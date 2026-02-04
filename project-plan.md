@@ -19,13 +19,13 @@ This document outlines the chronological steps to implement the Event Processor 
   - [x] Implement error handling for missing files or permissions.
 - **Definition of Done:** Running `swift src/main/processor/swift/ocr.swift ./test.png` in terminal outputs accurate text.
 
-### Ticket 3: OCR Wrapper Module
+### Ticket 3: OCR Wrapper Module [COMPLETED]
 - **Goal:** Create a TypeScript interface to interact with the Swift sidecar.
 - **Tasks:**
-  - Create `src/main/processor/ocr.ts`.
-  - Implement `extractText(filepath: string): Promise<string>`.
-  - Use `child_process` to spawn the Swift script.
-  - specific handling for "no text found" vs "error".
+  - [x] Create `src/main/processor/ocr.ts`.
+  - [x] Implement `extractText(filepath: string): Promise<string>`.
+  - [x] Use `child_process` to spawn the Swift script.
+  - [x] specific handling for "no text found" vs "error".
 - **Definition of Done:** A TypeScript function that takes a filepath and returns the text string.
 
 ## Phase 2: Storage & Logic
