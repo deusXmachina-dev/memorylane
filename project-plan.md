@@ -64,11 +64,11 @@ This document outlines the chronological steps to implement the Event Processor 
   - [x] Ensure model downloading/caching is handled (or bundled).
 - **Definition of Done:** A function that takes a string and returns a valid number array (embedding vector).
 
-### Ticket 8: Processor Orchestrator
+### Ticket 8: Processor Orchestrator [COMPLETED]
 - **Goal:** Implement the main business logic pipeline.
 - **Tasks:**
-  - Create `src/main/processor/index.ts`.
-  - Implement `processScreenshot(screenshot: Screenshot): Promise<void>`.
+  - [x] Create `src/main/processor/index.ts`.
+  - [x] Implement `processScreenshot(screenshot: Screenshot): Promise<void>`.
   - Pipeline:
     1. Call OCR Wrapper.
     2. Generate Embedding from text.
