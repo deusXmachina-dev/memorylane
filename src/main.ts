@@ -2,6 +2,9 @@ import { app, Tray, Menu, nativeImage } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import * as capture from './main/capture';
+import { EventProcessor } from './main/processor/index';
+import { EmbeddingService } from './main/processor/embedding';
+import { StorageService } from './main/processor/storage';
 import * as interactionMonitor from './main/interaction-monitor';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -10,6 +13,12 @@ if (started) {
 }
 
 let tray: Tray | null = null;
+let processor: EventProcessor | null = null;
+
+// Initialize Processor Services
+const embeddingService = new EmbeddingService();
+const storageService = new StorageService(StorageService.getDefaultDbPath());
+processor = new EventProcessor(embeddingService, storageService);
 
 // Prevent app from quitting when all windows are closed (tray app)
 app.on('window-all-closed', () => {
@@ -36,20 +45,20 @@ const createTray = () => {
 
   updateTrayMenu();
 
-  // Subscribe to screenshot events (visual change only)
-  capture.onScreenshot((screenshot) => {
-    const logData: Record<string, unknown> = {
-      id: screenshot.id,
-      timestamp: new Date(screenshot.timestamp).toISOString(),
-      filepath: screenshot.filepath,
-      trigger: screenshot.trigger.type,
-    };
+  // Register a callback to process screenshots
+  capture.onScreenshot(async (screenshot) => {
+    // 1. Log basic info
+    console.log(`[Main] Screenshot captured: ${screenshot.id}`);
 
-    if (screenshot.trigger.confidence) {
-      logData.changePercent = screenshot.trigger.confidence.toFixed(2) + '%';
+    // 2. Send to Processor
+    if (processor) {
+      try {
+        await processor.processScreenshot(screenshot);
+        console.log(`[Main] Screenshot processed successfully: ${screenshot.id}`);
+      } catch (error) {
+        console.error(`[Main] Error processing screenshot ${screenshot.id}:`, error);
+      }
     }
-
-    console.log('Screenshot captured:', logData);
   });
 
   // Subscribe to interaction events (independent stream)

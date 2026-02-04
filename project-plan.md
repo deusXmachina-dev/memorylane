@@ -79,11 +79,11 @@ This document outlines the chronological steps to implement the Event Processor 
 
 ## Phase 3: Integration
 
-### Ticket 9: Main Process Integration
+### Ticket 9: Main Process Integration [COMPLETED]
 - **Goal:** Connect the real capture loop to the processor.
 - **Tasks:**
-  - Modify `src/main.ts`.
-  - Import the processor module.
-  - Subscribe to `capture.onScreenshot`.
-  - Pass captured screenshots to the processor.
+  - [x] Modify `src/main.ts`.
+  - [x] Import the processor module.
+  - [x] Subscribe to `capture.onScreenshot`.
+  - [x] Pass captured screenshots to the processor.
 - **Definition of Done:** Running the app (npm start) automatically processes screenshots every 30s without manual intervention.
