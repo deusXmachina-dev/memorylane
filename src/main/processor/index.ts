@@ -59,4 +59,24 @@ export class EventProcessor {
       throw error;
     }
   }
+
+  /**
+   * Search for events using both vector similarity and FTS.
+   */
+  public async search(query: string): Promise<{ fts: StoredEvent[], vector: StoredEvent[] }> {
+    console.log(`[Search] Query: "${query}"`);
+
+    // 1. Generate embedding for vector search
+    const queryVector = await this.embeddingService.generateEmbedding(query);
+
+    // 2. Vector search
+    const vectorResults = await this.storageService.searchVectors(queryVector, 5);
+    console.log(`[Search] Vector results: ${vectorResults.length}`);
+
+    // 3. FTS search
+    const ftsResults = await this.storageService.searchFTS(query, 5);
+    console.log(`[Search] FTS results: ${ftsResults.length}`);
+
+    return { fts: ftsResults, vector: vectorResults };
+  }
 }

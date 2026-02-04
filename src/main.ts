@@ -122,6 +122,37 @@ const updateTrayMenu = () => {
     },
 /*     { type: 'separator' },
     {
+      label: 'Test Search: "MemoryLane"',
+      click: async () => {
+        if (!processor) {
+          console.error('[Test Search] Processor not initialized');
+          return;
+        }
+        
+        try {
+          console.log('[Test Search] Starting search for "MemoryLane"...');
+          const results = await processor.search('MemoryLane');
+          
+          console.log('\n=== FTS Results ===');
+          results.fts.forEach((event, idx) => {
+            console.log(`${idx + 1}. [${event.id}] ${new Date(event.timestamp).toISOString()}`);
+            console.log(`   Text: ${event.text.substring(0, 100)}${event.text.length > 100 ? '...' : ''}`);
+          });
+          
+          console.log('\n=== Vector Results ===');
+          results.vector.forEach((event, idx) => {
+            console.log(`${idx + 1}. [${event.id}] ${new Date(event.timestamp).toISOString()}`);
+            console.log(`   Text: ${event.text.substring(0, 100)}${event.text.length > 100 ? '...' : ''}`);
+          });
+          
+          console.log('\n[Test Search] Complete\n');
+        } catch (error) {
+          console.error('[Test Search] Error:', error);
+        }
+      },
+    },
+    { type: 'separator' },
+    {
       label: `Screenshots: ${capture.getScreenshotsDir()}`,
       enabled: false,
     }, */

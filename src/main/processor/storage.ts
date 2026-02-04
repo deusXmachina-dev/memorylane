@@ -99,22 +99,9 @@ export class StorageService {
   }
 
   /**
-   * Retrieves an event by ID (helper for testing/verification).
+   * Helper to normalize a record's vector to a plain number array.
    */
-  public async getEventById(id: string): Promise<StoredEvent | null> {
-    if (!this.tableInstance) return null;
-    
-    const results = await this.tableInstance
-        .query()
-        .where(`id = '${id}'`)
-        .limit(1)
-        .toArray();
-        
-    if (results.length === 0) return null;
-    
-    const record = results[0];
-    
-    // Normalize vector to plain array if it's not already
+  private normalizeVector(record: any): StoredEvent {
     let vector: number[] = [];
     if (Array.isArray(record.vector)) {
         vector = record.vector as number[];
@@ -129,6 +116,59 @@ export class StorageService {
         ...record,
         vector
     } as StoredEvent;
+  }
+
+  /**
+   * Retrieves an event by ID (helper for testing/verification).
+   */
+  public async getEventById(id: string): Promise<StoredEvent | null> {
+    if (!this.tableInstance) return null;
+    
+    const results = await this.tableInstance
+        .query()
+        .where(`id = '${id}'`)
+        .limit(1)
+        .toArray();
+        
+    if (results.length === 0) return null;
+    
+    return this.normalizeVector(results[0]);
+  }
+
+  /**
+   * Full-text search using FTS index.
+   */
+  public async searchFTS(query: string, limit = 5): Promise<StoredEvent[]> {
+    if (!this.tableInstance) {
+      await this.init();
+    }
+    
+    if (!this.tableInstance) return [];
+
+    const results = await this.tableInstance
+      .search(query)
+      .limit(limit)
+      .toArray();
+
+    return results.map(record => this.normalizeVector(record));
+  }
+
+  /**
+   * Vector similarity search.
+   */
+  public async searchVectors(queryVector: number[], limit = 5): Promise<StoredEvent[]> {
+    if (!this.tableInstance) {
+      await this.init();
+    }
+    
+    if (!this.tableInstance) return [];
+
+    const results = await this.tableInstance
+      .vectorSearch(queryVector)
+      .limit(limit)
+      .toArray();
+
+    return results.map(record => this.normalizeVector(record));
   }
 
   /**
