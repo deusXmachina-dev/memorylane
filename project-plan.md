@@ -11,12 +11,12 @@ This document outlines the chronological steps to implement the Event Processor 
   - [x] Verify build configuration works with native modules (Electron/Rebuild).
 - **Definition of Done:** `npm install` completes and app starts without native module errors.
 
-### Ticket 2: Swift OCR Sidecar
+### Ticket 2: Swift OCR Sidecar [COMPLETED]
 - **Goal:** Implement the native macOS OCR script using the Vision framework.
 - **Tasks:**
-  - Create directory `src/main/processor/swift/`.
-  - Create `ocr.swift` that accepts an image path argument and prints extracted text to stdout.
-  - Implement error handling for missing files or permissions.
+  - [x] Create directory `src/main/processor/swift/`.
+  - [x] Create `ocr.swift` that accepts an image path argument and prints extracted text to stdout.
+  - [x] Implement error handling for missing files or permissions.
 - **Definition of Done:** Running `swift src/main/processor/swift/ocr.swift ./test.png` in terminal outputs accurate text.
 
 ### Ticket 3: OCR Wrapper Module
