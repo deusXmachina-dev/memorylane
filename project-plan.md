@@ -30,13 +30,13 @@ This document outlines the chronological steps to implement the Event Processor 
 
 ## Phase 2: Storage & Logic
 
-### Ticket 4: Storage Layer (LanceDB)
+### Ticket 4: Storage Layer (LanceDB) [COMPLETED]
 - **Goal:** Implement persistent vector storage for events.
 - **Tasks:**
-  - Create `src/main/processor/storage.ts`.
-  - Initialize LanceDB connection in the app's `userData` directory.
-  - Define the schema for the `context_events` table (id, text, timestamp, vector).
-  - Implement `addEvent(event: StoredEvent)` method.
+  - [x] Create `src/main/processor/storage.ts`.
+  - [x] Initialize LanceDB connection in the app's `userData` directory.
+  - [x] Define the schema for the `context_events` table (id, text, timestamp, vector).
+  - [x] Implement `addEvent(event: StoredEvent)` method.
 - **Definition of Done:** Can programmatically insert a record with a vector and retrieve it.
 
 ### Ticket 5: Embedding Module
