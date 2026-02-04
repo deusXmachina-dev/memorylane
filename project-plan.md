@@ -47,12 +47,12 @@ This document outlines the chronological steps to implement the Event Processor 
   - [x] Add `npm test` script to `package.json`.
 - **Definition of Done:** Running `npm test` works (even if 0 tests found).
 
-### Ticket 6: Storage Refactor & Tests
+### Ticket 6: Storage Refactor & Tests [COMPLETED]
 - **Goal:** Refactor storage to a testable class pattern and add unit tests.
 - **Tasks:**
-  - Refactor `storage.ts` to export a `StorageService` class (dependency injection style).
-  - Create `src/main/processor/storage.test.ts`.
-  - Implement tests for: initialization, adding events, schema creation, FTS index creation.
+  - [x] Refactor `storage.ts` to export a `StorageService` class (dependency injection style).
+  - [x] Create `src/main/processor/storage.test.ts`.
+  - [x] Implement tests for: initialization, adding events, schema creation, FTS index creation.
 - **Definition of Done:** `StorageService` is clean/stateless and coverage is green.
 
 ### Ticket 7: Embedding Module

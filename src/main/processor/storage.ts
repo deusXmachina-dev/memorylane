@@ -1,9 +1,11 @@
 import * as lancedb from '@lancedb/lancedb';
 import * as path from 'path';
-import { app } from 'electron';
 import * as fs from 'fs';
+// We use require for electron to avoid aggressive static analysis or issues in Node test env
+// where 'electron' module might not behave as expected if imported at top level without checking.
+// However, standard import is usually fine if we guard usages.
+import { app } from 'electron';
 
-// Need to allow index signature for LanceDB compatibility or cast
 export interface StoredEvent extends Record<string, unknown> {
   id: string;
   timestamp: number;
@@ -11,99 +13,98 @@ export interface StoredEvent extends Record<string, unknown> {
   vector: number[];
 }
 
-let dbInstance: lancedb.Connection | null = null;
-let tableInstance: lancedb.Table | null = null;
-const TABLE_NAME = 'context_events';
+export class StorageService {
+  private dbPath: string;
+  private dbInstance: lancedb.Connection | null = null;
+  private tableInstance: lancedb.Table | null = null;
+  private readonly TABLE_NAME = 'context_events';
 
-/**
- * Gets the path to the LanceDB database directory.
- */
-function getDbPath(): string {
-  // Check if running in Electron
-  if (process.versions.electron) {
-    const userDataPath = app.getPath('userData');
-    return path.join(userDataPath, 'lancedb');
-  }
-  
-  // Fallback for testing/Node environment
-  return path.join(process.cwd(), 'temp_lancedb_test');
-}
-
-/**
- * Initializes the LanceDB connection and ensures the table exists.
- */
-export async function initStorage(): Promise<void> {
-  if (dbInstance && tableInstance) return;
-
-  const dbPath = getDbPath();
-  
-  // Ensure directory exists
-  if (!fs.existsSync(dbPath)) {
-    fs.mkdirSync(dbPath, { recursive: true });
+  constructor(dbPath: string) {
+    this.dbPath = dbPath;
   }
 
-  console.log(`Initializing LanceDB at: ${dbPath}`);
-  
-  dbInstance = await lancedb.connect(dbPath);
-  
-  const tableNames = await dbInstance.tableNames();
-  
-  if (!tableNames.includes(TABLE_NAME)) {
-    // Create table with empty initial data to define schema
-    // We need at least one record or a schema definition. 
-    // LanceDB infers schema from the first batch of data if not explicitly provided.
-    // For now, we'll wait until the first addEvent to create the table if strictly necessary,
-    // OR we can create it with a dummy row and then delete it, or use schema definition if supported by the JS SDK version.
-    
-    // In this version of the SDK, implicit creation on first write is common.
-    // However, to ensure FTS is set up, we might want to be explicit.
-    console.log(`Table '${TABLE_NAME}' does not exist. It will be created on first insertion.`);
-  } else {
-    tableInstance = await dbInstance.openTable(TABLE_NAME);
-  }
-}
-
-/**
- * Adds an event to the storage.
- */
-export async function addEvent(event: StoredEvent): Promise<void> {
-  if (!dbInstance) {
-    await initStorage();
-  }
-  
-  if (!dbInstance) throw new Error('Failed to initialize LanceDB connection');
-
-  const data = [event];
-
-  if (!tableInstance) {
-    // Check again if table exists (race condition check)
-    const tableNames = await dbInstance.tableNames();
-    if (tableNames.includes(TABLE_NAME)) {
-      tableInstance = await dbInstance.openTable(TABLE_NAME);
-      await tableInstance.add(data);
-    } else {
-      // Create table
-      tableInstance = await dbInstance.createTable(TABLE_NAME, data);
-      
-      // Create FTS index on the 'text' column
-      await tableInstance.createIndex('text', {
-        config: lancedb.Index.fts(),
-        replace: true
-      });
-      console.log('Created FTS index on "text" column.');
+  /**
+   * Helper to get the default database path based on environment.
+   */
+  public static getDefaultDbPath(): string {
+    // Check if running in Electron (using process.versions.electron)
+    if (process.versions.electron) {
+      try {
+        const userDataPath = app.getPath('userData');
+        return path.join(userDataPath, 'lancedb');
+      } catch (e) {
+        console.warn('Failed to get Electron userData path, falling back to temp.', e);
+      }
     }
-  } else {
-    await tableInstance.add(data);
-  }
-}
-
-/**
- * Retrieves an event by ID (helper for testing/verification).
- */
-export async function getEventById(id: string): Promise<StoredEvent | null> {
-    if (!tableInstance) return null;
     
-    const results = await tableInstance
+    // Fallback for testing/Node environment or if app is not ready
+    return path.join(process.cwd(), 'temp_lancedb_storage');
+  }
+
+  /**
+   * Initializes the connection and ensures the directory exists.
+   */
+  public async init(): Promise<void> {
+    if (this.dbInstance) return;
+
+    // Ensure directory exists
+    if (!fs.existsSync(this.dbPath)) {
+      fs.mkdirSync(this.dbPath, { recursive: true });
+    }
+
+    console.log(`Initializing LanceDB at: ${this.dbPath}`);
+    this.dbInstance = await lancedb.connect(this.dbPath);
+    
+    // Check if table exists
+    const tableNames = await this.dbInstance.tableNames();
+    if (tableNames.includes(this.TABLE_NAME)) {
+      this.tableInstance = await this.dbInstance.openTable(this.TABLE_NAME);
+    } else {
+      console.log(`Table '${this.TABLE_NAME}' does not exist. It will be created on first insertion.`);
+    }
+  }
+
+  /**
+   * Adds an event to the storage.
+   */
+  public async addEvent(event: StoredEvent): Promise<void> {
+    if (!this.dbInstance) {
+      await this.init();
+    }
+    
+    if (!this.dbInstance) throw new Error('Failed to initialize LanceDB connection');
+
+    const data = [event];
+
+    if (!this.tableInstance) {
+      // Check again if table exists (race condition check)
+      const tableNames = await this.dbInstance.tableNames();
+      if (tableNames.includes(this.TABLE_NAME)) {
+        this.tableInstance = await this.dbInstance.openTable(this.TABLE_NAME);
+        await this.tableInstance.add(data);
+      } else {
+        // Create table
+        this.tableInstance = await this.dbInstance.createTable(this.TABLE_NAME, data);
+        
+        // Create FTS index on the 'text' column
+        await this.tableInstance.createIndex('text', {
+          config: lancedb.Index.fts(),
+          replace: true
+        });
+        console.log('Created FTS index on "text" column.');
+      }
+    } else {
+      await this.tableInstance.add(data);
+    }
+  }
+
+  /**
+   * Retrieves an event by ID (helper for testing/verification).
+   */
+  public async getEventById(id: string): Promise<StoredEvent | null> {
+    if (!this.tableInstance) return null;
+    
+    const results = await this.tableInstance
         .query()
         .where(`id = '${id}'`)
         .limit(1)
@@ -111,14 +112,30 @@ export async function getEventById(id: string): Promise<StoredEvent | null> {
         
     if (results.length === 0) return null;
     
-    return results[0] as unknown as StoredEvent;
-}
+    const record = results[0];
+    
+    // Normalize vector to plain array if it's not already
+    let vector: number[] = [];
+    if (Array.isArray(record.vector)) {
+        vector = record.vector as number[];
+    } else if (record.vector && typeof (record.vector as any).toArray === 'function') {
+         vector = (record.vector as any).toArray();
+    } else if (record.vector) {
+        // Fallback for TypedArrays or Arrow Vectors that are iterable
+        vector = Array.from(record.vector as Iterable<number>);
+    }
 
-/**
- * Helper to close connection (mostly for testing).
- */
-export async function closeStorage(): Promise<void> {
-    // LanceDB JS SDK handles connections automatically, but we can clear references
-    dbInstance = null;
-    tableInstance = null;
+    return {
+        ...record,
+        vector
+    } as StoredEvent;
+  }
+
+  /**
+   * Closes the connection (mostly for cleanup/testing).
+   */
+  public async close(): Promise<void> {
+    this.dbInstance = null;
+    this.tableInstance = null;
+  }
 }
