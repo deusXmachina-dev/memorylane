@@ -35,25 +35,35 @@ This document outlines the chronological steps to implement the Event Processor 
 - **Tasks:**
   - Create `src/main/processor/storage.ts`.
   - Initialize LanceDB connection in the app's `userData` directory.
-  - Define the schema for the `context_events` table (id, text, timestamp).
-  - Implement `addEvent(event: Omit<StoredEvent, 'vector'>)` method.
-- **Definition of Done:** Can programmatically insert a record and retrieve it via a simple query.
+  - Define the schema for the `context_events` table (id, text, timestamp, vector).
+  - Implement `addEvent(event: StoredEvent)` method.
+- **Definition of Done:** Can programmatically insert a record with a vector and retrieve it.
 
-### Ticket 5: Processor Orchestrator
+### Ticket 5: Embedding Module
+- **Goal:** Create a service to convert text into vector embeddings.
+- **Tasks:**
+  - Install embedding library (e.g., `@xenova/transformers`).
+  - Create `src/main/processor/embedding.ts`.
+  - Implement `generateEmbedding(text: string): Promise<number[]>`.
+  - Ensure model downloading/caching is handled (or bundled).
+- **Definition of Done:** A function that takes a string and returns a valid number array (embedding vector).
+
+### Ticket 6: Processor Orchestrator
 - **Goal:** Implement the main business logic pipeline.
 - **Tasks:**
   - Create `src/main/processor/index.ts`.
   - Implement `processScreenshot(screenshot: Screenshot): Promise<void>`.
   - Pipeline:
     1. Call OCR Wrapper.
-    2. Construct Event object.
-    3. Call Storage Layer to save.
-    4. Delete the original screenshot file (`fs.unlink`).
-- **Definition of Done:** Calling `processScreenshot` with a test file results in a DB entry and the file being deleted.
+    2. Generate Embedding from text.
+    3. Construct Event object (with vector).
+    4. Call Storage Layer to save.
+    5. Delete the original screenshot file (`fs.unlink`).
+- **Definition of Done:** Calling `processScreenshot` with a test file results in a DB entry (with vector) and the file being deleted.
 
 ## Phase 3: Integration
 
-### Ticket 6: Main Process Integration
+### Ticket 7: Main Process Integration
 - **Goal:** Connect the real capture loop to the processor.
 - **Tasks:**
   - Modify `src/main.ts`.
