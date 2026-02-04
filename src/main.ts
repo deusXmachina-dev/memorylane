@@ -120,7 +120,6 @@ const updateTrayMenu = () => {
         }
       },
     },
-/*     { type: 'separator' },
     {
       label: 'Test Search: "MemoryLane"',
       click: async () => {
@@ -151,7 +150,8 @@ const updateTrayMenu = () => {
         }
       },
     },
-    { type: 'separator' },
+
+/*     { type: 'separator' },
     {
       label: `Screenshots: ${capture.getScreenshotsDir()}`,
       enabled: false,
