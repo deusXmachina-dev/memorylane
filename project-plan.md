@@ -55,13 +55,13 @@ This document outlines the chronological steps to implement the Event Processor 
   - [x] Implement tests for: initialization, adding events, schema creation, FTS index creation.
 - **Definition of Done:** `StorageService` is clean/stateless and coverage is green.
 
-### Ticket 7: Embedding Module
+### Ticket 7: Embedding Module [COMPLETED]
 - **Goal:** Create a service to convert text into vector embeddings.
 - **Tasks:**
-  - Install embedding library (e.g., `@xenova/transformers`).
-  - Create `src/main/processor/embedding.ts`.
-  - Implement `generateEmbedding(text: string): Promise<number[]>`.
-  - Ensure model downloading/caching is handled (or bundled).
+  - [x] Install embedding library (e.g., `@xenova/transformers`).
+  - [x] Create `src/main/processor/embedding.ts`.
+  - [x] Implement `generateEmbedding(text: string): Promise<number[]>`.
+  - [x] Ensure model downloading/caching is handled (or bundled).
 - **Definition of Done:** A function that takes a string and returns a valid number array (embedding vector).
 
 ### Ticket 8: Processor Orchestrator
