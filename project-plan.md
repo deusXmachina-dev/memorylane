@@ -39,7 +39,23 @@ This document outlines the chronological steps to implement the Event Processor 
   - [x] Implement `addEvent(event: StoredEvent)` method.
 - **Definition of Done:** Can programmatically insert a record with a vector and retrieve it.
 
-### Ticket 5: Embedding Module
+### Ticket 5: Testing Infrastructure
+- **Goal:** Set up a proper testing framework to replace manual scripts.
+- **Tasks:**
+  - Install `vitest`.
+  - Configure `vitest.config.ts` (handling native modules).
+  - Add `npm test` script to `package.json`.
+- **Definition of Done:** Running `npm test` works (even if 0 tests found).
+
+### Ticket 6: Storage Refactor & Tests
+- **Goal:** Refactor storage to a testable class pattern and add unit tests.
+- **Tasks:**
+  - Refactor `storage.ts` to export a `StorageService` class (dependency injection style).
+  - Create `src/main/processor/storage.test.ts`.
+  - Implement tests for: initialization, adding events, schema creation, FTS index creation.
+- **Definition of Done:** `StorageService` is clean/stateless and coverage is green.
+
+### Ticket 7: Embedding Module
 - **Goal:** Create a service to convert text into vector embeddings.
 - **Tasks:**
   - Install embedding library (e.g., `@xenova/transformers`).
@@ -48,7 +64,7 @@ This document outlines the chronological steps to implement the Event Processor 
   - Ensure model downloading/caching is handled (or bundled).
 - **Definition of Done:** A function that takes a string and returns a valid number array (embedding vector).
 
-### Ticket 6: Processor Orchestrator
+### Ticket 8: Processor Orchestrator
 - **Goal:** Implement the main business logic pipeline.
 - **Tasks:**
   - Create `src/main/processor/index.ts`.
@@ -63,7 +79,7 @@ This document outlines the chronological steps to implement the Event Processor 
 
 ## Phase 3: Integration
 
-### Ticket 7: Main Process Integration
+### Ticket 9: Main Process Integration
 - **Goal:** Connect the real capture loop to the processor.
 - **Tasks:**
   - Modify `src/main.ts`.
