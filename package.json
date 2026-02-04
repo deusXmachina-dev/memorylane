@@ -12,7 +12,7 @@
     "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx .",
     "test": "vitest",
-    "postinstall": "electron-rebuild -f -w uiohook-napi,@lancedb/lancedb"
+    "postinstall": "electron-rebuild -f -w uiohook-napi,@lancedb/lancedb,onnxruntime-node"
   },
   "keywords": [],
   "author": {
