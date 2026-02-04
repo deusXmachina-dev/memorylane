@@ -39,12 +39,12 @@ This document outlines the chronological steps to implement the Event Processor 
   - [x] Implement `addEvent(event: StoredEvent)` method.
 - **Definition of Done:** Can programmatically insert a record with a vector and retrieve it.
 
-### Ticket 5: Testing Infrastructure
+### Ticket 5: Testing Infrastructure [COMPLETED]
 - **Goal:** Set up a proper testing framework to replace manual scripts.
 - **Tasks:**
-  - Install `vitest`.
-  - Configure `vitest.config.ts` (handling native modules).
-  - Add `npm test` script to `package.json`.
+  - [x] Install `vitest`.
+  - [x] Configure `vitest.config.ts` (handling native modules).
+  - [x] Add `npm test` script to `package.json`.
 - **Definition of Done:** Running `npm test` works (even if 0 tests found).
 
 ### Ticket 6: Storage Refactor & Tests
