@@ -4,11 +4,11 @@ This document outlines the chronological steps to implement the Event Processor 
 
 ## Phase 1: Foundation & OCR
 
-### Ticket 1: Project Dependencies
+### Ticket 1: Project Dependencies [COMPLETED]
 - **Goal:** Set up the environment for vector storage.
 - **Tasks:**
-  - Install `lancedb` (Node.js client for LanceDB).
-  - Verify build configuration works with native modules (Electron/Rebuild).
+  - [x] Install `lancedb` (Node.js client for LanceDB).
+  - [x] Verify build configuration works with native modules (Electron/Rebuild).
 - **Definition of Done:** `npm install` completes and app starts without native module errors.
 
 ### Ticket 2: Swift OCR Sidecar
