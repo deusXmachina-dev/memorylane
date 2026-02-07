@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    />
+    <title>MemoryLane</title>
+    <link rel="stylesheet" href="./main-window.css" />
+  </head>
+  <body class="bg-zinc-900 text-zinc-100 min-h-screen antialiased select-none">
+    <div class="p-8 max-w-sm mx-auto space-y-6">
+      <!-- Header -->
+      <div class="text-center">
+        <h1 class="text-xl font-semibold text-white tracking-tight">MemoryLane</h1>
+        <p id="status-text" class="text-sm text-zinc-500 mt-1">Idle</p>
+      </div>
+
+      <!-- Capture Control -->
+      <section class="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-6">
+        <button
+          type="button"
+          id="capture-toggle"
+          class="w-full px-4 py-3 bg-zinc-700 hover:bg-zinc-600 text-white font-medium rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-zinc-500"
+        >
+          Start Capture
+        </button>
+
+        <!-- Stats -->
+        <div class="mt-4 flex justify-between text-sm text-zinc-400">
+          <span>Screenshots</span>
+          <span id="screenshot-count" class="font-mono text-zinc-300">0</span>
+        </div>
+      </section>
+
+      <!-- Actions -->
+      <section class="space-y-2">
+        <button
+          type="button"
+          id="settings-button"
+          class="w-full px-4 py-2.5 bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50 text-zinc-300 hover:text-white font-medium rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-zinc-500"
+        >
+          Settings
+        </button>
+      </section>
+    </div>
+
+    <script type="module" src="./main-window.ts"></script>
+  </body>
+</html>
