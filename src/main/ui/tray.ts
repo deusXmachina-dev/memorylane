@@ -31,6 +31,13 @@ interface TrayDependencies {
 let tray: Tray | null = null
 let deps: TrayDependencies | null = null
 
+app.on('before-quit', () => {
+  if (tray) {
+    tray.destroy()
+    tray = null
+  }
+})
+
 /**
  * Build the usage stats submenu with API and storage statistics
  */

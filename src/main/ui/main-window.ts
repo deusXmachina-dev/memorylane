@@ -5,7 +5,7 @@
  * Singleton window that hides on close instead of destroying.
  */
 
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { BrowserWindow, ipcMain } from 'electron'
 import path from 'node:path'
 import log from '../logger'
 import { openSettingsWindow } from '../settings/settings-window'
@@ -81,21 +81,8 @@ export function openMainWindow(): void {
     if (mainWindow && !mainWindow.isDestroyed()) {
       e.preventDefault()
       mainWindow.hide()
-      if (process.platform === 'darwin') {
-        app.dock?.hide()
-      }
     }
   })
-
-  mainWindow.on('show', () => {
-    if (process.platform === 'darwin') {
-      app.dock?.show()
-    }
-  })
-
-  if (process.platform === 'darwin') {
-    app.dock?.show()
-  }
 }
 
 /**

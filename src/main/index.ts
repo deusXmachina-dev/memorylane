@@ -50,8 +50,8 @@ app.on('window-all-closed', () => {
   // Don't quit - this is a tray app or MCP server
 })
 
-// macOS: Hide dock icon initially (main window will show it when opened)
-if (process.platform === 'darwin') {
+// macOS: Hide dock icon in MCP mode (headless)
+if (process.platform === 'darwin' && isMCPMode) {
   app.dock?.hide()
 }
 
@@ -169,6 +169,10 @@ if (isMCPMode) {
       processor: processor!,
     })
     openMainWindow()
+
+    app.on('activate', () => {
+      openMainWindow()
+    })
 
     log.info('MemoryLane started. Screenshots will be saved to:', recorder.getScreenshotsDir())
   })
