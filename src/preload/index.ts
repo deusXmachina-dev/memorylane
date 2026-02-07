@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('settingsAPI', {
   deleteApiKey: () => ipcRenderer.invoke('settings:deleteApiKey'),
   close: () => ipcRenderer.send('settings:close'),
   openExternal: (url: string) => shell.openExternal(url),
+  addToClaude: () => ipcRenderer.invoke('settings:addToClaude'),
+  addToCursor: () => ipcRenderer.invoke('settings:addToCursor'),
 })
 
 console.log('[Preload] settingsAPI exposed to renderer')

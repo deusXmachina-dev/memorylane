@@ -3,6 +3,8 @@ import path from 'node:path'
 import { ApiKeyManager } from './api-key-manager'
 import { CaptureSettingsManager } from './capture-settings-manager'
 import { SemanticClassifierService } from '../processor/semantic-classifier'
+import { registerWithClaudeDesktop } from '../integrations/claude-desktop'
+import { registerWithCursor } from '../integrations/cursor'
 import { CaptureSettings } from '../../shared/types'
 import log from '../logger'
 
@@ -20,7 +22,7 @@ export function openSettingsWindow(): void {
 
   settingsWindow = new BrowserWindow({
     width: 600,
-    height: 500,
+    height: 650,
     resizable: false,
     minimizable: false,
     maximizable: false,
@@ -101,6 +103,10 @@ export function initSettingsIPC(
       settingsWindow.close()
     }
   })
+
+  // Integration handlers
+  ipcMain.handle('settings:addToClaude', () => registerWithClaudeDesktop())
+  ipcMain.handle('settings:addToCursor', () => registerWithCursor())
 }
 
 /**

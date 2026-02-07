@@ -15,6 +15,8 @@ interface SettingsAPI {
   deleteApiKey: () => Promise<SaveResult>
   close: () => void
   openExternal: (url: string) => Promise<void>
+  addToClaude: () => Promise<void>
+  addToCursor: () => Promise<void>
 }
 
 interface CaptureSettings {
@@ -307,3 +309,22 @@ resetCaptureSettingsBtn.addEventListener('click', async () => {
 
 // Load capture settings on page load
 loadCaptureSettings()
+
+// ============================================
+// Integrations UI
+// ============================================
+
+const addToClaudeBtn = document.getElementById('add-to-claude') as HTMLButtonElement
+const addToCursorBtn = document.getElementById('add-to-cursor') as HTMLButtonElement
+
+addToClaudeBtn.addEventListener('click', () => {
+  const api = getSettingsAPI()
+  if (!api) return
+  void api.addToClaude()
+})
+
+addToCursorBtn.addEventListener('click', () => {
+  const api = getSettingsAPI()
+  if (!api) return
+  void api.addToCursor()
+})
