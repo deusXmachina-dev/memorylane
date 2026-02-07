@@ -26,35 +26,24 @@ interface MainWindowDependencies {
 
 interface MainWindowStatus {
   capturing: boolean
-  screenshotCount: number
 }
 
 let mainWindow: BrowserWindow | null = null
 let deps: MainWindowDependencies | null = null
 
-async function buildStatus(): Promise<MainWindowStatus> {
-  let screenshotCount = 0
-  if (deps?.processor) {
-    try {
-      screenshotCount = await deps.processor.getStorageService().countRows()
-    } catch {
-      // Storage unavailable
-    }
-  }
-
+function buildStatus(): MainWindowStatus {
   return {
     capturing: deps?.recorder.isCapturingNow() ?? false,
-    screenshotCount,
   }
 }
 
 /**
  * Send current status to the renderer process
  */
-export async function sendStatusToRenderer(): Promise<void> {
+export function sendStatusToRenderer(): void {
   if (!mainWindow || mainWindow.isDestroyed()) return
 
-  const status = await buildStatus()
+  const status = buildStatus()
   mainWindow.webContents.send('main-window:statusChanged', status)
 }
 
@@ -69,8 +58,8 @@ export function openMainWindow(): void {
   }
 
   mainWindow = new BrowserWindow({
-    width: 400,
-    height: 300,
+    width: 600,
+    height: 320,
     resizable: false,
     minimizable: true,
     maximizable: false,
@@ -127,13 +116,13 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
 
   log.info('[MainWindow] Initializing IPC handlers...')
 
-  ipcMain.handle('main-window:getStatus', async () => {
+  ipcMain.handle('main-window:getStatus', () => {
     return buildStatus()
   })
 
-  ipcMain.handle('main-window:toggleCapture', async () => {
+  ipcMain.handle('main-window:toggleCapture', () => {
     if (!deps) {
-      return { capturing: false, screenshotCount: 0 }
+      return { capturing: false }
     }
 
     if (deps.recorder.isCapturingNow()) {

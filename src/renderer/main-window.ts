@@ -1,6 +1,5 @@
 interface MainWindowStatus {
   capturing: boolean
-  screenshotCount: number
 }
 
 interface MainWindowAPI {
@@ -15,8 +14,6 @@ function getMainWindowAPI(): MainWindowAPI | undefined {
 }
 
 const captureToggle = document.getElementById('capture-toggle') as HTMLButtonElement
-const statusText = document.getElementById('status-text') as HTMLParagraphElement
-const screenshotCount = document.getElementById('screenshot-count') as HTMLSpanElement
 const settingsButton = document.getElementById('settings-button') as HTMLButtonElement
 
 function updateUI(status: MainWindowStatus): void {
@@ -31,12 +28,6 @@ function updateUI(status: MainWindowStatus): void {
     captureToggle.classList.remove('bg-red-700/80', 'hover:bg-red-700')
     captureToggle.classList.add('bg-zinc-700', 'hover:bg-zinc-600')
   }
-
-  statusText.textContent = capturing ? 'Capturing' : 'Idle'
-  statusText.classList.toggle('text-zinc-500', !capturing)
-  statusText.classList.toggle('text-emerald-400', capturing)
-
-  screenshotCount.textContent = String(status.screenshotCount)
 }
 
 async function loadStatus(retryCount = 0): Promise<void> {

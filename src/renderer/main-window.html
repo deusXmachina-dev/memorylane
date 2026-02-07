@@ -10,12 +10,11 @@
     <title>MemoryLane</title>
     <link rel="stylesheet" href="./main-window.css" />
   </head>
-  <body class="bg-zinc-900 text-zinc-100 min-h-screen antialiased select-none">
-    <div class="p-8 max-w-sm mx-auto space-y-6">
+  <body class="bg-zinc-900 text-zinc-100 antialiased select-none">
+    <div class="p-8 max-w-lg mx-auto space-y-6">
       <!-- Header -->
       <div class="text-center">
         <h1 class="text-xl font-semibold text-white tracking-tight">MemoryLane</h1>
-        <p id="status-text" class="text-sm text-zinc-500 mt-1">Idle</p>
       </div>
 
       <!-- Capture Control -->
@@ -27,12 +26,6 @@
         >
           Start Capture
         </button>
-
-        <!-- Stats -->
-        <div class="mt-4 flex justify-between text-sm text-zinc-400">
-          <span>Screenshots</span>
-          <span id="screenshot-count" class="font-mono text-zinc-300">0</span>
-        </div>
       </section>
 
       <!-- Actions -->
