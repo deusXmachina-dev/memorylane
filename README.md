@@ -22,11 +22,11 @@ MemoryLane captures your screen to give AI assistants context about what you're 
 
 ## Current Status
 
-> **⚠️ Early release — not yet Apple-notarized**
->
-> MemoryLane is code-signed but is still waiting for Apple notarization. This means macOS Gatekeeper will block the app on first launch — you'll need to manually approve it (see Installation below).
+> **⚠️ Early release**
 >
 > This is a fully functional early release. Expect rough edges.
+>
+> The app is code-signed but not yet Apple-notarized. Use the curl installer below to avoid Gatekeeper warnings.
 
 ### What works today
 
@@ -45,16 +45,19 @@ MemoryLane captures your screen to give AI assistants context about what you're 
 - macOS (Apple Silicon / ARM64)
 - [OpenRouter](https://openrouter.ai/) API key
 
-### Steps
+### Install
 
-1. Download the [latest DMG](https://github.com/deusXmachina-dev/memorylane/releases/download/v0.3.0/MemoryLane-0.3.0-arm64.dmg)
-2. Open the DMG and drag **MemoryLane** to your Applications folder
-3. Double-click the app — you'll see a warning that macOS can't verify the developer
-4. Go to **System Settings → Privacy & Security**, scroll down, and click **"Open Anyway"** next to the MemoryLane message
-5. Authenticate with your password or Touch ID and confirm the dialog
-6. Grant **Screen Recording** permission when prompted
-7. Grant **Accessibility** permission when prompted
-8. Enter your **OpenRouter API key** in the app window
+```bash
+curl -fsSL https://raw.githubusercontent.com/deusXmachina-dev/memorylane/main/install.sh | sh
+```
+
+This downloads the latest release and installs it to `/Applications`.
+
+### First launch
+
+1. Grant **Screen Recording** permission when prompted
+2. Grant **Accessibility** permission when prompted
+3. Enter your **OpenRouter API key** in the app window
 
 ## Usage
 
@@ -109,7 +112,6 @@ That said, we'd love to see someone prove us wrong — it's one reason we open-s
 
 ## Coming Soon
 
-- **Apple notarization** — seamless install without Gatekeeper warnings
 - **Browser integration** — deeper context from browser tabs and web apps
 - **Managed cloud service** — hosted version with richer integrations, online LLM tool access, and zero setup
 - **Cross-platform builds** — Intel Mac, Windows, and Linux support

@@ -41,9 +41,6 @@ mac:
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.inherit.plist
   target:
-    - target: dmg
-      arch:
-        - arm64
     - target: zip
       arch:
         - arm64

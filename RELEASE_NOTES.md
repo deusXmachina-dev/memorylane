@@ -22,19 +22,23 @@ MemoryLane is a macOS system tray app that captures your screen activity, proces
 
 ## Known Issues & Limitations
 
-- **Not notarized** — the app is code-signed but not Apple-notarized yet; you'll need to right-click → Open on first launch to bypass Gatekeeper ([#5](https://github.com/deusXmachina-dev/memorylane/issues/5))
-- **macOS ARM64 only** — this release includes a macOS Apple Silicon DMG only; Intel Mac, Windows, and Linux builds are not yet available
+- **Not notarized** — the app is code-signed but not Apple-notarized yet; install via the curl command above to avoid Gatekeeper warnings ([#5](https://github.com/deusXmachina-dev/memorylane/issues/5))
+- **macOS ARM64 only** — this release is Apple Silicon only; Intel Mac, Windows, and Linux builds are not yet available
 
 ## Installation
 
-1. Download `MemoryLane-0.3.0-arm64.dmg`
-2. Open the DMG and drag MemoryLane to Applications
-3. Double-click the app to open it — you'll see a warning that it can't be opened because Apple cannot check it for malicious software
-4. Go to **System Settings → Privacy & Security**, scroll down, and click **"Open Anyway"** next to the MemoryLane message
-5. Authenticate with your password or Touch ID and confirm the final dialog
-6. Grant Screen Recording permission when prompted
-7. Set your OpenRouter API key in the app window
-8. Optionally register the MCP server with Claude Desktop or Cursor
+```bash
+curl -fsSL https://raw.githubusercontent.com/deusXmachina-dev/memorylane/main/install.sh | sh
+```
+
+This downloads the latest release and installs it to `/Applications`. No Gatekeeper warnings.
+
+After launching:
+
+1. Grant **Screen Recording** permission when prompted
+2. Grant **Accessibility** permission when prompted
+3. Set your **OpenRouter API key** in the app window
+4. Optionally register the MCP server with Claude Desktop or Cursor
 
 ## Full Changelog
 
