@@ -8,7 +8,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 DIST_DIR="$PROJECT_DIR/dist"
 
 VERSION=$(node -p "require('$PROJECT_DIR/package.json').version")
-ZIP_NAME="$APP_NAME-$VERSION-arm64-mac.zip"
+ZIP_NAME="$APP_NAME-arm64-mac.zip"
 ZIP_PATH="$DIST_DIR/$ZIP_NAME"
 
 echo "$APP_NAME local installer"

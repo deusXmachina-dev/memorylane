@@ -4,25 +4,11 @@ set -euo pipefail
 APP_NAME="MemoryLane"
 REPO="deusXmachina-dev/memorylane"
 INSTALL_DIR="/Applications"
+ZIP_NAME="$APP_NAME-arm64-mac.zip"
+ZIP_URL="https://github.com/$REPO/releases/latest/download/$ZIP_NAME"
 
 echo "$APP_NAME installer"
 echo "===================="
-echo ""
-
-# Get latest release tag
-echo "Fetching latest release..."
-VERSION=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | grep '"tag_name"' | head -1 | cut -d'"' -f4)
-
-if [ -z "$VERSION" ]; then
-  echo "Error: could not determine latest version."
-  echo "Check https://github.com/$REPO/releases for available versions."
-  exit 1
-fi
-
-ZIP_NAME="$APP_NAME-${VERSION#v}-arm64-mac.zip"
-ZIP_URL="https://github.com/$REPO/releases/download/$VERSION/$ZIP_NAME"
-
-echo "Latest version: $VERSION"
 echo ""
 
 # Check architecture
@@ -66,7 +52,7 @@ ditto -xk "$TMPDIR/$APP_NAME.zip" "$INSTALL_DIR"
 xattr -cr "$INSTALL_DIR/$APP_NAME.app" 2>/dev/null || true
 
 echo ""
-echo "$APP_NAME $VERSION installed successfully!"
+echo "$APP_NAME installed successfully!"
 echo ""
 echo "To launch:"
 echo "  open -a $APP_NAME"

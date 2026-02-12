@@ -72,12 +72,17 @@ takes or whether other commits land on `main` in the meantime.
 npm run make:mac
 ```
 
-The build produces both a ZIP and a DMG in `dist/`. Verify they exist:
+The build produces both a ZIP and a DMG in `dist/` with **stable filenames**
+(no version number). Verify they exist:
 
 ```bash
-ls dist/MemoryLane-X.Y.Z-arm64-mac.zip
-ls dist/MemoryLane-X.Y.Z-arm64.dmg
+ls dist/MemoryLane-arm64-mac.zip
+ls dist/MemoryLane-arm64-mac.dmg
 ```
+
+These stable names are configured via `artifactName` in `electron-builder.yml`.
+They allow `https://github.com/{owner}/{repo}/releases/latest/download/{asset}`
+URLs to always resolve to the latest release, which `install.sh` depends on.
 
 Notarization runs automatically via `build/notarize.js` (requires `APPLE_ID` and
 `APPLE_APP_PASSWORD` in `.env`). The build will take a few extra minutes while Apple
@@ -97,8 +102,8 @@ codesign --verify --deep --strict "dist/mac-arm64/MemoryLane.app"
 
 ```bash
 gh release create vX.Y.Z \
-  dist/MemoryLane-X.Y.Z-arm64-mac.zip \
-  dist/MemoryLane-X.Y.Z-arm64.dmg \
+  dist/MemoryLane-arm64-mac.zip \
+  dist/MemoryLane-arm64-mac.dmg \
   --title "vX.Y.Z" \
   --notes-file RELEASE_NOTES.md
 ```
@@ -113,7 +118,7 @@ Before finishing, verify:
 - [ ] `README.md` "Coming Soon" doesn't list shipped features
 - [ ] `npm run format` and `npm run lint` pass
 - [ ] Tag is pushed to origin
-- [ ] ZIP exists in `dist/`
-- [ ] DMG exists in `dist/`
+- [ ] `dist/MemoryLane-arm64-mac.zip` exists
+- [ ] `dist/MemoryLane-arm64-mac.dmg` exists
 - [ ] Notarization verified (`spctl --assess` reports `accepted`)
 - [ ] GitHub release is published with both ZIP and DMG attached
