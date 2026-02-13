@@ -62,6 +62,13 @@ if (isMCPMode) {
   // ============================================
   // Headless mode - no tray, no recorder, just search services
 
+  let mcpServerInstance: {
+    close?: () => Promise<void> | void
+    getServer?: () => { close?: () => Promise<void> | void }
+  } | null = null
+  let mcpStorageService: StorageService | null = null
+  let mcpEmbeddingService: EmbeddingService | null = null
+
   app.on('ready', async () => {
     log.info('[MCP Mode] Starting MemoryLane MCP Server...')
     DebugPipelineWriter.cleanDebugDir()
@@ -71,18 +78,19 @@ if (isMCPMode) {
       const apiKeyManager = new ApiKeyManager()
 
       // Initialize only the services needed for search
-      const embeddingService = new EmbeddingService()
-      const storageService = new StorageService(StorageService.getDefaultDbPath())
+      mcpEmbeddingService = new EmbeddingService()
+      mcpStorageService = new StorageService(StorageService.getDefaultDbPath())
       const classifierService = new SemanticClassifierService(
         apiKeyManager.getApiKey() || undefined,
       )
-      const processor = new EventProcessor(embeddingService, storageService, classifierService)
+      const processor = new EventProcessor(mcpEmbeddingService, mcpStorageService, classifierService)
 
       log.info('[MCP Mode] Services initialized')
 
       // Dynamically import MCP server to avoid loading it in recorder mode
       const { MemoryLaneMCPServer } = await import('./mcp/server')
       const mcpServer = new MemoryLaneMCPServer(processor)
+      mcpServerInstance = mcpServer
 
       await mcpServer.start(undefined, mcpStdout)
 
@@ -92,6 +100,44 @@ if (isMCPMode) {
       app.quit()
       process.exit(1)
     }
+  })
+
+  // Cleanup handler for MCP mode
+  app.on('before-quit', async (event) => {
+    log.info('[MCP Mode] Shutting down MCP server...')
+
+    // Prevent immediate quit to allow async cleanup
+    event.preventDefault()
+
+    try {
+      // Close MCP server connection
+      if (mcpServerInstance) {
+        const server = mcpServerInstance.getServer?.() || mcpServerInstance
+        if (server.close) {
+          await server.close()
+        }
+      }
+
+      // Close storage service (database connections)
+      if (mcpStorageService) {
+        await mcpStorageService.close()
+      }
+
+      log.info('[MCP Mode] Cleanup completed')
+    } catch (error) {
+      log.error('[MCP Mode] Error during cleanup:', error)
+    } finally {
+      // Now actually quit
+      app.exit(0)
+    }
+
+    // Safety net: force-exit if graceful shutdown takes too long.
+    // In-flight async work (embedding inference, API calls, database writes)
+    // can keep the event loop alive indefinitely after app.quit().
+    setTimeout(() => {
+      log.warn('[MCP Mode] Graceful shutdown timed out — force exiting')
+      app.exit(0)
+    }, 3000).unref()
   })
 } else {
   // ============================================
