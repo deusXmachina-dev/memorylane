@@ -126,14 +126,19 @@ export class SemanticClassifierService {
         `[SemanticClassifier] Summarization usage - Tokens: ${promptTokens}/${completionTokens}, Cost: $${cost.toFixed(6)}`,
       )
 
-      this.debugWriter?.dump(input, prompt, {
-        model: this.model,
-        summary,
-        promptTokens,
-        completionTokens,
-        cost,
-        timestamp: Date.now(),
-      })
+      this.debugWriter?.dump(
+        input,
+        prompt,
+        {
+          model: this.model,
+          summary,
+          promptTokens,
+          completionTokens,
+          cost,
+          timestamp: Date.now(),
+        },
+        'summary',
+      )
 
       const result: ClassificationResult = {
         summary,
@@ -224,14 +229,19 @@ export class SemanticClassifierService {
         `[SemanticClassifier] Extraction usage - Tokens: ${promptTokens}/${completionTokens}, Cost: $${cost.toFixed(6)}`,
       )
 
-      this.debugWriter?.dump(input, prompt, {
-        model: this.model,
-        summary: detailedText,
-        promptTokens,
-        completionTokens,
-        cost,
-        timestamp: Date.now(),
-      })
+      this.debugWriter?.dump(
+        input,
+        prompt,
+        {
+          model: this.model,
+          summary: detailedText,
+          promptTokens,
+          completionTokens,
+          cost,
+          timestamp: Date.now(),
+        },
+        'extraction',
+      )
 
       return detailedText
     } catch (error) {
@@ -331,11 +341,8 @@ export class SemanticClassifierService {
 
     prompt += '## Privacy rules\n\n'
     prompt += 'Replace ALL of the following with [REDACTED]:\n'
-    prompt += '- Email addresses, phone numbers, physical addresses\n'
-    prompt += '- Names of people (except public figures in news articles)\n'
     prompt += '- Account numbers, credit card numbers, SSNs\n'
     prompt += '- API keys, tokens, passwords, secrets\n'
-    prompt += '- Personal messages content (keep structure: "chat message from [REDACTED]")\n'
     prompt += '- Financial amounts tied to personal accounts\n\n'
     prompt += 'Keep: application names, file names, code symbols, UI labels, generic content.\n\n'
 
@@ -396,11 +403,8 @@ export class SemanticClassifierService {
 
     prompt += '## Privacy rules\n\n'
     prompt += 'Replace ALL of the following with [REDACTED]:\n'
-    prompt += '- Email addresses, phone numbers, physical addresses\n'
-    prompt += '- Names of people (except public figures in news articles)\n'
     prompt += '- Account numbers, credit card numbers, SSNs\n'
     prompt += '- API keys, tokens, passwords, secrets\n'
-    prompt += '- Personal messages content (keep structure: "chat message from [REDACTED]")\n'
     prompt += '- Financial amounts tied to personal accounts\n\n'
     prompt += 'Keep: application names, file names, code symbols, UI labels, generic content.\n\n'
 

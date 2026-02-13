@@ -139,11 +139,8 @@ based on the visible changes and any event hints provided.
 ## Privacy rules
 
 Replace ALL of the following with [REDACTED]:
-- Email addresses, phone numbers, physical addresses
-- Names of people (except public figures in news articles)
 - Account numbers, credit card numbers, SSNs
 - API keys, tokens, passwords, secrets
-- Personal messages content (keep structure: "chat message from [REDACTED]")
 - Financial amounts tied to personal accounts
 
 Keep: application names, file names, code symbols, UI labels, generic content.

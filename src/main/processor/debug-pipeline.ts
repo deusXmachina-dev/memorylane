@@ -61,12 +61,21 @@ export class DebugPipelineWriter {
   /**
    * Dump a full LLM round-trip to a timestamped subfolder.
    * Fire-and-forget — errors are logged but never thrown.
+   *
+   * @param phase Optional label to distinguish pipeline passes (e.g. 'extraction', 'summary').
+   *              When provided, file names are prefixed: `extraction-prompt.txt`, etc.
    */
-  public dump(input: ClassificationInput, prompt: string, response: DebugPipelineResponse): void {
+  public dump(
+    input: ClassificationInput,
+    prompt: string,
+    response: DebugPipelineResponse,
+    phase?: string,
+  ): void {
     try {
       const { startScreenshot, endScreenshot } = input
       const ts = new Date().toISOString().replace(/:/g, '-')
       const subDir = path.join(this.debugDir, `${ts}_${startScreenshot.id}`)
+      const prefix = phase ? `${phase}-` : ''
 
       fs.mkdirSync(subDir, { recursive: true })
 
@@ -77,15 +86,15 @@ export class DebugPipelineWriter {
         fs.copyFileSync(endScreenshot.filepath, path.join(subDir, 'end.png'))
       }
 
-      fs.writeFileSync(path.join(subDir, 'prompt.txt'), prompt, 'utf-8')
+      fs.writeFileSync(path.join(subDir, `${prefix}prompt.txt`), prompt, 'utf-8')
 
       fs.writeFileSync(
-        path.join(subDir, 'response.json'),
+        path.join(subDir, `${prefix}response.json`),
         JSON.stringify(response, null, 2),
         'utf-8',
       )
 
-      log.info(`[DebugPipeline] Dumped round-trip to ${subDir}`)
+      log.info(`[DebugPipeline] Dumped ${phase ?? 'round-trip'} to ${subDir}`)
     } catch (error) {
       log.warn('[DebugPipeline] Failed to dump round-trip:', error)
     }
