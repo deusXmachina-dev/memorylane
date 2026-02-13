@@ -126,19 +126,14 @@ export class SemanticClassifierService {
         `[SemanticClassifier] Summarization usage - Tokens: ${promptTokens}/${completionTokens}, Cost: $${cost.toFixed(6)}`,
       )
 
-      this.debugWriter?.dump(
-        input,
-        prompt,
-        {
-          model: this.model,
-          summary,
-          promptTokens,
-          completionTokens,
-          cost,
-          timestamp: Date.now(),
-        },
-        'summary',
-      )
+      this.debugWriter?.dumpSummary(prompt, {
+        model: this.model,
+        output: summary,
+        promptTokens,
+        completionTokens,
+        cost,
+        timestamp: Date.now(),
+      })
 
       const result: ClassificationResult = {
         summary,
@@ -229,19 +224,14 @@ export class SemanticClassifierService {
         `[SemanticClassifier] Extraction usage - Tokens: ${promptTokens}/${completionTokens}, Cost: $${cost.toFixed(6)}`,
       )
 
-      this.debugWriter?.dump(
-        input,
-        prompt,
-        {
-          model: this.model,
-          summary: detailedText,
-          promptTokens,
-          completionTokens,
-          cost,
-          timestamp: Date.now(),
-        },
-        'extraction',
-      )
+      this.debugWriter?.dumpExtraction(input, prompt, {
+        model: this.model,
+        output: detailedText,
+        promptTokens,
+        completionTokens,
+        cost,
+        timestamp: Date.now(),
+      })
 
       return detailedText
     } catch (error) {

@@ -10,7 +10,7 @@ function getDebugDir(): string {
 
 export interface DebugPipelineResponse {
   model: string
-  summary: string
+  output: string
   promptTokens: number
   completionTokens: number
   cost: number
@@ -19,6 +19,7 @@ export interface DebugPipelineResponse {
 
 export class DebugPipelineWriter {
   private readonly debugDir: string
+  private lastSubDir: string | null = null
 
   private constructor(debugDir: string) {
     this.debugDir = debugDir
@@ -59,23 +60,20 @@ export class DebugPipelineWriter {
   }
 
   /**
-   * Dump a full LLM round-trip to a timestamped subfolder.
-   * Fire-and-forget — errors are logged but never thrown.
-   *
-   * @param phase Optional label to distinguish pipeline passes (e.g. 'extraction', 'summary').
-   *              When provided, file names are prefixed: `extraction-prompt.txt`, etc.
+   * Dump an LLM round-trip for the extraction phase (pass 1).
+   * Creates the subfolder, copies screenshot images, and writes prompt/response.
+   * The summary pass reuses the same subfolder via dumpSummary().
    */
-  public dump(
+  public dumpExtraction(
     input: ClassificationInput,
     prompt: string,
     response: DebugPipelineResponse,
-    phase?: string,
   ): void {
     try {
       const { startScreenshot, endScreenshot } = input
       const ts = new Date().toISOString().replace(/:/g, '-')
       const subDir = path.join(this.debugDir, `${ts}_${startScreenshot.id}`)
-      const prefix = phase ? `${phase}-` : ''
+      this.lastSubDir = subDir
 
       fs.mkdirSync(subDir, { recursive: true })
 
@@ -86,17 +84,43 @@ export class DebugPipelineWriter {
         fs.copyFileSync(endScreenshot.filepath, path.join(subDir, 'end.png'))
       }
 
-      fs.writeFileSync(path.join(subDir, `${prefix}prompt.txt`), prompt, 'utf-8')
+      fs.writeFileSync(path.join(subDir, 'extraction-prompt.txt'), prompt, 'utf-8')
 
       fs.writeFileSync(
-        path.join(subDir, `${prefix}response.json`),
+        path.join(subDir, 'extraction-response.json'),
         JSON.stringify(response, null, 2),
         'utf-8',
       )
 
-      log.info(`[DebugPipeline] Dumped ${phase ?? 'round-trip'} to ${subDir}`)
+      log.info(`[DebugPipeline] Dumped extraction to ${subDir}`)
     } catch (error) {
-      log.warn('[DebugPipeline] Failed to dump round-trip:', error)
+      log.warn('[DebugPipeline] Failed to dump extraction:', error)
+    }
+  }
+
+  /**
+   * Dump an LLM round-trip for the summary phase (pass 2).
+   * Writes into the same subfolder created by the preceding dumpExtraction() call.
+   * No screenshots are copied — the summary pass is text-only.
+   */
+  public dumpSummary(prompt: string, response: DebugPipelineResponse): void {
+    try {
+      if (!this.lastSubDir) {
+        log.warn('[DebugPipeline] dumpSummary called without a preceding dumpExtraction')
+        return
+      }
+
+      fs.writeFileSync(path.join(this.lastSubDir, 'summary-prompt.txt'), prompt, 'utf-8')
+
+      fs.writeFileSync(
+        path.join(this.lastSubDir, 'summary-response.json'),
+        JSON.stringify(response, null, 2),
+        'utf-8',
+      )
+
+      log.info(`[DebugPipeline] Dumped summary to ${this.lastSubDir}`)
+    } catch (error) {
+      log.warn('[DebugPipeline] Failed to dump summary:', error)
     }
   }
 }
