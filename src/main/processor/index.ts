@@ -1,5 +1,4 @@
 import * as fs from 'fs'
-import { extractText } from './ocr'
 import { EmbeddingService } from './embedding'
 import { StorageService, StoredEvent } from './storage'
 import { Screenshot, InteractionContext, SearchOptions, SearchFilters } from '../../shared/types'
@@ -17,9 +16,8 @@ export class EventProcessor {
 
   // Classification state - track START screenshot for START/END pairs
   private startScreenshot: Screenshot | null = null
-  private startOcrText = ''
 
-  // Processing queue to limit concurrent screenshot processing (prevents too many OCR/LLM subprocesses)
+  // Processing queue to limit concurrent screenshot processing (prevents too many LLM calls)
   private processingQueue: Array<{
     screenshot: Screenshot
     events: InteractionContext[]
@@ -48,7 +46,7 @@ export class EventProcessor {
 
   /**
    * Enqueue a screenshot for processing. Concurrency is limited by
-   * MAX_CONCURRENT_PROCESSING to prevent too many OCR subprocesses.
+   * MAX_CONCURRENT_PROCESSING to prevent too many concurrent LLM calls.
    */
   public async processScreenshot(screenshot: Screenshot): Promise<void> {
     const events = [...this.pendingEvents]
@@ -84,15 +82,14 @@ export class EventProcessor {
   }
 
   /**
-   * Main pipeline: OCR -> Embed -> Store -> Classification -> Cleanup
+   * Main pipeline: Extract -> Summarize -> Embed -> Store -> Cleanup
    *
    * Flow:
-   * 1. OCR extracts text from screenshot (needs file)
-   * 2. Generate embedding from text
-   * 3. Store in database
-   * 4. If classifier enabled: track START/END pairs for classification
-   * 5. Classification runs (needs both screenshot files)
-   * 6. Delete screenshot files after classification (or immediately if no classifier)
+   * 1. Track START/END screenshot pairs
+   * 2. When a pair completes: LLM extraction (images → detailed markdown)
+   * 3. LLM summarization (markdown → 5-15 word summary)
+   * 4. Generate embedding from summary (or detailed text)
+   * 5. Store in database, delete screenshot files
    */
   private async processScreenshotInternal(
     screenshot: Screenshot,
@@ -105,47 +102,45 @@ export class EventProcessor {
     log.info(`[EventProcessor] Events: ${JSON.stringify(events)}`)
 
     try {
-      // 1. OCR - needs the file to exist
       if (!fs.existsSync(filepath)) {
         log.warn(`File not found for screenshot ${id}: ${filepath}`)
         return
       }
 
-      const text = await extractText(filepath)
-      log.info(`[EventProcessor] OCR complete for ${id}. Text length: ${text.length}`)
-
-      // 2. Semantic Classification (START/END pair tracking)
       if (this.classifierService) {
         if (!this.startScreenshot) {
-          // This is the START screenshot - keep file and OCR for classification
-          this.setStartState(screenshot, text)
+          this.setStartState(screenshot)
         } else {
-          // Check if app changed between START and END
           const appChanged = this.hasAppChange(events)
 
           if (appChanged) {
-            // App change: use single-image classification for START only
-            log.info(`[EventProcessor] App change detected, using single-image classification`)
-            const summary = await this.runClassification(this.startScreenshot, undefined, events)
+            log.info(`[EventProcessor] App change detected, using single-image extraction`)
+            const { detailedText, summary } = await this.runExtractAndSummarize(
+              this.startScreenshot,
+              undefined,
+              events,
+            )
             await this.storeAndCleanup(
               this.startScreenshot,
-              this.startOcrText,
+              detailedText,
               summary,
               events,
               'app change, single-image',
             )
           } else {
-            // Normal flow: two-image classification (same app)
-            const summary = await this.runClassification(this.startScreenshot, screenshot, events)
-            await this.storeAndCleanup(this.startScreenshot, this.startOcrText, summary, events)
+            const { detailedText, summary } = await this.runExtractAndSummarize(
+              this.startScreenshot,
+              screenshot,
+              events,
+            )
+            await this.storeAndCleanup(this.startScreenshot, detailedText, summary, events)
           }
 
-          // END becomes new START (keep its file for next classification)
-          this.setStartState(screenshot, text)
+          // END becomes new START
+          this.setStartState(screenshot)
         }
       } else {
-        // No classifier - store OCR only with empty summary, then delete
-        await this.storeAndCleanup(screenshot, text, '', events, 'no classifier')
+        await this.storeAndCleanup(screenshot, '', '', events, 'no classifier')
       }
     } catch (error) {
       log.error(`Error processing screenshot ${id}:`, error)
@@ -154,29 +149,32 @@ export class EventProcessor {
   }
 
   /**
-   * Run classification and return summary. Handles errors gracefully.
+   * Run the two-pass pipeline: extract detailed text, then summarize.
+   * Handles errors gracefully — returns empty strings on failure.
    */
-  private async runClassification(
+  private async runExtractAndSummarize(
     startScreenshot: Screenshot,
     endScreenshot: Screenshot | undefined,
     events: InteractionContext[],
-  ): Promise<string> {
+  ): Promise<{ detailedText: string; summary: string }> {
     log.info(`[EventProcessor] START screenshot: ${startScreenshot.id}`)
     if (endScreenshot) {
       log.info(`[EventProcessor] END screenshot: ${endScreenshot.id}`)
     }
 
+    const input = { startScreenshot, endScreenshot, events }
+
     try {
-      const summary = await this.classifierService!.classify({
-        startScreenshot,
-        endScreenshot,
-        events,
-      })
-      log.info(`[EventProcessor] Classification summary: ${summary}`)
-      return summary
+      const detailedText = await this.classifierService!.extract(input)
+      log.info(`[EventProcessor] Extraction complete: ${detailedText.length} chars`)
+
+      const summary = await this.classifierService!.classify(detailedText, input)
+      log.info(`[EventProcessor] Summary: ${summary}`)
+
+      return { detailedText, summary }
     } catch (error) {
-      log.error('[EventProcessor] Classification failed:', error)
-      return 'Classification failed'
+      log.error('[EventProcessor] Extract/summarize failed:', error)
+      return { detailedText: '', summary: 'Classification failed' }
     }
   }
 
@@ -185,17 +183,17 @@ export class EventProcessor {
    */
   private async storeAndCleanup(
     screenshot: Screenshot,
-    ocrText: string,
+    detailedText: string,
     summary: string,
     events: InteractionContext[],
     logSuffix?: string,
   ): Promise<void> {
-    const vector = await this.embeddingService.generateEmbedding(summary || ocrText)
+    const vector = await this.embeddingService.generateEmbedding(summary || detailedText)
     const appName = this.extractAppName(events)
     const storedEvent: StoredEvent = {
       id: screenshot.id,
       timestamp: screenshot.timestamp,
-      text: ocrText,
+      text: detailedText,
       summary,
       appName,
       vector,
@@ -211,9 +209,8 @@ export class EventProcessor {
   /**
    * Update the START state for the next classification pair.
    */
-  private setStartState(screenshot: Screenshot, ocrText: string): void {
+  private setStartState(screenshot: Screenshot): void {
     this.startScreenshot = screenshot
-    this.startOcrText = ocrText
   }
 
   /**
