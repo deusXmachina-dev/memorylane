@@ -22,6 +22,7 @@ export class EventProcessor {
   // Processing queue to limit concurrent screenshot processing (prevents too many OCR/LLM subprocesses)
   private processingQueue: Array<{
     screenshot: Screenshot
+    events: InteractionContext[]
     resolve: () => void
     reject: (error: unknown) => void
   }> = []
@@ -50,10 +51,13 @@ export class EventProcessor {
    * MAX_CONCURRENT_PROCESSING to prevent too many OCR subprocesses.
    */
   public async processScreenshot(screenshot: Screenshot): Promise<void> {
+    const events = [...this.pendingEvents]
+    this.pendingEvents = []
+
     return new Promise<void>((resolve, reject) => {
-      this.processingQueue.push({ screenshot, resolve, reject })
+      this.processingQueue.push({ screenshot, events, resolve, reject })
       log.info(
-        `[EventProcessor] Queued screenshot ${screenshot.id} (queue size: ${this.processingQueue.length}, active: ${this.activeProcessingCount})`,
+        `[EventProcessor] Queued screenshot ${screenshot.id} with ${events.length} events (queue size: ${this.processingQueue.length}, active: ${this.activeProcessingCount})`,
       )
       void this.drainQueue()
     })
@@ -69,7 +73,7 @@ export class EventProcessor {
       const item = this.processingQueue.shift()!
       this.activeProcessingCount++
 
-      void this.processScreenshotInternal(item.screenshot)
+      void this.processScreenshotInternal(item.screenshot, item.events)
         .then(() => item.resolve())
         .catch((error) => item.reject(error))
         .finally(() => {
@@ -90,12 +94,11 @@ export class EventProcessor {
    * 5. Classification runs (needs both screenshot files)
    * 6. Delete screenshot files after classification (or immediately if no classifier)
    */
-  private async processScreenshotInternal(screenshot: Screenshot): Promise<void> {
+  private async processScreenshotInternal(
+    screenshot: Screenshot,
+    events: InteractionContext[],
+  ): Promise<void> {
     const { filepath, id } = screenshot
-
-    // Grab pending events and reset for next screenshot
-    const events = [...this.pendingEvents]
-    this.pendingEvents = []
     log.info(
       `[EventProcessor] Processing screenshot ${id} with ${events.length} accumulated events`,
     )
