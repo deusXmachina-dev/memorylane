@@ -6,8 +6,8 @@
   "main": "./out/main/index.js",
   "private": true,
   "scripts": {
-    "dev": "LOG_LEVEL=debug electron-vite dev",
-    "dev:debug-pipeline": "LOG_LEVEL=debug DEBUG_PIPELINE=1 electron-vite dev",
+    "dev": "cross-env LOG_LEVEL=debug electron-vite dev",
+    "dev:debug-pipeline": "cross-env LOG_LEVEL=debug DEBUG_PIPELINE=1 electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "package": "npm run build && electron-builder --dir",
@@ -48,6 +48,7 @@
     "@typescript-eslint/eslint-plugin": "^8.54.0",
     "@typescript-eslint/parser": "^8.54.0",
     "@vitejs/plugin-react": "^5.1.3",
+    "cross-env": "^10.1.0",
     "electron": "40.1.0",
     "electron-builder": "^26.7.0",
     "electron-vite": "^2.3.0",
