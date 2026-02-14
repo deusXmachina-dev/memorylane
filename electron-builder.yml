@@ -19,6 +19,10 @@ extraResources:
     to: swift
     filter:
       - '*.swift'
+  - from: src/main/processor/powershell
+    to: powershell
+    filter:
+      - '*.ps1'
 
 asar: true
 asarUnpack:
