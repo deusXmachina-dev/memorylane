@@ -2,12 +2,20 @@ import { spawn } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
 
+type OcrBackend = (filepath: string) => Promise<string>
+
+function assertImageExists(filepath: string): void {
+  if (!fs.existsSync(filepath)) {
+    throw new Error(`Image file not found: ${filepath}`)
+  }
+}
+
 /**
- * Resolves the path to the Swift OCR script.
+ * Resolves the path to the Swift OCR script for macOS OCR.
  * In development, it looks in the src directory.
  * In production, it looks in the resources directory.
  */
-function getOcrScriptPath(): string {
+function getMacOSOcrScriptPath(): string {
   let isPackaged = false
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -32,22 +40,11 @@ function getOcrScriptPath(): string {
   throw new Error(`OCR script not found at ${devPath}`)
 }
 
-/**
- * Extracts text from an image using the native macOS Vision framework via a Swift sidecar script.
- *
- * @param filepath Absolute path to the image file
- * @returns Promise resolving to the extracted text
- * @throws Error if the file doesn't exist or the OCR process fails
- */
-export async function extractText(filepath: string): Promise<string> {
-  const scriptPath = getOcrScriptPath()
+async function extractTextMacOS(filepath: string): Promise<string> {
+  assertImageExists(filepath)
+  const scriptPath = getMacOSOcrScriptPath()
 
   return new Promise((resolve, reject) => {
-    // Basic validation
-    if (!fs.existsSync(filepath)) {
-      return reject(new Error(`Image file not found: ${filepath}`))
-    }
-
     const swift = spawn('swift', [scriptPath, filepath])
 
     let stdoutData = ''
@@ -63,7 +60,6 @@ export async function extractText(filepath: string): Promise<string> {
 
     swift.on('close', (code) => {
       if (code !== 0) {
-        // The Swift script exits with 1 on known errors (missing file, Vision error)
         return reject(
           new Error(
             `OCR process failed with code ${code}: ${stderrData.trim() || 'Unknown error'}`,
@@ -71,8 +67,6 @@ export async function extractText(filepath: string): Promise<string> {
         )
       }
 
-      // Success: return the trimmed text
-      // Note: "No text found" results in empty string (exit code 0), which is valid.
       resolve(stdoutData.trim())
     })
 
@@ -80,4 +74,31 @@ export async function extractText(filepath: string): Promise<string> {
       reject(new Error(`Failed to spawn swift process: ${err.message}`))
     })
   })
+}
+
+async function extractTextWindowsUnsupported(_filepath: string): Promise<string> {
+  throw new Error(
+    'OCR backend is not configured for Windows yet. Use macOS OCR or configure a Windows backend.',
+  )
+}
+
+const PLATFORM_OCR_BACKENDS: Partial<Record<NodeJS.Platform, OcrBackend>> = {
+  darwin: extractTextMacOS,
+  win32: extractTextWindowsUnsupported,
+}
+
+/**
+ * Extracts text from an image using a platform-specific OCR backend.
+ *
+ * @param filepath Absolute path to the image file
+ * @returns Promise resolving to the extracted text
+ * @throws Error when no OCR backend is configured for the running platform
+ */
+export async function extractText(filepath: string): Promise<string> {
+  const backend = PLATFORM_OCR_BACKENDS[process.platform]
+  if (!backend) {
+    throw new Error(`OCR is not supported on platform "${process.platform}"`)
+  }
+
+  return backend(filepath)
 }
