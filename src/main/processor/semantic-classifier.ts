@@ -1,4 +1,5 @@
 import * as fs from 'fs'
+import { nativeImage } from 'electron'
 import { OpenRouter } from '@openrouter/sdk'
 import { ClassificationInput, ClassificationResult, InteractionContext } from '../../shared/types'
 import { UsageTracker } from '../services/usage-tracker'
@@ -28,6 +29,9 @@ const SUPPORTED_MODELS = {
 >
 
 export type ModelChoice = keyof typeof SUPPORTED_MODELS
+
+const MAX_VISION_IMAGE_DIMENSION = 1280
+const VISION_IMAGE_JPEG_QUALITY = 70
 
 export class SemanticClassifierService {
   private summaryHistory: ClassificationResult[] = []
@@ -106,7 +110,7 @@ export class SemanticClassifierService {
       const prompt = isSingleImage ? this.formatSingleImagePrompt(input) : this.formatPrompt(input)
 
       // Convert screenshot(s) to base64
-      const startImageData = this.imageToBase64(startScreenshot.filepath)
+      const startImageData = this.imageToDataUrl(startScreenshot.filepath)
 
       // Build content array with proper literal types
       const content = [
@@ -116,16 +120,16 @@ export class SemanticClassifierService {
         },
         {
           type: 'image_url' as const,
-          imageUrl: { url: `data:image/png;base64,${startImageData}` },
+          imageUrl: { url: startImageData },
         },
       ]
 
       // Add end image only if present (two-image mode)
       if (endScreenshot) {
-        const endImageData = this.imageToBase64(endScreenshot.filepath)
+        const endImageData = this.imageToDataUrl(endScreenshot.filepath)
         content.push({
           type: 'image_url' as const,
-          imageUrl: { url: `data:image/png;base64,${endImageData}` },
+          imageUrl: { url: endImageData },
         })
       }
 
@@ -324,11 +328,37 @@ export class SemanticClassifierService {
   }
 
   /**
-   * Convert image file to base64
+   * Convert image file to an LLM-ready data URL.
+   * Downscales large screenshots to reduce vision token usage.
    */
-  private imageToBase64(filepath: string): string {
+  private imageToDataUrl(filepath: string): string {
     const imageBuffer = fs.readFileSync(filepath)
-    return imageBuffer.toString('base64')
+    const image = nativeImage.createFromBuffer(imageBuffer)
+
+    if (image.isEmpty()) {
+      return `data:image/png;base64,${imageBuffer.toString('base64')}`
+    }
+
+    const size = image.getSize()
+    const largestDimension = Math.max(size.width, size.height)
+    const scale =
+      largestDimension > MAX_VISION_IMAGE_DIMENSION
+        ? MAX_VISION_IMAGE_DIMENSION / largestDimension
+        : 1
+
+    if (scale === 1) {
+      const pngBuffer = image.toPNG()
+      return `data:image/png;base64,${pngBuffer.toString('base64')}`
+    }
+
+    const resized = image.resize({
+      width: Math.max(1, Math.round(size.width * scale)),
+      height: Math.max(1, Math.round(size.height * scale)),
+      quality: 'good',
+    })
+
+    const optimizedJpeg = resized.toJPEG(VISION_IMAGE_JPEG_QUALITY)
+    return `data:image/jpeg;base64,${optimizedJpeg.toString('base64')}`
   }
 
   /**
