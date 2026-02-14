@@ -111,8 +111,14 @@ export class EventProcessor {
         return
       }
 
-      const text = await extractText(filepath)
-      log.info(`[EventProcessor] OCR complete for ${id}. Text length: ${text.length}`)
+      let text = ''
+      try {
+        text = await extractText(filepath)
+        log.info(`[EventProcessor] OCR complete for ${id}. Text length: ${text.length}`)
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        log.error(`[EventProcessor] OCR failed for ${id}: ${errorMessage}`)
+      }
 
       // 2. Semantic Classification (START/END pair tracking)
       if (this.classifierService) {

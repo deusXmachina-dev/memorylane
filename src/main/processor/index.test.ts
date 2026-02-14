@@ -13,6 +13,7 @@ vi.mock('./ocr')
 
 describe('EventProcessor', () => {
   const existingScreenshotPath = path.join(os.tmpdir(), 'memorylane-test.png')
+  const ocrFailureScreenshotPath = path.join(os.tmpdir(), 'memorylane-ocr-failure.png')
   const missingScreenshotPath = path.join(os.tmpdir(), 'memorylane-missing.png')
 
   let processor: EventProcessor
@@ -73,6 +74,32 @@ describe('EventProcessor', () => {
     })
 
     // 4. Cleanup
+    expect(fs.unlinkSync).toHaveBeenCalledWith(screenshot.filepath)
+  })
+
+  it('should continue processing when OCR fails', async () => {
+    const screenshot = {
+      id: 'ocr-failure-id',
+      filepath: ocrFailureScreenshotPath,
+      timestamp: 123456,
+      display: { id: 1, width: 1920, height: 1080 },
+    }
+
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+    vi.mocked(ocr.extractText).mockRejectedValue(new Error('OCR backend unavailable'))
+
+    await processor.processScreenshot(screenshot)
+
+    expect(ocr.extractText).toHaveBeenCalledWith(screenshot.filepath)
+    expect(mockEmbeddingService.generateEmbedding).toHaveBeenCalledWith('')
+    expect(mockStorageService.addEvent).toHaveBeenCalledWith({
+      appName: '',
+      id: screenshot.id,
+      timestamp: screenshot.timestamp,
+      text: '',
+      summary: '',
+      vector: [0.1, 0.2, 0.3],
+    })
     expect(fs.unlinkSync).toHaveBeenCalledWith(screenshot.filepath)
   })
 
