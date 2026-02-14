@@ -1,3 +1,13 @@
+# MemoryLane
+
+## Unreleased
+
+### What's Changed
+
+- **Native Windows OCR backend** — replaced the Tesseract CLI dependency on Windows with a native Windows OCR path, so OCR no longer requires Tesseract installation or PATH setup
+- **Unified OCR error contracts** — standardized OCR backend error messages across platforms for clearer diagnostics
+- **Windows OCR backend test coverage** — added unit tests for native backend success and failure modes
+
 # MemoryLane v0.6.0
 
 MemoryLane is a macOS system tray app that captures your screen activity, processes it with OCR and AI summarization, and makes it searchable through an MCP server — giving AI assistants like Claude and Cursor memory of what you've been working on.
