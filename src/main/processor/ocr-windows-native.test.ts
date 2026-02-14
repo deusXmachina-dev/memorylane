@@ -67,6 +67,44 @@ describe('extractTextWindowsNative', () => {
     await expect(promise).rejects.toThrow('[OCR:windows:runtime_failed]')
   })
 
+  it('parses JSON payload even when extra log lines are present', async () => {
+    const fs = await import('fs')
+    const childProcess = await import('child_process')
+
+    const mockChild = createMockChildProcess()
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+    vi.mocked(childProcess.spawn).mockReturnValue(
+      mockChild as unknown as ReturnType<typeof childProcess.spawn>,
+    )
+
+    const promise = extractTextWindowsNative('C:\\tmp\\shot.png')
+
+    mockChild.stdout.emit('data', 'Some preface log line\r\n')
+    mockChild.stdout.emit('data', '{"text":"Recovered OCR text"}\r\n')
+    mockChild.emit('close', 0)
+
+    await expect(promise).resolves.toBe('Recovered OCR text')
+  })
+
+  it('decodes UTF-16 output from powershell', async () => {
+    const fs = await import('fs')
+    const childProcess = await import('child_process')
+
+    const mockChild = createMockChildProcess()
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+    vi.mocked(childProcess.spawn).mockReturnValue(
+      mockChild as unknown as ReturnType<typeof childProcess.spawn>,
+    )
+
+    const promise = extractTextWindowsNative('C:\\tmp\\shot.png')
+
+    const utf16Json = Buffer.from('\uFEFF{"text":"UTF16 OCR text"}', 'utf16le')
+    mockChild.stdout.emit('data', utf16Json)
+    mockChild.emit('close', 0)
+
+    await expect(promise).resolves.toBe('UTF16 OCR text')
+  })
+
   it('fails when script exits with non-zero status', async () => {
     const fs = await import('fs')
     const childProcess = await import('child_process')
