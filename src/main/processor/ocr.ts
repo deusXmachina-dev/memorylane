@@ -1,6 +1,7 @@
 import { spawn } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
+import { createOcrBackendError } from './ocr-errors'
 import { extractTextWindows } from './ocr-windows'
 
 type OcrBackend = (filepath: string) => Promise<string>
@@ -30,7 +31,11 @@ function getMacOSOcrScriptPath(): string {
     if (fs.existsSync(prodPath)) {
       return prodPath
     }
-    throw new Error(`OCR script not found at ${prodPath}`)
+    throw createOcrBackendError(
+      'macos',
+      'backend_unavailable',
+      `OCR script not found at ${prodPath}`,
+    )
   }
 
   const devPath = path.resolve(process.cwd(), 'src', 'main', 'processor', 'swift', 'ocr.swift')
@@ -38,7 +43,7 @@ function getMacOSOcrScriptPath(): string {
     return devPath
   }
 
-  throw new Error(`OCR script not found at ${devPath}`)
+  throw createOcrBackendError('macos', 'backend_unavailable', `OCR script not found at ${devPath}`)
 }
 
 async function extractTextMacOS(filepath: string): Promise<string> {
@@ -61,7 +66,9 @@ async function extractTextMacOS(filepath: string): Promise<string> {
     swift.on('close', (code) => {
       if (code !== 0) {
         return reject(
-          new Error(
+          createOcrBackendError(
+            'macos',
+            'runtime_failed',
             `OCR process failed with code ${code}: ${stderrData.trim() || 'Unknown error'}`,
           ),
         )
@@ -71,7 +78,13 @@ async function extractTextMacOS(filepath: string): Promise<string> {
     })
 
     swift.on('error', (err) => {
-      reject(new Error(`Failed to spawn swift process: ${err.message}`))
+      reject(
+        createOcrBackendError(
+          'macos',
+          'backend_unavailable',
+          `Failed to spawn swift process: ${err.message}`,
+        ),
+      )
     })
   })
 }
@@ -93,7 +106,11 @@ export async function extractText(filepath: string): Promise<string> {
 
   const backend = PLATFORM_OCR_BACKENDS[process.platform]
   if (!backend) {
-    throw new Error(`OCR is not supported on platform "${process.platform}"`)
+    throw createOcrBackendError(
+      process.platform === 'win32' ? 'windows' : 'macos',
+      'backend_unavailable',
+      `OCR is not supported on platform "${process.platform}"`,
+    )
   }
 
   return backend(filepath)

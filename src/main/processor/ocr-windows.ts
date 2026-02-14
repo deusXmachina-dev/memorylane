@@ -1,4 +1,5 @@
 import { spawn } from 'child_process'
+import { createOcrBackendError } from './ocr-errors'
 
 function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && 'code' in error
@@ -28,20 +29,30 @@ export async function extractTextWindows(filepath: string): Promise<string> {
     tesseract.on('error', (error) => {
       if (isErrnoException(error) && error.code === 'ENOENT') {
         reject(
-          new Error(
+          createOcrBackendError(
+            'windows',
+            'backend_unavailable',
             'Windows OCR requires Tesseract to be installed and available on PATH. Install it and retry.',
           ),
         )
         return
       }
 
-      reject(new Error(`Failed to start Tesseract OCR process: ${error.message}`))
+      reject(
+        createOcrBackendError(
+          'windows',
+          'runtime_failed',
+          `Failed to start Tesseract OCR process: ${error.message}`,
+        ),
+      )
     })
 
     tesseract.on('close', (code) => {
       if (code !== 0) {
         reject(
-          new Error(
+          createOcrBackendError(
+            'windows',
+            'runtime_failed',
             `Tesseract OCR failed with code ${code}: ${stderrData.trim() || 'Unknown error'}`,
           ),
         )
