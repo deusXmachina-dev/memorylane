@@ -12,6 +12,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
+import { fileURLToPath } from 'url'
 
 const CONFIG_PATH = path.join(
   os.homedir(),
@@ -21,7 +22,7 @@ const CONFIG_PATH = path.join(
   'claude_desktop_config.json',
 )
 
-const PROJECT_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
+const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 const PROD_CONFIG = {
   command: '/Applications/MemoryLane.app/Contents/MacOS/MemoryLane',
@@ -40,12 +41,13 @@ const ELECTRON_BINARY = path.join(
   'Electron',
 )
 
+const TSX_CLI_PATH = path.join(PROJECT_ROOT, 'node_modules', 'tsx', 'dist', 'cli.mjs')
+const MCP_SERVER_SCRIPT_PATH = path.join(PROJECT_ROOT, 'scripts', 'mcp-server.ts')
+
 const DEV_CONFIG = {
-  command: '/bin/bash',
-  args: [
-    '-c',
-    `cd ${PROJECT_ROOT} && ELECTRON_RUN_AS_NODE=1 exec ${ELECTRON_BINARY} ./node_modules/.bin/tsx scripts/mcp-server.ts`,
-  ],
+  command: ELECTRON_BINARY,
+  args: [TSX_CLI_PATH, MCP_SERVER_SCRIPT_PATH],
+  env: { ELECTRON_RUN_AS_NODE: '1' },
 }
 
 interface ClaudeConfig {
@@ -68,7 +70,7 @@ function writeConfig(config: ClaudeConfig): void {
 function isDev(config: ClaudeConfig): boolean {
   const ml = config.mcpServers?.['memorylane'] as Record<string, unknown> | undefined
   if (!ml) return false
-  return ml.command === '/bin/bash'
+  return ml.command === ELECTRON_BINARY
 }
 
 function status(config: ClaudeConfig): void {
