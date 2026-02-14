@@ -1,6 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+if [ "$(uname -s)" != "Darwin" ]; then
+  echo "Error: scripts/install-local.sh is only supported on macOS."
+  exit 1
+fi
+
 APP_NAME="MemoryLane"
 INSTALL_DIR="/Applications"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

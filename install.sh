@@ -1,6 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+if [ "$(uname -s)" != "Darwin" ]; then
+  echo "Error: install.sh is only supported on macOS."
+  exit 1
+fi
+
 APP_NAME="MemoryLane"
 REPO="deusXmachina-dev/memorylane"
 INSTALL_DIR="/Applications"
