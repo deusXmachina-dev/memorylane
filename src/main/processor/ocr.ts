@@ -1,6 +1,7 @@
 import { spawn } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
+import { extractTextWindows } from './ocr-windows'
 
 type OcrBackend = (filepath: string) => Promise<string>
 
@@ -41,7 +42,6 @@ function getMacOSOcrScriptPath(): string {
 }
 
 async function extractTextMacOS(filepath: string): Promise<string> {
-  assertImageExists(filepath)
   const scriptPath = getMacOSOcrScriptPath()
 
   return new Promise((resolve, reject) => {
@@ -76,15 +76,9 @@ async function extractTextMacOS(filepath: string): Promise<string> {
   })
 }
 
-async function extractTextWindowsUnsupported(_filepath: string): Promise<string> {
-  throw new Error(
-    'OCR backend is not configured for Windows yet. Use macOS OCR or configure a Windows backend.',
-  )
-}
-
 const PLATFORM_OCR_BACKENDS: Partial<Record<NodeJS.Platform, OcrBackend>> = {
   darwin: extractTextMacOS,
-  win32: extractTextWindowsUnsupported,
+  win32: extractTextWindows,
 }
 
 /**
@@ -95,6 +89,8 @@ const PLATFORM_OCR_BACKENDS: Partial<Record<NodeJS.Platform, OcrBackend>> = {
  * @throws Error when no OCR backend is configured for the running platform
  */
 export async function extractText(filepath: string): Promise<string> {
+  assertImageExists(filepath)
+
   const backend = PLATFORM_OCR_BACKENDS[process.platform]
   if (!backend) {
     throw new Error(`OCR is not supported on platform "${process.platform}"`)
