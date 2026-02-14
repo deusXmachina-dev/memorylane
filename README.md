@@ -2,11 +2,19 @@
 
 ## Installation
 
+### macOS (Apple Silicon)
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/deusXmachina-dev/memorylane/main/install.sh | sh
 ```
 
 This downloads the latest release and installs it to `/Applications`.
+
+### Windows (Preview)
+
+1. Download the latest `MemoryLane Setup *.exe` from [GitHub Releases](https://github.com/deusXmachina-dev/memorylane/releases).
+2. Run the installer and finish setup.
+3. Launch MemoryLane from the Start menu.
 
 ## TL;DR
 
