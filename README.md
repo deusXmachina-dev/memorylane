@@ -64,7 +64,7 @@ MemoryLane captures your screen to give AI assistants context about what you're 
 ### What works today
 
 - Event-driven screen capture (typing, clicking, scrolling, app switches, visual changes)
-- OCR via macOS Vision framework
+- OCR via macOS Vision framework and Windows Tesseract CLI backend
 - AI-powered activity summarization (Mistral Small, GPT-5 Nano, Grok-4.1 Fast, Gemini Flash Lite via OpenRouter)
 - Semantic + full-text search over your activity history
 - MCP server with `search_context`, `browse_timeline`, and `get_event_details` tools
@@ -75,7 +75,7 @@ MemoryLane captures your screen to give AI assistants context about what you're 
 
 ### Requirements
 
-- macOS (Apple Silicon / ARM64)
+- macOS (Apple Silicon / ARM64) or Windows 10/11 (x64 preview)
 - A MemoryLane subscription ($20/mo) **or** your own [OpenRouter](https://openrouter.ai/) API key
 
 ### First launch
@@ -123,7 +123,9 @@ That said, we'd love to see someone prove us wrong — it's one reason we open-s
 
 ## Limitations
 
-1. **macOS ARM64 only** — this release is Apple Silicon only; Intel Mac, Windows, and Linux builds are planned
+1. **Windows is preview support** — some OS-specific UX (permissions and tray behavior) may still require tuning.
+2. **Windows OCR requires Tesseract** — install Tesseract and ensure `tesseract` is available on `PATH` for local OCR.
+3. **Platform support is still evolving** — Linux and Intel macOS are not yet officially supported.
 
 ## Coming Soon
 
