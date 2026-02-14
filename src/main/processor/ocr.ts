@@ -2,7 +2,7 @@ import { spawn } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
 import { createOcrBackendError } from './ocr-errors'
-import { extractTextWindows } from './ocr-windows'
+import { extractTextWindowsNative } from './ocr-windows-native'
 
 type OcrBackend = (filepath: string) => Promise<string>
 
@@ -91,7 +91,7 @@ async function extractTextMacOS(filepath: string): Promise<string> {
 
 const PLATFORM_OCR_BACKENDS: Partial<Record<NodeJS.Platform, OcrBackend>> = {
   darwin: extractTextMacOS,
-  win32: extractTextWindows,
+  win32: extractTextWindowsNative,
 }
 
 /**
