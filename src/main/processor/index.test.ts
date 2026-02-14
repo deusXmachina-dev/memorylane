@@ -3,6 +3,8 @@ import { EventProcessor } from './index'
 import { EmbeddingService } from './embedding'
 import { StorageService } from './storage'
 import * as fs from 'fs'
+import * as os from 'os'
+import * as path from 'path'
 import * as ocr from './ocr'
 
 // Mock dependencies
@@ -10,6 +12,9 @@ vi.mock('fs')
 vi.mock('./ocr')
 
 describe('EventProcessor', () => {
+  const existingScreenshotPath = path.join(os.tmpdir(), 'memorylane-test.png')
+  const missingScreenshotPath = path.join(os.tmpdir(), 'memorylane-missing.png')
+
   let processor: EventProcessor
   let mockEmbeddingService: EmbeddingService
   let mockStorageService: StorageService
@@ -37,7 +42,7 @@ describe('EventProcessor', () => {
   it('should process a screenshot successfully', async () => {
     const screenshot = {
       id: 'test-id',
-      filepath: '/tmp/test.png',
+      filepath: existingScreenshotPath,
       timestamp: 123456,
       display: { id: 1, width: 1920, height: 1080 },
     }
@@ -74,7 +79,7 @@ describe('EventProcessor', () => {
   it('should skip processing if file does not exist', async () => {
     const screenshot = {
       id: 'missing-id',
-      filepath: '/tmp/missing.png',
+      filepath: missingScreenshotPath,
       timestamp: 123456,
       display: { id: 1, width: 100, height: 100 },
     }
