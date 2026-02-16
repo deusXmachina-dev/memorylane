@@ -16,6 +16,8 @@ export interface CaptureReason {
   metadata?: Record<string, unknown>
 }
 
+export type SessionEndReason = 'app_switch' | 'max_duration' | 'stop'
+
 export interface InteractionContext {
   type: 'click' | 'keyboard' | 'scroll' | 'app_change'
   timestamp: number
@@ -46,11 +48,32 @@ export interface InteractionContext {
 }
 
 export type OnScreenshotCallback = (screenshot: Screenshot) => void
+export type OnSessionCompleteCallback = (session: CompletedSession) => void
+
+export interface CompletedSession {
+  sessionId: string
+  appName: string
+  startTimestamp: number
+  endTimestamp: number
+  screenshots: Screenshot[]
+  interactionEvents: InteractionContext[]
+  endReason: SessionEndReason
+}
 
 export interface ClassificationInput {
   startScreenshot: Screenshot
   endScreenshot?: Screenshot | undefined // Optional for single-image mode (app change)
   events: InteractionContext[]
+}
+
+export interface SessionClassificationInput {
+  sessionId: string
+  appName: string
+  startTimestamp: number
+  endTimestamp: number
+  screenshots: Screenshot[]
+  interactionEvents: InteractionContext[]
+  ocrText: string
 }
 
 export interface ClassificationResult {

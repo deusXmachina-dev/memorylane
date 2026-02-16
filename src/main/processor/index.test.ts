@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { EventProcessor } from './index'
 import { EmbeddingService } from './embedding'
 import { StorageService } from './storage'
+import { SemanticClassifierService } from './semantic-classifier'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
@@ -12,13 +13,13 @@ vi.mock('fs')
 vi.mock('./ocr')
 
 describe('EventProcessor', () => {
-  const existingScreenshotPath = path.join(os.tmpdir(), 'memorylane-test.png')
-  const ocrFailureScreenshotPath = path.join(os.tmpdir(), 'memorylane-ocr-failure.png')
-  const missingScreenshotPath = path.join(os.tmpdir(), 'memorylane-missing.png')
+  const firstScreenshotPath = path.join(os.tmpdir(), 'memorylane-first.png')
+  const secondScreenshotPath = path.join(os.tmpdir(), 'memorylane-second.png')
 
   let processor: EventProcessor
   let mockEmbeddingService: EmbeddingService
   let mockStorageService: StorageService
+  let mockClassifierService: SemanticClassifierService
 
   beforeEach(() => {
     // Reset mocks
@@ -37,85 +38,175 @@ describe('EventProcessor', () => {
       close: vi.fn(),
     } as unknown as StorageService
 
+    mockClassifierService = {
+      summarizeSession: vi.fn().mockResolvedValue(''),
+      classify: vi.fn(),
+      getSummaryHistory: vi.fn(),
+      getUsageTracker: vi.fn(),
+    } as unknown as SemanticClassifierService
+
     processor = new EventProcessor(mockEmbeddingService, mockStorageService)
   })
 
-  it('should process a screenshot successfully', async () => {
-    const screenshot = {
-      id: 'test-id',
-      filepath: existingScreenshotPath,
-      timestamp: 123456,
-      display: { id: 1, width: 1920, height: 1080 },
+  it('processes one session into one stored event', async () => {
+    const session = {
+      sessionId: 'session-1',
+      appName: 'Cursor',
+      startTimestamp: 1000,
+      endTimestamp: 2500,
+      endReason: 'app_switch' as const,
+      screenshots: [
+        {
+          id: 's1',
+          filepath: firstScreenshotPath,
+          timestamp: 1000,
+          display: { id: 1, width: 1920, height: 1080 },
+          trigger: { type: 'manual' as const },
+        },
+        {
+          id: 's2',
+          filepath: secondScreenshotPath,
+          timestamp: 2000,
+          display: { id: 1, width: 1920, height: 1080 },
+          trigger: { type: 'baseline_change' as const, confidence: 14.1 },
+        },
+      ],
+      interactionEvents: [
+        { type: 'keyboard' as const, timestamp: 1800, keyCount: 12, durationMs: 900 },
+      ],
     }
 
     // Setup mocks behavior
     vi.mocked(fs.existsSync).mockReturnValue(true)
-    vi.mocked(ocr.extractText).mockResolvedValue('Detected Text')
-    // fs.unlinkSync is void, no return needed
+    vi.mocked(ocr.extractText)
+      .mockResolvedValueOnce('First OCR text')
+      .mockResolvedValueOnce('Second OCR text')
 
     // Run
-    await processor.processScreenshot(screenshot)
+    await processor.processSession(session)
 
-    // Verify Pipeline Steps
-    // 1. OCR
-    expect(ocr.extractText).toHaveBeenCalledWith(screenshot.filepath)
+    const expectedText =
+      '[FRAME 1/2] timestamp=1000 id=s1\n' +
+      'First OCR text\n\n' +
+      '[FRAME 2/2] timestamp=2000 id=s2\n' +
+      'Second OCR text'
 
-    // 2. Embedding
-    expect(mockEmbeddingService.generateEmbedding).toHaveBeenCalledWith('Detected Text')
-
-    // 3. Storage
+    expect(mockEmbeddingService.generateEmbedding).toHaveBeenCalledWith(expectedText)
     expect(mockStorageService.addEvent).toHaveBeenCalledWith({
-      appName: '',
-      id: screenshot.id,
-      timestamp: screenshot.timestamp,
-      text: 'Detected Text',
+      id: 'session-1',
+      timestamp: 1000,
+      text: expectedText,
       summary: '',
+      appName: 'Cursor',
       vector: [0.1, 0.2, 0.3],
     })
-
-    // 4. Cleanup
-    expect(fs.unlinkSync).toHaveBeenCalledWith(screenshot.filepath)
+    expect(fs.unlinkSync).toHaveBeenCalledWith(firstScreenshotPath)
+    expect(fs.unlinkSync).toHaveBeenCalledWith(secondScreenshotPath)
   })
 
-  it('should continue processing when OCR fails', async () => {
-    const screenshot = {
-      id: 'ocr-failure-id',
-      filepath: ocrFailureScreenshotPath,
-      timestamp: 123456,
-      display: { id: 1, width: 1920, height: 1080 },
+  it('uses summary as embedding source when session summary succeeds', async () => {
+    processor = new EventProcessor(mockEmbeddingService, mockStorageService, mockClassifierService)
+    vi.mocked(mockClassifierService.summarizeSession).mockResolvedValue(
+      'Implemented session aggregation and updated processor tests.',
+    )
+
+    const session = {
+      sessionId: 'session-summary',
+      appName: 'Cursor',
+      startTimestamp: 3000,
+      endTimestamp: 4000,
+      endReason: 'stop' as const,
+      screenshots: [
+        {
+          id: 's3',
+          filepath: firstScreenshotPath,
+          timestamp: 3000,
+          display: { id: 1, width: 1920, height: 1080 },
+          trigger: { type: 'manual' as const },
+        },
+      ],
+      interactionEvents: [],
     }
 
     vi.mocked(fs.existsSync).mockReturnValue(true)
-    vi.mocked(ocr.extractText).mockRejectedValue(new Error('OCR backend unavailable'))
+    vi.mocked(ocr.extractText).mockResolvedValue('Fallback OCR text')
 
-    await processor.processScreenshot(screenshot)
+    await processor.processSession(session)
 
-    expect(ocr.extractText).toHaveBeenCalledWith(screenshot.filepath)
-    expect(mockEmbeddingService.generateEmbedding).toHaveBeenCalledWith('')
-    expect(mockStorageService.addEvent).toHaveBeenCalledWith({
-      appName: '',
-      id: screenshot.id,
-      timestamp: screenshot.timestamp,
-      text: '',
-      summary: '',
-      vector: [0.1, 0.2, 0.3],
-    })
-    expect(fs.unlinkSync).toHaveBeenCalledWith(screenshot.filepath)
+    expect(mockEmbeddingService.generateEmbedding).toHaveBeenCalledWith(
+      'Implemented session aggregation and updated processor tests.',
+    )
+    expect(mockStorageService.addEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'session-summary',
+        summary: 'Implemented session aggregation and updated processor tests.',
+      }),
+    )
   })
 
-  it('should skip processing if file does not exist', async () => {
-    const screenshot = {
-      id: 'missing-id',
-      filepath: missingScreenshotPath,
-      timestamp: 123456,
-      display: { id: 1, width: 100, height: 100 },
-    }
+  it('falls back to OCR embedding source when summary fails', async () => {
+    processor = new EventProcessor(mockEmbeddingService, mockStorageService, mockClassifierService)
+    vi.mocked(mockClassifierService.summarizeSession).mockRejectedValue(new Error('LLM timeout'))
 
     vi.mocked(fs.existsSync).mockReturnValue(false)
+    const session = {
+      sessionId: 'session-fallback',
+      appName: 'Terminal',
+      startTimestamp: 5000,
+      endTimestamp: 5000,
+      endReason: 'stop' as const,
+      screenshots: [
+        {
+          id: 's4',
+          filepath: firstScreenshotPath,
+          timestamp: 5000,
+          display: { id: 1, width: 100, height: 100 },
+          trigger: { type: 'manual' as const },
+        },
+      ],
+      interactionEvents: [],
+    }
 
-    await processor.processScreenshot(screenshot)
+    await processor.processSession(session)
 
-    expect(ocr.extractText).not.toHaveBeenCalled()
-    expect(mockStorageService.addEvent).not.toHaveBeenCalled()
+    const expectedText = '[FRAME 1/1] timestamp=5000 id=s4\n[NO_OCR_TEXT]'
+    expect(mockEmbeddingService.generateEmbedding).toHaveBeenCalledWith(expectedText)
+    expect(mockStorageService.addEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'session-fallback',
+        summary: '',
+        text: expectedText,
+      }),
+    )
+    expect(fs.unlinkSync).not.toHaveBeenCalled()
+  })
+
+  it('does not delete screenshots when storage fails', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+    vi.mocked(ocr.extractText).mockResolvedValue('OCR text')
+    vi.mocked(mockStorageService.addEvent).mockRejectedValue(new Error('db down'))
+
+    const session = {
+      sessionId: 'session-db-failure',
+      appName: 'Cursor',
+      startTimestamp: 7000,
+      endTimestamp: 7100,
+      endReason: 'stop' as const,
+      screenshots: [
+        {
+          id: 's5',
+          filepath: secondScreenshotPath,
+          timestamp: 7000,
+          display: { id: 1, width: 100, height: 100 },
+          trigger: { type: 'manual' as const },
+        },
+      ],
+      interactionEvents: [],
+    }
+
+    await expect(processor.processSession(session)).rejects.toThrow('db down')
+
+    expect(mockStorageService.addEvent).toHaveBeenCalledTimes(3)
+    expect(fs.unlinkSync).not.toHaveBeenCalled()
   })
 })

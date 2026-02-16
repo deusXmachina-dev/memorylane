@@ -17,6 +17,7 @@ import { ManagedKeyService } from './services/managed-key-service'
 import { DebugPipelineWriter } from './processor/debug-pipeline'
 import { startPowerMonitoring, shouldPause } from './power-monitor'
 import { config as loadEnv } from 'dotenv'
+import type { CompletedSession } from '../shared/types'
 
 try {
   loadEnv()
@@ -109,21 +110,44 @@ app.on('ready', async () => {
 
   openMainWindow()
 
-  recorder.onScreenshot(async (screenshot) => {
-    log.info(`[Main] Screenshot captured: ${screenshot.id}`)
-    try {
-      await processor!.processScreenshot(screenshot)
-      log.info(`[Main] Screenshot processed successfully: ${screenshot.id}`)
-      void updateTrayMenu()
-      void sendStatusToRenderer()
-    } catch (error) {
-      log.error(`[Main] Error processing screenshot ${screenshot.id}:`, error)
-    }
-  })
+  type RecorderWithSessionCallback = typeof recorder & {
+    onSessionComplete?: (callback: (session: CompletedSession) => void) => void
+  }
+  const recorderWithSessionCallback = recorder as RecorderWithSessionCallback
 
-  interactionMonitor.onInteraction((event) => {
-    processor!.addInteractionEvent(event)
-  })
+  if (typeof recorderWithSessionCallback.onSessionComplete === 'function') {
+    recorderWithSessionCallback.onSessionComplete(async (session) => {
+      log.info(
+        `[Main] Session completed: ${session.sessionId} (${session.screenshots.length} frames)`,
+      )
+      try {
+        await processor!.processSession(session)
+        log.info(`[Main] Session processed successfully: ${session.sessionId}`)
+        void updateTrayMenu()
+        void sendStatusToRenderer()
+      } catch (error) {
+        log.error(`[Main] Error processing session ${session.sessionId}:`, error)
+      }
+    })
+    log.info('[Main] Session-based recorder callback registered')
+  } else {
+    recorder.onScreenshot(async (screenshot) => {
+      log.info(`[Main] Screenshot captured: ${screenshot.id}`)
+      try {
+        await processor!.processScreenshot(screenshot)
+        log.info(`[Main] Screenshot processed successfully: ${screenshot.id}`)
+        void updateTrayMenu()
+        void sendStatusToRenderer()
+      } catch (error) {
+        log.error(`[Main] Error processing screenshot ${screenshot.id}:`, error)
+      }
+    })
+
+    interactionMonitor.onInteraction((event) => {
+      processor!.addInteractionEvent(event)
+    })
+    log.info('[Main] Using legacy screenshot-based processor integration')
+  }
 
   app.on('activate', () => {
     openMainWindow()

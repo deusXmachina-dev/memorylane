@@ -1,6 +1,11 @@
 import * as fs from 'fs'
 import { OpenRouter } from '@openrouter/sdk'
-import { ClassificationInput, ClassificationResult, InteractionContext } from '../../shared/types'
+import {
+  ClassificationInput,
+  ClassificationResult,
+  InteractionContext,
+  SessionClassificationInput,
+} from '../../shared/types'
 import { UsageTracker } from '../services/usage-tracker'
 import log from '../logger'
 import { DebugPipelineWriter } from './debug-pipeline'
@@ -28,6 +33,8 @@ const SUPPORTED_MODELS = {
 >
 
 export type ModelChoice = keyof typeof SUPPORTED_MODELS
+
+const MAX_OCR_CHARS_FOR_SESSION_PROMPT = 8000
 
 export class SemanticClassifierService {
   private summaryHistory: ClassificationResult[] = []
@@ -191,6 +198,94 @@ export class SemanticClassifierService {
   }
 
   /**
+   * Summarize one complete application session using sampled frames + interactions + OCR.
+   */
+  public async summarizeSession(input: SessionClassificationInput): Promise<string> {
+    if (!this.client) {
+      log.info('[SemanticClassifier] Skipping session summary - no API key configured')
+      return ''
+    }
+
+    if (input.screenshots.length === 0) {
+      log.warn('[SemanticClassifier] Skipping session summary - no screenshots provided')
+      return ''
+    }
+
+    try {
+      log.info(
+        `[SemanticClassifier] Summarizing session ${input.sessionId} with ` +
+          `${input.screenshots.length} image(s) and ${input.interactionEvents.length} event(s)`,
+      )
+
+      const prompt = this.formatSessionPrompt(input)
+      const content: Array<
+        | { type: 'text'; text: string }
+        | {
+            type: 'image_url'
+            imageUrl: { url: string }
+          }
+      > = [{ type: 'text', text: prompt }]
+
+      for (const screenshot of input.screenshots) {
+        const imageData = this.imageToBase64(screenshot.filepath)
+        content.push({
+          type: 'image_url',
+          imageUrl: { url: `data:image/png;base64,${imageData}` },
+        })
+      }
+
+      const response = await this.client.chat.send({
+        model: this.model,
+        messages: [{ role: 'user', content }],
+      })
+
+      const messageContent = response.choices?.[0]?.message?.content
+      const summary =
+        typeof messageContent === 'string' ? messageContent.trim() : 'No summary generated'
+      log.info(`[SemanticClassifier] Session summary: ${summary}`)
+
+      const promptTokens = response.usage?.promptTokens || 0
+      const completionTokens = response.usage?.completionTokens || 0
+      const modelCost = SUPPORTED_MODELS[this.model]
+      const cost =
+        (promptTokens / 1_000_000) * modelCost.input_tokens_per_million +
+        (completionTokens / 1_000_000) * modelCost.completion_tokens_per_million
+      this.usageTracker.recordUsage({
+        prompt_tokens: promptTokens,
+        completion_tokens: completionTokens,
+        cost: cost,
+      })
+      log.info(
+        `[SemanticClassifier] Usage tracked - Tokens: ${promptTokens}/${completionTokens}, Cost: $${cost.toFixed(6)}`,
+      )
+      log.info(`[SemanticClassifier] Total stats: ${JSON.stringify(this.usageTracker.getStats())}`)
+
+      this.debugWriter?.dumpSession(input, prompt, {
+        model: this.model,
+        summary,
+        promptTokens,
+        completionTokens,
+        cost,
+        timestamp: Date.now(),
+      })
+
+      const result: ClassificationResult = {
+        summary,
+        timestamp: input.endTimestamp,
+      }
+      this.summaryHistory.push(result)
+      if (this.summaryHistory.length > this.maxHistorySize) {
+        this.summaryHistory = this.summaryHistory.slice(-this.maxHistorySize)
+      }
+
+      return summary
+    } catch (error) {
+      log.error('[SemanticClassifier] Error during session summarization:', error)
+      throw error
+    }
+  }
+
+  /**
    * Format the prompt with events and previous summaries for context
    */
   private formatPrompt(input: ClassificationInput): string {
@@ -282,6 +377,65 @@ export class SemanticClassifierService {
   }
 
   /**
+   * Format a prompt for whole-session summarization.
+   */
+  private formatSessionPrompt(input: SessionClassificationInput): string {
+    const { appName, interactionEvents } = input
+    const sessionDurationMs = Math.max(0, input.endTimestamp - input.startTimestamp)
+    const durationSec = Math.round(sessionDurationMs / 1000)
+    const boundedOcr = this.truncateForPrompt(input.ocrText, MAX_OCR_CHARS_FOR_SESSION_PROMPT)
+
+    let prompt = "You are analyzing a user's single application session.\n\n"
+    prompt += '## Session metadata\n'
+    prompt += `- app: ${appName || 'unknown'}\n`
+    prompt += `- session id: ${input.sessionId}\n`
+    prompt += `- start timestamp: ${input.startTimestamp}\n`
+    prompt += `- end timestamp: ${input.endTimestamp}\n`
+    prompt += `- duration: ${durationSec}s\n`
+    prompt += `- image count provided: ${input.screenshots.length}\n`
+    prompt += `- interaction events: ${interactionEvents.length}\n\n`
+
+    prompt += '## Task\n'
+    prompt +=
+      'Using all provided screenshots, events, and OCR text, produce one concise high-level summary of what the user did during this entire session.\n\n'
+
+    if (interactionEvents.length > 0) {
+      prompt += '## Interaction signals\n'
+      interactionEvents.forEach((event) => {
+        prompt += this.formatEvent(event) + '\n'
+      })
+      prompt += '\n'
+    }
+
+    if (boundedOcr.length > 0) {
+      prompt += '## OCR text (chronological, may be noisy)\n'
+      prompt += boundedOcr + '\n\n'
+    }
+
+    if (this.summaryHistory.length > 0) {
+      prompt += '## Previous context (optional continuity)\n'
+      this.summaryHistory.forEach((result) => {
+        const timeAgo = this.formatTimeAgo(Date.now() - result.timestamp)
+        prompt += `- ${timeAgo} ago: "${result.summary}"\n`
+      })
+      prompt += '\n'
+    }
+
+    prompt += '## Instructions\n'
+    prompt += '- Prioritize session-level intent over frame-by-frame deltas\n'
+    prompt += '- Use OCR only as supporting detail (filenames, errors, entities)\n'
+    prompt += '- Do not mention uncertainty, analysis steps, or confidence\n'
+    prompt += '- STRICT: return only one sentence, 8-24 words\n\n'
+    prompt += 'Examples:\n'
+    prompt +=
+      '- "Implemented recorder session boundary logic and reviewed related TypeScript tests."\n'
+    prompt += '- "Reviewed GitHub repositories and created two new project repositories."\n'
+    prompt += '- "Debugged OCR failures in terminal logs and adjusted capture pipeline behavior."'
+
+    return prompt
+  }
+
+  /**
    * Format a single event for the prompt
    */
   private formatEvent(event: InteractionContext): string {
@@ -321,6 +475,14 @@ export class SemanticClassifierService {
     } else {
       return `${seconds}s`
     }
+  }
+
+  /**
+   * Truncate OCR text to keep prompts bounded for long sessions.
+   */
+  private truncateForPrompt(value: string, maxChars: number): string {
+    if (value.length <= maxChars) return value
+    return `${value.slice(0, maxChars)}\n...[truncated]`
   }
 
   /**

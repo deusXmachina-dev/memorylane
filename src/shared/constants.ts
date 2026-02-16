@@ -25,6 +25,12 @@ export const CAPTURE_RATE_CONFIG = {
   MAX_CONCURRENT_PROCESSING: 2, // Max simultaneous screenshot processing tasks (1-4)
 }
 
+// Session Processor Configuration
+export const SESSION_PROCESSOR_CONFIG = {
+  MAX_LLM_IMAGES_PER_SESSION: 6, // First + last + evenly sampled middle frames
+  MAX_SESSION_PROCESSING_RETRIES: 2, // Retry full session pipeline on transient failures
+}
+
 // Context Capture Configuration
 export const CONTEXT_CAPTURE_CONFIG = {
   ENABLED: false, // Disabled by default (requires permissions)

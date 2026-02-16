@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { app } from 'electron'
 import log from '../logger'
-import { ClassificationInput } from '../../shared/types'
+import { ClassificationInput, SessionClassificationInput } from '../../shared/types'
 
 function getDebugDir(): string {
   return path.join(app.getAppPath(), '.debug-pipeline')
@@ -88,6 +88,41 @@ export class DebugPipelineWriter {
       log.info(`[DebugPipeline] Dumped round-trip to ${subDir}`)
     } catch (error) {
       log.warn('[DebugPipeline] Failed to dump round-trip:', error)
+    }
+  }
+
+  /**
+   * Dump a full session-level LLM round-trip with all sampled images.
+   */
+  public dumpSession(
+    input: SessionClassificationInput,
+    prompt: string,
+    response: DebugPipelineResponse,
+  ): void {
+    try {
+      const ts = new Date().toISOString().replace(/:/g, '-')
+      const subDir = path.join(this.debugDir, `${ts}_${input.sessionId}`)
+
+      fs.mkdirSync(subDir, { recursive: true })
+
+      input.screenshots.forEach((screenshot, index) => {
+        if (fs.existsSync(screenshot.filepath)) {
+          const filename = `frame-${String(index + 1).padStart(2, '0')}_${screenshot.id}.png`
+          fs.copyFileSync(screenshot.filepath, path.join(subDir, filename))
+        }
+      })
+
+      fs.writeFileSync(path.join(subDir, 'prompt.txt'), prompt, 'utf-8')
+
+      fs.writeFileSync(
+        path.join(subDir, 'response.json'),
+        JSON.stringify(response, null, 2),
+        'utf-8',
+      )
+
+      log.info(`[DebugPipeline] Dumped session round-trip to ${subDir}`)
+    } catch (error) {
+      log.warn('[DebugPipeline] Failed to dump session round-trip:', error)
     }
   }
 }
