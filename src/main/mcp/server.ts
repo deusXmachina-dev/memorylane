@@ -22,10 +22,17 @@ import { registerPrompts } from './prompts'
 const SERVER_NAME = 'memorylane'
 const SERVER_VERSION = '1.0.0'
 
-const SERVER_INSTRUCTIONS = `\
+export const SERVER_INSTRUCTIONS = `\
 MemoryLane continuously captures screenshots of the user's screen and indexes \
 them with OCR text, AI summaries, and app metadata. Use it to recall past \
 screen activity.
+
+## Interpretation rules
+
+- **Summaries are the source of truth** for "what the user did".
+- **OCR is for exact recall only** (quotes, file names, error strings, commands).
+- **Never infer activity from OCR alone**. OCR text is ambiguous: it may be text \
+the user typed, text they only read, or unrelated on-screen noise.
 
 ## Choosing the right tool
 
@@ -38,8 +45,7 @@ limits since each result is a compact one-line summary. \
 "find my work on the auth module", or "that error I saw in the terminal". \
 Results are ranked by semantic relevance.
 - **get_event_details** — fetch full OCR screen text for specific event IDs \
-returned by the other tools. Summaries alone are not enough for detailed \
-questions; always call this when the user needs exact content.
+returned by the other tools. Use this only when exact text matters.
 
 ## Typical workflows
 

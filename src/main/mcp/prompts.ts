@@ -2,6 +2,38 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 
+export function buildRecentActivityPromptText(lookback: string): string {
+  return (
+    `Summarize my recent screen activity from the last ${lookback} minutes.\n\n` +
+    'Instructions:\n' +
+    `1. Use browse_timeline with startTime "${lookback} minutes ago" and ` +
+    'endTime "now", with recent_first sampling and a limit of 50.\n' +
+    '2. Use event summaries as the primary evidence for what I was doing.\n' +
+    '3. Call get_event_details only for entries where exact OCR text is needed ' +
+    '(e.g. commands, filenames, or error messages).\n' +
+    '4. Do not infer user activity from OCR alone.\n' +
+    '5. Provide a concise narrative summary organized by activity or app.\n' +
+    '6. Keep it brief: a short paragraph or a few bullet points is ideal.'
+  )
+}
+
+export function buildTimeReportPromptText(period: string): string {
+  return (
+    `Generate a time report for: ${period}\n\n` +
+    'Instructions:\n' +
+    '1. Use browse_timeline to fetch activity for the period with uniform sampling ' +
+    'and a limit of 100-1000.\n' +
+    '2. Group work into tasks or projects using summaries as the source of truth.\n' +
+    '3. Call get_event_details only when exact OCR text would improve confidence ' +
+    '(for example: quoting a command or error string).\n' +
+    '4. Never infer activity from OCR alone.\n' +
+    '5. Estimate time spent per group using timestamps.\n' +
+    '6. Present the report as a table with columns: Time Range, Project/Task, ' +
+    'Duration, and Details.\n' +
+    '7. Include a total at the bottom and note visible inactivity gaps as breaks.'
+  )
+}
+
 /**
  * Registers available MCP prompts.
  */
@@ -32,18 +64,7 @@ export function registerPrompts(server: McpServer): void {
             role: 'user' as const,
             content: {
               type: 'text' as const,
-              text:
-                `Summarize my recent screen activity from the last ${lookback} minutes.\n\n` +
-                'Instructions:\n' +
-                `1. Use browse_timeline with startTime "${lookback} minutes ago" and ` +
-                'endTime "now", with recent_first sampling and a limit of 50.\n' +
-                '2. Call get_event_details on a handful of entries that look most interesting ' +
-                'or where the summary alone is ambiguous.\n' +
-                '3. Provide a concise narrative summary of what I have been working on, ' +
-                'organized by activity or app.\n' +
-                '4. Highlight any notable items — e.g. errors, context switches, or ' +
-                'repeated focus on a particular task.\n' +
-                '5. Keep it brief: a short paragraph or a few bullet points is ideal.',
+              text: buildRecentActivityPromptText(lookback),
             },
           },
         ],
@@ -73,18 +94,7 @@ export function registerPrompts(server: McpServer): void {
           role: 'user' as const,
           content: {
             type: 'text' as const,
-            text:
-              `Generate a time report for: ${period}\n\n` +
-              'Instructions:\n' +
-              '1. Use browse_timeline to fetch activity for the period with uniform sampling ' +
-              'and a limit of 100-1000.\n' +
-              '2. Call get_event_details on entries where more detail might be useful.\n' +
-              '3. Group the activity into tasks or projects based on the app and content.\n' +
-              '4. Estimate the time spent on each group using the timestamps.\n' +
-              '5. Present the report as a table with columns: Time Range, Project/Task, ' +
-              'Duration, and Details.\n' +
-              '6. Include a total at the bottom.\n' +
-              '7. If there are gaps with no recorded activity, note them as breaks.',
+            text: buildTimeReportPromptText(period),
           },
         },
       ],

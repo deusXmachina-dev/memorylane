@@ -6,6 +6,25 @@ import { parseTimeString } from './parse-time'
 import { formatEventLine, sampleEvents, deduplicateResults } from './formatting'
 import log from '../logger'
 
+export const SEARCH_CONTEXT_TOOL_NAME = 'search_context'
+export const BROWSE_TIMELINE_TOOL_NAME = 'browse_timeline'
+export const GET_EVENT_DETAILS_TOOL_NAME = 'get_event_details'
+
+export const SEARCH_CONTEXT_DESCRIPTION =
+  'Semantic search over recorded screen activity. Results are summary-first and ranked by relevance. ' +
+  'Use this for targeted activity recall (e.g. "when did I review PR #142?"). ' +
+  'If query is omitted, returns events chronologically (requires startTime or endTime). ' +
+  'For exact strings, call get_event_details to inspect OCR text.'
+
+export const BROWSE_TIMELINE_DESCRIPTION =
+  'List activity during a time period for broad recall ("what did I do today?"). ' +
+  'Each result is a compact summary line (id, timestamp, app, summary). ' +
+  'Use summaries to infer activity; call get_event_details only when exact OCR text is needed.'
+
+export const GET_EVENT_DETAILS_DESCRIPTION =
+  'Fetch full event details by ID, including raw OCR text. Use this for exact recall only ' +
+  '(quotes, file names, commands, or error strings), not for inferring user activity.'
+
 /**
  * Registers all MCP tools on the given server.
  *
@@ -14,10 +33,9 @@ import log from '../logger'
  */
 export function registerTools(server: McpServer, getProcessor: () => EventProcessor | null): void {
   server.registerTool(
-    'search_context',
+    SEARCH_CONTEXT_TOOL_NAME,
     {
-      description:
-        'Semantic search over recorded screen activity. MemoryLane captures periodic screenshots — each entry has an AI-generated summary, OCR text, app name, and timestamp. Use this for targeted questions (e.g. "when did I review PR #142?", "find my work on the auth module"). Returns compact summaries only (id, time, app, summary) — call get_event_details for full OCR text. If query is omitted, returns events chronologically (requires startTime or endTime).',
+      description: SEARCH_CONTEXT_DESCRIPTION,
       inputSchema: {
         query: z
           .string()
@@ -50,10 +68,9 @@ export function registerTools(server: McpServer, getProcessor: () => EventProces
   )
 
   server.registerTool(
-    'browse_timeline',
+    BROWSE_TIMELINE_TOOL_NAME,
     {
-      description:
-        'List activity during a time period — best for broad questions like "what did I do today?" Each result is a one-line summary (~20 tokens), so use higher limits (30-50) to get a full picture. Supports uniform sampling to cover long ranges without returning everything. Returns id, timestamp, app, and summary — call get_event_details for full OCR text.',
+      description: BROWSE_TIMELINE_DESCRIPTION,
       inputSchema: {
         startTime: z
           .string()
@@ -84,10 +101,9 @@ export function registerTools(server: McpServer, getProcessor: () => EventProces
   )
 
   server.registerTool(
-    'get_event_details',
+    GET_EVENT_DETAILS_TOOL_NAME,
     {
-      description:
-        'Fetch full event details by ID, including the raw OCR screen text. This is the only tool that returns OCR content. Use after browse_timeline or search_context to read what was actually on screen.',
+      description: GET_EVENT_DETAILS_DESCRIPTION,
       inputSchema: {
         ids: z
           .array(z.string())

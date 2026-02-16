@@ -17,6 +17,7 @@ import { ManagedKeyService } from './services/managed-key-service'
 import { DebugPipelineWriter } from './processor/debug-pipeline'
 import { startPowerMonitoring, shouldPause } from './power-monitor'
 import { config as loadEnv } from 'dotenv'
+import { wireCapturePipeline } from './capture-pipeline'
 
 try {
   loadEnv()
@@ -109,21 +110,21 @@ app.on('ready', async () => {
 
   openMainWindow()
 
-  recorder.onScreenshot(async (screenshot) => {
-    log.info(`[Main] Screenshot captured: ${screenshot.id}`)
-    try {
-      await processor!.processScreenshot(screenshot)
-      log.info(`[Main] Screenshot processed successfully: ${screenshot.id}`)
-      void updateTrayMenu()
-      void sendStatusToRenderer()
-    } catch (error) {
-      log.error(`[Main] Error processing screenshot ${screenshot.id}:`, error)
-    }
+  const pipelineMode = wireCapturePipeline({
+    recorder,
+    processor: processor!,
+    interactionMonitor,
+    hooks: {
+      onProcessed: () => {
+        void updateTrayMenu()
+        void sendStatusToRenderer()
+      },
+      onProcessingError: (itemId, error) => {
+        log.error(`[Main] Error processing capture item ${itemId}:`, error)
+      },
+    },
   })
-
-  interactionMonitor.onInteraction((event) => {
-    processor!.addInteractionEvent(event)
-  })
+  log.info(`[Main] Capture pipeline wired in ${pipelineMode} mode`)
 
   app.on('activate', () => {
     openMainWindow()

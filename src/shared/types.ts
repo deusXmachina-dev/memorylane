@@ -47,6 +47,20 @@ export interface InteractionContext {
 
 export type OnScreenshotCallback = (screenshot: Screenshot) => void
 
+export type SessionEndReason = 'app_switch' | 'max_duration' | 'stop'
+
+export interface CaptureSession {
+  sessionId: string
+  appName: string
+  startTimestamp: number
+  endTimestamp: number
+  screenshots: Screenshot[]
+  interactionEvents: InteractionContext[]
+  endReason: SessionEndReason
+}
+
+export type OnSessionCompleteCallback = (session: CaptureSession) => void
+
 export interface ClassificationInput {
   startScreenshot: Screenshot
   endScreenshot?: Screenshot | undefined // Optional for single-image mode (app change)
