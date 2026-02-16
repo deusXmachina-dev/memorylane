@@ -12,12 +12,17 @@ function assertImageExists(filepath: string): void {
   }
 }
 
+interface OcrExecutable {
+  readonly command: string
+  readonly args: readonly string[]
+}
+
 /**
- * Resolves the path to the Swift OCR script for macOS OCR.
- * In development, it looks in the src directory.
- * In production, it looks in the resources directory.
+ * Resolves the OCR executable.
+ * In production, uses the pre-compiled binary shipped in the app resources.
+ * In development, interprets the Swift script via the `swift` command.
  */
-function getMacOSOcrScriptPath(): string {
+function getMacOSOcrExecutable(): OcrExecutable {
   let isPackaged = false
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -27,43 +32,47 @@ function getMacOSOcrScriptPath(): string {
   }
 
   if (isPackaged) {
-    const prodPath = path.join(process.resourcesPath, 'swift', 'ocr.swift')
-    if (fs.existsSync(prodPath)) {
-      return prodPath
+    const binaryPath = path.join(process.resourcesPath, 'swift', 'ocr')
+    if (fs.existsSync(binaryPath)) {
+      return { command: binaryPath, args: [] }
     }
     throw createOcrBackendError(
       'macos',
       'backend_unavailable',
-      `OCR script not found at ${prodPath}`,
+      `OCR binary not found at ${binaryPath}`,
     )
   }
 
-  const devPath = path.resolve(process.cwd(), 'src', 'main', 'processor', 'swift', 'ocr.swift')
-  if (fs.existsSync(devPath)) {
-    return devPath
+  const scriptPath = path.resolve(process.cwd(), 'src', 'main', 'processor', 'swift', 'ocr.swift')
+  if (fs.existsSync(scriptPath)) {
+    return { command: 'swift', args: [scriptPath] }
   }
 
-  throw createOcrBackendError('macos', 'backend_unavailable', `OCR script not found at ${devPath}`)
+  throw createOcrBackendError(
+    'macos',
+    'backend_unavailable',
+    `OCR script not found at ${scriptPath}`,
+  )
 }
 
 async function extractTextMacOS(filepath: string): Promise<string> {
-  const scriptPath = getMacOSOcrScriptPath()
+  const { command, args } = getMacOSOcrExecutable()
 
   return new Promise((resolve, reject) => {
-    const swift = spawn('swift', [scriptPath, filepath])
+    const proc = spawn(command, [...args, filepath])
 
     let stdoutData = ''
     let stderrData = ''
 
-    swift.stdout.on('data', (data) => {
+    proc.stdout.on('data', (data) => {
       stdoutData += data.toString()
     })
 
-    swift.stderr.on('data', (data) => {
+    proc.stderr.on('data', (data) => {
       stderrData += data.toString()
     })
 
-    swift.on('close', (code) => {
+    proc.on('close', (code) => {
       if (code !== 0) {
         return reject(
           createOcrBackendError(
@@ -77,12 +86,12 @@ async function extractTextMacOS(filepath: string): Promise<string> {
       resolve(stdoutData.trim())
     })
 
-    swift.on('error', (err) => {
+    proc.on('error', (err) => {
       reject(
         createOcrBackendError(
           'macos',
           'backend_unavailable',
-          `Failed to spawn swift process: ${err.message}`,
+          `Failed to spawn OCR process: ${err.message}`,
         ),
       )
     })

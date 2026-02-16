@@ -23,6 +23,11 @@ try {
   // cwd might not be available in packaged app context — expected, we don't need .env there
 }
 
+// Hide dock icon on macOS for pure tray experience
+if (process.platform === 'darwin') {
+  app.dock?.hide()
+}
+
 // Prevent app from quitting when all windows are closed (tray app)
 app.on('window-all-closed', () => {
   // Don't quit - this is a tray app

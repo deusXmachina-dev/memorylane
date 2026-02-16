@@ -15,10 +15,10 @@ extraResources:
     to: assets
     filter:
       - '**/*'
-  - from: src/main/processor/swift
+  - from: build/swift
     to: swift
     filter:
-      - '*.swift'
+      - ocr
   - from: src/main/processor/powershell
     to: powershell
     filter:
@@ -40,6 +40,8 @@ afterSign: build/notarize.js
 mac:
   notarize: false
   category: public.app-category.productivity
+  extendInfo:
+    LSUIElement: true
   identity: 'Filip Kubis (ZN3J54N7AP)'
   hardenedRuntime: true
   gatekeeperAssess: false

@@ -1,25 +1,10 @@
-# MemoryLane
-
-## Unreleased
-
-### What's Changed
-
-- **Native Windows OCR backend** — replaced the Tesseract CLI dependency on Windows with a native Windows OCR path, so OCR no longer requires Tesseract installation or PATH setup
-- **Unified OCR error contracts** — standardized OCR backend error messages across platforms for clearer diagnostics
-- **Windows OCR backend test coverage** — added unit tests for native backend success and failure modes
-
-# MemoryLane v0.6.0
+# MemoryLane v0.6.2
 
 MemoryLane is a macOS system tray app that captures your screen activity, processes it with OCR and AI summarization, and makes it searchable through an MCP server — giving AI assistants like Claude and Cursor memory of what you've been working on.
 
 ## What's Changed
 
-- **MCP server no longer blocks app startup** — the MCP server now runs as a separate Node process instead of inside the Electron main process, so the app launches instantly regardless of how many MCP clients are connected
-- **Snapshot timing fix** — pending events are now captured at screenshot time rather than processing time, improving the accuracy of activity timestamps
-- **Debug mode for LLM pipeline** — added a debug mode that lets you inspect how each screenshot flows through the LLM summarization pipeline
-- **Database exploration notebook** — added a Jupyter notebook (`tools/explore-db.ipynb`) for ad-hoc exploration of the local SQLite database
-- **Stable release artifact names** — release assets now use versionless filenames so download URLs always resolve to the latest version
-- **Claude Code CI workflow** — added a GitHub Actions workflow for Claude Code review
+- **Hidden dock icon** — the app no longer appears in the macOS dock, providing a cleaner tray-only experience
 
 ## Features
 
@@ -54,10 +39,10 @@ After launching:
 1. Grant **Screen Recording** permission when prompted
 2. Grant **Accessibility** permission when prompted
 3. Choose how to provide an API key:
-   - **Subscribe** _(recommended)_ — click Subscribe to get a managed key ($20/mo via Stripe)
+   - **Subscribe** _(recommended)_ — click Subscribe to get a managed key ($10/mo via Stripe)
    - **Bring Your Own Key** — paste your OpenRouter API key if you already have one
 4. Optionally register the MCP server with Claude Desktop or Cursor
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/commits/v0.6.0
+https://github.com/deusXmachina-dev/memorylane/commits/v0.6.2

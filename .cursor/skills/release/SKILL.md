@@ -9,7 +9,7 @@ description: Run the full release workflow for MemoryLane — bump version, upda
 
 - Working tree is clean (`git status` shows nothing to commit)
 - On the `main` branch, up to date with origin
-- `gh` CLI is authenticated (`gh auth status`)
+- `gh` CLI is authenticated (`gh auth status` — run with `required_permissions: ["all"]`)
 
 ## Steps
 
@@ -58,6 +58,11 @@ npm run lint
 git add -A
 git commit -m "release: vX.Y.Z"
 git tag vX.Y.Z
+```
+
+Push requires network access — run outside the sandbox (`required_permissions: ["all"]`):
+
+```bash
 git push origin main --tags
 ```
 
@@ -99,6 +104,8 @@ codesign --verify --deep --strict "dist/mac-arm64/MemoryLane.app"
 `spctl` should report `accepted` and `codesign` should exit 0 with no output.
 
 ### 9. Create GitHub release
+
+Run outside the sandbox (`required_permissions: ["all"]`):
 
 ```bash
 gh release create vX.Y.Z \

@@ -49,7 +49,7 @@ MemoryLane captures your screen to give AI assistants context about what you're 
 - **What happens to screenshots** — each screenshot is sent to a cloud vision model (Mistral by default, which has a zero data retention policy) for summarization and OCR. The screenshot is then deleted.
 - **What is stored** — only short text summaries and OCR extracts are kept, in a local SQLite database on your machine. Nothing leaves your device except the screenshot sent for processing.
 - **API key** — the app needs an [OpenRouter](https://openrouter.ai/) API key for cloud vision models. You have two options:
-  - **Subscribe ($20/mo)** _(recommended)_ — subscribe through the app and we provision an OpenRouter API key for you. No OpenRouter account needed. The key is a real OpenRouter key tied to your device — MemoryLane does **not** proxy your requests. Your screenshots go directly from your machine to OpenRouter. We only handle key provisioning and billing.
+  - **Get a managed key ($10 one-time)** _(recommended)_ — pay a one-time provisioning fee and we provision an OpenRouter API key for you. No OpenRouter account needed. The key is a real OpenRouter key tied to your device — MemoryLane does **not** proxy your requests. Your screenshots go directly from your machine to OpenRouter. We only handle key provisioning and billing.
   - **Bring Your Own Key** — already have an OpenRouter account? Paste your own API key instead. You pay OpenRouter directly and have full control over your account, usage limits, and billing.
   - In both cases, the key is encrypted and stored locally using Electron's safeStorage.
 
@@ -75,15 +75,15 @@ MemoryLane captures your screen to give AI assistants context about what you're 
 
 ### Requirements
 
-- macOS (Apple Silicon / ARM64) or Windows 10/11 (x64 preview)
-- A MemoryLane subscription ($20/mo) **or** your own [OpenRouter](https://openrouter.ai/) API key
+- macOS (Apple Silicon / ARM64)
+- A MemoryLane API key ($10 one-time provisioning fee) **or** your own [OpenRouter](https://openrouter.ai/) API key
 
 ### First launch
 
 1. Grant **Screen Recording** permission when prompted
 2. Grant **Accessibility** permission when prompted
 3. Choose how to provide an API key:
-   - **Subscribe** _(recommended)_ — click Subscribe to get a managed key ($20/mo via Stripe)
+   - **Get API Key** _(recommended)_ — click Get API Key to get a managed key ($10 one-time via Stripe)
    - **Bring Your Own Key** — paste your OpenRouter API key if you already have one
 
 ### Start capturing

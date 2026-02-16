@@ -130,3 +130,6 @@ playground/
 
 # Debug pipeline output (dev only)
 .debug-pipeline/
+
+# Compiled Swift binaries (built during packaging)
+build/swift/

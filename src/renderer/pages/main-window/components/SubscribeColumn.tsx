@@ -71,7 +71,7 @@ export function SubscribeColumn({ api, onKeySet }: SubscribeColumnProps): React.
       <CardContent className="space-y-3">
         <div className="flex items-center h-8">
           <p className="text-sm text-muted-foreground">
-            Get a managed API key for <span className="font-semibold text-foreground">$20/mo</span>.
+            Get a managed API key for <span className="font-semibold text-foreground">$10/mo</span>.
             No setup required.
           </p>
         </div>
