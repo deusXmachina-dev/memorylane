@@ -7,7 +7,9 @@ import {
   Screenshot,
   OnScreenshotCallback,
   OnSessionCompleteCallback,
+  CompletedAppSession,
   SessionAppIdentity,
+  SessionEndReason,
   CaptureReason,
   InteractionContext,
 } from '../../shared/types'
@@ -16,20 +18,19 @@ import * as visualDetector from './visual-detector'
 import * as interactionMonitor from './interaction-monitor'
 import log from '../logger'
 
-// Configuration
 const SCREENSHOTS_DIR = path.join(app.getPath('userData'), 'screenshots')
-const SCREENSHOT_MAX_AGE_MS = 60_000
-const CLEANUP_INTERVAL_MS = 30_000
+const FULL_RES_SIZE = { width: 1920 * 2, height: 1080 * 2 }
+const SAMPLE_SIZE = { width: 320, height: 180 }
 
-// State
 const screenshotCallbacks: OnScreenshotCallback[] = []
 const sessionCallbacks: OnSessionCompleteCallback[] = []
+
 let isCapturing = false
-let cleanupTimer: ReturnType<typeof setInterval> | null = null
 let lastCaptureTime = 0
 let isProcessingInteraction = false
-let sessionMaxDurationTimeout: ReturnType<typeof setTimeout> | null = null
 let currentSession: RecorderSession | null = null
+let sessionMaxDurationTimeout: ReturnType<typeof setTimeout> | null = null
+let recorderWorkQueue: Promise<void> = Promise.resolve()
 
 interface RecorderSession {
   sessionId: string
@@ -41,8 +42,40 @@ interface RecorderSession {
   closed: boolean
 }
 
+function ensureScreenshotsDir(): void {
+  if (!fs.existsSync(SCREENSHOTS_DIR)) {
+    fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true })
+  }
+}
+
 function getAppNameFromIdentity(identity: SessionAppIdentity | null): string {
   return identity?.processName ?? ''
+}
+
+function toCompletedSession(
+  session: RecorderSession,
+  endReason: SessionEndReason,
+  endTimestamp: number,
+): CompletedAppSession {
+  return {
+    sessionId: session.sessionId,
+    appName: getAppNameFromIdentity(session.appIdentity),
+    startTimestamp: session.startTimestamp,
+    endTimestamp,
+    screenshots: [...session.screenshots],
+    interactionEvents: [...session.interactionEvents],
+    endReason,
+  }
+}
+
+function emitCompletedSession(session: CompletedAppSession): void {
+  sessionCallbacks.forEach((callback) => {
+    try {
+      callback(session)
+    } catch (error) {
+      log.error('Error in session callback:', error)
+    }
+  })
 }
 
 function clearSessionTimer(): void {
@@ -52,22 +85,18 @@ function clearSessionTimer(): void {
   }
 }
 
-function scheduleSessionTimeout(sessionId: string): void {
-  clearSessionTimer()
-  sessionMaxDurationTimeout = setTimeout(() => {
-    if (!isCapturing || !currentSession || currentSession.sessionId !== sessionId) {
-      return
-    }
-
-    log.info(`[Session] Max duration reached for session ${sessionId}`)
-  }, CAPTURE_RATE_CONFIG.MAX_SESSION_DURATION_MS)
+function enqueueRecorderWork(work: () => Promise<void>): void {
+  recorderWorkQueue = recorderWorkQueue.then(work).catch((error) => {
+    log.error('[Session] Recorder queue work failed:', error)
+  })
 }
 
-function startSession(appIdentity: SessionAppIdentity | null, displayId: number | undefined): void {
-  const sessionId = uuidv4()
-
-  currentSession = {
-    sessionId,
+function startSession(
+  appIdentity: SessionAppIdentity | null,
+  displayId: number | undefined,
+): RecorderSession {
+  const session: RecorderSession = {
+    sessionId: uuidv4(),
     appIdentity,
     displayId,
     startTimestamp: Date.now(),
@@ -76,10 +105,36 @@ function startSession(appIdentity: SessionAppIdentity | null, displayId: number 
     closed: false,
   }
 
-  scheduleSessionTimeout(sessionId)
+  currentSession = session
+  scheduleSessionTimeout(session.sessionId)
   log.info(
-    `[Session] Started ${sessionId} for app "${getAppNameFromIdentity(appIdentity)}" (display: ${displayId ?? 'unknown'})`,
+    `[Session] Started ${session.sessionId} for app "${getAppNameFromIdentity(session.appIdentity)}" (display: ${displayId ?? 'unknown'})`,
   )
+
+  return session
+}
+
+function scheduleSessionTimeout(sessionId: string): void {
+  clearSessionTimer()
+
+  sessionMaxDurationTimeout = setTimeout(() => {
+    enqueueRecorderWork(async () => {
+      if (!isCapturing || !currentSession || currentSession.sessionId !== sessionId) {
+        return
+      }
+
+      const previousIdentity = currentSession.appIdentity
+      const previousDisplayId = currentSession.displayId
+
+      log.info(`[Session] Max duration reached for session ${sessionId}`)
+      await endCurrentSession('max_duration')
+      await beginSessionAndCaptureInitial(previousIdentity, previousDisplayId, 'max_duration')
+    })
+  }, CAPTURE_RATE_CONFIG.MAX_SESSION_DURATION_MS)
+}
+
+function getDisplayIdForContext(context: InteractionContext): number | undefined {
+  return context.displayId ?? currentSession?.displayId
 }
 
 function ensureSessionForInteraction(context: InteractionContext): void {
@@ -92,55 +147,13 @@ function ensureSessionForInteraction(context: InteractionContext): void {
 
 function addInteractionToSession(context: InteractionContext): void {
   ensureSessionForInteraction(context)
+
+  if (currentSession && context.displayId !== undefined) {
+    currentSession.displayId = context.displayId
+  }
   currentSession?.interactionEvents.push(context)
 }
 
-function addScreenshotToSession(screenshot: Screenshot): void {
-  if (!currentSession) {
-    startSession(null, screenshot.display.id)
-  }
-  currentSession?.screenshots.push(screenshot)
-}
-
-// Ensure screenshots directory exists
-function ensureScreenshotsDir(): void {
-  if (!fs.existsSync(SCREENSHOTS_DIR)) {
-    fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true })
-  }
-}
-
-/**
- * Delete screenshot files older than SCREENSHOT_MAX_AGE_MS from the screenshots directory.
- */
-function cleanupOldScreenshots(): void {
-  try {
-    const now = Date.now()
-    const files = fs.readdirSync(SCREENSHOTS_DIR)
-
-    for (const file of files) {
-      if (!file.endsWith('.png')) continue
-
-      const filepath = path.join(SCREENSHOTS_DIR, file)
-      const stat = fs.statSync(filepath)
-
-      if (now - stat.mtimeMs > SCREENSHOT_MAX_AGE_MS) {
-        fs.unlinkSync(filepath)
-        log.info(`[Cleanup] Deleted old screenshot: ${file}`)
-      }
-    }
-  } catch (error) {
-    log.error('[Cleanup] Error cleaning up old screenshots:', error)
-  }
-}
-
-const FULL_RES_SIZE = { width: 1920 * 2, height: 1080 * 2 }
-const SAMPLE_SIZE = { width: 320, height: 180 }
-
-/**
- * Capture a screen source at the given thumbnail resolution.
- * When displayId is provided, captures the matching display; otherwise falls back to the
- * first available source (primary display).
- */
 async function captureScreen(
   thumbnailSize: { width: number; height: number },
   displayId?: number,
@@ -152,7 +165,7 @@ async function captureScreen(
 
   const source =
     (displayId !== undefined
-      ? sources.find((s) => s.display_id === String(displayId))
+      ? sources.find((candidate) => candidate.display_id === String(displayId))
       : undefined) ?? sources[0]
 
   if (source === undefined) {
@@ -162,27 +175,169 @@ async function captureScreen(
   log.debug(
     `[Capture] captureScreen: requested display=${displayId ?? 'any'}, ` +
       `matched source=${source.id} (display_id=${source.display_id}), ` +
-      `available sources=[${sources.map((s) => s.display_id).join(', ')}]`,
+      `available sources=[${sources.map((candidate) => candidate.display_id).join(', ')}]`,
   )
 
   return source
 }
 
-/**
- * Capture a low-resolution sample bitmap for visual change detection.
- * Uses a dedicated capture at SAMPLE_SIZE so the bitmap dimensions are consistent
- * (desktopCapturer treats thumbnailSize as a bounding box, not an exact size).
- */
 async function captureSampleBitmap(displayId?: number): Promise<Buffer> {
   const source = await captureScreen(SAMPLE_SIZE, displayId)
   return source.thumbnail.toBitmap()
 }
 
-/**
- * Handle an interaction event by checking for visual changes and capturing if needed.
- */
-async function handleInteraction(context: InteractionContext): Promise<void> {
+function saveScreenshotFromSource(
+  source: Electron.DesktopCapturerSource,
+  reason: CaptureReason,
+  session: RecorderSession | null,
+): Screenshot {
+  ensureScreenshotsDir()
+
+  const thumbnail = source.thumbnail
+  const id = uuidv4()
+  const timestamp = Date.now()
+  const filename = `${timestamp}_${id}.png`
+  const filepath = path.join(SCREENSHOTS_DIR, filename)
+  const size = thumbnail.getSize()
+
+  fs.writeFileSync(filepath, thumbnail.toPNG())
+
+  const screenshot: Screenshot = {
+    id,
+    filepath,
+    timestamp,
+    display: {
+      id: parseInt(source.id.split(':')[1] || '0', 10),
+      width: size.width,
+      height: size.height,
+    },
+    trigger: reason,
+  }
+
+  if (session) {
+    session.screenshots.push(screenshot)
+  }
+
+  log.info(`[Capture] Screenshot saved: ${filename} (reason: ${reason.type})`)
+  log.debug(
+    `[Capture] Screenshot details: display=${screenshot.display.id}, ` +
+      `size=${size.width}x${size.height}, source=${source.id}`,
+  )
+
+  screenshotCallbacks.forEach((callback) => {
+    try {
+      callback(screenshot)
+    } catch (error) {
+      log.error('Error in screenshot callback:', error)
+    }
+  })
+
+  return screenshot
+}
+
+async function captureInitialScreenshot(
+  session: RecorderSession,
+  reason: SessionEndReason | 'start',
+): Promise<void> {
+  const [fullSource, sampleBitmap] = await Promise.all([
+    captureScreen(FULL_RES_SIZE, session.displayId),
+    captureSampleBitmap(session.displayId),
+  ])
+
+  visualDetector.updateBaselineFromBitmap(sampleBitmap)
+  saveScreenshotFromSource(
+    fullSource,
+    {
+      type: 'manual',
+      metadata: {
+        phase: 'session_start',
+        reason,
+      },
+    },
+    session,
+  )
+}
+
+async function beginSessionAndCaptureInitial(
+  appIdentity: SessionAppIdentity | null,
+  displayId: number | undefined,
+  reason: SessionEndReason | 'start',
+): Promise<void> {
+  const session = startSession(appIdentity, displayId)
+  try {
+    await captureInitialScreenshot(session, reason)
+    log.info(`[Session] Initial screenshot captured for session ${session.sessionId}`)
+  } catch (error) {
+    log.error(`[Session] Failed to capture initial screenshot for ${session.sessionId}:`, error)
+  }
+}
+
+async function endCurrentSession(endReason: SessionEndReason): Promise<void> {
+  const session = currentSession
+  if (!session || session.closed) {
+    return
+  }
+
+  session.closed = true
+  currentSession = null
+  clearSessionTimer()
+
+  try {
+    const finalSource = await captureScreen(FULL_RES_SIZE, session.displayId)
+    saveScreenshotFromSource(
+      finalSource,
+      {
+        type: 'manual',
+        metadata: {
+          phase: 'session_end',
+          endReason,
+        },
+      },
+      session,
+    )
+  } catch (error) {
+    log.warn(`[Session] Failed to capture final screenshot for ${session.sessionId}:`, error)
+  }
+
+  const completed = toCompletedSession(session, endReason, Date.now())
+  emitCompletedSession(completed)
+  log.info(
+    `[Session] Completed ${completed.sessionId} (${completed.appName || 'unknown app'}, ${endReason}, screenshots=${completed.screenshots.length}, events=${completed.interactionEvents.length})`,
+  )
+}
+
+async function handleAppChange(context: InteractionContext): Promise<void> {
+  const nextIdentity = context.activeWindow ?? null
+  const previousIdentity = context.previousWindow ?? null
+  const nextDisplayId = context.displayId
+
+  if (!currentSession) {
+    startSession(previousIdentity, nextDisplayId)
+  }
+
+  if (
+    currentSession &&
+    currentSession.appIdentity?.processName &&
+    nextIdentity?.processName &&
+    currentSession.appIdentity.processName === nextIdentity.processName
+  ) {
+    currentSession.appIdentity = nextIdentity
+    currentSession.displayId = nextDisplayId
+    currentSession.interactionEvents.push(context)
+    return
+  }
+
   addInteractionToSession(context)
+  await endCurrentSession('app_switch')
+
+  if (isCapturing) {
+    await beginSessionAndCaptureInitial(nextIdentity, nextDisplayId, 'app_switch')
+  }
+}
+
+async function handleRegularInteraction(context: InteractionContext): Promise<void> {
+  addInteractionToSession(context)
+  const displayId = getDisplayIdForContext(context)
 
   const now = Date.now()
   const timeSinceLastCapture = now - lastCaptureTime
@@ -202,91 +357,59 @@ async function handleInteraction(context: InteractionContext): Promise<void> {
   isProcessingInteraction = true
 
   try {
-    log.info(
-      `[Capture] Interaction detected: ${context.type} (display: ${context.displayId ?? 'unknown'})`,
-    )
+    log.info(`[Capture] Interaction detected: ${context.type} (display: ${displayId ?? 'unknown'})`)
 
-    const sampleBitmap = await captureSampleBitmap(context.displayId)
+    const sampleBitmap = await captureSampleBitmap(displayId)
     const result = visualDetector.checkBitmapAgainstBaseline(sampleBitmap)
 
-    if (result.changed) {
-      log.info(
-        `[Capture] Visual change detected (${result.difference.toFixed(1)}%) - capturing full-res screenshot`,
-      )
-
-      const fullSource = await captureScreen(FULL_RES_SIZE, context.displayId)
-      saveScreenshotFromSource(fullSource, {
-        type: 'baseline_change',
-        confidence: result.difference,
-      })
-
-      lastCaptureTime = Date.now()
-
-      visualDetector.updateBaselineFromBitmap(sampleBitmap)
-      log.info('[Capture] Baseline updated to new screenshot')
-    } else {
+    if (!result.changed) {
       log.info(
         `[Capture] No significant change (${result.difference.toFixed(1)}%) - keeping current baseline`,
       )
+      return
     }
+
+    log.info(
+      `[Capture] Visual change detected (${result.difference.toFixed(1)}%) - capturing full-res screenshot`,
+    )
+
+    const fullSource = await captureScreen(FULL_RES_SIZE, displayId)
+    saveScreenshotFromSource(
+      fullSource,
+      {
+        type: 'baseline_change',
+        confidence: result.difference,
+      },
+      currentSession,
+    )
+
+    lastCaptureTime = Date.now()
+    visualDetector.updateBaselineFromBitmap(sampleBitmap)
+    log.info('[Capture] Baseline updated to new screenshot')
   } finally {
     isProcessingInteraction = false
   }
 }
 
-/**
- * Save a screenshot from an already-captured source, notify callbacks, and return metadata.
- */
-function saveScreenshotFromSource(
-  source: Electron.DesktopCapturerSource,
-  reason: CaptureReason,
-): Screenshot {
-  ensureScreenshotsDir()
-
-  const thumbnail = source.thumbnail
-  const id = uuidv4()
-  const timestamp = Date.now()
-  const filename = `${timestamp}_${id}.png`
-  const filepath = path.join(SCREENSHOTS_DIR, filename)
-  const size = thumbnail.getSize()
-
-  const pngBuffer = thumbnail.toPNG()
-  fs.writeFileSync(filepath, pngBuffer)
-
-  const screenshot: Screenshot = {
-    id,
-    filepath,
-    timestamp,
-    display: {
-      id: parseInt(source.id.split(':')[1] || '0', 10),
-      width: size.width,
-      height: size.height,
-    },
-    trigger: reason,
+async function handleInteraction(context: InteractionContext): Promise<void> {
+  if (!isCapturing) {
+    return
   }
 
-  addScreenshotToSession(screenshot)
+  if (context.type === 'app_change') {
+    await handleAppChange(context)
+    return
+  }
 
-  log.info(`[Capture] Screenshot saved: ${filename} (reason: ${reason.type})`)
-  log.debug(
-    `[Capture] Screenshot details: display=${screenshot.display.id}, ` +
-      `size=${size.width}x${size.height}, source=${source.id}`,
-  )
-
-  screenshotCallbacks.forEach((callback) => {
-    try {
-      callback(screenshot)
-    } catch (error) {
-      log.error('Error in screenshot callback:', error)
-    }
-  })
-
-  return screenshot
+  await handleRegularInteraction(context)
 }
 
-/**
- * Start capturing screenshots using event-driven baseline detection
- */
+function queueInteraction(context: InteractionContext): void {
+  enqueueRecorderWork(async () => {
+    await handleInteraction(context)
+  })
+}
+
 export function startCapture(): void {
   if (isCapturing) {
     log.info('[Capture] Already running')
@@ -295,36 +418,18 @@ export function startCapture(): void {
 
   log.info('[Capture] Starting screenshot capture with event-driven baseline detection')
   isCapturing = true
-  startSession(null, undefined)
+  lastCaptureTime = 0
+  isProcessingInteraction = false
 
-  // Start periodic cleanup of old screenshot files
-  cleanupTimer = setInterval(cleanupOldScreenshots, CLEANUP_INTERVAL_MS)
-
-  // Start visual detection (no interval, just enables the module)
   visualDetector.startVisualDetection()
-
-  // Start interaction monitoring
   interactionMonitor.startInteractionMonitoring()
+  interactionMonitor.onInteraction(queueInteraction)
 
-  // Capture initial baseline screenshot and derive baseline from a separate sample capture
-  Promise.all([captureScreen(FULL_RES_SIZE), captureSampleBitmap()])
-    .then(([fullSource, sampleBitmap]) => {
-      visualDetector.updateBaselineFromBitmap(sampleBitmap)
-
-      saveScreenshotFromSource(fullSource, { type: 'manual' })
-      log.info('[Capture] Initial baseline screenshot captured')
-    })
-    .catch((error) => {
-      log.error('[Capture] Failed to capture initial baseline:', error)
-    })
-
-  // Register interaction monitor callback
-  interactionMonitor.onInteraction(handleInteraction)
+  enqueueRecorderWork(async () => {
+    await beginSessionAndCaptureInitial(null, undefined, 'start')
+  })
 }
 
-/**
- * Stop capturing screenshots
- */
 export function stopCapture(): void {
   if (!isCapturing) {
     log.info('[Capture] Not running')
@@ -335,49 +440,28 @@ export function stopCapture(): void {
   isCapturing = false
   lastCaptureTime = 0
   isProcessingInteraction = false
-  clearSessionTimer()
-  currentSession = null
 
-  // Stop periodic cleanup
-  if (cleanupTimer) {
-    clearInterval(cleanupTimer)
-    cleanupTimer = null
-  }
-
-  // Stop visual detection
+  interactionMonitor.clearInteractionCallback(queueInteraction)
+  interactionMonitor.stopInteractionMonitoring()
   visualDetector.stopVisualDetection()
 
-  // Clear interaction monitor callbacks
-  interactionMonitor.clearInteractionCallback(handleInteraction)
-
-  // Stop interaction monitoring
-  interactionMonitor.stopInteractionMonitoring()
+  enqueueRecorderWork(async () => {
+    await endCurrentSession('stop')
+  })
 }
 
-/**
- * Register a callback to be notified when screenshots are captured
- */
 export function onScreenshot(callback: OnScreenshotCallback): void {
   screenshotCallbacks.push(callback)
 }
 
-/**
- * Register a callback to be notified when a capture session is completed.
- */
 export function onSessionComplete(callback: OnSessionCompleteCallback): void {
   sessionCallbacks.push(callback)
 }
 
-/**
- * Get the directory where screenshots are saved
- */
 export function getScreenshotsDir(): string {
   return SCREENSHOTS_DIR
 }
 
-/**
- * Check if capture is currently running
- */
 export function isCapturingNow(): boolean {
   return isCapturing
 }
