@@ -6,6 +6,7 @@ import * as path from 'path'
 import {
   Screenshot,
   OnScreenshotCallback,
+  OnSessionCompleteCallback,
   SessionAppIdentity,
   CaptureReason,
   InteractionContext,
@@ -22,6 +23,7 @@ const CLEANUP_INTERVAL_MS = 30_000
 
 // State
 const screenshotCallbacks: OnScreenshotCallback[] = []
+const sessionCallbacks: OnSessionCompleteCallback[] = []
 let isCapturing = false
 let cleanupTimer: ReturnType<typeof setInterval> | null = null
 let lastCaptureTime = 0
@@ -357,6 +359,13 @@ export function stopCapture(): void {
  */
 export function onScreenshot(callback: OnScreenshotCallback): void {
   screenshotCallbacks.push(callback)
+}
+
+/**
+ * Register a callback to be notified when a capture session is completed.
+ */
+export function onSessionComplete(callback: OnSessionCompleteCallback): void {
+  sessionCallbacks.push(callback)
 }
 
 /**

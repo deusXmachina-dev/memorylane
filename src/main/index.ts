@@ -121,6 +121,12 @@ app.on('ready', async () => {
     }
   })
 
+  recorder.onSessionComplete((session) => {
+    log.info(
+      `[Main] Session completed: ${session.sessionId} (${session.appName || 'unknown app'}, ${session.endReason}, screenshots=${session.screenshots.length}, events=${session.interactionEvents.length})`,
+    )
+  })
+
   interactionMonitor.onInteraction((event) => {
     processor!.addInteractionEvent(event)
   })
