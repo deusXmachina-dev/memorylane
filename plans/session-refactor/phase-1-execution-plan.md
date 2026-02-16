@@ -38,3 +38,8 @@ Implement phase-1 session-based recorder changes while keeping the app buildable
 - Verify tray start/stop behavior and capture state transitions
 - Verify session ordering and boundary reasons via logs/tests
 - Run test/lint checks relevant to touched files
+
+## Step 6 Verification Results
+
+- `npm run lint` passed (existing warning only in `src/main/processor/storage.ts`)
+- `npm test` passed (`78` tests, `5` test files)
