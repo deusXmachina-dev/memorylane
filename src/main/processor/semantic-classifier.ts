@@ -201,7 +201,7 @@ export class SemanticClassifierService {
     // Primary task
     prompt += '## Task\n'
     prompt +=
-      'Compare the START and END screenshots. Describe what changed visually, then infer what the user accomplished in 5-10 words.\n\n'
+      'Compare the START and END screenshots. Summarize concrete on-screen changes and only actions directly supported by the evidence in 40-60 words.\n\n'
 
     // Events as hints
     if (events.length > 0) {
@@ -224,15 +224,19 @@ export class SemanticClassifierService {
 
     // Instructions
     prompt += '## Instructions\n'
-    prompt += '- Focus on visual differences: What appeared, disappeared, or changed?\n'
-    prompt += '- Use events as hints to understand HOW the change happened\n'
-    prompt += '- BE SPECIFIC: Extract file names, document titles, UI elements, data labels\n'
-    prompt += '- STRICT: Response must be ONLY 5-15 words. No explanations or analysis.\n\n'
-    prompt += 'Examples:\n'
-    prompt += '- "Implemented parseUserInput function in utils.ts"\n'
-    prompt += '- "Filled in Q2 revenue numbers for Marketing department"\n'
-    prompt += '- "Reviewed PR #142 comments on authentication refactor"\n'
-    prompt += '- "Replied to email from John about project deadline"'
+    prompt += '- Focus on observable changes: what appeared, disappeared, moved, or updated.\n'
+    prompt +=
+      '- Be concrete: include 2-4 specific visible details (for example names, titles, files, tabs, channels, errors, URLs, message snippets).\n'
+    prompt +=
+      '- Use events as supporting evidence; mention an action only when a visible change or event supports it.\n'
+    prompt +=
+      '- Prefer direct observations over hypotheses; minimize words like "likely" or "appears".\n'
+    prompt +=
+      '- Do not overreach: avoid claims like "fixed", "implemented", or "finished" unless strongly supported.\n'
+    prompt +=
+      '- Avoid generic filler like "the screenshot shows" or broad app descriptions with no concrete details.\n'
+    prompt +=
+      '- STRICT: Response must be 40-60 words, 2-3 sentences, single paragraph, no bullet points.\n'
 
     return prompt
   }
@@ -248,7 +252,7 @@ export class SemanticClassifierService {
 
     prompt += '## Task\n'
     prompt +=
-      'Based on this screenshot, summarize what the user was doing in this app in 5-15 words. Focus on the visible content and context.\n\n'
+      'Based on this single screenshot, describe what is visible and the most recent context before app switch using direct evidence in 40-60 words.\n\n'
 
     // Events as hints
     if (events.length > 0) {
@@ -270,13 +274,20 @@ export class SemanticClassifierService {
     }
 
     prompt += '## Instructions\n'
-    prompt += '- Describe what the user was working on based on visible content\n'
-    prompt += '- BE SPECIFIC: Extract file names, document titles, UI elements, data labels\n'
-    prompt += '- STRICT: Response must be ONLY 5-15 words, no explanations\n\n'
-    prompt += 'Examples:\n'
-    prompt += '- "Editing processScreenshot function in index.ts"\n'
-    prompt += '- "Reading PR #142 comments on auth refactor"\n'
-    prompt += '- "Composing email reply to John about deadline"'
+    prompt += '- Describe visible on-screen content at the moment before the app switch.\n'
+    prompt += '- Treat this as a context snapshot, not proof of completed work.\n'
+    prompt +=
+      '- Be concrete: include 2-4 specific visible details (for example names, titles, files, tabs, channels, errors, URLs, message snippets).\n'
+    prompt +=
+      '- Use interaction hints only as support; avoid action claims that are not directly evidenced.\n'
+    prompt +=
+      '- Prefer direct observations over hypotheses; minimize words like "likely" or "appears".\n'
+    prompt +=
+      '- Do not overreach: avoid claims like "fixed", "implemented", or "finished" unless strongly supported.\n'
+    prompt +=
+      '- Avoid generic filler like "the screenshot shows" or broad app descriptions with no concrete details.\n'
+    prompt +=
+      '- STRICT: Response must be 40-60 words, 2-3 sentences, single paragraph, no bullet points.\n'
 
     return prompt
   }
