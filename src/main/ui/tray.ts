@@ -2,9 +2,11 @@
  * System tray management for MemoryLane
  */
 
-import { app, Tray, Menu, nativeImage } from 'electron'
+import { app, Tray, Menu, nativeImage, dialog } from 'electron'
 import path from 'node:path'
+import * as fs from 'fs'
 import log from '../logger'
+import { captureWindow } from '../recorder/window-capture'
 import { formatBytes, formatNumber } from '../utils/formatters'
 import { registerWithClaudeDesktop } from '../integrations/claude-desktop'
 import { registerWithCursor } from '../integrations/cursor'
@@ -27,6 +29,7 @@ interface TrayDependencies {
 
 let tray: Tray | null = null
 let deps: TrayDependencies | null = null
+const isDev = !app.isPackaged
 
 app.on('before-quit', () => {
   if (tray) {
@@ -166,6 +169,32 @@ export const updateTrayMenu = async (): Promise<void> => {
         void registerWithClaudeCode()
       },
     },
+    ...(isDev
+      ? [
+          { type: 'separator' as const },
+          {
+            label: 'Test Window Capture',
+            click: async () => {
+              const result = await captureWindow()
+              if (!result) {
+                dialog.showErrorBox('Window Capture', 'No window captured (null result)')
+                return
+              }
+              const outPath = path.join(app.getPath('temp'), `memorylane-test-${Date.now()}.png`)
+              fs.writeFileSync(outPath, result.image)
+              log.info(
+                `[TestCapture] "${result.title}" ${result.width}x${result.height} → ${outPath}`,
+              )
+              dialog.showMessageBox({
+                type: 'info',
+                title: 'Window Capture',
+                message: `Captured "${result.title}" (${result.width}x${result.height})`,
+                detail: `Saved to ${outPath}`,
+              })
+            },
+          },
+        ]
+      : []),
     { type: 'separator' },
     {
       label: 'Quit',
@@ -186,7 +215,6 @@ export const updateTrayMenu = async (): Promise<void> => {
 export const setupTray = (dependencies: TrayDependencies): void => {
   deps = dependencies
 
-  const isDev = !app.isPackaged
   const iconPath = isDev
     ? path.join(app.getAppPath(), 'assets', 'tray-icon.png')
     : path.join(process.resourcesPath, 'assets', 'tray-icon.png')
