@@ -6,6 +6,7 @@ import * as path from 'path'
 import {
   Screenshot,
   OnScreenshotCallback,
+  SessionAppIdentity,
   CaptureReason,
   InteractionContext,
 } from '../../shared/types'
@@ -25,6 +26,79 @@ let isCapturing = false
 let cleanupTimer: ReturnType<typeof setInterval> | null = null
 let lastCaptureTime = 0
 let isProcessingInteraction = false
+let sessionMaxDurationTimeout: ReturnType<typeof setTimeout> | null = null
+let currentSession: RecorderSession | null = null
+
+interface RecorderSession {
+  sessionId: string
+  appIdentity: SessionAppIdentity | null
+  displayId: number | undefined
+  startTimestamp: number
+  screenshots: Screenshot[]
+  interactionEvents: InteractionContext[]
+  closed: boolean
+}
+
+function getAppNameFromIdentity(identity: SessionAppIdentity | null): string {
+  return identity?.processName ?? ''
+}
+
+function clearSessionTimer(): void {
+  if (sessionMaxDurationTimeout) {
+    clearTimeout(sessionMaxDurationTimeout)
+    sessionMaxDurationTimeout = null
+  }
+}
+
+function scheduleSessionTimeout(sessionId: string): void {
+  clearSessionTimer()
+  sessionMaxDurationTimeout = setTimeout(() => {
+    if (!isCapturing || !currentSession || currentSession.sessionId !== sessionId) {
+      return
+    }
+
+    log.info(`[Session] Max duration reached for session ${sessionId}`)
+  }, CAPTURE_RATE_CONFIG.MAX_SESSION_DURATION_MS)
+}
+
+function startSession(appIdentity: SessionAppIdentity | null, displayId: number | undefined): void {
+  const sessionId = uuidv4()
+
+  currentSession = {
+    sessionId,
+    appIdentity,
+    displayId,
+    startTimestamp: Date.now(),
+    screenshots: [],
+    interactionEvents: [],
+    closed: false,
+  }
+
+  scheduleSessionTimeout(sessionId)
+  log.info(
+    `[Session] Started ${sessionId} for app "${getAppNameFromIdentity(appIdentity)}" (display: ${displayId ?? 'unknown'})`,
+  )
+}
+
+function ensureSessionForInteraction(context: InteractionContext): void {
+  if (currentSession) {
+    return
+  }
+
+  startSession(context.activeWindow ?? null, context.displayId)
+}
+
+function addInteractionToSession(context: InteractionContext): void {
+  ensureSessionForInteraction(context)
+  currentSession?.interactionEvents.push(context)
+}
+
+function addScreenshotToSession(screenshot: Screenshot): void {
+  if (!currentSession) {
+    startSession(null, screenshot.display.id)
+  }
+  currentSession?.screenshots.push(screenshot)
+}
 
 // Ensure screenshots directory exists
 function ensureScreenshotsDir(): void {
@@ -106,6 +180,8 @@ async function captureSampleBitmap(displayId?: number): Promise<Buffer> {
  * Handle an interaction event by checking for visual changes and capturing if needed.
  */
 async function handleInteraction(context: InteractionContext): Promise<void> {
+  addInteractionToSession(context)
+
   const now = Date.now()
   const timeSinceLastCapture = now - lastCaptureTime
 
@@ -187,6 +263,8 @@ function saveScreenshotFromSource(
     trigger: reason,
   }
 
+  addScreenshotToSession(screenshot)
+
   log.info(`[Capture] Screenshot saved: ${filename} (reason: ${reason.type})`)
   log.debug(
     `[Capture] Screenshot details: display=${screenshot.display.id}, ` +
@@ -215,6 +293,7 @@ export function startCapture(): void {
 
   log.info('[Capture] Starting screenshot capture with event-driven baseline detection')
   isCapturing = true
+  startSession(null, undefined)
 
   // Start periodic cleanup of old screenshot files
   cleanupTimer = setInterval(cleanupOldScreenshots, CLEANUP_INTERVAL_MS)
@@ -254,6 +333,8 @@ export function stopCapture(): void {
   isCapturing = false
   lastCaptureTime = 0
   isProcessingInteraction = false
+  clearSessionTimer()
+  currentSession = null
 
   // Stop periodic cleanup
   if (cleanupTimer) {
