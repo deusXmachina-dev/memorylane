@@ -33,11 +33,39 @@ let idleTimeoutId: NodeJS.Timeout | null = null
 // Display resolution state (updated by app-change poller, used by keyboard/scroll handlers)
 let cachedDisplayId: number | null = null
 
+export interface ActiveWindowSnapshot {
+  title: string
+  processName: string
+  displayId: number
+}
+
 /**
  * Resolve which Electron Display contains the given global coordinate.
  */
 function getDisplayIdForPoint(x: number, y: number): number {
   return screen.getDisplayNearestPoint({ x, y }).id
+}
+
+export async function getActiveWindowSnapshot(): Promise<ActiveWindowSnapshot | null> {
+  try {
+    const currentWindow = await activeWin()
+
+    if (!currentWindow) {
+      return null
+    }
+
+    const centerX = currentWindow.bounds.x + currentWindow.bounds.width / 2
+    const centerY = currentWindow.bounds.y + currentWindow.bounds.height / 2
+
+    return {
+      title: currentWindow.title,
+      processName: currentWindow.owner.name,
+      displayId: getDisplayIdForPoint(centerX, centerY),
+    }
+  } catch (error) {
+    log.warn('[Interaction Monitor] Failed to fetch active window snapshot:', error)
+    return null
+  }
 }
 
 /**
@@ -254,20 +282,16 @@ async function checkAppChange(): Promise<void> {
   }
 
   try {
-    const currentWindow = await activeWin()
-
-    if (!currentWindow) {
+    const snapshot = await getActiveWindowSnapshot()
+    if (!snapshot) {
       return
     }
 
     const current = {
-      title: currentWindow.title,
-      processName: currentWindow.owner.name,
+      title: snapshot.title,
+      processName: snapshot.processName,
     }
-
-    const centerX = currentWindow.bounds.x + currentWindow.bounds.width / 2
-    const centerY = currentWindow.bounds.y + currentWindow.bounds.height / 2
-    cachedDisplayId = getDisplayIdForPoint(centerX, centerY)
+    cachedDisplayId = snapshot.displayId
 
     // Check if window has changed
     if (

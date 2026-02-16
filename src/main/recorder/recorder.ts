@@ -151,10 +151,16 @@ function addInteractionToSession(context: InteractionContext): void {
   if (currentSession && context.displayId !== undefined) {
     currentSession.displayId = context.displayId
   }
+  if (currentSession && context.activeWindow) {
+    currentSession.appIdentity = {
+      title: context.activeWindow.title,
+      processName: context.activeWindow.processName,
+    }
+  }
   currentSession?.interactionEvents.push(context)
 }
 
-async function captureScreen(
+async function captureDisplaySource(
   thumbnailSize: { width: number; height: number },
   displayId?: number,
 ): Promise<Electron.DesktopCapturerSource> {
@@ -181,8 +187,73 @@ async function captureScreen(
   return source
 }
 
-async function captureSampleBitmap(displayId?: number): Promise<Buffer> {
-  const source = await captureScreen(SAMPLE_SIZE, displayId)
+async function captureWindowSource(
+  thumbnailSize: { width: number; height: number },
+  appIdentity: SessionAppIdentity,
+): Promise<Electron.DesktopCapturerSource | null> {
+  const windowSources = await desktopCapturer.getSources({
+    types: ['window'],
+    thumbnailSize,
+  })
+
+  const normalizedTitle = appIdentity.title.trim().toLowerCase()
+  const normalizedProcessName = appIdentity.processName.trim().toLowerCase()
+
+  const byExactTitle =
+    normalizedTitle.length > 0
+      ? windowSources.find((source) => source.name.trim().toLowerCase() === normalizedTitle)
+      : undefined
+
+  const byContainsTitle =
+    normalizedTitle.length > 0
+      ? windowSources.find((source) => source.name.trim().toLowerCase().includes(normalizedTitle))
+      : undefined
+
+  const byProcessName =
+    normalizedProcessName.length > 0
+      ? windowSources.find((source) =>
+          source.name.trim().toLowerCase().includes(normalizedProcessName),
+        )
+      : undefined
+
+  const source = byExactTitle ?? byContainsTitle ?? byProcessName ?? null
+
+  if (source) {
+    log.debug(
+      `[Capture] captureWindowSource: matched window source=${source.id}, title="${source.name}", app=${appIdentity.processName}`,
+    )
+  }
+
+  return source
+}
+
+async function capturePreferredSource(
+  thumbnailSize: { width: number; height: number },
+  session: RecorderSession,
+): Promise<Electron.DesktopCapturerSource> {
+  if (session.appIdentity) {
+    try {
+      const windowSource = await captureWindowSource(thumbnailSize, session.appIdentity)
+      if (windowSource) {
+        return windowSource
+      }
+
+      log.warn(
+        `[Capture] Window capture lookup failed for app "${session.appIdentity.processName}" (title="${session.appIdentity.title}"), falling back to display capture`,
+      )
+    } catch (error) {
+      log.warn(
+        `[Capture] Window capture failed for app "${session.appIdentity.processName}", falling back to display capture`,
+        error,
+      )
+    }
+  }
+
+  return captureDisplaySource(thumbnailSize, session.displayId)
+}
+
+async function captureSampleBitmap(session: RecorderSession): Promise<Buffer> {
+  const source = await capturePreferredSource(SAMPLE_SIZE, session)
   return source.thumbnail.toBitmap()
 }
 
@@ -240,8 +311,8 @@ async function captureInitialScreenshot(
   reason: SessionEndReason | 'start',
 ): Promise<void> {
   const [fullSource, sampleBitmap] = await Promise.all([
-    captureScreen(FULL_RES_SIZE, session.displayId),
-    captureSampleBitmap(session.displayId),
+    capturePreferredSource(FULL_RES_SIZE, session),
+    captureSampleBitmap(session),
   ])
 
   visualDetector.updateBaselineFromBitmap(sampleBitmap)
@@ -263,7 +334,25 @@ async function beginSessionAndCaptureInitial(
   displayId: number | undefined,
   reason: SessionEndReason | 'start',
 ): Promise<void> {
-  const session = startSession(appIdentity, displayId)
+  let resolvedIdentity = appIdentity
+  let resolvedDisplayId = displayId
+
+  if (!resolvedIdentity || resolvedDisplayId === undefined) {
+    const snapshot = await interactionMonitor.getActiveWindowSnapshot()
+    if (snapshot) {
+      if (!resolvedIdentity) {
+        resolvedIdentity = {
+          title: snapshot.title,
+          processName: snapshot.processName,
+        }
+      }
+      if (resolvedDisplayId === undefined) {
+        resolvedDisplayId = snapshot.displayId
+      }
+    }
+  }
+
+  const session = startSession(resolvedIdentity, resolvedDisplayId)
   try {
     await captureInitialScreenshot(session, reason)
     log.info(`[Session] Initial screenshot captured for session ${session.sessionId}`)
@@ -283,7 +372,7 @@ async function endCurrentSession(endReason: SessionEndReason): Promise<void> {
   clearSessionTimer()
 
   try {
-    const finalSource = await captureScreen(FULL_RES_SIZE, session.displayId)
+    const finalSource = await capturePreferredSource(FULL_RES_SIZE, session)
     saveScreenshotFromSource(
       finalSource,
       {
@@ -338,6 +427,10 @@ async function handleAppChange(context: InteractionContext): Promise<void> {
 async function handleRegularInteraction(context: InteractionContext): Promise<void> {
   addInteractionToSession(context)
   const displayId = getDisplayIdForContext(context)
+  const session = currentSession
+  if (!session) {
+    return
+  }
 
   const now = Date.now()
   const timeSinceLastCapture = now - lastCaptureTime
@@ -359,7 +452,7 @@ async function handleRegularInteraction(context: InteractionContext): Promise<vo
   try {
     log.info(`[Capture] Interaction detected: ${context.type} (display: ${displayId ?? 'unknown'})`)
 
-    const sampleBitmap = await captureSampleBitmap(displayId)
+    const sampleBitmap = await captureSampleBitmap(session)
     const result = visualDetector.checkBitmapAgainstBaseline(sampleBitmap)
 
     if (!result.changed) {
@@ -373,7 +466,7 @@ async function handleRegularInteraction(context: InteractionContext): Promise<vo
       `[Capture] Visual change detected (${result.difference.toFixed(1)}%) - capturing full-res screenshot`,
     )
 
-    const fullSource = await captureScreen(FULL_RES_SIZE, displayId)
+    const fullSource = await capturePreferredSource(FULL_RES_SIZE, session)
     saveScreenshotFromSource(
       fullSource,
       {
