@@ -96,6 +96,12 @@ From the tray menu, click **Add to Claude Desktop**, **Add to Claude Code**, or 
 
 You can also set it up manually by pointing your MCP client to the MemoryLane server binary.
 
+When using MCP tools:
+
+- Use event **summaries** to answer "what was I doing?" questions.
+- Use **OCR text** only for exact recall (specific strings, file names, errors, or quotes).
+- Avoid drawing activity conclusions from OCR alone, because OCR may include unrelated on-screen text.
+
 ## How It Works
 
 AI conversations are full of friction because LLMs have no context about you. MemoryLane fixes that by watching what you do and making it searchable.

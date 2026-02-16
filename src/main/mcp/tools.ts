@@ -17,7 +17,7 @@ export function registerTools(server: McpServer, getProcessor: () => EventProces
     'search_context',
     {
       description:
-        'Semantic search over recorded screen activity. MemoryLane captures periodic screenshots — each entry has an AI-generated summary, OCR text, app name, and timestamp. Use this for targeted questions (e.g. "when did I review PR #142?", "find my work on the auth module"). Returns compact summaries only (id, time, app, summary) — call get_event_details for full OCR text. If query is omitted, returns events chronologically (requires startTime or endTime).',
+        'Semantic search over recorded screen activity sessions. Each result includes id, time, app, and AI summary for summary-first activity reasoning. Use this for targeted questions (e.g. "when did I review PR #142?", "find my work on the auth module"). For exact strings, call get_event_details to inspect OCR text. If query is omitted, returns events chronologically (requires startTime or endTime).',
       inputSchema: {
         query: z
           .string()
@@ -53,7 +53,7 @@ export function registerTools(server: McpServer, getProcessor: () => EventProces
     'browse_timeline',
     {
       description:
-        'List activity during a time period — best for broad questions like "what did I do today?" Each result is a one-line summary (~20 tokens), so use higher limits (30-50) to get a full picture. Supports uniform sampling to cover long ranges without returning everything. Returns id, timestamp, app, and summary — call get_event_details for full OCR text.',
+        'List activity during a time period — best for broad "what did I do?" questions. Each result is a one-line summary (~20 tokens), so use higher limits (30-50) to get a full picture. Supports uniform sampling to cover long ranges. Returns id, timestamp, app, and summary for activity inference; call get_event_details only when exact OCR text is needed.',
       inputSchema: {
         startTime: z
           .string()
@@ -87,7 +87,7 @@ export function registerTools(server: McpServer, getProcessor: () => EventProces
     'get_event_details',
     {
       description:
-        'Fetch full event details by ID, including the raw OCR screen text. This is the only tool that returns OCR content. Use after browse_timeline or search_context to read what was actually on screen.',
+        'Fetch full event details by ID, including summary and raw OCR screen text. This is the only tool that returns OCR content. Use after browse_timeline or search_context when exact on-screen text is required (quotes, file names, error strings), not as the primary source for activity inference.',
       inputSchema: {
         ids: z
           .array(z.string())
@@ -390,7 +390,9 @@ async function handleGetEventDetails(processor: EventProcessor | null, { ids }: 
       content: [
         {
           type: 'text' as const,
-          text: `${events.length} event(s):\n\n${formatted}`,
+          text:
+            'Interpretation guide: use "Summary" for what the user did. OCR is raw on-screen text for exact recall and can be ambiguous, so do not infer activity from OCR alone.\n\n' +
+            `${events.length} event(s):\n\n${formatted}`,
         },
       ],
     }

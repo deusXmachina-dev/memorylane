@@ -23,36 +23,47 @@ const SERVER_NAME = 'memorylane'
 const SERVER_VERSION = '1.0.0'
 
 const SERVER_INSTRUCTIONS = `\
-MemoryLane continuously captures screenshots of the user's screen and indexes \
-them with OCR text, AI summaries, and app metadata. Use it to recall past \
+MemoryLane captures application sessions and stores one event per session with \
+an AI summary, OCR text, app metadata, and timestamp. Use it to recall past \
 screen activity.
+
+## How to reason about data (critical)
+
+- **Use summaries for activity conclusions** — when answering "what the user did," \
+ground conclusions in event summaries from search_context or browse_timeline.
+- **Use OCR for exact recall only** — use OCR only when the user needs exact strings \
+(file names, error messages, copied text, specific wording).
+- **Never infer activity from OCR alone** — OCR is ambiguous: it may include passive \
+reading, user-authored text, third-party content, ads, or notifications.
 
 ## Choosing the right tool
 
 - **browse_timeline** — open-ended questions like "what did I do today?", \
 "summarize my morning", or "what was I working on last Friday?". Use higher \
-limits since each result is a compact one-line summary. \
+limits since each result is a compact one-line summary suitable for activity \
+reasoning. \
 10-100 is a good default limit for searches over less than 30 minutes. \
 100-500 is a good default limit for searches over many hours.
 - **search_context** — targeted recall like "when did I review PR #142?", \
 "find my work on the auth module", or "that error I saw in the terminal". \
-Results are ranked by semantic relevance.
+Results are ranked by semantic relevance and return summary-first context.
 - **get_event_details** — fetch full OCR screen text for specific event IDs \
-returned by the other tools. Summaries alone are not enough for detailed \
-questions; always call this when the user needs exact content.
+returned by the other tools. Use this only when exact on-screen text is needed; \
+do not use OCR as the primary source for inferring user activity.
 
 ## Typical workflows
 
-1. Broad recall: browse_timeline → summarize → get_event_details on key entries
-2. Targeted search: search_context → get_event_details on top hits
-3. Drill-down: start broad with browse_timeline, then refine with search_context
-4. Targeted with time context: start with search_context, then use browse_timeline to get the full context of the time period.
+1. Activity question: browse_timeline or search_context → answer from summaries.
+2. Exact-text question: search_context/browse_timeline → get_event_details on key IDs → quote OCR text.
+3. Drill-down: start broad with browse_timeline, then refine with search_context.
+4. Mixed question: use summaries for narrative and OCR only for precise supporting details.
 
 ## Tips
 
 - Combine time filters with semantic queries in search_context to narrow results.
 - Use the appName filter when the user mentions a specific app ("in VS Code", "on Slack").
 - When summarizing a time period, prefer uniform sampling to cover the full range.
+- If summary and OCR seem to disagree, trust summary for "what happened" and treat OCR as raw evidence only.
 - Event IDs are opaque UUIDs — never fabricate them; always use IDs from tool results.`
 
 export class MemoryLaneMCPServer {
