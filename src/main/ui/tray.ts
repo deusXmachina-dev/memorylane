@@ -2,7 +2,7 @@
  * System tray management for MemoryLane
  */
 
-import { app, Tray, Menu, nativeImage, dialog } from 'electron'
+import { app, Tray, Menu, nativeImage, desktopCapturer, dialog } from 'electron'
 import path from 'node:path'
 import * as fs from 'fs'
 import log from '../logger'
@@ -30,6 +30,48 @@ interface TrayDependencies {
 let tray: Tray | null = null
 let deps: TrayDependencies | null = null
 const isDev = !app.isPackaged
+const TEST_CAPTURES_DIR = path.join(app.getAppPath(), 'test-captures')
+
+/**
+ * Build a submenu listing all visible windows. Clicking one captures it
+ * via captureWindow and saves the PNG to test-captures/.
+ * Only used in dev mode.
+ */
+const buildWindowCaptureSubmenu = async (): Promise<Electron.MenuItemConstructorOptions[]> => {
+  const sources = await desktopCapturer.getSources({
+    types: ['window'],
+    thumbnailSize: { width: 1, height: 1 },
+  })
+
+  if (sources.length === 0) {
+    return [{ label: 'No windows found', enabled: false }]
+  }
+
+  return sources.map((source) => ({
+    label: source.name || '(untitled)',
+    click: async () => {
+      const result = await captureWindow({ title: source.name })
+      if (!result) {
+        dialog.showErrorBox('Window Capture', `Could not capture "${source.name}"`)
+        return
+      }
+      fs.mkdirSync(TEST_CAPTURES_DIR, { recursive: true })
+      const safeName = source.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .slice(0, 60)
+      const outPath = path.join(TEST_CAPTURES_DIR, `${safeName}.png`)
+      fs.writeFileSync(outPath, result.image)
+      log.info(`[TestCapture] "${result.title}" ${result.width}x${result.height} → ${outPath}`)
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'Window Capture',
+        message: `Captured "${result.title}" (${result.width}x${result.height})`,
+        detail: outPath,
+      })
+    },
+  }))
+}
 
 app.on('before-quit', () => {
   if (tray) {
@@ -124,6 +166,7 @@ export const updateTrayMenu = async (): Promise<void> => {
   const isCapturing = deps.recorder.isCapturingNow()
 
   const usageStatsSubmenu = await buildUsageStatsSubmenu()
+  const windowCaptureSubmenu = isDev ? await buildWindowCaptureSubmenu() : []
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -174,24 +217,7 @@ export const updateTrayMenu = async (): Promise<void> => {
           { type: 'separator' as const },
           {
             label: 'Test Window Capture',
-            click: async () => {
-              const result = await captureWindow()
-              if (!result) {
-                dialog.showErrorBox('Window Capture', 'No window captured (null result)')
-                return
-              }
-              const outPath = path.join(app.getPath('temp'), `memorylane-test-${Date.now()}.png`)
-              fs.writeFileSync(outPath, result.image)
-              log.info(
-                `[TestCapture] "${result.title}" ${result.width}x${result.height} → ${outPath}`,
-              )
-              dialog.showMessageBox({
-                type: 'info',
-                title: 'Window Capture',
-                message: `Captured "${result.title}" (${result.width}x${result.height})`,
-                detail: `Saved to ${outPath}`,
-              })
-            },
+            submenu: windowCaptureSubmenu,
           },
         ]
       : []),
