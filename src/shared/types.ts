@@ -10,6 +10,23 @@ export interface Screenshot {
   trigger: CaptureReason // Why was this screenshot taken
 }
 
+export type SessionEndReason = 'app_switch' | 'max_duration' | 'stop'
+
+export interface SessionAppIdentity {
+  title: string
+  processName: string
+}
+
+export interface CompletedAppSession {
+  sessionId: string
+  appName: string
+  startTimestamp: number
+  endTimestamp: number
+  screenshots: Screenshot[]
+  interactionEvents: InteractionContext[]
+  endReason: SessionEndReason
+}
+
 export interface CaptureReason {
   type: 'timer' | 'baseline_change' | 'manual'
   confidence?: number // Visual change percentage (0-100) for baseline_change
@@ -46,6 +63,7 @@ export interface InteractionContext {
 }
 
 export type OnScreenshotCallback = (screenshot: Screenshot) => void
+export type OnSessionCompleteCallback = (session: CompletedAppSession) => void
 
 export interface ClassificationInput {
   startScreenshot: Screenshot

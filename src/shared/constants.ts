@@ -22,6 +22,7 @@ export const INTERACTION_MONITOR_CONFIG = {
 // Capture Rate Limiting Configuration
 export const CAPTURE_RATE_CONFIG = {
   MIN_CAPTURE_INTERVAL_MS: 5000, // Minimum time between interaction-triggered captures (1000-30000ms)
+  MAX_SESSION_DURATION_MS: 10 * 60 * 1000, // Force a session boundary every 10 minutes
   MAX_CONCURRENT_PROCESSING: 2, // Max simultaneous screenshot processing tasks (1-4)
 }
 
