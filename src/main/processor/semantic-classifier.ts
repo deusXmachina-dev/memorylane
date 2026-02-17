@@ -1,6 +1,11 @@
 import * as fs from 'fs'
 import { OpenRouter } from '@openrouter/sdk'
-import { ClassificationInput, ClassificationResult, InteractionContext } from '../../shared/types'
+import {
+  ClassificationInput,
+  ClassificationResult,
+  CustomEndpointConfig,
+  InteractionContext,
+} from '../../shared/types'
 import { UsageTracker } from '../services/usage-tracker'
 import log from '../logger'
 import { DebugPipelineWriter } from './debug-pipeline'
@@ -29,10 +34,17 @@ const SUPPORTED_MODELS = {
 
 export type ModelChoice = keyof typeof SUPPORTED_MODELS
 
+export interface EndpointConfig {
+  serverURL?: string
+  apiKey?: string
+  model?: string
+}
+
 export class SemanticClassifierService {
   private summaryHistory: ClassificationResult[] = []
   private client: OpenRouter | null = null
-  private model: ModelChoice
+  private model: string
+  private isCustomEndpoint = false
   private maxHistorySize: number
   private usageTracker: UsageTracker
   private debugWriter: DebugPipelineWriter | null
@@ -43,31 +55,52 @@ export class SemanticClassifierService {
     maxHistorySize = 5,
     usageTracker?: UsageTracker,
     debugWriter?: DebugPipelineWriter | null,
+    endpointConfig?: EndpointConfig,
   ) {
-    // Use provided key directly - caller (ApiKeyManager) handles env fallback
-    if (apiKey) {
-      this.client = new OpenRouter({ apiKey })
-      log.info('[SemanticClassifier] Initialized with API key')
-    } else {
-      log.warn('[SemanticClassifier] No API key provided - classification disabled')
-    }
-    this.model = model
     this.maxHistorySize = maxHistorySize
     this.usageTracker = usageTracker || new UsageTracker()
     this.debugWriter = debugWriter ?? null
+
+    if (endpointConfig?.serverURL) {
+      // Custom endpoint takes priority
+      const effectiveKey = endpointConfig.apiKey || apiKey || ''
+      this.client = new OpenRouter({ apiKey: effectiveKey, serverURL: endpointConfig.serverURL })
+      this.model = endpointConfig.model || model
+      this.isCustomEndpoint = true
+      log.info(`[SemanticClassifier] Initialized with custom endpoint: ${endpointConfig.serverURL}`)
+    } else if (apiKey) {
+      this.client = new OpenRouter({ apiKey })
+      this.model = model
+      log.info('[SemanticClassifier] Initialized with API key')
+    } else {
+      this.model = model
+      log.warn('[SemanticClassifier] No API key provided - classification disabled')
+    }
   }
 
   /**
-   * Check if the classifier is configured with an API key
+   * Check if the classifier is configured (has either an API key or custom endpoint)
    */
   public isConfigured(): boolean {
     return this.client !== null
   }
 
   /**
-   * Update the API key at runtime
+   * Whether the classifier is currently using a custom endpoint
+   */
+  public isUsingCustomEndpoint(): boolean {
+    return this.isCustomEndpoint
+  }
+
+  /**
+   * Update the API key at runtime (for OpenRouter)
    */
   public updateApiKey(apiKey: string | null): void {
+    if (this.isCustomEndpoint) {
+      // Don't override custom endpoint with OpenRouter key changes
+      log.info('[SemanticClassifier] Ignoring API key update - custom endpoint active')
+      return
+    }
     if (apiKey) {
       // Clear env var to prevent SDK from reading it and potentially duplicating keys
       delete process.env.OPENROUTER_API_KEY
@@ -76,6 +109,31 @@ export class SemanticClassifierService {
     } else {
       this.client = null
       log.info('[SemanticClassifier] API key cleared')
+    }
+  }
+
+  /**
+   * Switch to a custom endpoint or revert to OpenRouter
+   */
+  public updateEndpoint(config: CustomEndpointConfig | null, openRouterKey?: string | null): void {
+    if (config) {
+      const effectiveKey = config.apiKey || ''
+      this.client = new OpenRouter({ apiKey: effectiveKey, serverURL: config.serverURL })
+      this.model = config.model
+      this.isCustomEndpoint = true
+      log.info(`[SemanticClassifier] Switched to custom endpoint: ${config.serverURL}`)
+    } else {
+      // Revert to OpenRouter
+      this.isCustomEndpoint = false
+      if (openRouterKey) {
+        this.client = new OpenRouter({ apiKey: openRouterKey })
+        this.model = 'mistralai/mistral-small-3.2-24b-instruct'
+        log.info('[SemanticClassifier] Reverted to OpenRouter')
+      } else {
+        this.client = null
+        this.model = 'mistralai/mistral-small-3.2-24b-instruct'
+        log.info('[SemanticClassifier] Custom endpoint removed, no OpenRouter key available')
+      }
     }
   }
 
@@ -148,10 +206,13 @@ export class SemanticClassifierService {
       // Track usage - always increment request count for successful calls
       const promptTokens = response.usage?.promptTokens || 0
       const completionTokens = response.usage?.completionTokens || 0
-      const modelCost = SUPPORTED_MODELS[this.model]
-      const cost =
-        (promptTokens / 1_000_000) * modelCost.input_tokens_per_million +
-        (completionTokens / 1_000_000) * modelCost.completion_tokens_per_million
+      let cost = 0
+      if (!this.isCustomEndpoint && this.model in SUPPORTED_MODELS) {
+        const modelCost = SUPPORTED_MODELS[this.model as ModelChoice]
+        cost =
+          (promptTokens / 1_000_000) * modelCost.input_tokens_per_million +
+          (completionTokens / 1_000_000) * modelCost.completion_tokens_per_million
+      }
       this.usageTracker.recordUsage({
         prompt_tokens: promptTokens,
         completion_tokens: completionTokens,
