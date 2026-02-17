@@ -115,10 +115,22 @@ app.on('ready', async () => {
     captureWindowByTitle: recorder.captureWindowByTitle,
   })
 
+  // Start continuous video recording with segment splitting
+  const segmentOrchestrator = await import('./recorder/segment-orchestrator')
+  segmentOrchestrator.onSegment((segment, context) => {
+    log.info(
+      `[Main] Segment: ${segment.filepath} app=${context.appName ?? '(none)'} ` +
+        `title="${context.windowTitle ?? ''}"`,
+    )
+    // Future: processor.processSegment(segment, context)
+  })
+  await segmentOrchestrator.start()
+
   // Expose modules on globalThis for Playwright e2e tests (dev only)
   if (!app.isPackaged) {
     const videoRecorder = await import('./recorder/video-recorder')
     ;(globalThis as Record<string, unknown>).__videoRecorder = videoRecorder
+    ;(globalThis as Record<string, unknown>).__segmentOrchestrator = segmentOrchestrator
   }
 
   const { setupTray, updateTrayMenu } = await import('./ui/tray')

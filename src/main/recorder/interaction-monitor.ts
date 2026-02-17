@@ -252,6 +252,7 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
   const current: NonNullable<InteractionContext['activeWindow']> = {
     title: event.title ?? '',
     processName: event.app ?? '',
+    ...(event.bundleId && { bundleId: event.bundleId }),
     ...(event.url && { url: event.url }),
   }
 
