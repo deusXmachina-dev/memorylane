@@ -21,6 +21,11 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   addToClaude: () => ipcRenderer.invoke('main-window:addToClaude'),
   addToCursor: () => ipcRenderer.invoke('main-window:addToCursor'),
   addToClaudeCode: () => ipcRenderer.invoke('main-window:addToClaudeCode'),
+  // Custom endpoint
+  getCustomEndpoint: () => ipcRenderer.invoke('main-window:getCustomEndpoint'),
+  saveCustomEndpoint: (config: { serverURL: string; model: string; apiKey?: string }) =>
+    ipcRenderer.invoke('main-window:saveCustomEndpoint', config),
+  deleteCustomEndpoint: () => ipcRenderer.invoke('main-window:deleteCustomEndpoint'),
   // Subscription
   startCheckout: () => ipcRenderer.invoke('main-window:startCheckout'),
   openSubscriptionPortal: () => ipcRenderer.invoke('main-window:openSubscriptionPortal'),

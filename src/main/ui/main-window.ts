@@ -14,9 +14,10 @@ import { registerWithCursor } from '../integrations/cursor'
 import { registerWithClaudeCode } from '../integrations/claude-code'
 import type { EventProcessor } from '../processor/index'
 import type { ApiKeyManager } from '../settings/api-key-manager'
+import type { CustomEndpointManager } from '../settings/custom-endpoint-manager'
 import type { SemanticClassifierService } from '../processor/semantic-classifier'
 import type { ManagedKeyService } from '../services/managed-key-service'
-import type { MainWindowStats } from '../../shared/types'
+import type { CustomEndpointConfig, MainWindowStats } from '../../shared/types'
 
 interface MainWindowDependencies {
   recorder: {
@@ -29,6 +30,7 @@ interface MainWindowDependencies {
   }
   processor: EventProcessor
   apiKeyManager: ApiKeyManager
+  customEndpointManager: CustomEndpointManager
   classifierService: SemanticClassifierService
   managedKeyService: ManagedKeyService
 }
@@ -218,6 +220,46 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   ipcMain.handle('main-window:addToClaude', () => registerWithClaudeDesktop())
   ipcMain.handle('main-window:addToCursor', () => registerWithCursor())
   ipcMain.handle('main-window:addToClaudeCode', () => registerWithClaudeCode())
+
+  // Custom endpoint management
+  ipcMain.handle('main-window:getCustomEndpoint', () => {
+    if (!deps) {
+      return { enabled: false, serverURL: null, model: null, hasApiKey: false }
+    }
+    return deps.customEndpointManager.getStatus()
+  })
+
+  ipcMain.handle(
+    'main-window:saveCustomEndpoint',
+    (_event: IpcMainInvokeEvent, config: CustomEndpointConfig) => {
+      if (!deps) {
+        return { success: false, error: 'Dependencies not initialized' }
+      }
+      try {
+        deps.customEndpointManager.saveEndpoint(config)
+        deps.classifierService.updateEndpoint(config)
+        return { success: true }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        return { success: false, error: message }
+      }
+    },
+  )
+
+  ipcMain.handle('main-window:deleteCustomEndpoint', () => {
+    if (!deps) {
+      return { success: false, error: 'Dependencies not initialized' }
+    }
+    try {
+      deps.customEndpointManager.deleteEndpoint()
+      const openRouterKey = deps.apiKeyManager.getApiKey()
+      deps.classifierService.updateEndpoint(null, openRouterKey)
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      return { success: false, error: message }
+    }
+  })
 
   // Subscription / managed key
   deps.managedKeyService.setUpdateCallback((status, payload) => {

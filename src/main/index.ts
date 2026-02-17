@@ -12,6 +12,7 @@ import { EmbeddingService } from './processor/embedding'
 import { StorageService } from './processor/storage'
 import { SemanticClassifierService } from './processor/semantic-classifier'
 import { ApiKeyManager } from './settings/api-key-manager'
+import { CustomEndpointManager } from './settings/custom-endpoint-manager'
 import { DeviceIdentity } from './settings/device-identity'
 import { ManagedKeyService } from './services/managed-key-service'
 import { DebugPipelineWriter } from './processor/debug-pipeline'
@@ -39,6 +40,7 @@ let interactionMonitor: typeof import('./recorder/interaction-monitor')
 
 let processor: EventProcessor | null = null
 let apiKeyManager: ApiKeyManager | null = null
+let customEndpointManager: CustomEndpointManager | null = null
 let classifierService: SemanticClassifierService | null = null
 let managedKeyService: ManagedKeyService | null = null
 
@@ -47,16 +49,29 @@ const initServices = async (): Promise<void> => {
   interactionMonitor = await import('./recorder/interaction-monitor')
 
   apiKeyManager = new ApiKeyManager()
+  customEndpointManager = new CustomEndpointManager()
 
   const embeddingService = new EmbeddingService()
   const storageService = new StorageService(StorageService.getDefaultDbPath())
   const debugWriter = DebugPipelineWriter.create()
+
+  // Build endpoint config from saved custom endpoint (if any)
+  const savedEndpoint = customEndpointManager.getEndpoint()
+  const endpointConfig = savedEndpoint
+    ? {
+        serverURL: savedEndpoint.serverURL,
+        apiKey: savedEndpoint.apiKey,
+        model: savedEndpoint.model,
+      }
+    : undefined
+
   classifierService = new SemanticClassifierService(
     apiKeyManager.getApiKey() || undefined,
     undefined,
     undefined,
     undefined,
     debugWriter,
+    endpointConfig,
   )
   processor = new EventProcessor(embeddingService, storageService, classifierService)
 
@@ -101,6 +116,7 @@ app.on('ready', async () => {
     interactionMonitor,
     processor: processor!,
     apiKeyManager: apiKeyManager!,
+    customEndpointManager: customEndpointManager!,
     classifierService: classifierService!,
     managedKeyService: managedKeyService!,
   })
