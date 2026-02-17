@@ -22,21 +22,20 @@ func nowMs() -> Int64 {
 // MARK: - CLI argument parsing
 
 struct Config {
-    var outputPath: String
+    var initialOutputDir: String
     var width: Int = 1280
     var height: Int = 720
     var fps: Int = 5
-    var displayID: UInt32? = nil
 }
 
 func parseArgs() -> Config? {
     let args = CommandLine.arguments
     guard args.count >= 2 else {
-        emit(["status": "error", "message": "Usage: screen-recorder <output-path> [--width N] [--height N] [--fps N] [--display ID]", "timestamp": nowMs()])
+        emit(["status": "error", "message": "Usage: screen-recorder <output-dir> [--width N] [--height N] [--fps N]", "timestamp": nowMs()])
         return nil
     }
 
-    var config = Config(outputPath: args[1])
+    var config = Config(initialOutputDir: args[1])
     var i = 2
     while i < args.count {
         switch args[i] {
@@ -46,8 +45,6 @@ func parseArgs() -> Config? {
             i += 1; if i < args.count { config.height = Int(args[i]) ?? config.height }
         case "--fps":
             i += 1; if i < args.count { config.fps = Int(args[i]) ?? config.fps }
-        case "--display":
-            i += 1; if i < args.count { config.displayID = UInt32(args[i]) }
         default:
             break
         }
@@ -56,142 +53,158 @@ func parseArgs() -> Config? {
     return config
 }
 
-// MARK: - Screen Recorder
+// MARK: - Per-display recorder
 
-class ScreenRecorder: NSObject, SCStreamOutput {
-    private let config: Config
+class DisplayRecorder: NSObject, SCStreamOutput {
+    let displayID: UInt32
+    let config: Config
     private var stream: SCStream?
+    private let displayQueue: DispatchQueue
+
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
-    private var startTime: CMTime?
+    private var outputPath: String = ""
+    private var firstPTS: CMTime?
+    private var segmentStartTimestamp: Int64 = 0
     private var started = false
-    private var stopping = false
+    private var pendingSplit: (writer: AVAssetWriter, input: AVAssetWriterInput, path: String)?
 
-    init(config: Config) {
+    init(displayID: UInt32, config: Config) {
+        self.displayID = displayID
         self.config = config
+        self.displayQueue = DispatchQueue(label: "screen-recorder-display-\(displayID)")
     }
 
-    func start() async {
-        do {
-            // Get available content
-            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+    func createWriter(outputPath: String) throws -> (AVAssetWriter, AVAssetWriterInput) {
+        let outputURL = URL(fileURLWithPath: outputPath)
+        let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
 
-            // Find the target display
-            guard let display = findDisplay(in: content) else {
-                emit(["status": "error", "message": "No matching display found", "timestamp": nowMs()])
-                exit(1)
+        let videoSettings: [String: Any] = [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: config.width,
+            AVVideoHeightKey: config.height,
+            AVVideoCompressionPropertiesKey: [
+                AVVideoAverageBitRateKey: 1_000_000,
+                AVVideoProfileLevelKey: AVVideoProfileLevelH264BaselineAutoLevel,
+                AVVideoExpectedSourceFrameRateKey: config.fps,
+            ],
+        ]
+
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+        input.expectsMediaDataInRealTime = true
+
+        writer.add(input)
+        writer.startWriting()
+        writer.startSession(atSourceTime: .zero)
+
+        return (writer, input)
+    }
+
+    func startStream(display: SCDisplay) async throws {
+        let initialFilename = "\(nowMs())_\(displayID).mp4"
+        let initialPath = (config.initialOutputDir as NSString).appendingPathComponent(initialFilename)
+        outputPath = initialPath
+        segmentStartTimestamp = nowMs()
+
+        let (writer, input) = try createWriter(outputPath: initialPath)
+        assetWriter = writer
+        videoInput = input
+
+        let streamConfig = SCStreamConfiguration()
+        streamConfig.width = config.width
+        streamConfig.height = config.height
+        streamConfig.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(config.fps))
+        streamConfig.pixelFormat = kCVPixelFormatType_32BGRA
+        streamConfig.showsCursor = true
+        streamConfig.queueDepth = 5
+
+        let filter = SCContentFilter(display: display, excludingWindows: [])
+        stream = SCStream(filter: filter, configuration: streamConfig, delegate: nil)
+        try stream!.addStreamOutput(self, type: .screen, sampleHandlerQueue: displayQueue)
+        try await stream!.startCapture()
+        started = true
+    }
+
+    func split(newOutputPath: String) {
+        displayQueue.async { [self] in
+            guard started else { return }
+            do {
+                let (newWriter, newInput) = try createWriter(outputPath: newOutputPath)
+
+                let oldWriter = assetWriter
+                let oldInput = videoInput
+                let oldPath = outputPath
+                let segStart = segmentStartTimestamp
+
+                // Atomic swap on the serial queue
+                assetWriter = newWriter
+                videoInput = newInput
+                outputPath = newOutputPath
+                firstPTS = nil
+                segmentStartTimestamp = nowMs()
+
+                // Finalize old writer in background
+                Task {
+                    oldInput?.markAsFinished()
+                    await oldWriter?.finishWriting()
+                    let endTs = nowMs()
+                    emit([
+                        "status": "segment_complete",
+                        "displayId": Int(displayID),
+                        "filepath": oldPath,
+                        "startTimestamp": segStart,
+                        "endTimestamp": endTs,
+                    ])
+                }
+            } catch {
+                emit(["status": "error", "message": "Failed to create new writer for split: \(error.localizedDescription)", "timestamp": nowMs()])
             }
-
-            // Configure stream
-            let streamConfig = SCStreamConfiguration()
-            streamConfig.width = config.width
-            streamConfig.height = config.height
-            streamConfig.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(config.fps))
-            streamConfig.pixelFormat = kCVPixelFormatType_32BGRA
-            streamConfig.showsCursor = true
-            streamConfig.queueDepth = 5
-
-            // Create filter for the target display
-            let filter = SCContentFilter(display: display, excludingWindows: [])
-
-            // Set up AVAssetWriter
-            let outputURL = URL(fileURLWithPath: config.outputPath)
-            assetWriter = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
-
-            let videoSettings: [String: Any] = [
-                AVVideoCodecKey: AVVideoCodecType.h264,
-                AVVideoWidthKey: config.width,
-                AVVideoHeightKey: config.height,
-                AVVideoCompressionPropertiesKey: [
-                    AVVideoAverageBitRateKey: 1_000_000,
-                    AVVideoProfileLevelKey: AVVideoProfileLevelH264BaselineAutoLevel,
-                    AVVideoExpectedSourceFrameRateKey: config.fps,
-                ],
-            ]
-
-            videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
-            videoInput!.expectsMediaDataInRealTime = true
-
-            assetWriter!.add(videoInput!)
-            assetWriter!.startWriting()
-            assetWriter!.startSession(atSourceTime: .zero)
-
-            // Start capture
-            stream = SCStream(filter: filter, configuration: streamConfig, delegate: nil)
-            try stream!.addStreamOutput(self, type: .screen, sampleHandlerQueue: DispatchQueue(label: "screen-recorder"))
-            try await stream!.startCapture()
-
-            started = true
-            emit(["status": "recording", "timestamp": nowMs()])
-
-        } catch {
-            emit(["status": "error", "message": error.localizedDescription, "timestamp": nowMs()])
-            exit(1)
         }
     }
 
-    func stop() {
-        guard started, !stopping else { return }
-        stopping = true
+    func stop() async {
+        started = false
 
-        Task {
-            // Stop the stream
-            if let stream = stream {
-                try? await stream.stopCapture()
-            }
-
-            // Finalize the asset writer
-            videoInput?.markAsFinished()
-
-            guard let writer = assetWriter else {
-                emit(["status": "error", "message": "No asset writer", "timestamp": nowMs()])
-                exit(1)
-            }
-
-            await writer.finishWriting()
-
-            if writer.status == .completed {
-                emit([
-                    "status": "stopped",
-                    "filepath": config.outputPath,
-                    "timestamp": nowMs(),
-                ])
-            } else {
-                emit([
-                    "status": "error",
-                    "message": writer.error?.localizedDescription ?? "Unknown write error",
-                    "timestamp": nowMs(),
-                ])
-            }
-
-            exit(0)
+        if let stream = stream {
+            try? await stream.stopCapture()
         }
-    }
 
-    private func findDisplay(in content: SCShareableContent) -> SCDisplay? {
-        if let targetID = config.displayID {
-            return content.displays.first { $0.displayID == targetID }
+        // Finalize the current segment
+        let oldInput = videoInput
+        let oldWriter = assetWriter
+        let oldPath = outputPath
+        let segStart = segmentStartTimestamp
+
+        videoInput = nil
+        assetWriter = nil
+
+        oldInput?.markAsFinished()
+        await oldWriter?.finishWriting()
+
+        if oldWriter?.status == .completed {
+            emit([
+                "status": "segment_complete",
+                "displayId": Int(displayID),
+                "filepath": oldPath,
+                "startTimestamp": segStart,
+                "endTimestamp": nowMs(),
+            ])
         }
-        // Default to main display
-        return content.displays.first { $0.displayID == CGMainDisplayID() }
-            ?? content.displays.first
     }
 
     // MARK: - SCStreamOutput
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard type == .screen, started, !stopping else { return }
+        guard type == .screen, started else { return }
         guard let videoInput = videoInput, videoInput.isReadyForMoreMediaData else { return }
 
-        // Retime sample buffers relative to first frame
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-        if startTime == nil {
-            startTime = pts
+        if firstPTS == nil {
+            firstPTS = pts
         }
 
-        let adjustedPTS = CMTimeSubtract(pts, startTime!)
+        let adjustedPTS = CMTimeSubtract(pts, firstPTS!)
 
-        // Create a retimed copy of the sample buffer
         var timingInfo = CMSampleTimingInfo(
             duration: CMSampleBufferGetDuration(sampleBuffer),
             presentationTimeStamp: adjustedPTS,
@@ -213,29 +226,113 @@ class ScreenRecorder: NSObject, SCStreamOutput {
     }
 }
 
+// MARK: - Coordinator
+
+class RecordingCoordinator {
+    let config: Config
+    var displayRecorders: [UInt32: DisplayRecorder] = [:]
+
+    init(config: Config) {
+        self.config = config
+    }
+
+    func start() async {
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+
+            guard !content.displays.isEmpty else {
+                emit(["status": "error", "message": "No displays found", "timestamp": nowMs()])
+                exit(1)
+            }
+
+            // Create output directory if needed
+            let fm = FileManager.default
+            if !fm.fileExists(atPath: config.initialOutputDir) {
+                try fm.createDirectory(atPath: config.initialOutputDir, withIntermediateDirectories: true)
+            }
+
+            for display in content.displays {
+                let recorder = DisplayRecorder(displayID: display.displayID, config: config)
+                try await recorder.startStream(display: display)
+                displayRecorders[display.displayID] = recorder
+            }
+
+            let displayIds = Array(displayRecorders.keys.map { Int($0) })
+            emit(["status": "recording", "displays": displayIds, "timestamp": nowMs()])
+        } catch {
+            emit(["status": "error", "message": error.localizedDescription, "timestamp": nowMs()])
+            exit(1)
+        }
+    }
+
+    func split(displayId: UInt32, outputPath: String) {
+        guard let recorder = displayRecorders[displayId] else {
+            emit(["status": "error", "message": "No recorder for display \(displayId)", "timestamp": nowMs()])
+            return
+        }
+        recorder.split(newOutputPath: outputPath)
+    }
+
+    func stop() async {
+        for (_, recorder) in displayRecorders {
+            await recorder.stop()
+        }
+        emit(["status": "stopped", "timestamp": nowMs()])
+        exit(0)
+    }
+}
+
+// MARK: - Stdin command handler
+
+func handleStdinCommands(coordinator: RecordingCoordinator) {
+    DispatchQueue.global().async {
+        while let line = readLine() {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty { continue }
+
+            guard let data = trimmed.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let command = json["command"] as? String else {
+                continue
+            }
+
+            switch command {
+            case "split":
+                guard let displayId = json["displayId"] as? Int,
+                      let outputPath = json["outputPath"] as? String else {
+                    emit(["status": "error", "message": "split requires displayId and outputPath", "timestamp": nowMs()])
+                    continue
+                }
+                coordinator.split(displayId: UInt32(displayId), outputPath: outputPath)
+
+            case "stop":
+                Task {
+                    await coordinator.stop()
+                }
+
+            default:
+                emit(["status": "error", "message": "Unknown command: \(command)", "timestamp": nowMs()])
+            }
+        }
+        // stdin closed — stop
+        Task {
+            await coordinator.stop()
+        }
+    }
+}
+
 // MARK: - Main
 
 guard let config = parseArgs() else {
     exit(1)
 }
 
-let recorder = ScreenRecorder(config: config)
+let coordinator = RecordingCoordinator(config: config)
 
-// Start recording
 Task {
-    await recorder.start()
+    await coordinator.start()
 }
 
-// Listen for stop signal on stdin (newline)
-DispatchQueue.global().async {
-    while let line = readLine() {
-        _ = line
-        recorder.stop()
-        break
-    }
-    // stdin closed — also stop
-    recorder.stop()
-}
+handleStdinCommands(coordinator: coordinator)
 
-// Keep alive
 RunLoop.main.run()
