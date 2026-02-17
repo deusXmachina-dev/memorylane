@@ -76,6 +76,19 @@ export interface KeyStatus {
   maskedKey: string | null
 }
 
+export interface CustomEndpointConfig {
+  serverURL: string // e.g. "http://localhost:11434/v1"
+  model: string // e.g. "llama3.2-vision"
+  apiKey?: string // optional - many local servers don't need one
+}
+
+export interface CustomEndpointStatus {
+  enabled: boolean
+  serverURL: string | null
+  model: string | null
+  hasApiKey: boolean
+}
+
 export type SubscriptionStatus = 'idle' | 'awaiting_checkout' | 'polling' | 'error'
 
 export interface SubscriptionUpdate {
@@ -121,6 +134,10 @@ export interface MainWindowAPI {
   addToClaude: () => Promise<void>
   addToCursor: () => Promise<void>
   addToClaudeCode: () => Promise<void>
+  // Custom endpoint
+  getCustomEndpoint: () => Promise<CustomEndpointStatus>
+  saveCustomEndpoint: (config: CustomEndpointConfig) => Promise<SaveResult>
+  deleteCustomEndpoint: () => Promise<SaveResult>
   // Subscription
   startCheckout: () => Promise<void>
   openSubscriptionPortal: () => Promise<void>
