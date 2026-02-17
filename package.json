@@ -20,6 +20,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "node ./scripts/enode.js ./node_modules/vitest/vitest.mjs",
+    "test:e2e": "npm run build && npx playwright test",
     "postinstall": "electron-builder install-app-deps",
     "prepare": "husky",
     "db:search": "node ./scripts/enode.js ./node_modules/.bin/tsx scripts/db-search.ts",
