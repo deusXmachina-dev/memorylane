@@ -4,6 +4,8 @@
  * Records the primary screen to WebM files in {userData}/recordings/.
  * Uses getDisplayMedia() in a hidden renderer, with
  * setDisplayMediaRequestHandler to auto-select the primary screen.
+ *
+ * Cross-platform fallback backend for video-recorder.ts dispatcher.
  */
 
 import { app, BrowserWindow, desktopCapturer, session } from 'electron'
@@ -180,4 +182,11 @@ export function isRecording(): boolean {
  */
 export function getRecordingsDir(): string {
   return RECORDINGS_DIR
+}
+
+/**
+ * MediaScanner backend is always available (cross-platform).
+ */
+export function isAvailable(): boolean {
+  return true
 }
