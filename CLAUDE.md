@@ -174,3 +174,4 @@ Each captured screenshot provides:
 ## Multi-Agent Workflow
 
 Multiple agents may be working concurrently on the current branch. When committing changes, only stage and commit the files you personally modified — do not use `git add -A` or `git add .`.
+The `agent-e2e/` folder contains agent-focused targeted validation scripts and e2e checks.

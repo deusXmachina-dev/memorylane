@@ -253,6 +253,8 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
     title: event.title ?? '',
     processName: event.app ?? '',
     ...(event.bundleId && { bundleId: event.bundleId }),
+    ...(event.pid !== undefined && { pid: event.pid }),
+    ...(event.windowId !== undefined && { windowId: event.windowId }),
     ...(event.url && { url: event.url }),
   }
 
@@ -263,7 +265,8 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
   if (
     previousWindow &&
     previousWindow.title === current.title &&
-    previousWindow.processName === current.processName
+    previousWindow.processName === current.processName &&
+    previousWindow.windowId === current.windowId
   ) {
     log.debug(`[Interaction Monitor] Skipping duplicate: ${current.processName} "${current.title}"`)
     return

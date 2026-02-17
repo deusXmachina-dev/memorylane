@@ -11,6 +11,7 @@ export interface AppWatcherEvent {
   app?: string
   bundleId?: string
   pid?: number
+  windowId?: number
   title?: string
   url?: string
   error?: string

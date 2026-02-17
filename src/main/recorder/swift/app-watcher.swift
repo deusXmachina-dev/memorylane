@@ -44,6 +44,100 @@ func windowTitle(forPid pid: pid_t) -> String? {
     return titleValue as? String
 }
 
+/// Read AX window bounds as CGRect for matching against CGWindow metadata.
+func windowBounds(for window: AXUIElement) -> CGRect? {
+    var positionValue: AnyObject?
+    var sizeValue: AnyObject?
+
+    guard AXUIElementCopyAttributeValue(window, kAXPositionAttribute as CFString, &positionValue) == .success,
+          AXUIElementCopyAttributeValue(window, kAXSizeAttribute as CFString, &sizeValue) == .success,
+          let positionObj = positionValue,
+          let sizeObj = sizeValue,
+          CFGetTypeID(positionObj) == AXValueGetTypeID(),
+          CFGetTypeID(sizeObj) == AXValueGetTypeID() else {
+        return nil
+    }
+
+    let positionAX = unsafeBitCast(positionObj, to: AXValue.self)
+    let sizeAX = unsafeBitCast(sizeObj, to: AXValue.self)
+
+    var point = CGPoint.zero
+    var size = CGSize.zero
+    guard AXValueGetValue(positionAX, .cgPoint, &point),
+          AXValueGetValue(sizeAX, .cgSize, &size) else {
+        return nil
+    }
+
+    return CGRect(origin: point, size: size)
+}
+
+func doubleValue(_ value: Any?) -> Double? {
+    if let d = value as? Double { return d }
+    if let n = value as? NSNumber { return n.doubleValue }
+    return nil
+}
+
+func cgWindowInfoRect(_ dict: [String: Any]) -> CGRect? {
+    guard let bounds = dict[kCGWindowBounds as String] as? [String: Any] else { return nil }
+    guard let x = doubleValue(bounds["X"]),
+          let y = doubleValue(bounds["Y"]),
+          let width = doubleValue(bounds["Width"]),
+          let height = doubleValue(bounds["Height"]) else {
+        return nil
+    }
+    return CGRect(x: x, y: y, width: width, height: height)
+}
+
+func rectsApproximatelyEqual(_ a: CGRect, _ b: CGRect, tolerance: CGFloat = 1.0) -> Bool {
+    return abs(a.origin.x - b.origin.x) <= tolerance &&
+           abs(a.origin.y - b.origin.y) <= tolerance &&
+           abs(a.size.width - b.size.width) <= tolerance &&
+           abs(a.size.height - b.size.height) <= tolerance
+}
+
+/// Resolve CGWindowID for the focused app window by matching PID/title/bounds.
+func windowID(forPid pid: pid_t, title: String?, bounds: CGRect?) -> UInt32? {
+    guard let infoList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+            as? [[String: Any]] else {
+        return nil
+    }
+
+    let pidInt = Int(pid)
+    var candidates = infoList.filter { info in
+        let ownerPid = info[kCGWindowOwnerPID as String] as? Int
+        let layer = info[kCGWindowLayer as String] as? Int ?? 0
+        return ownerPid == pidInt && layer == 0
+    }
+
+    if let bounds, !candidates.isEmpty {
+        let boundsMatched = candidates.filter { info in
+            guard let rect = cgWindowInfoRect(info) else { return false }
+            return rectsApproximatelyEqual(rect, bounds)
+        }
+        if !boundsMatched.isEmpty {
+            candidates = boundsMatched
+        }
+    }
+
+    if let title, !title.isEmpty, !candidates.isEmpty {
+        let titleMatched = candidates.filter { info in
+            (info[kCGWindowName as String] as? String) == title
+        }
+        if !titleMatched.isEmpty {
+            candidates = titleMatched
+        }
+    }
+
+    guard let first = candidates.first else { return nil }
+    if let number = first[kCGWindowNumber as String] as? NSNumber {
+        return number.uint32Value
+    }
+    if let number = first[kCGWindowNumber as String] as? Int {
+        return UInt32(number)
+    }
+    return nil
+}
+
 // MARK: - Browser URL extraction via AppleScript
 
 /// Bundle IDs we know how to extract URLs from.
@@ -92,7 +186,7 @@ func browserURL(bundleId: String, appName: String) -> String? {
 // MARK: - Build event payload
 
 /// Build the full event dictionary, enriching with url/document where possible.
-func buildEvent(type: String, app: NSRunningApplication, title: String) -> [String: Any] {
+func buildEvent(type: String, app: NSRunningApplication, title: String, windowId: UInt32?) -> [String: Any] {
     let bundleId = app.bundleIdentifier ?? ""
     let appName = app.localizedName ?? ""
     let pid = app.processIdentifier
@@ -105,6 +199,10 @@ func buildEvent(type: String, app: NSRunningApplication, title: String) -> [Stri
         "pid": pid,
         "title": title,
     ]
+
+    if let windowId = windowId {
+        dict["windowId"] = windowId
+    }
 
     // Try to get browser URL
     if let url = browserURL(bundleId: bundleId, appName: appName) {
@@ -163,7 +261,10 @@ let titleCallback: AXObserverCallback = { _, element, _, _ in
         title = ""
     }
 
-    emit(buildEvent(type: "window_change", app: app, title: title))
+    let bounds = windowBounds(for: element)
+    let windowId = windowID(forPid: app.processIdentifier, title: title, bounds: bounds)
+
+    emit(buildEvent(type: "window_change", app: app, title: title, windowId: windowId))
 }
 
 func setupTitleObserver(forPid pid: pid_t) {
@@ -201,7 +302,10 @@ let axCallback: AXObserverCallback = { _, element, _, _ in
         title = windowTitle(forPid: app.processIdentifier) ?? ""
     }
 
-    emit(buildEvent(type: "window_change", app: app, title: title))
+    let bounds = windowBounds(for: element)
+    let windowId = windowID(forPid: app.processIdentifier, title: title, bounds: bounds)
+
+    emit(buildEvent(type: "window_change", app: app, title: title, windowId: windowId))
 
     // Re-target title observer to the newly focused window
     setupTitleObserver(forPid: app.processIdentifier)
@@ -240,7 +344,10 @@ nc.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
     guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
 
     let title = windowTitle(forPid: app.processIdentifier) ?? ""
-    emit(buildEvent(type: "app_change", app: app, title: title))
+    let focused = focusedWindow(forPid: app.processIdentifier)
+    let bounds = focused.flatMap { windowBounds(for: $0) }
+    let windowId = windowID(forPid: app.processIdentifier, title: title, bounds: bounds)
+    emit(buildEvent(type: "app_change", app: app, title: title, windowId: windowId))
 
     // Set up AX observer for window changes within this new app
     setupAXObserver(forPid: app.processIdentifier)

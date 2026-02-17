@@ -22,6 +22,8 @@ export interface InteractionContext {
     title: string
     processName: string
     bundleId?: string
+    pid?: number
+    windowId?: number
     url?: string // Browser tab URL (Chrome, Safari, Arc, etc.)
   }
 
@@ -30,6 +32,8 @@ export interface InteractionContext {
     title: string
     processName: string
     bundleId?: string
+    pid?: number
+    windowId?: number
     url?: string
   }
 }
