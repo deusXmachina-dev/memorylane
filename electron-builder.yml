@@ -20,6 +20,7 @@ extraResources:
     filter:
       - ocr
       - app-watcher
+      - screen-recorder
   - from: src/main/processor/powershell
     to: powershell
     filter:
