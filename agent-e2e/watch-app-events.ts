@@ -6,7 +6,6 @@
  *   node ./scripts/enode.js ./node_modules/.bin/tsx agent-e2e/watch-app-events.ts
  *   node ./scripts/enode.js ./node_modules/.bin/tsx agent-e2e/watch-app-events.ts --seconds 30
  *   node ./scripts/enode.js ./node_modules/.bin/tsx agent-e2e/watch-app-events.ts --json
- *   node ./scripts/enode.js ./node_modules/.bin/tsx agent-e2e/watch-app-events.ts --require-window-id
  */
 
 import { startAppWatcher, stopAppWatcher, AppWatcherEvent } from '../src/main/recorder/app-watcher'
@@ -14,14 +13,12 @@ import { startAppWatcher, stopAppWatcher, AppWatcherEvent } from '../src/main/re
 interface CLIArgs {
   seconds: number
   json: boolean
-  requireWindowId: boolean
 }
 
 function parseArgs(): CLIArgs {
   const args = process.argv.slice(2)
   let seconds = 15
   let json = false
-  let requireWindowId = false
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
@@ -38,14 +35,10 @@ function parseArgs(): CLIArgs {
       json = true
       continue
     }
-    if (arg === '--require-window-id') {
-      requireWindowId = true
-      continue
-    }
     throw new Error(`Unknown argument: ${arg}`)
   }
 
-  return { seconds, json, requireWindowId }
+  return { seconds, json }
 }
 
 function formatTime(ts: number): string {
@@ -56,12 +49,11 @@ function formatEventLine(event: AppWatcherEvent): string {
   const app = event.app ?? '-'
   const title = event.title ?? ''
   const pid = event.pid ?? '-'
-  const windowId = event.windowId ?? '-'
-  return `[${formatTime(event.timestamp)}] ${event.type} app="${app}" pid=${pid} windowId=${windowId} title="${title}"`
+  return `[${formatTime(event.timestamp)}] ${event.type} app="${app}" pid=${pid} title="${title}"`
 }
 
 async function main(): Promise<void> {
-  const { seconds, json, requireWindowId } = parseArgs()
+  const { seconds, json } = parseArgs()
 
   if (process.platform !== 'darwin') {
     console.error('app-watcher dev script currently supports macOS only.')
@@ -69,11 +61,10 @@ async function main(): Promise<void> {
   }
 
   console.log(`Watching app/window events for ${seconds}s...`)
-  console.log('Tip: switch between windows/tabs to validate windowId stability.\n')
+  console.log('Tip: switch between windows/tabs to see events.\n')
 
   let total = 0
   let actionable = 0
-  let missingWindowId = 0
   let lastKey = ''
 
   const stopAndExit = (exitCode: number): void => {
@@ -85,12 +76,6 @@ async function main(): Promise<void> {
     console.log('\n--- Summary ---')
     console.log(`Total events: ${total}`)
     console.log(`Actionable events: ${actionable}`)
-    console.log(`Events missing windowId: ${missingWindowId}`)
-    if (requireWindowId && actionable > 0 && missingWindowId > 0) {
-      console.error('FAIL: Some app/window events were missing windowId.')
-      stopAndExit(2)
-      return
-    }
     stopAndExit(0)
   }, seconds * 1000)
 
@@ -115,13 +100,10 @@ async function main(): Promise<void> {
     }
 
     actionable++
-    if (event.windowId === undefined) {
-      missingWindowId++
-    }
 
-    const key = `${event.type}|${event.pid ?? ''}|${event.windowId ?? ''}|${event.title ?? ''}`
+    const key = `${event.type}|${event.pid ?? ''}|${event.title ?? ''}`
     if (key === lastKey) {
-      console.log('  ↳ duplicate event key (same type/pid/windowId/title)')
+      console.log('  ↳ duplicate event key (same type/pid/title)')
     }
     lastKey = key
   })
