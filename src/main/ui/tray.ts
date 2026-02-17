@@ -2,10 +2,9 @@
  * System tray management for MemoryLane
  */
 
-import { app, Tray, Menu, nativeImage, dialog } from 'electron'
+import { app, Tray, Menu, nativeImage } from 'electron'
 import path from 'node:path'
 import log from '../logger'
-import { startRecording, stopRecording, isRecording } from '../recorder/video-recorder'
 import { formatBytes, formatNumber } from '../utils/formatters'
 import { registerWithClaudeDesktop } from '../integrations/claude-desktop'
 import { registerWithCursor } from '../integrations/cursor'
@@ -166,39 +165,6 @@ export const updateTrayMenu = async (): Promise<void> => {
         void registerWithClaudeCode()
       },
     },
-    ...(!app.isPackaged
-      ? [
-          { type: 'separator' as const },
-          {
-            label: isRecording() ? 'Stop Video Recording' : 'Start Video Recording',
-            click: async () => {
-              if (isRecording()) {
-                try {
-                  const result = await stopRecording()
-                  void updateTrayMenu()
-                  dialog.showMessageBox({
-                    type: 'info',
-                    title: 'Video Recording',
-                    message: 'Recording saved',
-                    detail: result.filepath,
-                  })
-                } catch (error) {
-                  log.error('[TestVideoRecording] Failed to stop:', error)
-                  dialog.showErrorBox('Video Recording', `Failed to stop recording: ${error}`)
-                }
-              } else {
-                try {
-                  await startRecording()
-                  void updateTrayMenu()
-                } catch (error) {
-                  log.error('[TestVideoRecording] Failed to start:', error)
-                  dialog.showErrorBox('Video Recording', `Failed to start recording: ${error}`)
-                }
-              }
-            },
-          },
-        ]
-      : []),
     { type: 'separator' },
     {
       label: 'Quit',
