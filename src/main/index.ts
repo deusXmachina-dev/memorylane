@@ -115,6 +115,12 @@ app.on('ready', async () => {
     captureWindowByTitle: recorder.captureWindowByTitle,
   })
 
+  // Expose modules on globalThis for Playwright e2e tests (dev only)
+  if (!app.isPackaged) {
+    const videoRecorder = await import('./recorder/video-recorder')
+    ;(globalThis as Record<string, unknown>).__videoRecorder = videoRecorder
+  }
+
   const { setupTray, updateTrayMenu } = await import('./ui/tray')
   setupTray({
     recorder,
