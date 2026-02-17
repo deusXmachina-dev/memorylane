@@ -1,8 +1,9 @@
 /**
  * Native macOS video recorder using ScreenCaptureKit.
  *
- * Spawns a Swift subprocess that records the screen to H.264/MP4.
- * Follows the app-watcher.ts pattern for Swift process management.
+ * Manages a long-lived Swift subprocess that continuously records all displays.
+ * Segment splitting is triggered via stdin commands — zero-gap, no process restarts.
+ * Follows the app-watcher.ts pattern for process lifecycle and auto-restart.
  */
 
 import { spawn, ChildProcess } from 'child_process'
@@ -12,15 +13,18 @@ import * as path from 'path'
 import * as fs from 'fs'
 // eslint-disable-next-line import/no-unresolved
 import { v4 as uuidv4 } from 'uuid'
-import type { VideoRecording } from '../../shared/types'
+import type { VideoSegment, OnSegmentCallback } from '../../shared/types'
 import log from '../logger'
 
 const RECORDINGS_DIR = path.join(app.getPath('userData'), 'recordings')
+const MAX_RESTART_RETRIES = 3
+const RESTART_BACKOFF_MS = 1000
 
 let proc: ChildProcess | null = null
-let recording = false
-let recordingStartTimestamp = 0
-let currentOutputPath = ''
+let running = false
+let stopped = false
+let retries = 0
+const segmentCallbacks: OnSegmentCallback[] = []
 
 interface SwiftExecutable {
   readonly command: string
@@ -103,27 +107,25 @@ export function isAvailable(): boolean {
 }
 
 /**
- * Start recording the primary screen.
+ * Start the persistent recording process.
+ * Records all connected displays continuously.
  */
-export async function startRecording(options?: { displayId?: number }): Promise<void> {
-  if (recording) {
-    log.warn('[VideoRecorderMac] Already recording')
+export async function start(): Promise<void> {
+  if (running) {
+    log.warn('[VideoRecorderMac] Already running')
     return
   }
 
   ensureRecordingsDir()
+  stopped = false
+  retries = 0
 
-  const id = uuidv4()
-  recordingStartTimestamp = Date.now()
-  const filename = `${recordingStartTimestamp}_${id}.mp4`
-  currentOutputPath = path.join(RECORDINGS_DIR, filename)
+  return spawnProcess()
+}
 
+function spawnProcess(): Promise<void> {
   const { command, args } = getExecutable()
-  const swiftArgs = [...args, currentOutputPath, '--width', '1280', '--height', '720', '--fps', '5']
-
-  if (options?.displayId !== undefined) {
-    swiftArgs.push('--display', String(options.displayId))
-  }
+  const swiftArgs = [...args, RECORDINGS_DIR, '--width', '1280', '--height', '720', '--fps', '5']
 
   log.info(`[VideoRecorderMac] Spawning: ${command} ${swiftArgs.join(' ')}`)
 
@@ -146,16 +148,45 @@ export async function startRecording(options?: { displayId?: number }): Promise<
       log.debug(`[VideoRecorderMac] stdout: ${line}`)
       try {
         const event = JSON.parse(line)
+
         if (event.status === 'recording' && !resolved) {
           resolved = true
           clearTimeout(timeout)
-          recording = true
-          log.info('[VideoRecorderMac] Recording started')
+          running = true
+          retries = 0
+          log.info(
+            `[VideoRecorderMac] Recording started on displays: ${JSON.stringify(event.displays)}`,
+          )
           resolve()
-        } else if (event.status === 'error' && !resolved) {
-          resolved = true
-          clearTimeout(timeout)
-          reject(new Error(event.message))
+        } else if (event.status === 'error') {
+          log.error(`[VideoRecorderMac] Error from subprocess: ${event.message}`)
+          if (!resolved) {
+            resolved = true
+            clearTimeout(timeout)
+            reject(new Error(event.message))
+          }
+        } else if (event.status === 'segment_complete') {
+          const segment: VideoSegment = {
+            id: uuidv4(),
+            filepath: event.filepath,
+            displayId: event.displayId,
+            startTimestamp: event.startTimestamp,
+            endTimestamp: event.endTimestamp,
+          }
+          log.info(
+            `[VideoRecorderMac] Segment complete: ${path.basename(segment.filepath)} ` +
+              `display=${segment.displayId} ` +
+              `duration=${((segment.endTimestamp - segment.startTimestamp) / 1000).toFixed(1)}s`,
+          )
+          segmentCallbacks.forEach((cb) => {
+            try {
+              cb(segment)
+            } catch (err) {
+              log.error('[VideoRecorderMac] Error in segment callback:', err)
+            }
+          })
+        } else if (event.status === 'stopped') {
+          log.info('[VideoRecorderMac] Process reported stopped')
         }
       } catch {
         log.warn(`[VideoRecorderMac] Could not parse line: ${line}`)
@@ -175,90 +206,108 @@ export async function startRecording(options?: { displayId?: number }): Promise<
       }
     })
 
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
+      log.info(
+        `[VideoRecorderMac] Process exited (code=${code}, signal=${signal}, stopped=${stopped})`,
+      )
       proc = null
+      running = false
+
       if (!resolved) {
         resolved = true
         clearTimeout(timeout)
         reject(new Error(`screen-recorder exited with code ${code} before starting`))
+        return
+      }
+
+      // Auto-restart on unexpected exit
+      if (!stopped) {
+        if (retries < MAX_RESTART_RETRIES) {
+          retries++
+          const delay = RESTART_BACKOFF_MS * retries
+          log.info(
+            `[VideoRecorderMac] Restarting in ${delay}ms (attempt ${retries}/${MAX_RESTART_RETRIES})`,
+          )
+          setTimeout(() => {
+            if (!stopped) {
+              spawnProcess().catch((err) => {
+                log.error(`[VideoRecorderMac] Restart failed: ${err.message}`)
+              })
+            }
+          }, delay)
+        } else {
+          log.error(`[VideoRecorderMac] Max retries (${MAX_RESTART_RETRIES}) reached, giving up`)
+        }
       }
     })
   })
 }
 
 /**
- * Stop recording and return metadata about the saved file.
+ * Stop the recording process gracefully.
  */
-export async function stopRecording(): Promise<VideoRecording> {
-  if (!recording || !proc) {
-    throw new Error('Not recording')
+export async function stop(): Promise<void> {
+  if (!proc) {
+    running = false
+    return
   }
 
-  return new Promise<VideoRecording>((resolve, reject) => {
+  stopped = true
+
+  return new Promise<void>((resolve) => {
     const child = proc!
 
     const timeout = setTimeout(() => {
       log.warn('[VideoRecorderMac] Stop timed out, killing process')
       child.kill('SIGTERM')
-      reject(new Error('Timed out waiting for recording to stop'))
+      running = false
+      proc = null
+      resolve()
     }, 10_000)
-
-    const rl = createInterface({ input: child.stdout! })
-
-    rl.on('line', (line) => {
-      log.debug(`[VideoRecorderMac] stdout (stop): ${line}`)
-      try {
-        const event = JSON.parse(line)
-        if (event.status === 'stopped') {
-          clearTimeout(timeout)
-          recording = false
-          proc = null
-
-          const endTimestamp = Date.now()
-          const result: VideoRecording = {
-            id: path.basename(currentOutputPath, '.mp4').split('_').slice(1).join('_'),
-            filepath: event.filepath || currentOutputPath,
-            startTimestamp: recordingStartTimestamp,
-            endTimestamp,
-            display: { id: 0, width: 1280, height: 720 },
-            format: 'mp4',
-          }
-
-          log.info(
-            `[VideoRecorderMac] Saved ${path.basename(result.filepath)} (${((endTimestamp - recordingStartTimestamp) / 1000).toFixed(1)}s)`,
-          )
-          resolve(result)
-        } else if (event.status === 'error') {
-          clearTimeout(timeout)
-          recording = false
-          proc = null
-          reject(new Error(event.message))
-        }
-      } catch {
-        // ignore parse errors during stop
-      }
-    })
 
     child.on('close', () => {
       clearTimeout(timeout)
-      if (recording) {
-        recording = false
-        proc = null
-        reject(new Error('screen-recorder exited unexpectedly during stop'))
-      }
+      running = false
+      proc = null
+      resolve()
     })
 
-    // Send stop signal: write newline to stdin
-    log.info('[VideoRecorderMac] Sending stop signal')
-    child.stdin!.write('\n')
+    // Send stop command via stdin
+    log.info('[VideoRecorderMac] Sending stop command')
+    child.stdin!.write(JSON.stringify({ command: 'stop' }) + '\n')
   })
 }
 
 /**
- * Whether a recording is currently in progress.
+ * Trigger a segment split on a specific display.
+ * Non-blocking — the segment_complete event will arrive asynchronously.
  */
-export function isRecording(): boolean {
-  return recording
+export function split(displayId: number): void {
+  if (!proc || !running) {
+    log.warn('[VideoRecorderMac] Cannot split — not running')
+    return
+  }
+
+  const newFilename = `${Date.now()}_${displayId}_${uuidv4()}.mp4`
+  const newOutputPath = path.join(RECORDINGS_DIR, newFilename)
+
+  const cmd = JSON.stringify({ command: 'split', displayId, outputPath: newOutputPath })
+  log.debug(`[VideoRecorderMac] Sending split: ${cmd}`)
+  proc.stdin!.write(cmd + '\n')
+}
+
+/**
+ * Register a callback for completed segments.
+ */
+export function onSegment(callback: OnSegmentCallback): void {
+  segmentCallbacks.push(callback)
+}
+
+/**
+ * Whether the recording process is currently running.
+ */
+export function isRunning(): boolean {
+  return running
 }
 
 /**
