@@ -4,7 +4,6 @@ import { toast } from 'sonner'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Badge } from '@components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@components/ui/card'
 import type { CustomEndpointStatus, MainWindowAPI } from '@types'
 
 interface CustomEndpointSectionProps {
@@ -27,12 +26,15 @@ export function CustomEndpointSection({
   endpointStatus,
   onEndpointChanged,
 }: CustomEndpointSectionProps): React.JSX.Element {
-  const [expanded, setExpanded] = useState(!endpointStatus.enabled)
+  const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [serverURL, setServerURL] = useState('')
   const [model, setModel] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  const showForm = open && (editing || !endpointStatus.enabled)
 
   const handleSave = useCallback(async () => {
     const url = serverURL.trim()
@@ -59,7 +61,7 @@ export function CustomEndpointSection({
         setServerURL('')
         setModel('')
         setApiKey('')
-        setExpanded(false)
+        setEditing(false)
         toast.success('Custom endpoint saved')
         onEndpointChanged()
       } else {
@@ -75,6 +77,7 @@ export function CustomEndpointSection({
     try {
       const result = await api.deleteCustomEndpoint()
       if (result.success) {
+        setEditing(false)
         toast.success('Custom endpoint removed')
         onEndpointChanged()
       } else {
@@ -95,97 +98,99 @@ export function CustomEndpointSection({
   )
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium">Custom Endpoint</CardTitle>
-          {endpointStatus.enabled && (
-            <Badge variant="secondary" className="text-xs">
-              Active
-            </Badge>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {endpointStatus.enabled && !expanded && (
-          <div className="space-y-2">
-            <div className="flex flex-wrap gap-1.5">
-              <Badge variant="outline" className="font-mono text-xs">
-                {endpointStatus.serverURL}
-              </Badge>
-              <Badge variant="outline" className="font-mono text-xs">
-                {endpointStatus.model}
-              </Badge>
-              {endpointStatus.hasApiKey && (
-                <Badge variant="outline" className="text-xs">
-                  Key set
-                </Badge>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setExpanded(true)}>
-                Change
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={deleting}
-                onClick={() => void handleDelete()}
-              >
-                {deleting ? 'Removing...' : 'Remove'}
-              </Button>
-            </div>
-          </div>
+    <div className="space-y-2">
+      <button
+        type="button"
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="text-[10px]">{open ? '\u25BC' : '\u25B6'}</span>
+        Custom endpoint
+        {endpointStatus.enabled && (
+          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+            Active
+          </Badge>
         )}
+      </button>
 
-        {(expanded || !endpointStatus.enabled) && (
-          <div className="space-y-2">
-            <Input
-              type="text"
-              placeholder="http://localhost:11434/v1"
-              value={serverURL}
-              onChange={(e) => setServerURL(e.target.value)}
-              onKeyDown={handleKeyDown}
-              className="font-mono text-sm"
-            />
-            <Input
-              type="text"
-              placeholder="llama3.2-vision"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              onKeyDown={handleKeyDown}
-              className="font-mono text-sm"
-            />
-            <Input
-              type="password"
-              placeholder="API key (optional)"
-              autoComplete="off"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              onKeyDown={handleKeyDown}
-              className="font-mono text-sm"
-            />
-            <div className="flex gap-2">
-              <Button
-                className="flex-1"
-                size="sm"
-                disabled={saving}
-                onClick={() => void handleSave()}
-              >
-                {saving ? 'Saving...' : 'Save Endpoint'}
-              </Button>
-              {endpointStatus.enabled && (
-                <Button variant="ghost" size="sm" onClick={() => setExpanded(false)}>
-                  Cancel
-                </Button>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Connect to any OpenAI-compatible API (Ollama, llama.cpp, vLLM, LocalAI, etc.)
-            </p>
+      {open && endpointStatus.enabled && !editing && (
+        <div className="pl-3.5 space-y-2">
+          <div className="flex flex-wrap gap-1.5">
+            <Badge variant="outline" className="font-mono text-xs">
+              {endpointStatus.serverURL}
+            </Badge>
+            <Badge variant="outline" className="font-mono text-xs">
+              {endpointStatus.model}
+            </Badge>
+            {endpointStatus.hasApiKey && (
+              <Badge variant="outline" className="text-xs">
+                Key set
+              </Badge>
+            )}
           </div>
-        )}
-      </CardContent>
-    </Card>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+              Change
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={deleting}
+              onClick={() => void handleDelete()}
+            >
+              {deleting ? 'Removing...' : 'Remove'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {showForm && (
+        <div className="pl-3.5 space-y-2">
+          <Input
+            type="text"
+            placeholder="http://localhost:11434/v1"
+            value={serverURL}
+            onChange={(e) => setServerURL(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="font-mono text-sm"
+          />
+          <Input
+            type="text"
+            placeholder="llama3.2-vision"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="font-mono text-sm"
+          />
+          <Input
+            type="password"
+            placeholder="API key (optional)"
+            autoComplete="off"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            onKeyDown={handleKeyDown}
+            className="font-mono text-sm"
+          />
+          <div className="flex gap-2">
+            <Button
+              className="flex-1"
+              size="sm"
+              disabled={saving}
+              onClick={() => void handleSave()}
+            >
+              {saving ? 'Saving...' : 'Save Endpoint'}
+            </Button>
+            {endpointStatus.enabled && (
+              <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Connect to any OpenAI-compatible API (Ollama, llama.cpp, vLLM, LocalAI, etc.)
+          </p>
+        </div>
+      )}
+    </div>
   )
 }

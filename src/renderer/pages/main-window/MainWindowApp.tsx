@@ -87,16 +87,7 @@ export function MainWindowApp(): React.JSX.Element {
         <Logo />
 
         {!isConfigured ? (
-          <>
-            <ApiKeySetupSection api={api} onKeySet={loadKeyStatus} />
-            {endpointStatus && (
-              <CustomEndpointSection
-                api={api}
-                endpointStatus={endpointStatus}
-                onEndpointChanged={loadAll}
-              />
-            )}
-          </>
+          <ApiKeySetupSection api={api} onKeySet={loadKeyStatus} />
         ) : (
           <>
             <CaptureControlSection
@@ -113,14 +104,6 @@ export function MainWindowApp(): React.JSX.Element {
 
             <IntegrationsSection api={api} />
 
-            {endpointStatus && (
-              <CustomEndpointSection
-                api={api}
-                endpointStatus={endpointStatus}
-                onEndpointChanged={loadAll}
-              />
-            )}
-
             {keyStatus && !hasCustomEndpoint && (
               <ManageKeySection
                 api={api}
@@ -130,6 +113,14 @@ export function MainWindowApp(): React.JSX.Element {
               />
             )}
           </>
+        )}
+
+        {endpointStatus && (
+          <CustomEndpointSection
+            api={api}
+            endpointStatus={endpointStatus}
+            onEndpointChanged={loadAll}
+          />
         )}
       </div>
       <Toaster />
