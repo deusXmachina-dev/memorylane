@@ -45,6 +45,16 @@ export interface VideoRecording {
   format: 'webm' | 'mp4'
 }
 
+export interface VideoSegment {
+  id: string
+  filepath: string
+  displayId: number
+  startTimestamp: number
+  endTimestamp: number
+}
+
+export type OnSegmentCallback = (segment: VideoSegment) => void
+
 export interface ClassificationInput {
   startScreenshot: Screenshot
   endScreenshot?: Screenshot | undefined // Optional for single-image mode (app change)
