@@ -5,6 +5,7 @@ import type { KeyStatus, MainWindowStats } from '@types'
 interface StatsDisplayProps {
   stats: MainWindowStats | null
   keyStatus: KeyStatus | null
+  isCustomEndpoint?: boolean
 }
 
 function formatBytes(bytes: number): string {
@@ -19,7 +20,11 @@ function formatNumber(n: number): string {
   return n.toLocaleString()
 }
 
-export function StatsDisplay({ stats, keyStatus }: StatsDisplayProps): React.JSX.Element {
+export function StatsDisplay({
+  stats,
+  keyStatus,
+  isCustomEndpoint,
+}: StatsDisplayProps): React.JSX.Element {
   if (!stats) {
     return (
       <Card>
@@ -33,11 +38,12 @@ export function StatsDisplay({ stats, keyStatus }: StatsDisplayProps): React.JSX
   }
 
   const isManaged = keyStatus?.source === 'managed'
+  const hideCost = isManaged || isCustomEndpoint
 
   return (
     <Card>
       <CardContent className="py-3">
-        <div className={`grid ${isManaged ? 'grid-cols-2' : 'grid-cols-3'} gap-4 text-center`}>
+        <div className={`grid ${hideCost ? 'grid-cols-2' : 'grid-cols-3'} gap-4 text-center`}>
           <div>
             <div className="text-lg font-semibold">{formatNumber(stats.screenshotCount)}</div>
             <div className="text-xs text-muted-foreground">Screenshots</div>
@@ -46,7 +52,7 @@ export function StatsDisplay({ stats, keyStatus }: StatsDisplayProps): React.JSX
             <div className="text-lg font-semibold">{formatBytes(stats.dbSize)}</div>
             <div className="text-xs text-muted-foreground">Storage</div>
           </div>
-          {!isManaged && (
+          {!hideCost && (
             <div>
               <div className="text-lg font-semibold">
                 {stats.apiUsage ? `$${stats.apiUsage.totalCost.toFixed(2)}` : '-'}

@@ -4,14 +4,16 @@ import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { Logo } from './components/Logo'
 import { ApiKeySetupSection } from './components/ApiKeySetupSection'
 import { CaptureControlSection } from './components/CaptureControlSection'
+import { CustomEndpointSection } from './components/CustomEndpointSection'
 import { StatsDisplay } from './components/StatsDisplay'
 import { IntegrationsSection } from './components/IntegrationsSection'
 import { ManageKeySection } from './components/ManageKeySection'
-import type { KeyStatus, MainWindowStats } from '@types'
+import type { CustomEndpointStatus, KeyStatus, MainWindowStats } from '@types'
 
 export function MainWindowApp(): React.JSX.Element {
   const api = useMainWindowAPI()
   const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null)
+  const [endpointStatus, setEndpointStatus] = useState<CustomEndpointStatus | null>(null)
   const [capturing, setCapturing] = useState(false)
   const [toggling, setToggling] = useState(false)
   const [stats, setStats] = useState<MainWindowStats | null>(null)
@@ -25,6 +27,15 @@ export function MainWindowApp(): React.JSX.Element {
     }
   }, [api])
 
+  const loadEndpointStatus = useCallback(async () => {
+    try {
+      const status = await api.getCustomEndpoint()
+      setEndpointStatus(status)
+    } catch {
+      // Silently handle error
+    }
+  }, [api])
+
   const loadStats = useCallback(async () => {
     try {
       const s = await api.getStats()
@@ -35,8 +46,8 @@ export function MainWindowApp(): React.JSX.Element {
   }, [api])
 
   const loadAll = useCallback(async () => {
-    await Promise.all([loadKeyStatus(), loadStats()])
-  }, [loadKeyStatus, loadStats])
+    await Promise.all([loadKeyStatus(), loadEndpointStatus(), loadStats()])
+  }, [loadKeyStatus, loadEndpointStatus, loadStats])
 
   useEffect(() => {
     void api.getStatus().then((status) => setCapturing(status.capturing))
@@ -67,14 +78,25 @@ export function MainWindowApp(): React.JSX.Element {
   }, [api])
 
   const hasKey = keyStatus?.hasKey ?? false
+  const hasCustomEndpoint = endpointStatus?.enabled ?? false
+  const isConfigured = hasKey || hasCustomEndpoint
 
   return (
     <div className="min-h-screen antialiased select-none">
       <div className="p-6 max-w-xl mx-auto space-y-4">
         <Logo />
 
-        {!hasKey ? (
-          <ApiKeySetupSection api={api} onKeySet={loadKeyStatus} />
+        {!isConfigured ? (
+          <>
+            <ApiKeySetupSection api={api} onKeySet={loadKeyStatus} />
+            {endpointStatus && (
+              <CustomEndpointSection
+                api={api}
+                endpointStatus={endpointStatus}
+                onEndpointChanged={loadAll}
+              />
+            )}
+          </>
         ) : (
           <>
             <CaptureControlSection
@@ -83,11 +105,23 @@ export function MainWindowApp(): React.JSX.Element {
               onToggle={() => void handleToggle()}
             />
 
-            <StatsDisplay stats={stats} keyStatus={keyStatus} />
+            <StatsDisplay
+              stats={stats}
+              keyStatus={keyStatus}
+              isCustomEndpoint={hasCustomEndpoint}
+            />
 
             <IntegrationsSection api={api} />
 
-            {keyStatus && (
+            {endpointStatus && (
+              <CustomEndpointSection
+                api={api}
+                endpointStatus={endpointStatus}
+                onEndpointChanged={loadAll}
+              />
+            )}
+
+            {keyStatus && !hasCustomEndpoint && (
               <ManageKeySection
                 api={api}
                 keyStatus={keyStatus}
