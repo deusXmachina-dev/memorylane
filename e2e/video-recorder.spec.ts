@@ -4,6 +4,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 
 const MAIN_ENTRY = path.join(__dirname, '..', 'out', 'main', 'index.js')
+const TEST_CAPTURES_DIR = path.join(__dirname, '..', 'test-captures')
 
 test('records a short video and saves a valid file', async () => {
   const electronApp = await electron.launch({
@@ -44,7 +45,11 @@ test('records a short video and saves a valid file', async () => {
   const stat = fs.statSync(result.filepath)
   expect(stat.size).toBeGreaterThan(0)
 
-  // Clean up the test recording
+  // Copy to test-captures/ for manual inspection, then clean up the original
+  fs.mkdirSync(TEST_CAPTURES_DIR, { recursive: true })
+  const destPath = path.join(TEST_CAPTURES_DIR, path.basename(result.filepath))
+  fs.copyFileSync(result.filepath, destPath)
+  console.log(`Recording saved to ${destPath} (${stat.size} bytes)`)
   fs.unlinkSync(result.filepath)
 
   await electronApp.close()

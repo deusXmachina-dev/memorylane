@@ -47,6 +47,14 @@ function getExecutable(): SwiftExecutable {
     throw new Error(`screen-recorder binary not found at ${binaryPath}`)
   }
 
+  // Prefer pre-compiled binary (from npm run build:swift)
+  const devBinaryPath = path.resolve(process.cwd(), 'build', 'swift', 'screen-recorder')
+  log.debug(`[VideoRecorderMac] Checking dev binary at: ${devBinaryPath}`)
+  if (fs.existsSync(devBinaryPath)) {
+    return { command: devBinaryPath, args: [] }
+  }
+
+  // Fall back to JIT-compiling the Swift script
   const scriptPath = path.resolve(
     process.cwd(),
     'src',
@@ -73,7 +81,7 @@ function getExecutable(): SwiftExecutable {
     }
   }
 
-  throw new Error(`screen-recorder script not found at ${scriptPath}`)
+  throw new Error(`screen-recorder not found at ${devBinaryPath} or ${scriptPath}`)
 }
 
 function ensureRecordingsDir(): void {
