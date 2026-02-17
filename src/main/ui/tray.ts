@@ -5,12 +5,7 @@
 import { app, Tray, Menu, nativeImage, dialog } from 'electron'
 import path from 'node:path'
 import log from '../logger'
-import {
-  startRecording,
-  stopRecording,
-  isRecordingNow,
-  buildOutputPath,
-} from '../recorder/video-recorder'
+import { startRecording, stopRecording, isRecording } from '../recorder/video-recorder'
 import { formatBytes, formatNumber } from '../utils/formatters'
 import { registerWithClaudeDesktop } from '../integrations/claude-desktop'
 import { registerWithCursor } from '../integrations/cursor'
@@ -175,19 +170,17 @@ export const updateTrayMenu = async (): Promise<void> => {
       ? [
           { type: 'separator' as const },
           {
-            label: isRecordingNow() ? 'Stop Video Recording' : 'Start Video Recording',
+            label: isRecording() ? 'Stop Video Recording' : 'Start Video Recording',
             click: async () => {
-              const testCapturesDir = path.join(app.getAppPath(), 'test-captures')
-              if (isRecordingNow()) {
+              if (isRecording()) {
                 try {
-                  const outPath = buildOutputPath(testCapturesDir)
-                  await stopRecording(outPath)
+                  const result = await stopRecording()
                   void updateTrayMenu()
                   dialog.showMessageBox({
                     type: 'info',
                     title: 'Video Recording',
                     message: 'Recording saved',
-                    detail: outPath,
+                    detail: result.filepath,
                   })
                 } catch (error) {
                   log.error('[TestVideoRecording] Failed to stop:', error)

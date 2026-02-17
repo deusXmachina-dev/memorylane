@@ -34,6 +34,24 @@ export interface InteractionContext {
   }
 }
 
+export interface VideoRecording {
+  id: string // UUID
+  filepath: string // Absolute path to video file
+  startTimestamp: number // Unix ms
+  endTimestamp: number // Unix ms
+  display: {
+    id: number
+    width: number
+    height: number
+  }
+  format: 'webm' | 'mp4'
+}
+
+export interface ClassificationInput {
+  startScreenshot: Screenshot
+  endScreenshot?: Screenshot | undefined // Optional for single-image mode (app change)
+  events: InteractionContext[]
+}
 export interface ClassificationResult {
   summary: string
   timestamp: number

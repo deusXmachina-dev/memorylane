@@ -1,29 +1,41 @@
 /**
  * Screen video recorder using a hidden BrowserWindow + MediaRecorder.
  *
- * Dev-only test utility for capturing screen recordings to disk.
+ * Records the primary screen to WebM files in {userData}/recordings/.
  * Uses getDisplayMedia() in a hidden renderer, with
  * setDisplayMediaRequestHandler to auto-select the primary screen.
  */
 
-import { BrowserWindow, desktopCapturer, session } from 'electron'
+import { app, BrowserWindow, desktopCapturer, session } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
+// eslint-disable-next-line import/no-unresolved
+import { v4 as uuidv4 } from 'uuid'
+import type { VideoRecording } from '../../shared/types'
 import log from '../logger'
+
+const RECORDINGS_DIR = path.join(app.getPath('userData'), 'recordings')
 
 let recorderWindow: BrowserWindow | null = null
 let recording = false
+let recordingStartTimestamp = 0
+
+function ensureRecordingsDir(): void {
+  if (!fs.existsSync(RECORDINGS_DIR)) {
+    fs.mkdirSync(RECORDINGS_DIR, { recursive: true })
+  }
+}
 
 /**
  * Start recording the primary screen.
  */
-export async function startRecording(): Promise<void> {
+export async function startRecording(options?: { displayId?: number }): Promise<void> {
   if (recording) {
     log.warn('[VideoRecorder] Already recording')
     return
   }
 
-  // Auto-select primary screen when the hidden renderer calls getDisplayMedia
+  // Auto-select screen when the hidden renderer calls getDisplayMedia
   session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
     const sources = await desktopCapturer.getSources({ types: ['screen'] })
     if (sources.length === 0) {
@@ -31,7 +43,13 @@ export async function startRecording(): Promise<void> {
       callback({ video: undefined })
       return
     }
-    callback({ video: sources[0] })
+
+    const source =
+      (options?.displayId !== undefined
+        ? sources.find((s) => s.display_id === String(options.displayId))
+        : undefined) ?? sources[0]
+
+    callback({ video: source })
   })
 
   recorderWindow = new BrowserWindow({
@@ -73,15 +91,16 @@ export async function startRecording(): Promise<void> {
     })()
   `)
 
+  recordingStartTimestamp = Date.now()
   recording = true
   log.info('[VideoRecorder] Recording started')
 }
 
 /**
- * Stop recording and save the video to `outputPath`.
- * Returns the absolute path of the saved file.
+ * Stop recording and save the video.
+ * Returns metadata about the saved recording.
  */
-export async function stopRecording(outputPath: string): Promise<string> {
+export async function stopRecording(): Promise<VideoRecording> {
   if (!recording || !recorderWindow) {
     throw new Error('Not recording')
   }
@@ -117,6 +136,7 @@ export async function stopRecording(outputPath: string): Promise<string> {
   `)
 
   recording = false
+  const endTimestamp = Date.now()
 
   // Tear down hidden window & restore handler
   recorderWindow.close()
@@ -124,25 +144,40 @@ export async function stopRecording(outputPath: string): Promise<string> {
   session.defaultSession.setDisplayMediaRequestHandler(null)
 
   // Write the file
-  const buffer = Buffer.from(base64Data, 'base64')
-  fs.mkdirSync(path.dirname(outputPath), { recursive: true })
-  fs.writeFileSync(outputPath, buffer)
+  ensureRecordingsDir()
+  const id = uuidv4()
+  const filename = `${recordingStartTimestamp}_${id}.webm`
+  const filepath = path.join(RECORDINGS_DIR, filename)
 
-  log.info(`[VideoRecorder] Saved ${outputPath} (${buffer.length} bytes)`)
-  return outputPath
+  const buffer = Buffer.from(base64Data, 'base64')
+  fs.writeFileSync(filepath, buffer)
+
+  const result: VideoRecording = {
+    id,
+    filepath,
+    startTimestamp: recordingStartTimestamp,
+    endTimestamp,
+    display: { id: 0, width: 0, height: 0 },
+    format: 'webm',
+  }
+
+  log.info(
+    `[VideoRecorder] Saved ${filename} (${buffer.length} bytes, ${((endTimestamp - recordingStartTimestamp) / 1000).toFixed(1)}s)`,
+  )
+
+  return result
 }
 
 /**
  * Whether a recording is currently in progress.
  */
-export function isRecordingNow(): boolean {
+export function isRecording(): boolean {
   return recording
 }
 
 /**
- * Generate a timestamped output path inside the given directory.
+ * Get the directory where recordings are saved.
  */
-export function buildOutputPath(dir: string): string {
-  const ts = new Date().toISOString().replace(/[:.]/g, '-')
-  return path.join(dir, `recording-${ts}.webm`)
+export function getRecordingsDir(): string {
+  return RECORDINGS_DIR
 }
