@@ -1,17 +1,14 @@
-import sharp from 'sharp'
+import * as fs from 'fs'
 import { OpenRouter } from '@openrouter/sdk'
 import {
   ClassificationResult,
   CustomEndpointConfig,
   ActivityClassificationInput,
 } from '../../shared/types'
-import { buildChronologicalTimeline } from './activity-timeline'
+import { buildVideoTimeline } from './activity-timeline'
 import { UsageTracker } from '../services/usage-tracker'
 import log from '../logger'
 import { DebugPipelineWriter } from './debug-pipeline'
-
-/** Max width for screenshots sent to the LLM. Matches capture resolution; converts to JPEG. */
-const LLM_IMAGE_MAX_WIDTH = 1920
 
 const SUPPORTED_MODELS = {
   'google/gemini-2.5-flash-lite-preview-09-2025': {
@@ -136,7 +133,7 @@ export class SemanticClassifierService {
   }
 
   /**
-   * Classify an activity using multiple screenshots and interaction context.
+   * Classify an activity using video evidence and interaction context.
    * Returns a richer summary describing the arc of the activity.
    */
   public async classifyActivity(input: ActivityClassificationInput): Promise<string> {
@@ -145,33 +142,37 @@ export class SemanticClassifierService {
       return ''
     }
 
-    const { activity, screenshotPaths } = input
+    const { activity, videoPath } = input
+    const hasVideo = !!videoPath && fs.existsSync(videoPath)
 
     try {
       const durationMs = (activity.endTimestamp ?? Date.now()) - activity.startTimestamp
       const durationStr = this.formatDuration(durationMs)
       log.info(
-        `[SemanticClassifier] Classifying activity ${activity.id}: ${activity.appName} (${durationStr}, ${screenshotPaths.length} screenshots)`,
+        `[SemanticClassifier] Classifying activity ${activity.id}: ${activity.appName} (${durationStr}, ${hasVideo ? 'video' : 'no-video'})`,
       )
 
-      const prompt = this.formatActivityPrompt(input)
+      const prompt = this.formatActivityPrompt(input, hasVideo)
 
-      // Build content: text prompt + screenshots
+      // Build content: text prompt + video (video-only mode)
       const content: Array<
-        | { type: 'text'; text: string }
-        | { type: 'image_url'; imageUrl: { url: string; detail: 'high' } }
+        { type: 'text'; text: string } | { type: 'video_url'; videoUrl: { url: string } }
       > = [{ type: 'text' as const, text: prompt }]
 
-      for (const filepath of screenshotPaths) {
+      if (hasVideo) {
         try {
-          const imageData = await this.prepareImageForLLM(filepath)
+          const videoData = await this.prepareVideoForLLM(videoPath!)
           content.push({
-            type: 'image_url' as const,
-            imageUrl: { url: `data:image/jpeg;base64,${imageData}`, detail: 'high' },
+            type: 'video_url' as const,
+            videoUrl: { url: `data:video/mp4;base64,${videoData}` },
           })
         } catch (error) {
-          log.warn(`[SemanticClassifier] Failed to read screenshot ${filepath}:`, error)
+          log.warn(`[SemanticClassifier] Failed to read video ${videoPath}:`, error)
         }
+      } else {
+        log.warn(
+          `[SemanticClassifier] No video available for activity ${activity.id}; sending prompt-only classification request`,
+        )
       }
 
       const response = await this.client.chat.send({
@@ -253,30 +254,36 @@ export class SemanticClassifierService {
   }
 
   /**
-   * Format the prompt for activity classification with multiple screenshots.
+   * Format the prompt for video-based activity classification.
    */
-  private formatActivityPrompt(input: ActivityClassificationInput): string {
-    const { activity, screenshotPaths } = input
+  private formatActivityPrompt(input: ActivityClassificationInput, hasVideo: boolean): string {
+    const { activity } = input
     const durationMs = (activity.endTimestamp ?? Date.now()) - activity.startTimestamp
     const durationStr = this.formatDuration(durationMs)
 
-    let prompt = `You are summarizing a user activity session from screenshots and interaction timeline.\n\n`
+    let prompt =
+      'You are summarizing a user activity session from video and interaction timeline.\n\n'
 
     // Rules first — sets the model's behavior before it sees any data
     prompt += '## Rules\n'
-    prompt +=
-      '- Screenshots are primary source. Timeline is secondary context for ordering/pacing.\n'
-    prompt += '- Answer "What was I working on?" — useful for recall, not a play-by-play.\n'
+    prompt += '- Video is primary source. Timeline is secondary context for ordering/pacing.\n'
+    if (!hasVideo) {
+      prompt +=
+        '- Video payload is unavailable for this run. Use timeline/context only and be explicit about uncertainty.\n'
+    }
+    prompt += '- Answer "What was I working on?" - useful for recall, not a play-by-play.\n'
     prompt +=
       '- NEVER mention raw interactions (clicks, scrolling, coordinates). Translate into meaningful actions.\n'
-    prompt += `- Be specific: name files, functions, errors, URLs, UI elements visible in the screenshots.\n`
-    prompt += `- Match verb intensity to evidence: browsing/reviewing (no visible edits) \u2192 "browsed," "reviewed," "checked." Light editing (small visible changes) \u2192 "tweaked," "adjusted." Active work (sustained edits, new code, debugging) \u2192 "implemented," "debugged," "refactored." Evidence of editing = visible changed lines, new code, or diff markers in the screenshots.\n`
+    prompt +=
+      '- Be specific: name files, functions, errors, URLs, UI elements visible in the video.\n'
+    prompt +=
+      '- Match verb intensity to evidence: browsing/reviewing (no visible edits) -> "browsed," "reviewed," "checked." Light editing (small visible changes) -> "tweaked," "adjusted." Active work (sustained edits, new code, debugging) -> "implemented," "debugged," "refactored." Evidence of editing = visible changed lines, new code, or diff markers in the video.\n'
     prompt +=
       '- Do NOT exaggerate. Switching files = browsing, not editing. Opening a file = reviewing, not working on it.\n'
     prompt +=
       "- If previous context is provided, only describe what's NEW. If nothing meaningfully new, say so briefly.\n"
     prompt +=
-      '- Describe what changed between screenshots: new code, different tabs, updated content, navigation.\n'
+      '- Describe what changed over time in the video: new code, tabs, updated content, navigation.\n'
     prompt +=
       '- Click coordinates: use them to identify WHAT was clicked by looking at that position in the screenshot. NEVER output raw coordinates.\n'
     prompt +=
@@ -293,9 +300,9 @@ export class SemanticClassifierService {
     prompt += '\n'
 
     // Timeline
-    const timeline = buildChronologicalTimeline(activity, screenshotPaths)
+    const timeline = buildVideoTimeline(activity)
     if (timeline) {
-      prompt += `## Activity timeline (screenshots labeled [S1]\u2013[S${screenshotPaths.length}], attached as images below)\n`
+      prompt += '## Activity timeline (video attached below)\n'
       prompt += timeline + '\n\n'
     }
 
@@ -352,17 +359,8 @@ export class SemanticClassifierService {
     }
   }
 
-  /**
-   * Resize screenshot to a reasonable width and convert to JPEG for the LLM.
-   * Retina screenshots (3326x2160) are too large — text becomes unreadable
-   * after the provider auto-downscales them. Resizing to ~1600px wide keeps
-   * text sharp while cutting payload size significantly.
-   */
-  private async prepareImageForLLM(filepath: string): Promise<string> {
-    const buffer = await sharp(filepath)
-      .resize({ width: LLM_IMAGE_MAX_WIDTH, withoutEnlargement: true })
-      .jpeg({ quality: 85 })
-      .toBuffer()
+  private async prepareVideoForLLM(filepath: string): Promise<string> {
+    const buffer = await fs.promises.readFile(filepath)
     return buffer.toString('base64')
   }
 

@@ -59,6 +59,36 @@ export function buildChronologicalTimeline(
 }
 
 /**
+ * Build a chronological timeline with interactions only.
+ * Used for video-based classification where visual context comes from the video itself.
+ */
+export function buildVideoTimeline(activity: Activity): string {
+  const startTime = activity.startTimestamp
+  const items: TimelineItem[] = []
+
+  // Add interactions only (skip the first app_change — it's just the activity boundary trigger)
+  for (let i = 0; i < activity.interactions.length; i++) {
+    if (i === 0 && activity.interactions[i].type === 'app_change') continue
+    const item = interactionToTimelineItem(activity.interactions[i])
+    if (item) items.push(item)
+  }
+
+  // Sort chronologically
+  items.sort((a, b) => a.timestamp - b.timestamp)
+
+  // Aggregate adjacent clicks
+  const merged = mergeAdjacentClicks(items)
+
+  // Format with relative timestamps
+  return merged
+    .map((item) => {
+      const relMs = item.timestamp - startTime
+      return `${formatRelativeTime(relMs)} ${item.text}`
+    })
+    .join('\n')
+}
+
+/**
  * Convert a single interaction event into a timeline item.
  */
 function interactionToTimelineItem(event: InteractionContext): TimelineItem | null {
