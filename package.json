@@ -30,6 +30,7 @@
     "mcp:dev": "node ./scripts/enode.js ./node_modules/.bin/tsx scripts/mcp-dev.ts on",
     "mcp:dev:off": "node ./scripts/enode.js ./node_modules/.bin/tsx scripts/mcp-dev.ts off",
     "mcp:dev:status": "node ./scripts/enode.js ./node_modules/.bin/tsx scripts/mcp-dev.ts status",
+    "cli": "node ./scripts/enode.js ./node_modules/.bin/tsx src/main/cli-entry.ts",
     "install:local": "node ./scripts/install-local.js"
   },
   "keywords": [],

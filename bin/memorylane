@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# memorylane — CLI for querying MemoryLane screen activity history.
+#
+# Works in two modes:
+#   1. Packaged app: discovers the Electron binary and bundled cli-entry.js
+#      inside the .app bundle (Contents/Resources/bin/memorylane).
+#   2. Dev checkout: uses the local Electron binary from node_modules and
+#      the built output in out/main/cli-entry.js.
+#
+# Stdout isolation:
+#   The Electron runtime and various modules print init messages to stdout.
+#   To keep CLI output clean, we save the real stdout as fd 3, redirect
+#   process stdout to stderr, and tell cli-entry.ts to write output to fd 3
+#   via CLI_STDOUT_FD=3.
+#
+# Usage:
+#   memorylane search "PR review" --limit 10
+#   memorylane timeline --start "1 hour ago" --end now --json
+#   memorylane details <id> --db /path/to/memorylane.db
+#   memorylane help
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# --- Packaged .app mode ---
+# Layout: MemoryLane.app/Contents/Resources/bin/memorylane  (this script)
+#         MemoryLane.app/Contents/MacOS/MemoryLane           (Electron binary)
+#         MemoryLane.app/Contents/Resources/app.asar/...     (bundled JS)
+PACKAGED_ELECTRON="$SCRIPT_DIR/../MacOS/MemoryLane"
+PACKAGED_CLI_ENTRY="$SCRIPT_DIR/../Resources/app.asar/out/main/cli-entry.js"
+
+# When installed to Contents/Resources/bin/, the MacOS dir is two levels up
+# (Resources/bin -> Resources -> Contents -> Contents/MacOS)
+if [ ! -f "$PACKAGED_ELECTRON" ]; then
+  PACKAGED_ELECTRON="$SCRIPT_DIR/../../MacOS/MemoryLane"
+  PACKAGED_CLI_ENTRY="$SCRIPT_DIR/../app.asar/out/main/cli-entry.js"
+fi
+
+if [ -f "$PACKAGED_ELECTRON" ] && [ -f "$PACKAGED_CLI_ENTRY" ]; then
+  export ELECTRON_RUN_AS_NODE=1
+  export CLI_STDOUT_FD=3
+  exec 3>&1 1>&2 "$PACKAGED_ELECTRON" "$PACKAGED_CLI_ENTRY" "$@"
+fi
+
+# --- Dev checkout mode ---
+# Layout: <project>/bin/memorylane         (this script)
+#         <project>/node_modules/electron/  (Electron package)
+#         <project>/out/main/cli-entry.js   (built JS)
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+DEV_CLI_ENTRY="$PROJECT_ROOT/out/main/cli-entry.js"
+
+if [ ! -f "$DEV_CLI_ENTRY" ]; then
+  echo "Error: cli-entry.js not found. Run 'npm run build' first." >&2
+  exit 1
+fi
+
+# Resolve the Electron binary path from the node module
+ELECTRON_BIN="$PROJECT_ROOT/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron"
+
+# Fallback: try Linux/Windows electron binary path
+if [ ! -f "$ELECTRON_BIN" ]; then
+  ELECTRON_BIN="$PROJECT_ROOT/node_modules/electron/dist/electron"
+fi
+
+if [ ! -f "$ELECTRON_BIN" ]; then
+  echo "Error: Electron binary not found. Run 'npm install' first." >&2
+  exit 1
+fi
+
+export ELECTRON_RUN_AS_NODE=1
+export CLI_STDOUT_FD=3
+exec 3>&1 1>&2 "$ELECTRON_BIN" "$DEV_CLI_ENTRY" "$@"

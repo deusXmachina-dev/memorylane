@@ -17,6 +17,7 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
           'mcp-entry': resolve(__dirname, 'src/main/mcp-entry.ts'),
+          'cli-entry': resolve(__dirname, 'src/main/cli-entry.ts'),
         },
         external: [
           'uiohook-napi',

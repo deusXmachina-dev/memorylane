@@ -29,6 +29,10 @@ extraResources:
     to: powershell
     filter:
       - '*.ps1'
+  - from: bin
+    to: bin
+    filter:
+      - memorylane
 
 asar: true
 asarUnpack:
