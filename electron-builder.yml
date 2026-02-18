@@ -29,6 +29,7 @@ asar: true
 asarUnpack:
   - 'node_modules/uiohook-napi/**/*'
   - 'node_modules/sharp/**/*'
+  - 'node_modules/ffmpeg-static/**/*'
   - 'node_modules/better-sqlite3/**/*'
   - 'node_modules/sqlite-vec*/**/*'
   - 'node_modules/@img/**/*'
