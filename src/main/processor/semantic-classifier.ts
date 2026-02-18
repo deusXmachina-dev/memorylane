@@ -15,9 +15,13 @@ import { DebugPipelineWriter } from './debug-pipeline'
 const LLM_IMAGE_MAX_WIDTH = 1920
 
 const SUPPORTED_MODELS = {
-  'google/gemini-2.5-flash-lite': {
+  'google/gemini-2.5-flash-lite-preview-09-2025': {
     input_tokens_per_million: 0.1,
     completion_tokens_per_million: 0.4,
+  },
+  'qwen/qwen3.5-397b-a17b': {
+    input_tokens_per_million: 0.2,
+    completion_tokens_per_million: 0.6,
   },
 } as const satisfies Record<
   string,
@@ -25,6 +29,9 @@ const SUPPORTED_MODELS = {
 >
 
 export type ModelChoice = keyof typeof SUPPORTED_MODELS
+
+const DEFAULT_MODEL: ModelChoice = 'google/gemini-2.5-flash-lite-preview-09-2025'
+const FALLBACK_MODEL: ModelChoice = 'qwen/qwen3.5-397b-a17b'
 
 export interface EndpointConfig {
   serverURL?: string
@@ -43,7 +50,7 @@ export class SemanticClassifierService {
 
   constructor(
     apiKey?: string,
-    model: ModelChoice = 'google/gemini-2.5-flash-lite',
+    model: ModelChoice = DEFAULT_MODEL,
     maxHistorySize = 5,
     usageTracker?: UsageTracker,
     debugWriter?: DebugPipelineWriter | null,
@@ -119,11 +126,11 @@ export class SemanticClassifierService {
       this.isCustomEndpoint = false
       if (openRouterKey) {
         this.client = new OpenRouter({ apiKey: openRouterKey })
-        this.model = 'google/gemini-2.5-flash-lite'
+        this.model = DEFAULT_MODEL
         log.info('[SemanticClassifier] Reverted to OpenRouter')
       } else {
         this.client = null
-        this.model = 'google/gemini-2.5-flash-lite'
+        this.model = DEFAULT_MODEL
         log.info('[SemanticClassifier] Custom endpoint removed, no OpenRouter key available')
       }
     }
@@ -185,13 +192,21 @@ export class SemanticClassifierService {
       }
 
       const response = await this.client.chat.send({
-        model: this.model,
         messages: [{ role: 'user', content }],
-        // Force Vertex AI for video — Google AI Studio rejects base64 video
-        ...(hasVideo &&
-          !this.isCustomEndpoint && {
-            provider: { order: ['Google'], allowFallbacks: false },
-          }),
+        ...(this.isCustomEndpoint
+          ? // Custom endpoint: single model, no provider routing
+            { model: this.model }
+          : hasVideo
+            ? // Video via OpenRouter: force Google/Vertex (rejects base64 video otherwise)
+              {
+                model: this.model,
+                provider: { order: ['Google'], allowFallbacks: false },
+              }
+            : // Screenshots via OpenRouter: primary model with Qwen fallback on rate-limit
+              {
+                models: [this.model, FALLBACK_MODEL],
+                route: 'fallback' as const,
+              }),
       })
 
       const messageContent = response.choices?.[0]?.message?.content
@@ -199,12 +214,13 @@ export class SemanticClassifierService {
         typeof messageContent === 'string' ? messageContent.trim() : 'No summary generated'
       log.info(`[SemanticClassifier] Activity summary: ${summary}`)
 
-      // Track usage
+      // Track usage — response.model reflects the model that actually served the request
+      const actualModel = response.model || this.model
       const promptTokens = response.usage?.promptTokens || 0
       const completionTokens = response.usage?.completionTokens || 0
       let cost = 0
-      if (!this.isCustomEndpoint && this.model in SUPPORTED_MODELS) {
-        const modelCost = SUPPORTED_MODELS[this.model as ModelChoice]
+      if (!this.isCustomEndpoint && actualModel in SUPPORTED_MODELS) {
+        const modelCost = SUPPORTED_MODELS[actualModel as ModelChoice]
         cost =
           (promptTokens / 1_000_000) * modelCost.input_tokens_per_million +
           (completionTokens / 1_000_000) * modelCost.completion_tokens_per_million

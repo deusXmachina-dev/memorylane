@@ -157,13 +157,14 @@ describe('SemanticClassifierService', () => {
 
   it('should track cost normally for OpenRouter models', async () => {
     mockSend.mockResolvedValue({
+      model: 'google/gemini-2.5-flash-lite-preview-09-2025',
       choices: [{ message: { content: 'Test summary' } }],
       usage: { promptTokens: 1_000_000, completionTokens: 1_000_000 },
     })
 
     const service = new SemanticClassifierService(
       'test-key',
-      'google/gemini-2.5-flash-lite',
+      'google/gemini-2.5-flash-lite-preview-09-2025',
       undefined,
       mockUsageTracker,
     )
@@ -423,6 +424,46 @@ describe('SemanticClassifierService', () => {
     const sentContent = mockSend.mock.calls[0][0].messages[0].content
     // Should fall back to screenshot mode
     expect(sentContent[0].text).toContain('screenshots')
+  })
+
+  it('should use models array with fallback route for non-video OpenRouter calls', async () => {
+    mockSend.mockResolvedValue({
+      model: 'google/gemini-2.5-flash-lite-preview-09-2025',
+      choices: [{ message: { content: 'Test summary' } }],
+      usage: { promptTokens: 100, completionTokens: 20 },
+    })
+
+    const service = new SemanticClassifierService(
+      'test-key',
+      undefined,
+      undefined,
+      mockUsageTracker,
+    )
+
+    const input: ActivityClassificationInput = {
+      activity: {
+        id: 'test-activity',
+        startTimestamp: 1000,
+        endTimestamp: 5000,
+        appName: 'VS Code',
+        windowTitle: 'index.ts',
+        screenshots: [],
+        interactions: [],
+      },
+      screenshotPaths: ['/tmp/start.png'],
+      previousSummaries: [],
+    }
+
+    await service.classifyActivity(input)
+
+    const sendArgs = mockSend.mock.calls[0][0]
+    expect(sendArgs.models).toEqual([
+      'google/gemini-2.5-flash-lite-preview-09-2025',
+      'qwen/qwen3.5-397b-a17b',
+    ])
+    expect(sendArgs.route).toBe('fallback')
+    expect(sendArgs.model).toBeUndefined()
+    expect(sendArgs.provider).toBeUndefined()
   })
 
   it('should set provider order to Google when sending video via OpenRouter', async () => {
