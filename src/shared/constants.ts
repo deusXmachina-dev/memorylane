@@ -1,9 +1,3 @@
-// Visual Change Detection Configuration (Event-driven baseline model)
-export const VISUAL_DETECTOR_CONFIG = {
-  ENABLED: true,
-  DHASH_THRESHOLD_PERCENT: 8, // Threshold for baseline comparison (1-20%)
-}
-
 // User Interaction Monitoring Configuration
 export const INTERACTION_MONITOR_CONFIG = {
   ENABLED: true,
@@ -37,8 +31,9 @@ export const SCREENSHOT_CLEANUP_CONFIG = {
 export const ACTIVITY_CONFIG = {
   MIN_ACTIVITY_DURATION_MS: 3_000, // Discard activities shorter than 3s
   MAX_ACTIVITY_DURATION_MS: 5 * 60 * 1000, // Force-split after 5 minutes
+  PERIODIC_CAPTURE_INTERVAL_MS: 1_000, // Capture one screenshot per second while activity is active
   FORCE_SPLIT_CHECK_INTERVAL_MS: 60_000, // Check for max-duration force-split every 60s
-  MAX_SCREENSHOTS_PER_ACTIVITY: 20, // Cap intermediate screenshots
+  MAX_SCREENSHOTS_PER_ACTIVITY: 300, // Cap screenshots per activity (up to full 5-minute 1s capture window)
   MAX_SCREENSHOTS_FOR_LLM: 6, // Max images sent to LLM
 }
 

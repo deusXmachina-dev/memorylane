@@ -4,7 +4,6 @@ import { v4 as uuidv4 } from 'uuid'
 import * as fs from 'fs'
 import * as path from 'path'
 import { ActivityScreenshot } from '../../shared/types'
-import * as visualDetector from './visual-detector'
 import * as interactionMonitor from './interaction-monitor'
 import log from '../logger'
 
@@ -22,7 +21,6 @@ function ensureScreenshotsDir(): void {
 }
 
 const FULL_RES_SIZE = { width: 1920, height: 1080 }
-const SAMPLE_SIZE = { width: 320, height: 180 }
 
 function parseDisplayId(sourceId: string): number {
   return parseInt(sourceId.split(':')[1] || '0', 10)
@@ -87,16 +85,6 @@ async function captureScreen(
 }
 
 /**
- * Capture a low-resolution sample bitmap for visual change detection.
- * Uses a dedicated capture at SAMPLE_SIZE so the bitmap dimensions are consistent
- * (desktopCapturer treats thumbnailSize as a bounding box, not an exact size).
- */
-async function captureSampleBitmap(displayId?: number): Promise<Buffer> {
-  const source = await captureScreen(SAMPLE_SIZE, displayId)
-  return source.thumbnail.toBitmap()
-}
-
-/**
  * Capture a screenshot immediately.
  * Used by ActivityManager for on-demand captures (activity start/end/periodic).
  */
@@ -109,31 +97,6 @@ export async function captureImmediate(
   log.info(
     `[Capture] Screenshot saved: ${path.basename(screenshot.filepath)} (trigger: ${trigger})`,
   )
-  return screenshot
-}
-
-/**
- * Check for visual change and capture if detected.
- * Used by ActivityManager for periodic visual-change-gated captures.
- * Returns the screenshot if visual change was detected, null otherwise.
- */
-export async function captureIfVisualChange(
-  trigger: ActivityScreenshot['trigger'],
-  displayId?: number,
-): Promise<ActivityScreenshot | null> {
-  const sampleBitmap = await captureSampleBitmap(displayId)
-  const result = visualDetector.checkBitmapAgainstBaseline(sampleBitmap)
-
-  if (!result.changed) {
-    return null
-  }
-
-  log.info(
-    `[Capture] Visual change detected (${result.difference.toFixed(1)}%) - capturing screenshot`,
-  )
-
-  const screenshot = await captureImmediate(trigger, displayId)
-  visualDetector.updateBaselineFromBitmap(sampleBitmap)
   return screenshot
 }
 
@@ -173,7 +136,7 @@ export async function captureWindowByTitle(
 }
 
 /**
- * Start the capture system: visual detection and interaction monitoring.
+ * Start the capture system.
  * The ActivityManager (wired in index.ts) handles interaction routing and capture orchestration.
  */
 export function startCapture(): void {
@@ -185,21 +148,8 @@ export function startCapture(): void {
   log.info('[Capture] Starting capture system')
   isCapturing = true
 
-  // Start visual detection (enables the module for baseline comparisons)
-  visualDetector.startVisualDetection()
-
   // Start interaction monitoring (events routed to ActivityManager via index.ts)
   interactionMonitor.startInteractionMonitoring()
-
-  // Initialize visual detection baseline from a sample capture
-  captureSampleBitmap()
-    .then((sampleBitmap) => {
-      visualDetector.updateBaselineFromBitmap(sampleBitmap)
-      log.info('[Capture] Visual detection baseline initialized')
-    })
-    .catch((error) => {
-      log.error('[Capture] Failed to initialize baseline:', error)
-    })
 }
 
 /**
@@ -213,9 +163,6 @@ export function stopCapture(): void {
 
   log.info('[Capture] Stopping capture system')
   isCapturing = false
-
-  // Stop visual detection
-  visualDetector.stopVisualDetection()
 
   // Stop interaction monitoring
   interactionMonitor.stopInteractionMonitoring()

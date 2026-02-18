@@ -23,10 +23,6 @@ interface CaptureProvider {
     trigger: ActivityScreenshot['trigger'],
     displayId?: number,
   ) => Promise<ActivityScreenshot>
-  captureIfVisualChange: (
-    trigger: ActivityScreenshot['trigger'],
-    displayId?: number,
-  ) => Promise<ActivityScreenshot | null>
   captureWindowByTitle?: (
     title: string,
     trigger: ActivityScreenshot['trigger'],
@@ -35,10 +31,12 @@ interface CaptureProvider {
 
 export class ActivityManager {
   private currentActivity: Activity | null = null
-  private periodicTimer: NodeJS.Timeout | null = null
+  private forceSplitTimer: NodeJS.Timeout | null = null
+  private captureTimer: NodeJS.Timeout | null = null
   private callbacks: OnActivityCompleteCallback[] = []
   private captureProvider: CaptureProvider
   private eventQueue: Promise<void> = Promise.resolve()
+  private isIntervalCaptureInFlight = false
 
   constructor(captureProvider: CaptureProvider) {
     this.captureProvider = captureProvider
@@ -56,12 +54,14 @@ export class ActivityManager {
    * Routes to the appropriate handler based on event type.
    */
   public async handleInteraction(event: InteractionContext): Promise<void> {
-    this.eventQueue = this.eventQueue
-      .then(() => this.processEvent(event))
-      .catch((err) => {
-        log.error('[ActivityManager] Error processing event:', err)
-      })
+    this.enqueueWork(() => this.processEvent(event), '[ActivityManager] Error processing event:')
     return this.eventQueue
+  }
+
+  private enqueueWork(work: () => Promise<void>, errorMessage: string): void {
+    this.eventQueue = this.eventQueue.then(work).catch((err) => {
+      log.error(errorMessage, err)
+    })
   }
 
   private async processEvent(event: InteractionContext): Promise<void> {
@@ -192,18 +192,6 @@ export class ActivityManager {
 
     // Accumulate the interaction
     this.currentActivity.interactions.push(event)
-
-    // Try visual-change-gated capture for non-app-change interactions
-    if (this.currentActivity.screenshots.length < ACTIVITY_CONFIG.MAX_SCREENSHOTS_PER_ACTIVITY) {
-      try {
-        const screenshot = await this.captureProvider.captureIfVisualChange('visual_change')
-        if (screenshot) {
-          this.addScreenshot(screenshot)
-        }
-      } catch (error) {
-        log.warn('[ActivityManager] Failed visual change capture:', error)
-      }
-    }
   }
 
   // ---------------------------------------------------------------------------
@@ -240,13 +228,13 @@ export class ActivityManager {
     }
 
     // Start periodic timer
-    this.startPeriodicTimer()
+    this.startActivityTimers()
   }
 
   private async finalizeCurrentActivity(): Promise<void> {
     if (!this.currentActivity) return
 
-    this.stopPeriodicTimer()
+    this.stopActivityTimers()
 
     const activity = this.currentActivity
     this.currentActivity = null
@@ -281,47 +269,82 @@ export class ActivityManager {
   // Private: Periodic capture
   // ---------------------------------------------------------------------------
 
-  private startPeriodicTimer(): void {
-    this.stopPeriodicTimer()
+  private startActivityTimers(): void {
+    this.stopActivityTimers()
 
-    this.periodicTimer = setInterval(async () => {
-      if (!this.currentActivity) return
+    this.captureTimer = setInterval(() => {
+      this.enqueueWork(
+        () => this.capturePeriodicScreenshot(),
+        '[ActivityManager] Error in periodic capture:',
+      )
+    }, ACTIVITY_CONFIG.PERIODIC_CAPTURE_INTERVAL_MS)
 
-      // Check if max duration exceeded → force-split
-      const elapsed = Date.now() - this.currentActivity.startTimestamp
-      if (elapsed >= ACTIVITY_CONFIG.MAX_ACTIVITY_DURATION_MS) {
-        log.info(`[ActivityManager] Max activity duration exceeded (${elapsed}ms), force-splitting`)
-        // Capture end, finalize, and start a new activity for the same app
-        try {
-          const endScreenshot = await this.captureProvider.captureImmediate('activity_end')
-          this.addScreenshot(endScreenshot)
-        } catch (error) {
-          log.warn('[ActivityManager] Failed to capture end screenshot for force-split:', error)
-        }
-
-        // Save current app info before finalize clears it
-        const currentAppEvent: InteractionContext = {
-          type: 'app_change',
-          timestamp: Date.now(),
-          activeWindow: {
-            title: this.currentActivity.windowTitle,
-            processName: this.currentActivity.appName,
-            bundleId: this.currentActivity.bundleId,
-            url: this.currentActivity.url,
-          },
-        }
-
-        await this.finalizeCurrentActivity()
-        await this.startNewActivity(currentAppEvent)
-      }
+    this.forceSplitTimer = setInterval(() => {
+      this.enqueueWork(
+        () => this.checkForceSplit(),
+        '[ActivityManager] Error in force-split check:',
+      )
     }, ACTIVITY_CONFIG.FORCE_SPLIT_CHECK_INTERVAL_MS)
   }
 
-  private stopPeriodicTimer(): void {
-    if (this.periodicTimer) {
-      clearInterval(this.periodicTimer)
-      this.periodicTimer = null
+  private stopActivityTimers(): void {
+    if (this.captureTimer) {
+      clearInterval(this.captureTimer)
+      this.captureTimer = null
     }
+    if (this.forceSplitTimer) {
+      clearInterval(this.forceSplitTimer)
+      this.forceSplitTimer = null
+    }
+    this.isIntervalCaptureInFlight = false
+  }
+
+  private async capturePeriodicScreenshot(): Promise<void> {
+    if (!this.currentActivity || this.isIntervalCaptureInFlight) return
+    if (this.currentActivity.screenshots.length >= ACTIVITY_CONFIG.MAX_SCREENSHOTS_PER_ACTIVITY)
+      return
+
+    this.isIntervalCaptureInFlight = true
+    try {
+      const screenshot = await this.captureProvider.captureImmediate('periodic')
+      this.addScreenshot(screenshot)
+    } catch (error) {
+      log.warn('[ActivityManager] Failed periodic capture:', error)
+    } finally {
+      this.isIntervalCaptureInFlight = false
+    }
+  }
+
+  private async checkForceSplit(): Promise<void> {
+    if (!this.currentActivity) return
+
+    const elapsed = Date.now() - this.currentActivity.startTimestamp
+    if (elapsed < ACTIVITY_CONFIG.MAX_ACTIVITY_DURATION_MS) return
+
+    log.info(`[ActivityManager] Max activity duration exceeded (${elapsed}ms), force-splitting`)
+
+    // Capture end, finalize, and start a new activity for the same app
+    try {
+      const endScreenshot = await this.captureProvider.captureImmediate('activity_end')
+      this.addScreenshot(endScreenshot)
+    } catch (error) {
+      log.warn('[ActivityManager] Failed to capture end screenshot for force-split:', error)
+    }
+
+    // Save current app info before finalize clears it
+    const currentAppEvent: InteractionContext = {
+      type: 'app_change',
+      timestamp: Date.now(),
+      activeWindow: {
+        title: this.currentActivity.windowTitle,
+        processName: this.currentActivity.appName,
+        bundleId: this.currentActivity.bundleId,
+        url: this.currentActivity.url,
+      },
+    }
+
+    await this.finalizeCurrentActivity()
+    await this.startNewActivity(currentAppEvent)
   }
 
   // ---------------------------------------------------------------------------

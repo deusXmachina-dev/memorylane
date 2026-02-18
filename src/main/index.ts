@@ -111,7 +111,6 @@ app.on('ready', async () => {
   // Set up ActivityManager with recorder as capture provider
   activityManager = new ActivityManager({
     captureImmediate: recorder.captureImmediate,
-    captureIfVisualChange: recorder.captureIfVisualChange,
     captureWindowByTitle: recorder.captureWindowByTitle,
   })
 

@@ -43,7 +43,7 @@ export interface ActivityScreenshot {
   id: string
   filepath: string
   timestamp: number
-  trigger: 'activity_start' | 'activity_end' | 'visual_change'
+  trigger: 'activity_start' | 'activity_end' | 'periodic'
   display: { id: number; width: number; height: number }
 }
 
