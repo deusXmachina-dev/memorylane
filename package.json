@@ -79,6 +79,7 @@
     "color-name": "^1.1.4",
     "dotenv": "^17.2.3",
     "electron-log": "^5.4.3",
+    "ffmpeg-static": "^5.3.0",
     "lucide-react": "^0.563.0",
     "next-themes": "^0.4.6",
     "radix-ui": "^1.4.3",
