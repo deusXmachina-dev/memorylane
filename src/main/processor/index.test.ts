@@ -45,6 +45,7 @@ function createActivity(overrides: Partial<Activity> = {}): Activity {
       },
     ],
     interactions: overrides.interactions ?? [],
+    videoSegment: overrides.videoSegment,
   }
 }
 
@@ -162,5 +163,70 @@ describe('ActivityProcessor', () => {
     // Still classified and stored
     expect(mockClassifierService.classifyActivity).toHaveBeenCalled()
     expect(mockStorageService.addActivity).toHaveBeenCalled()
+  })
+
+  it('should pass videoPath to classifier when activity has video segment', async () => {
+    const activity = createActivity({
+      videoSegment: {
+        id: 'vid-1',
+        filepath: '/tmp/video.mp4',
+        displayId: 1,
+        startTimestamp: 1000,
+        endTimestamp: 5000,
+      },
+    })
+
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+    vi.mocked(ocr.extractText).mockResolvedValue('Detected Text')
+
+    await processor.processActivity(activity)
+
+    expect(mockClassifierService.classifyActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        videoPath: '/tmp/video.mp4',
+      }),
+    )
+  })
+
+  it('should delete video file after processing', async () => {
+    const activity = createActivity({
+      videoSegment: {
+        id: 'vid-1',
+        filepath: '/tmp/video.mp4',
+        displayId: 1,
+        startTimestamp: 1000,
+        endTimestamp: 5000,
+      },
+    })
+
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+    vi.mocked(ocr.extractText).mockResolvedValue('Detected Text')
+
+    await processor.processActivity(activity)
+
+    // Video file should be deleted along with screenshots
+    expect(fs.unlinkSync).toHaveBeenCalledWith('/tmp/video.mp4')
+  })
+
+  it('should still run OCR when video is present', async () => {
+    const activity = createActivity({
+      videoSegment: {
+        id: 'vid-1',
+        filepath: '/tmp/video.mp4',
+        displayId: 1,
+        startTimestamp: 1000,
+        endTimestamp: 5000,
+      },
+    })
+
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+    vi.mocked(ocr.extractText).mockResolvedValue('Detected Text')
+
+    await processor.processActivity(activity)
+
+    // OCR still runs on screenshots regardless of video
+    expect(ocr.extractText).toHaveBeenCalledTimes(2)
+    expect(ocr.extractText).toHaveBeenCalledWith('/tmp/ss-1.png')
+    expect(ocr.extractText).toHaveBeenCalledWith('/tmp/ss-2.png')
   })
 })
