@@ -18,7 +18,7 @@ import { CustomEndpointManager } from './settings/custom-endpoint-manager'
 import { DeviceIdentity } from './settings/device-identity'
 import { ManagedKeyService } from './services/managed-key-service'
 import { DebugPipelineWriter } from './processor/debug-pipeline'
-import { ActivityManager } from './processor/activity-manager'
+import { ActivityManager, VideoProvider } from './processor/activity-manager'
 import { ProcessingQueue } from './processor/processing-queue'
 import { startPowerMonitoring, shouldPause } from './power-monitor'
 import { SCREENSHOT_CLEANUP_CONFIG } from '../shared/constants'
@@ -108,12 +108,29 @@ app.on('ready', async () => {
 
   await initServices()
 
-  // Set up ActivityManager with recorder as capture provider
-  activityManager = new ActivityManager({
-    captureImmediate: recorder.captureImmediate,
-    captureIfVisualChange: recorder.captureIfVisualChange,
-    captureWindowByTitle: recorder.captureWindowByTitle,
-  })
+  // Start video recorder if available (macOS only)
+  let videoProvider: VideoProvider | undefined
+  try {
+    const videoRecorder = await import('./recorder/video-recorder')
+    await videoRecorder.start()
+    videoProvider = {
+      split: (displayId) => videoRecorder.split(displayId),
+      isRunning: () => videoRecorder.isRunning(),
+    }
+    log.info('[Main] Video recorder started')
+  } catch (err) {
+    log.warn('[Main] Video recorder not available:', err)
+  }
+
+  // Set up ActivityManager with recorder as capture provider and optional video provider
+  activityManager = new ActivityManager(
+    {
+      captureImmediate: recorder.captureImmediate,
+      captureIfVisualChange: recorder.captureIfVisualChange,
+      captureWindowByTitle: recorder.captureWindowByTitle,
+    },
+    videoProvider,
+  )
 
   const { setupTray, updateTrayMenu } = await import('./ui/tray')
   setupTray({
@@ -177,11 +194,20 @@ app.on('ready', async () => {
         log.info('[Main] Pausing capture (power state: locked/suspended)')
         recorder.stopCapture()
       }
+      if (videoProvider?.isRunning()) {
+        log.info('[Main] Stopping video recorder (power state: locked/suspended)')
+        import('./recorder/video-recorder').then((vr) => vr.stop()).catch(() => {})
+      }
     },
     onResume: () => {
       if (!recorder.isCapturingNow() && !shouldPause()) {
         log.info('[Main] Resuming capture (power state: active)')
         recorder.startCapture()
+        if (videoProvider && !videoProvider.isRunning()) {
+          import('./recorder/video-recorder')
+            .then((vr) => vr.start())
+            .catch((err) => log.warn('[Main] Failed to restart video recorder:', err))
+        }
       }
     },
   })
