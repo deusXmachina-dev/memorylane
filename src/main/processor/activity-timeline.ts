@@ -140,37 +140,6 @@ function mergeAdjacentClicks(items: TimelineItem[]): { timestamp: number; text: 
 }
 
 /**
- * Build a chronological timeline with only interactions (no screenshot labels).
- * Used when the video itself provides visual context instead of screenshots.
- */
-export function buildVideoTimeline(activity: Activity): string {
-  const startTime = activity.startTimestamp
-
-  const items: TimelineItem[] = []
-
-  // Add interactions only (skip the first app_change — it's just the activity boundary trigger)
-  for (let i = 0; i < activity.interactions.length; i++) {
-    if (i === 0 && activity.interactions[i].type === 'app_change') continue
-    const item = interactionToTimelineItem(activity.interactions[i])
-    if (item) items.push(item)
-  }
-
-  // Sort chronologically
-  items.sort((a, b) => a.timestamp - b.timestamp)
-
-  // Aggregate adjacent clicks
-  const merged = mergeAdjacentClicks(items)
-
-  // Format with relative timestamps
-  return merged
-    .map((item) => {
-      const relMs = item.timestamp - startTime
-      return `${formatRelativeTime(relMs)} ${item.text}`
-    })
-    .join('\n')
-}
-
-/**
  * Format milliseconds as relative time (M:SS).
  */
 function formatRelativeTime(ms: number): string {

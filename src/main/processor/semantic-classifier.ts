@@ -1,4 +1,3 @@
-import * as fs from 'fs'
 import sharp from 'sharp'
 import { OpenRouter } from '@openrouter/sdk'
 import {
@@ -6,7 +5,7 @@ import {
   CustomEndpointConfig,
   ActivityClassificationInput,
 } from '../../shared/types'
-import { buildChronologicalTimeline, buildVideoTimeline } from './activity-timeline'
+import { buildChronologicalTimeline } from './activity-timeline'
 import { UsageTracker } from '../services/usage-tracker'
 import log from '../logger'
 import { DebugPipelineWriter } from './debug-pipeline'
@@ -147,47 +146,31 @@ export class SemanticClassifierService {
     }
 
     const { activity, screenshotPaths } = input
-    const hasVideo = !!(input.videoPath && fs.existsSync(input.videoPath))
 
     try {
       const durationMs = (activity.endTimestamp ?? Date.now()) - activity.startTimestamp
       const durationStr = this.formatDuration(durationMs)
-      const mediaDesc = hasVideo ? '(video)' : `(${screenshotPaths.length} screenshots)`
       log.info(
-        `[SemanticClassifier] Classifying activity ${activity.id}: ${activity.appName} (${durationStr}, ${mediaDesc})`,
+        `[SemanticClassifier] Classifying activity ${activity.id}: ${activity.appName} (${durationStr}, ${screenshotPaths.length} screenshots)`,
       )
 
-      const prompt = this.formatActivityPrompt(input, hasVideo)
+      const prompt = this.formatActivityPrompt(input)
 
-      // Build content: text prompt + video or screenshots
+      // Build content: text prompt + screenshots
       const content: Array<
         | { type: 'text'; text: string }
         | { type: 'image_url'; imageUrl: { url: string; detail: 'high' } }
-        | { type: 'video_url'; videoUrl: { url: string } }
       > = [{ type: 'text' as const, text: prompt }]
 
-      if (hasVideo) {
-        // Send video instead of screenshots
-        const videoBuffer = fs.readFileSync(input.videoPath!)
-        log.info(
-          `[SemanticClassifier] Video file: ${(videoBuffer.length / 1024).toFixed(0)}KB raw, ${((videoBuffer.length * 4) / 3 / 1024).toFixed(0)}KB base64`,
-        )
-        const videoBase64 = videoBuffer.toString('base64')
-        content.push({
-          type: 'video_url' as const,
-          videoUrl: { url: `data:video/mp4;base64,${videoBase64}` },
-        })
-      } else {
-        for (const filepath of screenshotPaths) {
-          try {
-            const imageData = await this.prepareImageForLLM(filepath)
-            content.push({
-              type: 'image_url' as const,
-              imageUrl: { url: `data:image/jpeg;base64,${imageData}`, detail: 'high' },
-            })
-          } catch (error) {
-            log.warn(`[SemanticClassifier] Failed to read screenshot ${filepath}:`, error)
-          }
+      for (const filepath of screenshotPaths) {
+        try {
+          const imageData = await this.prepareImageForLLM(filepath)
+          content.push({
+            type: 'image_url' as const,
+            imageUrl: { url: `data:image/jpeg;base64,${imageData}`, detail: 'high' },
+          })
+        } catch (error) {
+          log.warn(`[SemanticClassifier] Failed to read screenshot ${filepath}:`, error)
         }
       }
 
@@ -196,17 +179,11 @@ export class SemanticClassifierService {
         ...(this.isCustomEndpoint
           ? // Custom endpoint: single model, no provider routing
             { model: this.model }
-          : hasVideo
-            ? // Video via OpenRouter: force Google/Vertex (rejects base64 video otherwise)
-              {
-                model: this.model,
-                provider: { order: ['Google'], allowFallbacks: false },
-              }
-            : // Screenshots via OpenRouter: primary model with Qwen fallback on rate-limit
-              {
-                models: [this.model, FALLBACK_MODEL],
-                route: 'fallback' as const,
-              }),
+          : // OpenRouter: primary model with Qwen fallback on rate-limit
+            {
+              models: [this.model, FALLBACK_MODEL],
+              route: 'fallback' as const,
+            }),
       })
 
       const messageContent = response.choices?.[0]?.message?.content
@@ -278,39 +255,28 @@ export class SemanticClassifierService {
   /**
    * Format the prompt for activity classification with multiple screenshots.
    */
-  private formatActivityPrompt(input: ActivityClassificationInput, hasVideo: boolean): string {
+  private formatActivityPrompt(input: ActivityClassificationInput): string {
     const { activity, screenshotPaths } = input
     const durationMs = (activity.endTimestamp ?? Date.now()) - activity.startTimestamp
     const durationStr = this.formatDuration(durationMs)
 
-    const mediaType = hasVideo ? 'video' : 'screenshots'
-    let prompt = `You are summarizing a user activity session from ${mediaType} and interaction timeline.\n\n`
+    let prompt = `You are summarizing a user activity session from screenshots and interaction timeline.\n\n`
 
     // Rules first — sets the model's behavior before it sees any data
     prompt += '## Rules\n'
-    if (hasVideo) {
-      prompt +=
-        '- The attached video is the primary source. Timeline is secondary context for ordering/pacing.\n'
-    } else {
-      prompt +=
-        '- Screenshots are primary source. Timeline is secondary context for ordering/pacing.\n'
-    }
+    prompt +=
+      '- Screenshots are primary source. Timeline is secondary context for ordering/pacing.\n'
     prompt += '- Answer "What was I working on?" — useful for recall, not a play-by-play.\n'
     prompt +=
       '- NEVER mention raw interactions (clicks, scrolling, coordinates). Translate into meaningful actions.\n'
-    prompt += `- Be specific: name files, functions, errors, URLs, UI elements visible in the ${mediaType}.\n`
-    prompt += `- Match verb intensity to evidence: browsing/reviewing (no visible edits) \u2192 "browsed," "reviewed," "checked." Light editing (small visible changes) \u2192 "tweaked," "adjusted." Active work (sustained edits, new code, debugging) \u2192 "implemented," "debugged," "refactored." Evidence of editing = visible changed lines, new code, or diff markers in the ${mediaType}.\n`
+    prompt += `- Be specific: name files, functions, errors, URLs, UI elements visible in the screenshots.\n`
+    prompt += `- Match verb intensity to evidence: browsing/reviewing (no visible edits) \u2192 "browsed," "reviewed," "checked." Light editing (small visible changes) \u2192 "tweaked," "adjusted." Active work (sustained edits, new code, debugging) \u2192 "implemented," "debugged," "refactored." Evidence of editing = visible changed lines, new code, or diff markers in the screenshots.\n`
     prompt +=
       '- Do NOT exaggerate. Switching files = browsing, not editing. Opening a file = reviewing, not working on it.\n'
     prompt +=
       "- If previous context is provided, only describe what's NEW. If nothing meaningfully new, say so briefly.\n"
-    if (hasVideo) {
-      prompt +=
-        '- Describe what changed during the video: new code, different tabs, updated content, navigation.\n'
-    } else {
-      prompt +=
-        '- Describe what changed between screenshots: new code, different tabs, updated content, navigation.\n'
-    }
+    prompt +=
+      '- Describe what changed between screenshots: new code, different tabs, updated content, navigation.\n'
     prompt +=
       '- Click coordinates: use them to identify WHAT was clicked by looking at that position in the screenshot. NEVER output raw coordinates.\n'
     prompt +=
@@ -327,18 +293,10 @@ export class SemanticClassifierService {
     prompt += '\n'
 
     // Timeline
-    if (hasVideo) {
-      const timeline = buildVideoTimeline(activity)
-      if (timeline) {
-        prompt += '## Activity timeline (video attached below)\n'
-        prompt += timeline + '\n\n'
-      }
-    } else {
-      const timeline = buildChronologicalTimeline(activity, screenshotPaths)
-      if (timeline) {
-        prompt += `## Activity timeline (screenshots labeled [S1]\u2013[S${screenshotPaths.length}], attached as images below)\n`
-        prompt += timeline + '\n\n'
-      }
+    const timeline = buildChronologicalTimeline(activity, screenshotPaths)
+    if (timeline) {
+      prompt += `## Activity timeline (screenshots labeled [S1]\u2013[S${screenshotPaths.length}], attached as images below)\n`
+      prompt += timeline + '\n\n'
     }
 
     // Previous context

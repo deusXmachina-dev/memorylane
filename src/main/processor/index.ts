@@ -47,14 +47,13 @@ export class ActivityProcessor {
         log.info('[ActivityProcessor] OCR disabled by OCR_CONFIG.ENABLED')
       }
 
-      // 3. Classify activity (video preferred over screenshots when available)
+      // 3. Classify activity
       let summary = ''
       if (this.classifierService) {
         try {
           summary = await this.classifierService.classifyActivity({
             activity,
             screenshotPaths: selectedScreenshots.map((s) => s.filepath),
-            videoPath: activity.videoSegment?.filepath,
             previousSummaries: this.classifierService.getSummaryHistory(),
           })
           log.info(`[ActivityProcessor] Activity classification summary: ${summary}`)
@@ -96,11 +95,6 @@ export class ActivityProcessor {
       // 7. Delete all screenshot files
       for (const screenshot of screenshots) {
         this.deleteFile(screenshot.filepath)
-      }
-
-      // 8. Delete video file if present
-      if (activity.videoSegment?.filepath) {
-        this.deleteFile(activity.videoSegment.filepath)
       }
     } catch (error) {
       log.error(`[ActivityProcessor] Error processing activity ${id}:`, error)
@@ -176,7 +170,7 @@ export class ActivityProcessor {
   }
 
   /**
-   * Safely delete a file (screenshot or video segment)
+   * Safely delete a file.
    */
   private deleteFile(filepath: string): void {
     try {

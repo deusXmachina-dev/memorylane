@@ -89,10 +89,6 @@ export class DebugPipelineWriter {
             imageIndex === 0 ? 'start' : imageIndex === imageCount - 1 ? 'end' : `mid-${imageIndex}`
           fs.writeFileSync(path.join(subDir, `${label}.jpeg`), Buffer.from(base64, 'base64'))
           imageIndex++
-        } else if (block.type === 'video_url') {
-          const dataUrl: string = block.videoUrl?.url ?? ''
-          const base64 = dataUrl.replace(/^data:[^;]+;base64,/, '')
-          fs.writeFileSync(path.join(subDir, 'video.mp4'), Buffer.from(base64, 'base64'))
         }
       }
 

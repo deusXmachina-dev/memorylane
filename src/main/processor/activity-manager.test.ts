@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { ActivityManager, VideoProvider } from './activity-manager'
-import { Activity, ActivityScreenshot, InteractionContext, VideoSegment } from '../../shared/types'
+import { ActivityManager } from './activity-manager'
+import { Activity, ActivityScreenshot, InteractionContext } from '../../shared/types'
 
 vi.mock('../logger', () => ({
   default: {
@@ -75,89 +75,8 @@ describe('ActivityManager', () => {
     vi.useRealTimers()
   })
 
-  describe('with VideoProvider', () => {
-    it('should attach video segment to completed activity', async () => {
-      const mockSegment: VideoSegment = {
-        id: 'seg-1',
-        filepath: '/tmp/recordings/1234_1_abc.mp4',
-        displayId: 1,
-        startTimestamp: 1000,
-        endTimestamp: 5000,
-      }
-
-      const videoProvider: VideoProvider = {
-        split: vi.fn().mockResolvedValue(mockSegment),
-        isRunning: vi.fn().mockReturnValue(true),
-      }
-
-      const manager = new ActivityManager(captureProvider, videoProvider)
-
-      const completedActivities: Activity[] = []
-      manager.onActivityComplete((activity) => {
-        completedActivities.push(activity)
-      })
-
-      // Start activity: switch to VS Code
-      await manager.handleInteraction(makeAppChangeEvent('Code', 'com.microsoft.VSCode'))
-
-      // Advance past MIN_ACTIVITY_DURATION_MS
-      await vi.advanceTimersByTimeAsync(200)
-
-      // Switch to Terminal → finalizes VS Code activity
-      await manager.handleInteraction(makeAppChangeEvent('Terminal', 'com.apple.Terminal', 'Code'))
-
-      expect(completedActivities).toHaveLength(1)
-      expect(completedActivities[0].appName).toBe('Code')
-      expect(completedActivities[0].videoSegment).toEqual(mockSegment)
-      expect(videoProvider.split).toHaveBeenCalledWith(1)
-    })
-
-    it('should complete activity without video when split fails', async () => {
-      const videoProvider: VideoProvider = {
-        split: vi.fn().mockRejectedValue(new Error('Split timed out')),
-        isRunning: vi.fn().mockReturnValue(true),
-      }
-
-      const manager = new ActivityManager(captureProvider, videoProvider)
-
-      const completedActivities: Activity[] = []
-      manager.onActivityComplete((activity) => {
-        completedActivities.push(activity)
-      })
-
-      await manager.handleInteraction(makeAppChangeEvent('Code', 'com.microsoft.VSCode'))
-      await vi.advanceTimersByTimeAsync(200)
-      await manager.handleInteraction(makeAppChangeEvent('Terminal', 'com.apple.Terminal', 'Code'))
-
-      expect(completedActivities).toHaveLength(1)
-      expect(completedActivities[0].videoSegment).toBeUndefined()
-    })
-
-    it('should skip video split when provider is not running', async () => {
-      const videoProvider: VideoProvider = {
-        split: vi.fn(),
-        isRunning: vi.fn().mockReturnValue(false),
-      }
-
-      const manager = new ActivityManager(captureProvider, videoProvider)
-
-      const completedActivities: Activity[] = []
-      manager.onActivityComplete((activity) => {
-        completedActivities.push(activity)
-      })
-
-      await manager.handleInteraction(makeAppChangeEvent('Code', 'com.microsoft.VSCode'))
-      await vi.advanceTimersByTimeAsync(200)
-      await manager.handleInteraction(makeAppChangeEvent('Terminal', 'com.apple.Terminal', 'Code'))
-
-      expect(completedActivities).toHaveLength(1)
-      expect(completedActivities[0].videoSegment).toBeUndefined()
-      expect(videoProvider.split).not.toHaveBeenCalled()
-    })
-  })
-
-  describe('without VideoProvider', () => {
-    it('should complete activity without video segment', async () => {
+  describe('activity completion', () => {
+    it('should complete activity with screenshots', async () => {
       const manager = new ActivityManager(captureProvider)
 
       const completedActivities: Activity[] = []
@@ -171,7 +90,6 @@ describe('ActivityManager', () => {
 
       expect(completedActivities).toHaveLength(1)
       expect(completedActivities[0].appName).toBe('Code')
-      expect(completedActivities[0].videoSegment).toBeUndefined()
       expect(completedActivities[0].screenshots.length).toBeGreaterThan(0)
     })
   })

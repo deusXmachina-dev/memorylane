@@ -6,9 +6,8 @@
  * are accumulated for a single, richer LLM summary.
  */
 
-import * as path from 'path'
 import { v4 as uuidv4 } from 'uuid'
-import { Activity, ActivityScreenshot, InteractionContext, VideoSegment } from '../../shared/types'
+import { Activity, ActivityScreenshot, InteractionContext } from '../../shared/types'
 import {
   ACTIVITY_CONFIG,
   BROWSER_BUNDLE_IDS,
@@ -34,22 +33,15 @@ interface CaptureProvider {
   ) => Promise<ActivityScreenshot | null>
 }
 
-export interface VideoProvider {
-  split: (displayId: number) => Promise<VideoSegment>
-  isRunning: () => boolean
-}
-
 export class ActivityManager {
   private currentActivity: Activity | null = null
   private periodicTimer: NodeJS.Timeout | null = null
   private callbacks: OnActivityCompleteCallback[] = []
   private captureProvider: CaptureProvider
-  private videoProvider: VideoProvider | null
   private eventQueue: Promise<void> = Promise.resolve()
 
-  constructor(captureProvider: CaptureProvider, videoProvider?: VideoProvider) {
+  constructor(captureProvider: CaptureProvider) {
     this.captureProvider = captureProvider
-    this.videoProvider = videoProvider ?? null
   }
 
   /**
@@ -270,26 +262,9 @@ export class ActivityManager {
       return
     }
 
-    // Attach video segment if video provider is available
-    if (this.videoProvider?.isRunning()) {
-      const displayId = this.resolveDisplayId(activity)
-      if (displayId !== undefined) {
-        try {
-          const segment = await this.videoProvider.split(displayId)
-          activity.videoSegment = segment
-          log.info(
-            `[ActivityManager] Attached video segment to activity ${activity.id} (${path.basename(segment.filepath)})`,
-          )
-        } catch (error) {
-          log.warn(`[ActivityManager] Failed to split video for activity ${activity.id}:`, error)
-        }
-      }
-    }
-
     log.info(
       `[ActivityManager] Finalizing activity ${activity.id}: ${activity.appName} "${activity.windowTitle}" ` +
-        `(${durationMs}ms, ${activity.screenshots.length} screenshots, ${activity.interactions.length} interactions` +
-        `${activity.videoSegment ? ', with video' : ''})`,
+        `(${durationMs}ms, ${activity.screenshots.length} screenshots, ${activity.interactions.length} interactions)`,
     )
 
     // Notify callbacks
@@ -352,23 +327,6 @@ export class ActivityManager {
   // ---------------------------------------------------------------------------
   // Private: Helpers
   // ---------------------------------------------------------------------------
-
-  /**
-   * Resolve the display ID for video splitting from the activity's interactions.
-   */
-  private resolveDisplayId(activity: Activity): number | undefined {
-    for (const interaction of activity.interactions) {
-      if (interaction.type === 'app_change' && interaction.displayId !== undefined) {
-        return interaction.displayId
-      }
-    }
-    for (const interaction of activity.interactions) {
-      if (interaction.displayId !== undefined) {
-        return interaction.displayId
-      }
-    }
-    return undefined
-  }
 
   private addScreenshot(screenshot: ActivityScreenshot): void {
     if (!this.currentActivity) return
