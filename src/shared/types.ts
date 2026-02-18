@@ -47,6 +47,16 @@ export interface ActivityScreenshot {
   display: { id: number; width: number; height: number }
 }
 
+export interface VideoSegment {
+  id: string
+  filepath: string
+  displayId: number
+  startTimestamp: number
+  endTimestamp: number
+}
+
+export type OnSegmentCallback = (segment: VideoSegment) => void
+
 export interface Activity {
   id: string
   startTimestamp: number
@@ -58,6 +68,7 @@ export interface Activity {
   tld?: string
   screenshots: ActivityScreenshot[]
   interactions: InteractionContext[]
+  videoSegment?: VideoSegment
 }
 
 export interface ActivityClassificationInput {
