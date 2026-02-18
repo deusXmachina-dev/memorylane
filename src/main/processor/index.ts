@@ -6,6 +6,7 @@ import { Activity } from '../../shared/types'
 import { SemanticClassifierService } from './semantic-classifier'
 import { buildChronologicalTimeline } from './activity-timeline'
 import { ACTIVITY_CONFIG, OCR_CONFIG } from '@constants'
+import { buildActivityVideo } from './video'
 import log from '../logger'
 
 export class ActivityProcessor {
@@ -28,6 +29,7 @@ export class ActivityProcessor {
    */
   public async processActivity(activity: Activity): Promise<void> {
     const { id, screenshots } = activity
+    let videoPath: string | undefined
     log.info(
       `[ActivityProcessor] Processing activity ${id}: ${activity.appName} "${activity.windowTitle}" (${screenshots.length} screenshots, ${activity.interactions.length} interactions)`,
     )
@@ -47,13 +49,22 @@ export class ActivityProcessor {
         log.info('[ActivityProcessor] OCR disabled by OCR_CONFIG.ENABLED')
       }
 
-      // 3. Classify activity
+      // 3. Build transient MP4 from screenshots for video-first classification
+      try {
+        videoPath = await buildActivityVideo(activity.id, screenshots)
+        log.info(`[ActivityProcessor] Built activity video: ${videoPath}`)
+      } catch (error) {
+        log.warn('[ActivityProcessor] Failed to build activity video:', error)
+      }
+
+      // 4. Classify activity
       let summary = ''
       if (this.classifierService) {
         try {
           summary = await this.classifierService.classifyActivity({
             activity,
             screenshotPaths: selectedScreenshots.map((s) => s.filepath),
+            videoPath,
             previousSummaries: this.classifierService.getSummaryHistory(),
           })
           log.info(`[ActivityProcessor] Activity classification summary: ${summary}`)
@@ -63,15 +74,15 @@ export class ActivityProcessor {
         }
       }
 
-      // 4. Generate embedding from summary (fallback to combined OCR text)
+      // 5. Generate embedding from summary (fallback to combined OCR text)
       const embeddingText = summary || ocrTexts.join(' ')
       const vector = await this.embeddingService.generateEmbedding(embeddingText)
 
-      // 5. Build interaction timeline for storage (same format as the LLM prompt)
+      // 6. Build interaction timeline for storage (same format as the LLM prompt)
       const selectedPaths = selectedScreenshots.map((s) => s.filepath)
       const interactionSummary = buildChronologicalTimeline(activity, selectedPaths)
 
-      // 6. Store as activity
+      // 7. Store as activity
       const durationMs = (activity.endTimestamp ?? Date.now()) - activity.startTimestamp
       await this.storageService.addActivity({
         id: activity.id,
@@ -92,13 +103,17 @@ export class ActivityProcessor {
 
       log.info(`[ActivityProcessor] Stored activity ${id} (${activity.appName}, ${durationMs}ms)`)
 
-      // 7. Delete all screenshot files
+      // 8. Delete all screenshot files
       for (const screenshot of screenshots) {
         this.deleteFile(screenshot.filepath)
       }
     } catch (error) {
       log.error(`[ActivityProcessor] Error processing activity ${id}:`, error)
       throw error
+    } finally {
+      if (videoPath) {
+        this.deleteFile(videoPath)
+      }
     }
   }
 
