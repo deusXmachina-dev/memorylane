@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import * as fs from 'fs'
+import * as os from 'os'
+import * as path from 'path'
 
 // Mock dependencies
 vi.mock('electron', () => ({
@@ -339,5 +342,88 @@ describe('SemanticClassifierService', () => {
     expect(sendArgs.route).toBe('fallback')
     expect(sendArgs.model).toBeUndefined()
     expect(sendArgs.provider).toBeUndefined()
+  })
+
+  it('should send video_url block in video-only mode', async () => {
+    mockSend.mockResolvedValue({
+      model: 'google/gemini-2.5-flash-lite-preview-09-2025',
+      choices: [{ message: { content: 'Video summary' } }],
+      usage: { promptTokens: 100, completionTokens: 20 },
+    })
+
+    const service = new SemanticClassifierService(
+      'test-key',
+      undefined,
+      undefined,
+      mockUsageTracker,
+    )
+
+    const tmpVideoPath = path.join(os.tmpdir(), `memorylane-test-${Date.now()}.mp4`)
+    fs.writeFileSync(tmpVideoPath, Buffer.from('video-bytes'))
+
+    try {
+      const input: ActivityClassificationInput = {
+        activity: {
+          id: 'test-activity',
+          startTimestamp: 1000,
+          endTimestamp: 5000,
+          appName: 'VS Code',
+          windowTitle: 'index.ts',
+          screenshots: [],
+          interactions: [],
+        },
+        screenshotPaths: ['/tmp/start.png'],
+        videoPath: tmpVideoPath,
+        previousSummaries: [],
+      }
+
+      await service.classifyActivity(input)
+
+      const sendArgs = mockSend.mock.calls[mockSend.mock.calls.length - 1][0]
+      const content = sendArgs.messages[0].content as Array<Record<string, unknown>>
+      expect(content.some((b) => b.type === 'video_url')).toBe(true)
+      expect(content.some((b) => b.type === 'image_url')).toBe(false)
+    } finally {
+      if (fs.existsSync(tmpVideoPath)) {
+        fs.unlinkSync(tmpVideoPath)
+      }
+    }
+  })
+
+  it('should send prompt-only content when video file is missing', async () => {
+    mockSend.mockResolvedValue({
+      model: 'google/gemini-2.5-flash-lite-preview-09-2025',
+      choices: [{ message: { content: 'Prompt-only summary' } }],
+      usage: { promptTokens: 100, completionTokens: 20 },
+    })
+
+    const service = new SemanticClassifierService(
+      'test-key',
+      undefined,
+      undefined,
+      mockUsageTracker,
+    )
+
+    const input: ActivityClassificationInput = {
+      activity: {
+        id: 'test-activity',
+        startTimestamp: 1000,
+        endTimestamp: 5000,
+        appName: 'VS Code',
+        windowTitle: 'index.ts',
+        screenshots: [],
+        interactions: [],
+      },
+      screenshotPaths: ['/tmp/start.png'],
+      videoPath: '/tmp/missing-video.mp4',
+      previousSummaries: [],
+    }
+
+    await service.classifyActivity(input)
+
+    const sendArgs = mockSend.mock.calls[mockSend.mock.calls.length - 1][0]
+    const content = sendArgs.messages[0].content as Array<Record<string, unknown>>
+    expect(content).toHaveLength(1)
+    expect(content[0].type).toBe('text')
   })
 })

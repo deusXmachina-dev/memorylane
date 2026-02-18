@@ -36,7 +36,7 @@ function resolveFfmpegPath(): string {
     }
   }
 
-  if (ffmpegStatic && fs.existsSync(ffmpegStatic)) {
+  if (ffmpegStatic) {
     return ffmpegStatic
   }
 

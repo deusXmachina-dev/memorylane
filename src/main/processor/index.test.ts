@@ -5,11 +5,13 @@ import { StorageService } from './storage'
 import { SemanticClassifierService } from './semantic-classifier'
 import * as fs from 'fs'
 import * as ocr from './ocr'
+import * as video from './video'
 import { Activity } from '../../shared/types'
 
 // Mock dependencies
 vi.mock('fs')
 vi.mock('./ocr')
+vi.mock('./video')
 vi.mock('@constants', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>
   return {
@@ -79,6 +81,8 @@ describe('ActivityProcessor', () => {
       mockStorageService,
       mockClassifierService,
     )
+
+    vi.mocked(video.buildActivityVideo).mockResolvedValue('/tmp/activity-1.mp4')
   })
 
   it('should process an activity: OCR, classify, embed, store, cleanup', async () => {
@@ -94,10 +98,11 @@ describe('ActivityProcessor', () => {
     expect(ocr.extractText).toHaveBeenCalledWith('/tmp/ss-1.png')
     expect(ocr.extractText).toHaveBeenCalledWith('/tmp/ss-2.png')
 
-    // Classifier was called with screenshots
+    // Classifier was called with screenshots + transient video
     expect(mockClassifierService.classifyActivity).toHaveBeenCalledWith({
       activity,
       screenshotPaths: ['/tmp/ss-1.png', '/tmp/ss-2.png'],
+      videoPath: '/tmp/activity-1.mp4',
       previousSummaries: [],
     })
 
@@ -122,6 +127,7 @@ describe('ActivityProcessor', () => {
     // Screenshot files deleted
     expect(fs.unlinkSync).toHaveBeenCalledWith('/tmp/ss-1.png')
     expect(fs.unlinkSync).toHaveBeenCalledWith('/tmp/ss-2.png')
+    expect(fs.unlinkSync).toHaveBeenCalledWith('/tmp/activity-1.mp4')
   })
 
   it('should continue processing when OCR fails', async () => {
@@ -146,7 +152,7 @@ describe('ActivityProcessor', () => {
     )
 
     // Cleanup still runs
-    expect(fs.unlinkSync).toHaveBeenCalledTimes(2)
+    expect(fs.unlinkSync).toHaveBeenCalledTimes(3)
   })
 
   it('should skip OCR for missing screenshot files', async () => {
@@ -161,6 +167,24 @@ describe('ActivityProcessor', () => {
 
     // Still classified and stored
     expect(mockClassifierService.classifyActivity).toHaveBeenCalled()
+    expect(mockStorageService.addActivity).toHaveBeenCalled()
+  })
+
+  it('should keep processing when video build fails', async () => {
+    const activity = createActivity()
+
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+    vi.mocked(ocr.extractText).mockResolvedValue('Detected Text')
+    vi.mocked(video.buildActivityVideo).mockRejectedValue(new Error('ffmpeg unavailable'))
+
+    await processor.processActivity(activity)
+
+    expect(mockClassifierService.classifyActivity).toHaveBeenCalledWith({
+      activity,
+      screenshotPaths: ['/tmp/ss-1.png', '/tmp/ss-2.png'],
+      videoPath: undefined,
+      previousSummaries: [],
+    })
     expect(mockStorageService.addActivity).toHaveBeenCalled()
   })
 })
