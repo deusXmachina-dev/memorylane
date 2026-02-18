@@ -78,6 +78,7 @@ export class DebugPipelineWriter {
 
       // Extract and save media from content blocks (exact LLM payload)
       let imageIndex = 0
+      let videoIndex = 0
       const imageCount = content.filter((b) => b.type === 'image_url').length
       for (const block of content) {
         if (block.type === 'text') {
@@ -89,6 +90,12 @@ export class DebugPipelineWriter {
             imageIndex === 0 ? 'start' : imageIndex === imageCount - 1 ? 'end' : `mid-${imageIndex}`
           fs.writeFileSync(path.join(subDir, `${label}.jpeg`), Buffer.from(base64, 'base64'))
           imageIndex++
+        } else if (block.type === 'video_url') {
+          const dataUrl: string = block.videoUrl?.url ?? ''
+          const base64 = dataUrl.replace(/^data:[^;]+;base64,/, '')
+          const filename = videoIndex === 0 ? 'activity.mp4' : `activity-${videoIndex + 1}.mp4`
+          fs.writeFileSync(path.join(subDir, filename), Buffer.from(base64, 'base64'))
+          videoIndex++
         }
       }
 
@@ -110,6 +117,8 @@ export class DebugPipelineWriter {
             endTimestamp: activity.endTimestamp,
             screenshotCount: activity.screenshots.length,
             interactionCount: activity.interactions.length,
+            hasVideo: videoIndex > 0,
+            videoCount: videoIndex,
           },
           null,
           2,
