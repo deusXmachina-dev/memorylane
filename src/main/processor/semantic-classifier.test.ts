@@ -424,4 +424,83 @@ describe('SemanticClassifierService', () => {
     // Should fall back to screenshot mode
     expect(sentContent[0].text).toContain('screenshots')
   })
+
+  it('should set provider order to Google when sending video via OpenRouter', async () => {
+    mockSend.mockResolvedValue({
+      choices: [{ message: { content: 'Video summary' } }],
+      usage: { promptTokens: 100, completionTokens: 20 },
+    })
+
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true)
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('fake-video-data'))
+
+    const service = new SemanticClassifierService(
+      'test-key',
+      undefined,
+      undefined,
+      mockUsageTracker,
+    )
+
+    const input: ActivityClassificationInput = {
+      activity: {
+        id: 'test-activity',
+        startTimestamp: 1000,
+        endTimestamp: 5000,
+        appName: 'VS Code',
+        windowTitle: 'index.ts',
+        screenshots: [],
+        interactions: [],
+      },
+      screenshotPaths: [],
+      videoPath: '/tmp/video.mp4',
+      previousSummaries: [],
+    }
+
+    await service.classifyActivity(input)
+
+    const sendArgs = mockSend.mock.calls[0][0]
+    expect(sendArgs.provider).toEqual({ order: ['Google'], allowFallbacks: false })
+  })
+
+  it('should not set provider when using custom endpoint with video', async () => {
+    mockSend.mockResolvedValue({
+      choices: [{ message: { content: 'Video summary' } }],
+      usage: { promptTokens: 100, completionTokens: 20 },
+    })
+
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true)
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('fake-video-data'))
+
+    const service = new SemanticClassifierService(
+      undefined,
+      undefined,
+      undefined,
+      mockUsageTracker,
+      null,
+      {
+        serverURL: 'http://localhost:11434/v1',
+        model: 'my-custom-model',
+      },
+    )
+
+    const input: ActivityClassificationInput = {
+      activity: {
+        id: 'test-activity',
+        startTimestamp: 1000,
+        endTimestamp: 5000,
+        appName: 'VS Code',
+        windowTitle: 'index.ts',
+        screenshots: [],
+        interactions: [],
+      },
+      screenshotPaths: [],
+      videoPath: '/tmp/video.mp4',
+      previousSummaries: [],
+    }
+
+    await service.classifyActivity(input)
+
+    const sendArgs = mockSend.mock.calls[0][0]
+    expect(sendArgs.provider).toBeUndefined()
+  })
 })

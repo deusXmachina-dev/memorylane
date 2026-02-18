@@ -60,35 +60,41 @@ export class DebugPipelineWriter {
 
   /**
    * Dump a full activity classification round-trip to a timestamped subfolder.
+   * Saves the exact content blocks sent to the LLM (base64-decoded media files).
    * Fire-and-forget — errors are logged but never thrown.
    */
   public dumpActivity(
     input: ActivityClassificationInput,
-    prompt: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    content: Array<{ type: string; [key: string]: any }>,
     response: DebugPipelineResponse,
   ): void {
     try {
-      const { activity, screenshotPaths } = input
+      const { activity } = input
       const ts = new Date().toISOString().replace(/:/g, '-')
       const subDir = path.join(this.debugDir, `${ts}_${activity.id}`)
 
       fs.mkdirSync(subDir, { recursive: true })
 
-      // Copy video file if present
-      if (input.videoPath && fs.existsSync(input.videoPath)) {
-        fs.copyFileSync(input.videoPath, path.join(subDir, 'video.mp4'))
-      }
-
-      // Copy screenshot files
-      for (let i = 0; i < screenshotPaths.length; i++) {
-        const filepath = screenshotPaths[i]
-        if (fs.existsSync(filepath)) {
-          const label = i === 0 ? 'start' : i === screenshotPaths.length - 1 ? 'end' : `mid-${i}`
-          fs.copyFileSync(filepath, path.join(subDir, `${label}.png`))
+      // Extract and save media from content blocks (exact LLM payload)
+      let imageIndex = 0
+      const imageCount = content.filter((b) => b.type === 'image_url').length
+      for (const block of content) {
+        if (block.type === 'text') {
+          fs.writeFileSync(path.join(subDir, 'prompt.txt'), block.text, 'utf-8')
+        } else if (block.type === 'image_url') {
+          const dataUrl: string = block.imageUrl?.url ?? ''
+          const base64 = dataUrl.replace(/^data:[^;]+;base64,/, '')
+          const label =
+            imageIndex === 0 ? 'start' : imageIndex === imageCount - 1 ? 'end' : `mid-${imageIndex}`
+          fs.writeFileSync(path.join(subDir, `${label}.jpeg`), Buffer.from(base64, 'base64'))
+          imageIndex++
+        } else if (block.type === 'video_url') {
+          const dataUrl: string = block.videoUrl?.url ?? ''
+          const base64 = dataUrl.replace(/^data:[^;]+;base64,/, '')
+          fs.writeFileSync(path.join(subDir, 'video.mp4'), Buffer.from(base64, 'base64'))
         }
       }
-
-      fs.writeFileSync(path.join(subDir, 'prompt.txt'), prompt, 'utf-8')
 
       fs.writeFileSync(
         path.join(subDir, 'response.json'),

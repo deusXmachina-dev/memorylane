@@ -185,6 +185,10 @@ export class SemanticClassifierService {
       const response = await this.client.chat.send({
         model: this.model,
         messages: [{ role: 'user', content }],
+        ...(hasVideo &&
+          !this.isCustomEndpoint && {
+            provider: { order: ['Google'], allowFallbacks: false },
+          }),
       })
 
       const messageContent = response.choices?.[0]?.message?.content
@@ -211,7 +215,7 @@ export class SemanticClassifierService {
         `[SemanticClassifier] Usage tracked - Tokens: ${promptTokens}/${completionTokens}, Cost: $${cost.toFixed(6)}`,
       )
 
-      this.debugWriter?.dumpActivity(input, prompt, {
+      this.debugWriter?.dumpActivity(input, content, {
         model: this.model,
         summary,
         promptTokens,
@@ -232,7 +236,12 @@ export class SemanticClassifierService {
 
       return summary
     } catch (error) {
-      log.error('[SemanticClassifier] Error during activity classification:', error)
+      const apiMessage =
+        error instanceof Error && 'error' in error
+          ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (error as Record<string, { message?: string }>).error?.message || error.message
+          : String(error)
+      log.error(`[SemanticClassifier] Activity classification failed: ${apiMessage}`)
       throw error
     }
   }
