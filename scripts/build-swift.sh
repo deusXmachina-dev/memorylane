@@ -19,4 +19,14 @@ swiftc -O \
   "$ROOT_DIR/src/main/recorder/swift/app-watcher.swift" \
   -o "$OUT_DIR/app-watcher"
 
+echo "Compiling screen-recorder.swift → build/swift/screen-recorder"
+swiftc -O \
+  -target arm64-apple-macos13.0 \
+  -framework ScreenCaptureKit \
+  -framework AVFoundation \
+  -framework CoreMedia \
+  -framework VideoToolbox \
+  "$ROOT_DIR/src/main/recorder/swift/screen-recorder.swift" \
+  -o "$OUT_DIR/screen-recorder"
+
 echo "Swift binaries built successfully"
