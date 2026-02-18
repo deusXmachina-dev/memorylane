@@ -156,6 +156,7 @@ export class SemanticClassifierService {
       const content: Array<
         | { type: 'text'; text: string }
         | { type: 'image_url'; imageUrl: { url: string; detail: 'high' } }
+        | { type: 'video_url'; videoUrl: { url: string } }
       > = [{ type: 'text' as const, text: prompt }]
 
       if (hasVideo) {
@@ -163,8 +164,8 @@ export class SemanticClassifierService {
         const videoBuffer = fs.readFileSync(input.videoPath!)
         const videoBase64 = videoBuffer.toString('base64')
         content.push({
-          type: 'image_url' as const,
-          imageUrl: { url: `data:video/mp4;base64,${videoBase64}`, detail: 'high' },
+          type: 'video_url' as const,
+          videoUrl: { url: `data:video/mp4;base64,${videoBase64}` },
         })
       } else {
         // Fallback: send screenshots as before

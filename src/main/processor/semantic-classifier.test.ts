@@ -343,8 +343,8 @@ describe('SemanticClassifierService', () => {
     // Should have text prompt + video content block (no screenshot blocks)
     expect(sentContent).toHaveLength(2)
     expect(sentContent[0].type).toBe('text')
-    expect(sentContent[1].type).toBe('image_url')
-    expect(sentContent[1].imageUrl.url).toMatch(/^data:video\/mp4;base64,/)
+    expect(sentContent[1].type).toBe('video_url')
+    expect(sentContent[1].videoUrl.url).toMatch(/^data:video\/mp4;base64,/)
     // Prompt should reference video
     expect(sentContent[0].text).toContain('video')
     expect(sentContent[0].text).not.toContain('[S1]')
