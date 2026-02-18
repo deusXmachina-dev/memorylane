@@ -132,6 +132,9 @@ playground/
 .debug-pipeline/
 debug-pipeline/
 
+# Test results (vitest)
+test-results/
+
 # E2E test captures
 test-captures/
 
