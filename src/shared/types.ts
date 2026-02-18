@@ -74,6 +74,7 @@ export interface Activity {
 export interface ActivityClassificationInput {
   activity: Activity
   screenshotPaths: string[] // paths of selected screenshots (up to MAX_SCREENSHOTS_FOR_LLM)
+  videoPath?: string // MP4 segment path (preferred over screenshots when present)
   previousSummaries: ClassificationResult[]
 }
 
