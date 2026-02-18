@@ -74,6 +74,11 @@ export class DebugPipelineWriter {
 
       fs.mkdirSync(subDir, { recursive: true })
 
+      // Copy video file if present
+      if (input.videoPath && fs.existsSync(input.videoPath)) {
+        fs.copyFileSync(input.videoPath, path.join(subDir, 'video.mp4'))
+      }
+
       // Copy screenshot files
       for (let i = 0; i < screenshotPaths.length; i++) {
         const filepath = screenshotPaths[i]

@@ -1,3 +1,4 @@
+import * as fs from 'fs'
 import sharp from 'sharp'
 import { OpenRouter } from '@openrouter/sdk'
 import {
@@ -5,7 +6,7 @@ import {
   CustomEndpointConfig,
   ActivityClassificationInput,
 } from '../../shared/types'
-import { buildChronologicalTimeline } from './activity-timeline'
+import { buildChronologicalTimeline, buildVideoTimeline } from './activity-timeline'
 import { UsageTracker } from '../services/usage-tracker'
 import log from '../logger'
 import { DebugPipelineWriter } from './debug-pipeline'
@@ -14,10 +15,6 @@ import { DebugPipelineWriter } from './debug-pipeline'
 const LLM_IMAGE_MAX_WIDTH = 1920
 
 const SUPPORTED_MODELS = {
-  'mistralai/mistral-small-3.2-24b-instruct': {
-    input_tokens_per_million: 0.08,
-    completion_tokens_per_million: 0.2,
-  },
   'google/gemini-2.5-flash-lite': {
     input_tokens_per_million: 0.1,
     completion_tokens_per_million: 0.4,
@@ -46,7 +43,7 @@ export class SemanticClassifierService {
 
   constructor(
     apiKey?: string,
-    model: ModelChoice = 'mistralai/mistral-small-3.2-24b-instruct',
+    model: ModelChoice = 'google/gemini-2.5-flash-lite',
     maxHistorySize = 5,
     usageTracker?: UsageTracker,
     debugWriter?: DebugPipelineWriter | null,
@@ -122,11 +119,11 @@ export class SemanticClassifierService {
       this.isCustomEndpoint = false
       if (openRouterKey) {
         this.client = new OpenRouter({ apiKey: openRouterKey })
-        this.model = 'mistralai/mistral-small-3.2-24b-instruct'
+        this.model = 'google/gemini-2.5-flash-lite'
         log.info('[SemanticClassifier] Reverted to OpenRouter')
       } else {
         this.client = null
-        this.model = 'mistralai/mistral-small-3.2-24b-instruct'
+        this.model = 'google/gemini-2.5-flash-lite'
         log.info('[SemanticClassifier] Custom endpoint removed, no OpenRouter key available')
       }
     }
@@ -143,32 +140,44 @@ export class SemanticClassifierService {
     }
 
     const { activity, screenshotPaths } = input
+    const hasVideo = !!(input.videoPath && fs.existsSync(input.videoPath))
 
     try {
-      const durationStr = this.formatDuration(
-        (activity.endTimestamp ?? Date.now()) - activity.startTimestamp,
-      )
+      const durationMs = (activity.endTimestamp ?? Date.now()) - activity.startTimestamp
+      const durationStr = this.formatDuration(durationMs)
+      const mediaDesc = hasVideo ? '(video)' : `(${screenshotPaths.length} screenshots)`
       log.info(
-        `[SemanticClassifier] Classifying activity ${activity.id}: ${activity.appName} (${durationStr}, ${screenshotPaths.length} screenshots)`,
+        `[SemanticClassifier] Classifying activity ${activity.id}: ${activity.appName} (${durationStr}, ${mediaDesc})`,
       )
 
-      const prompt = this.formatActivityPrompt(input)
+      const prompt = this.formatActivityPrompt(input, hasVideo)
 
-      // Build content: text prompt + up to MAX_SCREENSHOTS_FOR_LLM images
+      // Build content: text prompt + video or screenshots
       const content: Array<
         | { type: 'text'; text: string }
         | { type: 'image_url'; imageUrl: { url: string; detail: 'high' } }
       > = [{ type: 'text' as const, text: prompt }]
 
-      for (const filepath of screenshotPaths) {
-        try {
-          const imageData = await this.prepareImageForLLM(filepath)
-          content.push({
-            type: 'image_url' as const,
-            imageUrl: { url: `data:image/jpeg;base64,${imageData}`, detail: 'high' },
-          })
-        } catch (error) {
-          log.warn(`[SemanticClassifier] Failed to read screenshot ${filepath}:`, error)
+      if (hasVideo) {
+        // Send video instead of screenshots
+        const videoBuffer = fs.readFileSync(input.videoPath!)
+        const videoBase64 = videoBuffer.toString('base64')
+        content.push({
+          type: 'image_url' as const,
+          imageUrl: { url: `data:video/mp4;base64,${videoBase64}`, detail: 'high' },
+        })
+      } else {
+        // Fallback: send screenshots as before
+        for (const filepath of screenshotPaths) {
+          try {
+            const imageData = await this.prepareImageForLLM(filepath)
+            content.push({
+              type: 'image_url' as const,
+              imageUrl: { url: `data:image/jpeg;base64,${imageData}`, detail: 'high' },
+            })
+          } catch (error) {
+            log.warn(`[SemanticClassifier] Failed to read screenshot ${filepath}:`, error)
+          }
         }
       }
 
@@ -230,31 +239,39 @@ export class SemanticClassifierService {
   /**
    * Format the prompt for activity classification with multiple screenshots.
    */
-  private formatActivityPrompt(input: ActivityClassificationInput): string {
+  private formatActivityPrompt(input: ActivityClassificationInput, hasVideo: boolean): string {
     const { activity, screenshotPaths } = input
     const durationMs = (activity.endTimestamp ?? Date.now()) - activity.startTimestamp
     const durationStr = this.formatDuration(durationMs)
 
-    let prompt =
-      'You are summarizing a user activity session from screenshots and interaction timeline.\n\n'
+    const mediaType = hasVideo ? 'video' : 'screenshots'
+    let prompt = `You are summarizing a user activity session from ${mediaType} and interaction timeline.\n\n`
 
     // Rules first — sets the model's behavior before it sees any data
     prompt += '## Rules\n'
-    prompt +=
-      '- Screenshots are primary source. Timeline is secondary context for ordering/pacing.\n'
+    if (hasVideo) {
+      prompt +=
+        '- The attached video is the primary source. Timeline is secondary context for ordering/pacing.\n'
+    } else {
+      prompt +=
+        '- Screenshots are primary source. Timeline is secondary context for ordering/pacing.\n'
+    }
     prompt += '- Answer "What was I working on?" — useful for recall, not a play-by-play.\n'
     prompt +=
       '- NEVER mention raw interactions (clicks, scrolling, coordinates). Translate into meaningful actions.\n'
-    prompt +=
-      '- Be specific: name files, functions, errors, URLs, UI elements visible in screenshots.\n'
-    prompt +=
-      '- Match verb intensity to evidence: browsing/reviewing (no visible edits) \u2192 "browsed," "reviewed," "checked." Light editing (small visible changes) \u2192 "tweaked," "adjusted." Active work (sustained edits, new code, debugging) \u2192 "implemented," "debugged," "refactored." Evidence of editing = visible changed lines, new code, or diff markers in screenshots.\n'
+    prompt += `- Be specific: name files, functions, errors, URLs, UI elements visible in the ${mediaType}.\n`
+    prompt += `- Match verb intensity to evidence: browsing/reviewing (no visible edits) \u2192 "browsed," "reviewed," "checked." Light editing (small visible changes) \u2192 "tweaked," "adjusted." Active work (sustained edits, new code, debugging) \u2192 "implemented," "debugged," "refactored." Evidence of editing = visible changed lines, new code, or diff markers in the ${mediaType}.\n`
     prompt +=
       '- Do NOT exaggerate. Switching files = browsing, not editing. Opening a file = reviewing, not working on it.\n'
     prompt +=
       "- If previous context is provided, only describe what's NEW. If nothing meaningfully new, say so briefly.\n"
-    prompt +=
-      '- Describe what changed between screenshots: new code, different tabs, updated content, navigation.\n'
+    if (hasVideo) {
+      prompt +=
+        '- Describe what changed during the video: new code, different tabs, updated content, navigation.\n'
+    } else {
+      prompt +=
+        '- Describe what changed between screenshots: new code, different tabs, updated content, navigation.\n'
+    }
     prompt +=
       '- Click coordinates: use them to identify WHAT was clicked by looking at that position in the screenshot. NEVER output raw coordinates.\n'
     prompt +=
@@ -271,10 +288,18 @@ export class SemanticClassifierService {
     prompt += '\n'
 
     // Timeline
-    const timeline = buildChronologicalTimeline(activity, screenshotPaths)
-    if (timeline) {
-      prompt += `## Activity timeline (screenshots labeled [S1]\u2013[S${screenshotPaths.length}], attached as images below)\n`
-      prompt += timeline + '\n\n'
+    if (hasVideo) {
+      const timeline = buildVideoTimeline(activity)
+      if (timeline) {
+        prompt += '## Activity timeline (video attached below)\n'
+        prompt += timeline + '\n\n'
+      }
+    } else {
+      const timeline = buildChronologicalTimeline(activity, screenshotPaths)
+      if (timeline) {
+        prompt += `## Activity timeline (screenshots labeled [S1]\u2013[S${screenshotPaths.length}], attached as images below)\n`
+        prompt += timeline + '\n\n'
+      }
     }
 
     // Previous context
