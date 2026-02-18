@@ -67,7 +67,6 @@ class DisplayRecorder: NSObject, SCStreamOutput {
     private var firstPTS: CMTime?
     private var segmentStartTimestamp: Int64 = 0
     private var started = false
-    private var pendingSplit: (writer: AVAssetWriter, input: AVAssetWriterInput, path: String)?
 
     init(displayID: UInt32, config: Config) {
         self.displayID = displayID
@@ -136,25 +135,36 @@ class DisplayRecorder: NSObject, SCStreamOutput {
                 let oldPath = outputPath
                 let segStart = segmentStartTimestamp
 
-                // Atomic swap on the serial queue
+                // Atomic swap on the serial queue — new frames go to the new writer
                 assetWriter = newWriter
                 videoInput = newInput
                 outputPath = newOutputPath
                 firstPTS = nil
                 segmentStartTimestamp = nowMs()
 
-                // Finalize old writer in background
-                Task {
-                    oldInput?.markAsFinished()
-                    await oldWriter?.finishWriting()
+                // markAsFinished on the same queue where append() was called
+                oldInput?.markAsFinished()
+
+                // Finalize asynchronously — moov atom is written here
+                guard let writer = oldWriter else { return }
+                writer.finishWriting { [displayID] in
                     let endTs = nowMs()
-                    emit([
-                        "status": "segment_complete",
-                        "displayId": Int(displayID),
-                        "filepath": oldPath,
-                        "startTimestamp": segStart,
-                        "endTimestamp": endTs,
-                    ])
+                    if writer.status == .completed {
+                        emit([
+                            "status": "segment_complete",
+                            "displayId": Int(displayID),
+                            "filepath": oldPath,
+                            "startTimestamp": segStart,
+                            "endTimestamp": endTs,
+                        ])
+                    } else {
+                        emit([
+                            "status": "error",
+                            "message": "Segment finalization failed (\(writer.status.rawValue)): \(writer.error?.localizedDescription ?? "unknown")",
+                            "displayId": Int(displayID),
+                            "timestamp": nowMs(),
+                        ])
+                    }
                 }
             } catch {
                 emit(["status": "error", "message": "Failed to create new writer for split: \(error.localizedDescription)", "timestamp": nowMs()])
@@ -169,26 +179,42 @@ class DisplayRecorder: NSObject, SCStreamOutput {
             try? await stream.stopCapture()
         }
 
-        // Finalize the current segment
-        let oldInput = videoInput
-        let oldWriter = assetWriter
-        let oldPath = outputPath
-        let segStart = segmentStartTimestamp
+        // Finalize on displayQueue to serialize with any pending frame callbacks
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            displayQueue.async { [self] in
+                let oldInput = videoInput
+                let oldWriter = assetWriter
+                let oldPath = outputPath
+                let segStart = segmentStartTimestamp
 
-        videoInput = nil
-        assetWriter = nil
+                videoInput = nil
+                assetWriter = nil
 
-        oldInput?.markAsFinished()
-        await oldWriter?.finishWriting()
-
-        if oldWriter?.status == .completed {
-            emit([
-                "status": "segment_complete",
-                "displayId": Int(displayID),
-                "filepath": oldPath,
-                "startTimestamp": segStart,
-                "endTimestamp": nowMs(),
-            ])
+                oldInput?.markAsFinished()
+                guard let writer = oldWriter else {
+                    continuation.resume()
+                    return
+                }
+                writer.finishWriting { [displayID] in
+                    if writer.status == .completed {
+                        emit([
+                            "status": "segment_complete",
+                            "displayId": Int(displayID),
+                            "filepath": oldPath,
+                            "startTimestamp": segStart,
+                            "endTimestamp": nowMs(),
+                        ])
+                    } else {
+                        emit([
+                            "status": "error",
+                            "message": "Final segment failed (\(writer.status.rawValue)): \(writer.error?.localizedDescription ?? "unknown")",
+                            "displayId": Int(displayID),
+                            "timestamp": nowMs(),
+                        ])
+                    }
+                    continuation.resume()
+                }
+            }
         }
     }
 

@@ -162,13 +162,15 @@ export class SemanticClassifierService {
       if (hasVideo) {
         // Send video instead of screenshots
         const videoBuffer = fs.readFileSync(input.videoPath!)
+        log.info(
+          `[SemanticClassifier] Video file: ${(videoBuffer.length / 1024).toFixed(0)}KB raw, ${((videoBuffer.length * 4) / 3 / 1024).toFixed(0)}KB base64`,
+        )
         const videoBase64 = videoBuffer.toString('base64')
         content.push({
           type: 'video_url' as const,
           videoUrl: { url: `data:video/mp4;base64,${videoBase64}` },
         })
       } else {
-        // Fallback: send screenshots as before
         for (const filepath of screenshotPaths) {
           try {
             const imageData = await this.prepareImageForLLM(filepath)
@@ -185,6 +187,7 @@ export class SemanticClassifierService {
       const response = await this.client.chat.send({
         model: this.model,
         messages: [{ role: 'user', content }],
+        // Force Vertex AI for video — Google AI Studio rejects base64 video
         ...(hasVideo &&
           !this.isCustomEndpoint && {
             provider: { order: ['Google'], allowFallbacks: false },
@@ -236,12 +239,22 @@ export class SemanticClassifierService {
 
       return summary
     } catch (error) {
-      const apiMessage =
-        error instanceof Error && 'error' in error
-          ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (error as Record<string, { message?: string }>).error?.message || error.message
-          : String(error)
-      log.error(`[SemanticClassifier] Activity classification failed: ${apiMessage}`)
+      if (error instanceof Error && 'error' in error) {
+        const err = error as Record<string, unknown>
+        const nested = err.error as Record<string, unknown> | undefined
+        log.error(
+          `[SemanticClassifier] Activity classification failed:`,
+          `message=${nested?.message}`,
+          `code=${nested?.code}`,
+          `type=${nested?.type}`,
+          `statusCode=${err.statusCode}`,
+        )
+        if (err.body) {
+          log.error(`[SemanticClassifier] Response body: ${err.body}`)
+        }
+      } else {
+        log.error(`[SemanticClassifier] Activity classification failed: ${error}`)
+      }
       throw error
     }
   }

@@ -92,6 +92,7 @@ async function main(): Promise<void> {
   console.log(
     `[Test] ✓ Segment complete: ${path.basename(segmentPath)} (${segmentSize} bytes, ${((endTs - startTs) / 1000).toFixed(1)}s)`,
   )
+  assertValidMp4(segmentPath, 'Split segment')
 
   // Step 4: Record a bit more, then stop
   console.log('\n[Test] Step 4: Recording 2 more seconds, then stopping...')
@@ -112,6 +113,7 @@ async function main(): Promise<void> {
   console.log(
     `[Test] ✓ Final segment: ${path.basename(finalPath)} (${fs.statSync(finalPath).size} bytes)`,
   )
+  assertValidMp4(finalPath, 'Final segment')
 
   const stoppedEvent = await waitForEvent(events, 'stopped', 5_000)
   assert(stoppedEvent !== null, 'Should receive "stopped" status')
@@ -147,6 +149,49 @@ async function main(): Promise<void> {
 }
 
 // --- Helpers ---
+
+/**
+ * Parse MP4 top-level atoms and return their types.
+ * MP4 atoms: 4-byte big-endian size + 4-byte ASCII type.
+ * Handles extended 64-bit sizes (size field == 1) and size == 0 (extends to EOF).
+ * A valid MP4 must contain at least: ftyp, moov, mdat.
+ */
+function parseMp4Atoms(filepath: string): string[] {
+  const buf = fs.readFileSync(filepath)
+  const atoms: string[] = []
+  let offset = 0
+  while (offset + 8 <= buf.length) {
+    let size = buf.readUInt32BE(offset)
+    const type = buf.toString('ascii', offset + 4, offset + 8)
+    atoms.push(type)
+
+    if (size === 0) {
+      // Atom extends to end of file — no more atoms after this
+      break
+    } else if (size === 1) {
+      // Extended 64-bit size in bytes 8-15
+      if (offset + 16 > buf.length) break
+      const hi = buf.readUInt32BE(offset + 8)
+      const lo = buf.readUInt32BE(offset + 12)
+      size = hi * 0x100000000 + lo
+    }
+
+    if (size < 8) break // corrupted
+    offset += size
+  }
+  return atoms
+}
+
+function assertValidMp4(filepath: string, label: string): void {
+  const atoms = parseMp4Atoms(filepath)
+  console.log(`[Test] ${label} atoms: ${atoms.join(', ')}`)
+  assert(atoms.includes('ftyp'), `${label}: missing ftyp atom (not a valid MP4)`)
+  assert(
+    atoms.includes('moov'),
+    `${label}: missing moov atom (file not finalized — AVAssetWriter.finishWriting() failed)`,
+  )
+  assert(atoms.includes('mdat'), `${label}: missing mdat atom (no media data)`)
+}
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
