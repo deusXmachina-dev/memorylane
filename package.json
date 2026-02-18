@@ -30,8 +30,7 @@
     "mcp:dev": "node ./scripts/enode.js ./node_modules/.bin/tsx scripts/mcp-dev.ts on",
     "mcp:dev:off": "node ./scripts/enode.js ./node_modules/.bin/tsx scripts/mcp-dev.ts off",
     "mcp:dev:status": "node ./scripts/enode.js ./node_modules/.bin/tsx scripts/mcp-dev.ts status",
-    "install:local": "node ./scripts/install-local.js",
-    "test:e2e:video": "node ./scripts/enode.js ./node_modules/.bin/tsx agent-e2e/video-segment-integration.ts"
+    "install:local": "node ./scripts/install-local.js"
   },
   "keywords": [],
   "author": {
