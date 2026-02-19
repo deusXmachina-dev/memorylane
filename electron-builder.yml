@@ -25,6 +25,7 @@ extraResources:
     filter:
       - ocr
       - app-watcher
+      - screenshot
   - from: src/main/processor/powershell
     to: powershell
     filter:
