@@ -1,9 +1,10 @@
-import { app, desktopCapturer } from 'electron'
+import { app } from 'electron'
 // eslint-disable-next-line import/no-unresolved
 import { v4 as uuidv4 } from 'uuid'
 import * as fs from 'fs'
 import * as path from 'path'
 import { ActivityScreenshot } from '../../shared/types'
+import { createCaptureBackend, CaptureBackend } from './capture-backend'
 import * as visualDetector from './visual-detector'
 import * as interactionMonitor from './interaction-monitor'
 import log from '../logger'
@@ -13,6 +14,7 @@ const SCREENSHOTS_DIR = path.join(app.getPath('userData'), 'screenshots')
 
 // State
 let isCapturing = false
+let backend: CaptureBackend | null = null
 
 // Ensure screenshots directory exists
 function ensureScreenshotsDir(): void {
@@ -21,79 +23,11 @@ function ensureScreenshotsDir(): void {
   }
 }
 
-const FULL_RES_SIZE = { width: 1920, height: 1080 }
-const SAMPLE_SIZE = { width: 320, height: 180 }
-
-function parseDisplayId(sourceId: string): number {
-  return parseInt(sourceId.split(':')[1] || '0', 10)
-}
-
-/**
- * Persist a captured source's thumbnail to disk and build the ActivityScreenshot metadata.
- */
-function saveScreenshot(
-  source: Electron.DesktopCapturerSource,
-  trigger: ActivityScreenshot['trigger'],
-): ActivityScreenshot {
-  ensureScreenshotsDir()
-
-  const id = uuidv4()
-  const timestamp = Date.now()
-  const filename = `${timestamp}_${id}.png`
-  const filepath = path.join(SCREENSHOTS_DIR, filename)
-  const size = source.thumbnail.getSize()
-
-  fs.writeFileSync(filepath, source.thumbnail.toPNG())
-
-  return {
-    id,
-    filepath,
-    timestamp,
-    trigger,
-    display: { id: parseDisplayId(source.id), width: size.width, height: size.height },
+function getBackend(): CaptureBackend {
+  if (!backend) {
+    backend = createCaptureBackend()
   }
-}
-
-/**
- * Capture a screen source at the given thumbnail resolution.
- * When displayId is provided, captures the matching display; otherwise falls back to the
- * first available source (primary display).
- */
-async function captureScreen(
-  thumbnailSize: { width: number; height: number },
-  displayId?: number,
-): Promise<Electron.DesktopCapturerSource> {
-  const sources = await desktopCapturer.getSources({
-    types: ['screen'],
-    thumbnailSize,
-  })
-
-  const source =
-    (displayId !== undefined
-      ? sources.find((s) => s.display_id === String(displayId))
-      : undefined) ?? sources[0]
-
-  if (source === undefined) {
-    throw new Error('No screen sources available')
-  }
-
-  log.debug(
-    `[Capture] captureScreen: requested display=${displayId ?? 'any'}, ` +
-      `matched source=${source.id} (display_id=${source.display_id}), ` +
-      `available sources=[${sources.map((s) => s.display_id).join(', ')}]`,
-  )
-
-  return source
-}
-
-/**
- * Capture a low-resolution sample bitmap for visual change detection.
- * Uses a dedicated capture at SAMPLE_SIZE so the bitmap dimensions are consistent
- * (desktopCapturer treats thumbnailSize as a bounding box, not an exact size).
- */
-async function captureSampleBitmap(displayId?: number): Promise<Buffer> {
-  const source = await captureScreen(SAMPLE_SIZE, displayId)
-  return source.thumbnail.toBitmap()
+  return backend
 }
 
 /**
@@ -104,8 +38,23 @@ export async function captureImmediate(
   trigger: ActivityScreenshot['trigger'],
   displayId?: number,
 ): Promise<ActivityScreenshot> {
-  const source = await captureScreen(FULL_RES_SIZE, displayId)
-  const screenshot = saveScreenshot(source, trigger)
+  ensureScreenshotsDir()
+
+  const id = uuidv4()
+  const timestamp = Date.now()
+  const filename = `${timestamp}_${id}.png`
+  const filepath = path.join(SCREENSHOTS_DIR, filename)
+
+  const result = await getBackend().captureScreen(filepath, displayId)
+
+  const screenshot: ActivityScreenshot = {
+    id,
+    filepath,
+    timestamp,
+    trigger,
+    display: { id: result.displayId, width: result.width, height: result.height },
+  }
+
   log.info(
     `[Capture] Screenshot saved: ${path.basename(screenshot.filepath)} (trigger: ${trigger})`,
   )
@@ -121,7 +70,7 @@ export async function captureIfVisualChange(
   trigger: ActivityScreenshot['trigger'],
   displayId?: number,
 ): Promise<ActivityScreenshot | null> {
-  const sampleBitmap = await captureSampleBitmap(displayId)
+  const sampleBitmap = await getBackend().captureSampleBitmap(displayId)
   const result = visualDetector.checkBitmapAgainstBaseline(sampleBitmap)
 
   if (!result.changed) {
@@ -139,32 +88,35 @@ export async function captureIfVisualChange(
 
 /**
  * Capture a specific window by its title.
- * Uses desktopCapturer with types: ['window'] which on macOS uses CGWindowListCopyWindowInfo,
- * allowing capture of background windows regardless of z-order.
- * Returns null if no window with the given title is found.
+ * Uses native window capture on macOS (CGWindowListCreateImage),
+ * desktopCapturer on other platforms. Returns null if window not found.
  */
 export async function captureWindowByTitle(
   title: string,
   trigger: ActivityScreenshot['trigger'],
 ): Promise<ActivityScreenshot | null> {
-  const sources = await desktopCapturer.getSources({
-    types: ['window'],
-    thumbnailSize: FULL_RES_SIZE,
-  })
+  ensureScreenshotsDir()
 
-  log.debug(
-    `[Capture] captureWindowByTitle: looking for "${title}" among ${sources.length} windows: [${sources.map((s) => `"${s.name}"`).join(', ')}]`,
-  )
+  const id = uuidv4()
+  const timestamp = Date.now()
+  const filename = `${timestamp}_${id}.png`
+  const filepath = path.join(SCREENSHOTS_DIR, filename)
 
-  const source = sources.find((s) => s.name === title)
-  if (!source) {
-    log.info(
-      `[Capture] Window not found by title: "${title}" (${sources.length} windows available)`,
-    )
+  const result = await getBackend().captureWindow(title, filepath)
+  if (!result) {
+    // Clean up file if it was partially written
+    fs.promises.unlink(filepath).catch(() => {})
     return null
   }
 
-  const screenshot = saveScreenshot(source, trigger)
+  const screenshot: ActivityScreenshot = {
+    id,
+    filepath,
+    timestamp,
+    trigger,
+    display: { id: result.displayId, width: result.width, height: result.height },
+  }
+
   log.info(
     `[Capture] Window screenshot saved: ${path.basename(screenshot.filepath)} ` +
       `(title: "${title}", trigger: ${trigger})`,
@@ -185,6 +137,9 @@ export function startCapture(): void {
   log.info('[Capture] Starting capture system')
   isCapturing = true
 
+  // Start the capture backend (starts native process on macOS)
+  getBackend().start()
+
   // Start visual detection (enables the module for baseline comparisons)
   visualDetector.startVisualDetection()
 
@@ -192,7 +147,8 @@ export function startCapture(): void {
   interactionMonitor.startInteractionMonitoring()
 
   // Initialize visual detection baseline from a sample capture
-  captureSampleBitmap()
+  getBackend()
+    .captureSampleBitmap()
     .then((sampleBitmap) => {
       visualDetector.updateBaselineFromBitmap(sampleBitmap)
       log.info('[Capture] Visual detection baseline initialized')
@@ -219,6 +175,9 @@ export function stopCapture(): void {
 
   // Stop interaction monitoring
   interactionMonitor.stopInteractionMonitoring()
+
+  // Stop the capture backend (stops native process on macOS)
+  getBackend().stop()
 }
 
 /**
