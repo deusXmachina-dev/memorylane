@@ -56,8 +56,10 @@ export class ActivityProcessor {
             previousSummaries: this.classifierService.getSummaryHistory(),
           })
           log.info(`[ActivityProcessor] Activity classification summary: ${summary}`)
-        } catch (error) {
-          log.error('[ActivityProcessor] Activity classification failed:', error)
+        } catch {
+          log.warn(
+            `[ActivityProcessor] Classification failed for activity ${id} (${activity.appName}), proceeding without summary`,
+          )
           summary = ''
         }
       }

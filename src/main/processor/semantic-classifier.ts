@@ -222,7 +222,8 @@ export class SemanticClassifierService {
 
       return summary
     } catch (error) {
-      log.error('[SemanticClassifier] Error during activity classification:', error)
+      const detail = this.describeError(error)
+      log.error(`[SemanticClassifier] Activity classification failed: ${detail}`)
       throw error
     }
   }
@@ -345,6 +346,34 @@ export class SemanticClassifierService {
       .jpeg({ quality: 85 })
       .toBuffer()
     return buffer.toString('base64')
+  }
+
+  /**
+   * Build a human-readable description of an API error, pulling status codes
+   * and response bodies from OpenRouter SDK errors when available.
+   */
+  private describeError(error: unknown): string {
+    const endpoint = this.isCustomEndpoint ? 'custom endpoint' : 'OpenRouter'
+    const parts = [`model=${this.model}`, `endpoint=${endpoint}`]
+
+    if (error instanceof Error) {
+      parts.push(`message="${error.message}"`)
+
+      // OpenRouterError (parent of ChatError) carries HTTP details
+      const httpErr = error as { statusCode?: number; body?: string }
+      if (typeof httpErr.statusCode === 'number') {
+        parts.push(`status=${httpErr.statusCode}`)
+      }
+      if (typeof httpErr.body === 'string') {
+        const bodyPreview =
+          httpErr.body.length > 500 ? httpErr.body.slice(0, 500) + '…' : httpErr.body
+        parts.push(`body=${bodyPreview}`)
+      }
+    } else {
+      parts.push(`error=${String(error)}`)
+    }
+
+    return parts.join(', ')
   }
 
   /**

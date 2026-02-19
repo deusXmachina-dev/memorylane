@@ -33,6 +33,11 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   onSubscriptionUpdate: (callback: (update: unknown) => void) => {
     ipcRenderer.on('main-window:subscriptionUpdate', (_event, update) => callback(update))
   },
+  // Capture settings
+  getCaptureSettings: () => ipcRenderer.invoke('main-window:getCaptureSettings'),
+  saveCaptureSettings: (settings: Record<string, unknown>) =>
+    ipcRenderer.invoke('main-window:saveCaptureSettings', settings),
+  resetCaptureSettings: () => ipcRenderer.invoke('main-window:resetCaptureSettings'),
   // Stats
   getStats: () => ipcRenderer.invoke('main-window:getStats'),
 })

@@ -18,7 +18,8 @@ import type { CustomEndpointManager } from '../settings/custom-endpoint-manager'
 import type { SemanticClassifierService } from '../processor/semantic-classifier'
 import type { ManagedKeyService } from '../services/managed-key-service'
 import type { ActivityManager } from '../processor/activity-manager'
-import type { CustomEndpointConfig, MainWindowStats } from '../../shared/types'
+import type { CustomEndpointConfig, MainWindowStats, CaptureSettings } from '../../shared/types'
+import type { CaptureSettingsManager } from '../settings/capture-settings-manager'
 
 interface MainWindowDependencies {
   recorder: {
@@ -32,6 +33,7 @@ interface MainWindowDependencies {
   customEndpointManager: CustomEndpointManager
   classifierService: SemanticClassifierService
   managedKeyService: ManagedKeyService
+  captureSettingsManager: CaptureSettingsManager
 }
 
 interface MainWindowStatus {
@@ -71,7 +73,7 @@ export function openMainWindow(): void {
 
   mainWindow = new BrowserWindow({
     width: 600,
-    height: 520,
+    height: 570,
     resizable: false,
     minimizable: true,
     maximizable: false,
@@ -296,4 +298,37 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
 
   // Stats
   ipcMain.handle('main-window:getStats', () => buildStats())
+
+  // Capture settings
+  ipcMain.handle('main-window:getCaptureSettings', () => {
+    if (!deps) return null
+    return deps.captureSettingsManager.get()
+  })
+
+  ipcMain.handle(
+    'main-window:saveCaptureSettings',
+    (_event: IpcMainInvokeEvent, partial: Partial<CaptureSettings>) => {
+      if (!deps) return { success: false, error: 'Dependencies not initialized' }
+      try {
+        deps.captureSettingsManager.save(partial)
+        deps.captureSettingsManager.applyToConstants()
+        return { success: true }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        return { success: false, error: message }
+      }
+    },
+  )
+
+  ipcMain.handle('main-window:resetCaptureSettings', () => {
+    if (!deps) return { success: false, error: 'Dependencies not initialized' }
+    try {
+      deps.captureSettingsManager.reset()
+      deps.captureSettingsManager.applyToConstants()
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      return { success: false, error: message }
+    }
+  })
 }

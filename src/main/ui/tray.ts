@@ -6,9 +6,6 @@ import { app, Tray, Menu, nativeImage } from 'electron'
 import path from 'node:path'
 import log from '../logger'
 import { formatBytes, formatNumber } from '../utils/formatters'
-import { registerWithClaudeDesktop } from '../integrations/claude-desktop'
-import { registerWithCursor } from '../integrations/cursor'
-import { registerWithClaudeCode } from '../integrations/claude-code'
 import type { ActivityProcessor } from '../processor/index'
 import type { ActivityManager } from '../processor/activity-manager'
 import { sendStatusToRenderer, openMainWindow } from './main-window'
@@ -126,25 +123,6 @@ export const updateTrayMenu = async (): Promise<void> => {
       label: 'Open MemoryLane',
       click: () => {
         openMainWindow()
-      },
-    },
-    { type: 'separator' },
-    {
-      label: 'Add to Claude Desktop',
-      click: () => {
-        void registerWithClaudeDesktop()
-      },
-    },
-    {
-      label: 'Add to Cursor',
-      click: () => {
-        void registerWithCursor()
-      },
-    },
-    {
-      label: 'Add to Claude Code',
-      click: () => {
-        void registerWithClaudeCode()
       },
     },
     { type: 'separator' },

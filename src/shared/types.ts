@@ -129,6 +129,16 @@ export interface MainWindowStats {
   apiUsage: { requestCount: number; totalCost: number } | null
 }
 
+export interface CaptureSettings {
+  visualThreshold: number
+  typingDebounceMs: number
+  scrollDebounceMs: number
+  clickDebounceMs: number
+  minActivityDurationMs: number
+  maxActivityDurationMs: number
+  maxScreenshotsPerActivity: number
+}
+
 export type UpdateState = 'idle' | 'downloading' | 'ready'
 
 export interface MainWindowAPI {
@@ -151,6 +161,10 @@ export interface MainWindowAPI {
   openSubscriptionPortal: () => Promise<void>
   getSubscriptionStatus: () => Promise<SubscriptionStatus>
   onSubscriptionUpdate: (callback: (update: SubscriptionUpdate) => void) => void
+  // Capture settings
+  getCaptureSettings: () => Promise<CaptureSettings>
+  saveCaptureSettings: (settings: Partial<CaptureSettings>) => Promise<SaveResult>
+  resetCaptureSettings: () => Promise<SaveResult>
   // Stats
   getStats: () => Promise<MainWindowStats>
   // Updater

@@ -22,6 +22,7 @@ import { ActivityManager } from './processor/activity-manager'
 import { ProcessingQueue } from './processor/processing-queue'
 import { startPowerMonitoring, shouldPause } from './power-monitor'
 import { SCREENSHOT_CLEANUP_CONFIG } from '../shared/constants'
+import { CaptureSettingsManager } from './settings/capture-settings-manager'
 import { config as loadEnv } from 'dotenv'
 
 try {
@@ -106,6 +107,9 @@ app.on('ready', async () => {
     return
   }
 
+  const captureSettingsManager = new CaptureSettingsManager()
+  captureSettingsManager.applyToConstants()
+
   await initServices()
 
   // Set up ActivityManager with recorder as capture provider
@@ -137,6 +141,7 @@ app.on('ready', async () => {
     customEndpointManager: customEndpointManager!,
     classifierService: classifierService!,
     managedKeyService: managedKeyService!,
+    captureSettingsManager,
   })
 
   const keySource = apiKeyManager!.getKeySource()

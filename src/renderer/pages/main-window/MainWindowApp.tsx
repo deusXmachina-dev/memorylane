@@ -4,14 +4,15 @@ import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { Logo } from './components/Logo'
 import { ApiKeySetupSection } from './components/ApiKeySetupSection'
 import { CaptureControlSection } from './components/CaptureControlSection'
-import { CustomEndpointSection } from './components/CustomEndpointSection'
 import { StatsDisplay } from './components/StatsDisplay'
 import { IntegrationsSection } from './components/IntegrationsSection'
-import { ManageKeySection } from './components/ManageKeySection'
+import { Button } from '@components/ui/button'
+import { CaptureSettingsPage } from './CaptureSettingsPage'
 import type { CustomEndpointStatus, KeyStatus, MainWindowStats } from '@types'
 
 export function MainWindowApp(): React.JSX.Element {
   const api = useMainWindowAPI()
+  const [page, setPage] = useState<'home' | 'settings'>('home')
   const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null)
   const [endpointStatus, setEndpointStatus] = useState<CustomEndpointStatus | null>(null)
   const [capturing, setCapturing] = useState(false)
@@ -81,6 +82,20 @@ export function MainWindowApp(): React.JSX.Element {
   const hasCustomEndpoint = endpointStatus?.enabled ?? false
   const isConfigured = hasKey || hasCustomEndpoint
 
+  if (page === 'settings') {
+    return (
+      <div className="min-h-screen antialiased select-none">
+        <CaptureSettingsPage
+          onBack={() => {
+            setPage('home')
+            void loadAll()
+          }}
+        />
+        <Toaster />
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen antialiased select-none">
       <div className="p-6 max-w-xl mx-auto space-y-4">
@@ -103,25 +118,14 @@ export function MainWindowApp(): React.JSX.Element {
             />
 
             <IntegrationsSection api={api} />
-
-            {keyStatus && !hasCustomEndpoint && (
-              <ManageKeySection
-                api={api}
-                keyStatus={keyStatus}
-                onKeyDeleted={loadKeyStatus}
-                onKeyUpdated={loadKeyStatus}
-              />
-            )}
           </>
         )}
 
-        {endpointStatus && (
-          <CustomEndpointSection
-            api={api}
-            endpointStatus={endpointStatus}
-            onEndpointChanged={loadAll}
-          />
-        )}
+        <div className="pt-1 flex justify-end">
+          <Button variant="ghost" size="sm" onClick={() => setPage('settings')}>
+            Advanced Settings
+          </Button>
+        </div>
       </div>
       <Toaster />
     </div>

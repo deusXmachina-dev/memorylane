@@ -187,7 +187,7 @@ export function CustomEndpointSection({
             )}
           </div>
           <p className="text-xs text-muted-foreground">
-            Connect to any OpenAI-compatible API (Ollama, llama.cpp, vLLM, LocalAI, etc.)
+            Connect to any OpenAI-compatible API (Ollama, vLLM, LocalAI, etc.)
           </p>
         </div>
       )}
