@@ -19,4 +19,12 @@ swiftc -O \
   "$ROOT_DIR/src/main/recorder/swift/app-watcher.swift" \
   -o "$OUT_DIR/app-watcher"
 
+echo "Compiling screenshot.swift → build/swift/screenshot"
+swiftc -O \
+  -target arm64-apple-macos13.0 \
+  -framework CoreGraphics \
+  -framework ImageIO \
+  "$ROOT_DIR/src/main/recorder/swift/screenshot.swift" \
+  -o "$OUT_DIR/screenshot"
+
 echo "Swift binaries built successfully"
