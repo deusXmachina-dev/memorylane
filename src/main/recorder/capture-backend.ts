@@ -1,3 +1,6 @@
+import { NativeCaptureBackend } from './capture-native'
+import { ElectronCaptureBackend } from './capture-electron'
+
 export interface CaptureResult {
   width: number
   height: number
@@ -14,11 +17,7 @@ export interface CaptureBackend {
 
 export function createCaptureBackend(): CaptureBackend {
   if (process.platform === 'darwin') {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { NativeCaptureBackend } = require('./capture-native')
     return new NativeCaptureBackend()
   }
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { ElectronCaptureBackend } = require('./capture-electron')
   return new ElectronCaptureBackend()
 }
