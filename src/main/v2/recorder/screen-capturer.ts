@@ -24,7 +24,7 @@ export interface Frame {
 export class ScreenCapturer {
   private readonly intervalMs: number
   private readonly outputDir: string
-  private readonly displayId: number | undefined
+  private displayId: number | undefined
   private readonly maxDimensionPx: number | undefined
   private readonly stream: DurableStream<Frame>
   private _capturing = false
@@ -42,6 +42,10 @@ export class ScreenCapturer {
 
   get capturing(): boolean {
     return this._capturing
+  }
+
+  setDisplayId(displayId: number | undefined): void {
+    this.displayId = displayId
   }
 
   start(): void {

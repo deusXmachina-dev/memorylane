@@ -371,6 +371,67 @@ describe('ActivityProducer', () => {
     expect(activities[1].provenance.sourceWindowIds).toEqual(['chrome-docs'])
   })
 
+  it('splits activities when display changes even with same app and tld', async () => {
+    const { producer, frameStream, eventStream, activityStream } = createProducer()
+    const activities: V2Activity[] = []
+    subscriptions.push(
+      activityStream.subscribe({
+        startAt: { type: 'now' },
+        onRecord: (record) => activities.push(record.payload),
+      }),
+    )
+
+    await producer.start()
+    await frameStream.append(makeFrame(20_000, 0))
+    await frameStream.append(makeFrame(21_000, 1))
+    await frameStream.append(makeFrame(22_000, 2))
+
+    await eventStream.append(
+      makeWindow({
+        id: 'chrome-display-1',
+        startTimestamp: 19_900,
+        endTimestamp: 20_500,
+        events: [
+          makeEvent(19_900, 'app_change', {
+            displayId: 1,
+            activeWindow: {
+              title: 'GitHub',
+              processName: 'Google Chrome',
+              bundleId: 'com.google.Chrome',
+              url: 'https://github.com/deusXmachina-dev',
+            },
+          }),
+        ],
+      }),
+    )
+
+    await eventStream.append(
+      makeWindow({
+        id: 'chrome-display-2',
+        startTimestamp: 20_600,
+        endTimestamp: 22_100,
+        closedBy: 'flush',
+        events: [
+          makeEvent(20_600, 'app_change', {
+            displayId: 2,
+            activeWindow: {
+              title: 'GitHub',
+              processName: 'Google Chrome',
+              bundleId: 'com.google.Chrome',
+              url: 'https://github.com/deusXmachina-dev/memorylane',
+            },
+          }),
+        ],
+      }),
+    )
+
+    await waitFor(() => activities.length === 2, 'Expected two activities split by display')
+    expect(activities[0].context.displayId).toBe(1)
+    expect(activities[1].context.displayId).toBe(2)
+    expect(activities[0].provenance.sourceWindowIds).toEqual(['chrome-display-1'])
+    expect(activities[1].provenance.sourceWindowIds).toEqual(['chrome-display-2'])
+  })
+
   it('falls back to unknown context for first window and still drops no-frame windows', async () => {
     const { producer, frameStream, eventStream, activityStream } = createProducer()
     const activities: V2Activity[] = []

@@ -400,6 +400,14 @@ export class ActivityProducer {
   }
 
   private canMergeContexts(left: V2ActivityContext, right: V2ActivityContext): boolean {
+    if (
+      left.displayId !== undefined &&
+      right.displayId !== undefined &&
+      left.displayId !== right.displayId
+    ) {
+      return false
+    }
+
     const sameApp =
       left.bundleId && right.bundleId
         ? left.bundleId === right.bundleId

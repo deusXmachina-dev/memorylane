@@ -110,6 +110,9 @@ export function createV2PipelineHarness(params: {
       eventCapturer.destroy()
     },
     handleEvent(event: InteractionContext) {
+      if (event.type === 'app_change' && event.displayId !== undefined) {
+        screenCapturer.setDisplayId(event.displayId)
+      }
       eventCapturer.handleEvent(event)
     },
   }

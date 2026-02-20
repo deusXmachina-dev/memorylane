@@ -9,6 +9,13 @@ export interface AppWatcherEvent {
   pid?: number
   title?: string
   url?: string
+  displayId?: number
+  windowBounds?: {
+    x: number
+    y: number
+    width: number
+    height: number
+  }
   error?: string
 }
 

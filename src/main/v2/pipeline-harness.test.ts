@@ -14,15 +14,19 @@ vi.mock('../logger', () => ({
   },
 }))
 
-let screenshotCount = 0
+const { mockedCaptureDesktop } = vi.hoisted(() => ({
+  mockedCaptureDesktop: vi.fn(
+    async ({ outputPath, displayId }: { outputPath: string; displayId?: number }) => ({
+      filepath: outputPath,
+      width: 1280,
+      height: 720,
+      displayId: displayId ?? 1,
+    }),
+  ),
+}))
+
 vi.mock('./recorder/native-screenshot', () => ({
-  captureDesktop: vi.fn(async ({ outputPath }: { outputPath: string }) => ({
-    filepath: outputPath,
-    width: 1280,
-    height: 720,
-    displayId: 1,
-    token: screenshotCount++,
-  })),
+  captureDesktop: mockedCaptureDesktop,
 }))
 
 function sleep(ms: number): Promise<void> {
@@ -46,7 +50,7 @@ describe('v2 pipeline harness', () => {
   const subscriptions: StreamSubscription[] = []
 
   afterEach(() => {
-    screenshotCount = 0
+    mockedCaptureDesktop.mockClear()
     for (const sub of subscriptions.splice(0)) {
       sub.unsubscribe()
     }
@@ -100,6 +104,44 @@ describe('v2 pipeline harness', () => {
     expect(activities[0].frames.length).toBeGreaterThan(0)
     expect(activities[0].context.appName).toBe('Code')
     expect(harness.activityProducer.getStats().emittedActivities).toBeGreaterThanOrEqual(1)
+
+    await harness.stop()
+  })
+
+  it('retargets captures when app_change reports a different display', async () => {
+    const harness = createV2PipelineHarness({
+      outputDir: path.join(process.cwd(), '.tmp-v2-harness-display-retarget'),
+      frameIntervalMs: 20,
+      activityProducerConfig: {
+        frameJoinGraceMs: 0,
+        maxFrameWaitMs: 0,
+        minActivityDurationMs: 0,
+        eventConsumerId: 'harness:event:display-retarget',
+        frameConsumerId: 'harness:frame:display-retarget',
+      },
+    })
+
+    await harness.start()
+    await sleep(40)
+
+    harness.handleEvent({
+      type: 'app_change',
+      timestamp: Date.now(),
+      displayId: 2,
+      activeWindow: {
+        title: 'Display 2 Window',
+        processName: 'Code',
+        bundleId: 'com.microsoft.VSCode',
+      },
+    })
+
+    await waitFor(
+      () =>
+        mockedCaptureDesktop.mock.calls.some(
+          (call) => (call[0] as { displayId?: number } | undefined)?.displayId === 2,
+        ),
+      'Expected captureDesktop to receive displayId=2 after app_change',
+    )
 
     await harness.stop()
   })

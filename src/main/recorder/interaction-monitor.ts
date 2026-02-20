@@ -28,6 +28,7 @@ let lastClickDisplayId: number | undefined
 
 // App change state
 let previousWindow: NonNullable<InteractionContext['activeWindow']> | null = null
+let previousWindowDisplayId: number | null = null
 
 // Display resolution state (used by keyboard/scroll handlers)
 let cachedDisplayId: number | null = null
@@ -259,20 +260,27 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
   // Cache window title for keyboard context enrichment
   cachedWindowTitle = current.title
 
+  const resolvedDisplayId = (() => {
+    if (event.displayId !== undefined) {
+      return event.displayId
+    }
+    // Fallback to cursor-based approximation if watcher display metadata is unavailable.
+    const cursorPoint = screen.getCursorScreenPoint()
+    return getDisplayIdForPoint(cursorPoint.x, cursorPoint.y)
+  })()
+
   // Skip if nothing actually changed
   if (
     previousWindow &&
     previousWindow.title === current.title &&
-    previousWindow.processName === current.processName
+    previousWindow.processName === current.processName &&
+    previousWindowDisplayId === resolvedDisplayId
   ) {
     log.debug(`[Interaction Monitor] Skipping duplicate: ${current.processName} "${current.title}"`)
     return
   }
 
-  // Update display cache from the mouse cursor position (best approximation
-  // without window bounds, which the watcher doesn't provide)
-  const cursorPoint = screen.getCursorScreenPoint()
-  cachedDisplayId = getDisplayIdForPoint(cursorPoint.x, cursorPoint.y)
+  cachedDisplayId = resolvedDisplayId
 
   log.info(
     `[Interaction Monitor] App changed from ${previousWindow?.processName ?? '(none)'} to ${current.processName}`,
@@ -281,12 +289,13 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
   const context: InteractionContext = {
     type: 'app_change',
     timestamp: event.timestamp,
-    displayId: cachedDisplayId,
+    displayId: resolvedDisplayId,
     activeWindow: current,
     previousWindow: previousWindow ?? undefined,
   }
 
   previousWindow = current
+  previousWindowDisplayId = resolvedDisplayId
 
   // Notify all callbacks
   log.debug(
@@ -372,6 +381,7 @@ export function stopInteractionMonitoring(): void {
     lastClickPosition = null
     lastClickDisplayId = undefined
     previousWindow = null
+    previousWindowDisplayId = null
     cachedDisplayId = null
     cachedWindowTitle = null
 

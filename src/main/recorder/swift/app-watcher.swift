@@ -38,6 +38,72 @@ func windowTitle(forPid pid: pid_t) -> String? {
     return titleValue as? String
 }
 
+func focusedWindowFrame(forPid pid: pid_t) -> CGRect? {
+    guard let win = focusedWindow(forPid: pid) else { return nil }
+
+    var positionValue: AnyObject?
+    var sizeValue: AnyObject?
+    guard AXUIElementCopyAttributeValue(win, kAXPositionAttribute as CFString, &positionValue) == .success,
+          AXUIElementCopyAttributeValue(win, kAXSizeAttribute as CFString, &sizeValue) == .success,
+          let positionObject = positionValue,
+          let sizeObject = sizeValue,
+          CFGetTypeID(positionObject) == AXValueGetTypeID(),
+          CFGetTypeID(sizeObject) == AXValueGetTypeID() else {
+        return nil
+    }
+
+    let positionAX = positionObject as! AXValue
+    let sizeAX = sizeObject as! AXValue
+    guard AXValueGetType(positionAX) == .cgPoint,
+          AXValueGetType(sizeAX) == .cgSize else {
+        return nil
+    }
+
+    var origin = CGPoint.zero
+    var size = CGSize.zero
+    guard AXValueGetValue(positionAX, .cgPoint, &origin),
+          AXValueGetValue(sizeAX, .cgSize, &size) else {
+        return nil
+    }
+
+    return CGRect(origin: origin, size: size)
+}
+
+func displayIdForWindowFrame(_ frame: CGRect) -> CGDirectDisplayID? {
+    let screens = NSScreen.screens
+    guard !screens.isEmpty else {
+        return nil
+    }
+
+    let center = CGPoint(x: frame.midX, y: frame.midY)
+    if let centerScreen = screens.first(where: { $0.frame.contains(center) }),
+       let screenNumber = centerScreen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
+        return CGDirectDisplayID(screenNumber.uint32Value)
+    }
+
+    var bestScreen: NSScreen?
+    var bestArea: CGFloat = 0
+    for screen in screens {
+        let intersection = frame.intersection(screen.frame)
+        if intersection.isNull {
+            continue
+        }
+
+        let area = intersection.width * intersection.height
+        if area > bestArea {
+            bestArea = area
+            bestScreen = screen
+        }
+    }
+
+    guard let bestScreen,
+          let screenNumber = bestScreen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+        return nil
+    }
+
+    return CGDirectDisplayID(screenNumber.uint32Value)
+}
+
 // MARK: - Browser URL via Accessibility API
 
 let browserBundleIds: Set<String> = [
@@ -125,6 +191,18 @@ func buildEvent(type: String, app: NSRunningApplication, title: String) -> [Stri
 
     if let url = browserURL(pid: pid, bundleId: bundleId) {
         dict["url"] = url
+    }
+
+    if let frame = focusedWindowFrame(forPid: pid) {
+        dict["windowBounds"] = [
+            "x": frame.origin.x,
+            "y": frame.origin.y,
+            "width": frame.size.width,
+            "height": frame.size.height,
+        ]
+        if let displayId = displayIdForWindowFrame(frame) {
+            dict["displayId"] = Int(displayId)
+        }
     }
 
     return dict
