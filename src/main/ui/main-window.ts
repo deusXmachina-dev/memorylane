@@ -22,10 +22,7 @@ import type { UsageTracker } from '../services/usage-tracker'
 
 interface SemanticService {
   updateApiKey(apiKey: string | null): void
-  updateEndpoint(
-    config: { serverURL: string; apiKey?: string } | null,
-    openRouterKey?: string | null,
-  ): void
+  updateEndpoint(config: CustomEndpointConfig | null, openRouterKey?: string | null): void
 }
 
 interface MainWindowDependencies {
@@ -239,10 +236,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       }
       try {
         deps.customEndpointManager.saveEndpoint(config)
-        deps.semanticService.updateEndpoint({
-          serverURL: config.serverURL,
-          apiKey: config.apiKey,
-        })
+        deps.semanticService.updateEndpoint(config)
         return { success: true }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'
