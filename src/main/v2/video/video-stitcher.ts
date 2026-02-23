@@ -15,10 +15,8 @@ const FFMPEG_VIDEO_PRESET = 'veryfast'
 const FFMPEG_VIDEO_CRF = '28'
 const FFMPEG_VIDEOTOOLBOX_ENCODER = 'h264_videotoolbox'
 const FFMPEG_X264_ENCODER = 'libx264'
-// Screen/text content looks poor at very low bitrates with VideoToolbox.
-// 600k keeps quality acceptable while staying well under the semantic 25MB video cap
-// for most activities (including long sessions).
-const FFMPEG_MAC_VIDEOTOOLBOX_TARGET_BITRATE_KBPS = 400
+// Chosen from local benchmarks as a good CPU/size tradeoff on macOS.
+const FFMPEG_MAC_VIDEOTOOLBOX_TARGET_BITRATE_KBPS = 200
 
 interface EncoderAttempt {
   label: string
