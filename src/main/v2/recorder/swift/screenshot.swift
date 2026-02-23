@@ -1,6 +1,7 @@
 import Cocoa
 import CoreGraphics
 import ImageIO
+import ScreenCaptureKit
 import UniformTypeIdentifiers
 
 setbuf(stdout, nil)
@@ -112,32 +113,52 @@ func resizeIfNeeded(_ image: CGImage, maxDimension: Int?) throws -> CGImage {
     return resized
 }
 
-func resolveDisplayId(_ requestedDisplayId: UInt32?) throws -> CGDirectDisplayID {
+func resolveDisplay(_ displays: [SCDisplay], requestedDisplayId: UInt32?) throws -> SCDisplay {
+    guard !displays.isEmpty else {
+        throw ScreenshotError.captureFailed("No shareable displays available")
+    }
+
     if let requestedDisplayId {
-        var displayCount: UInt32 = 0
-        CGGetOnlineDisplayList(0, nil, &displayCount)
-        var displayIds = Array(repeating: CGDirectDisplayID(), count: Int(displayCount))
-        CGGetOnlineDisplayList(displayCount, &displayIds, &displayCount)
-
-        if displayIds.contains(requestedDisplayId) {
-            return requestedDisplayId
+        if let display = displays.first(where: { $0.displayID == requestedDisplayId }) {
+            return display
         }
-
         throw ScreenshotError.displayNotFound(requestedDisplayId)
     }
 
-    return CGMainDisplayID()
+    let mainDisplayId = CGMainDisplayID()
+    if let mainDisplay = displays.first(where: { $0.displayID == mainDisplayId }) {
+        return mainDisplay
+    }
+
+    return displays[0]
+}
+
+@available(macOS 14.0, *)
+func captureDisplayImage(_ display: SCDisplay) async throws -> CGImage {
+    let filter = SCContentFilter(display: display, excludingWindows: [])
+    let configuration = SCStreamConfiguration()
+    configuration.width = display.width
+    configuration.height = display.height
+    configuration.showsCursor = false
+    return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
 }
 
 func captureScreen(
     outputPath: String,
     requestedDisplayId: UInt32?,
     maxDimension: Int?
-) throws -> [String: Any] {
-    let displayId = try resolveDisplayId(requestedDisplayId)
+) async throws -> [String: Any] {
+    let shareableContent = try await SCShareableContent.excludingDesktopWindows(
+        false,
+        onScreenWindowsOnly: true
+    )
+    let display = try resolveDisplay(shareableContent.displays, requestedDisplayId: requestedDisplayId)
 
-    guard let originalImage = CGDisplayCreateImage(displayId) else {
-        throw ScreenshotError.captureFailed("Could not capture display \(displayId)")
+    let originalImage: CGImage
+    if #available(macOS 14.0, *) {
+        originalImage = try await captureDisplayImage(display)
+    } else {
+        throw ScreenshotError.captureFailed("ScreenCaptureKit screenshots require macOS 14 or newer")
     }
 
     let image = try resizeIfNeeded(originalImage, maxDimension: maxDimension)
@@ -149,8 +170,25 @@ func captureScreen(
         "filepath": outputPath,
         "width": image.width,
         "height": image.height,
-        "displayId": Int(displayId),
+        "displayId": Int(display.displayID),
     ]
+}
+
+func runAsync<T>(_ operation: @escaping () async throws -> T) throws -> T {
+    let semaphore = DispatchSemaphore(value: 0)
+    var result: Result<T, Error>?
+
+    Task {
+        do {
+            result = .success(try await operation())
+        } catch {
+            result = .failure(error)
+        }
+        semaphore.signal()
+    }
+
+    semaphore.wait()
+    return try result!.get()
 }
 
 let usage = """
@@ -191,11 +229,13 @@ do {
     }
 
     emitJSON(
-        try captureScreen(
+        try runAsync {
+            try await captureScreen(
             outputPath: outputPath,
             requestedDisplayId: requestedDisplayId,
             maxDimension: maxDimension
         )
+        }
     )
 } catch ScreenshotError.invalidArguments(let message) {
     fail(message, exitCode: 2)

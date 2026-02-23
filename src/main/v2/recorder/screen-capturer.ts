@@ -4,6 +4,8 @@ import { SCREEN_CAPTURER_CONFIG } from '@constants'
 import { captureDesktop } from './native-screenshot'
 import type { DurableStream } from '../streams/stream'
 
+const MAX_TRANSIENT_CAPTURE_FAILURES = 20
+
 export interface ScreenCapturerConfig {
   intervalMs?: number
   outputDir: string
@@ -87,11 +89,7 @@ export class ScreenCapturer {
     const outputPath = path.join(this.outputDir, `frame-${seq}.png`)
     const timestamp = Date.now()
 
-    const result = await captureDesktop({
-      outputPath,
-      displayId: this.displayId,
-      maxDimensionPx: this.maxDimensionPx,
-    })
+    const result = await this.captureDesktopWithTolerance(outputPath)
 
     const frame: Frame = {
       filepath: result.filepath,
@@ -103,6 +101,32 @@ export class ScreenCapturer {
     }
 
     this.enqueueFrame(frame)
+  }
+
+  private async captureDesktopWithTolerance(outputPath: string) {
+    for (
+      let failedAttempts = 0;
+      failedAttempts <= MAX_TRANSIENT_CAPTURE_FAILURES;
+      failedAttempts += 1
+    ) {
+      try {
+        return await captureDesktop({
+          outputPath,
+          displayId: this.displayId,
+          maxDimensionPx: this.maxDimensionPx,
+        })
+      } catch (error) {
+        if (failedAttempts === MAX_TRANSIENT_CAPTURE_FAILURES) {
+          throw error
+        }
+        log.warn(
+          `[ScreenCapturer] Capture failed (ignored ${failedAttempts + 1}/${MAX_TRANSIENT_CAPTURE_FAILURES})`,
+          error,
+        )
+      }
+    }
+
+    throw new Error('Capture retry loop exited unexpectedly')
   }
 
   private enqueueFrame(frame: Frame): void {
