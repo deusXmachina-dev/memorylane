@@ -12,26 +12,34 @@ import { updateTrayMenu } from './tray'
 import { registerWithClaudeDesktop } from '../integrations/claude-desktop'
 import { registerWithCursor } from '../integrations/cursor'
 import { registerWithClaudeCode } from '../integrations/claude-code'
-import type { ActivityProcessor } from '../processor/index'
 import type { ApiKeyManager } from '../settings/api-key-manager'
 import type { CustomEndpointManager } from '../settings/custom-endpoint-manager'
-import type { SemanticClassifierService } from '../processor/semantic-classifier'
 import type { ManagedKeyService } from '../services/managed-key-service'
-import type { ActivityManager } from '../processor/activity-manager'
 import type { CustomEndpointConfig, MainWindowStats, CaptureSettings } from '../../shared/types'
 import type { CaptureSettingsManager } from '../settings/capture-settings-manager'
+import type { StorageService } from '../storage'
+import type { UsageTracker } from '../services/usage-tracker'
+
+interface SemanticService {
+  updateApiKey(apiKey: string | null): void
+  updateEndpoint(
+    config: { serverURL: string; apiKey?: string } | null,
+    openRouterKey?: string | null,
+  ): void
+}
 
 interface MainWindowDependencies {
-  recorder: {
+  capture: {
     isCapturingNow: () => boolean
     startCapture: () => void
     stopCapture: () => void
+    forceClose: () => Promise<void>
   }
-  activityManager: ActivityManager
-  processor: ActivityProcessor
+  storage: StorageService
+  usageTracker: UsageTracker
   apiKeyManager: ApiKeyManager
   customEndpointManager: CustomEndpointManager
-  classifierService: SemanticClassifierService
+  semanticService: SemanticService
   managedKeyService: ManagedKeyService
   captureSettingsManager: CaptureSettingsManager
 }
@@ -45,7 +53,7 @@ let deps: MainWindowDependencies | null = null
 
 function buildStatus(): MainWindowStatus {
   return {
-    capturing: deps?.recorder.isCapturingNow() ?? false,
+    capturing: deps?.capture.isCapturingNow() ?? false,
   }
 }
 
@@ -122,31 +130,24 @@ async function buildStats(): Promise<MainWindowStats> {
     }
   }
 
-  const storage = deps.processor.getStorage()
-  const classifier = deps.processor.getClassifierService()
-
   let activityCount = 0
   let dbSize = 0
   const dateRange: { oldest: number | null; newest: number | null } = { oldest: null, newest: null }
 
   try {
-    activityCount = storage.activities.count()
-    dbSize = storage.getDbSize()
-    const range = storage.activities.getDateRange()
+    activityCount = deps.storage.activities.count()
+    dbSize = deps.storage.getDbSize()
+    const range = deps.storage.activities.getDateRange()
     dateRange.oldest = range.oldest
     dateRange.newest = range.newest
   } catch (error) {
     log.error('[MainWindow] Error fetching storage stats:', error)
   }
 
-  let apiUsage: { requestCount: number; totalCost: number } | null = null
-  if (classifier) {
-    const usageTracker = classifier.getUsageTracker()
-    const stats = usageTracker.getStats()
-    apiUsage = {
-      requestCount: stats.requestCount,
-      totalCost: stats.totalCost,
-    }
+  const stats = deps.usageTracker.getStats()
+  const apiUsage: { requestCount: number; totalCost: number } | null = {
+    requestCount: stats.requestCount,
+    totalCost: stats.totalCost,
   }
 
   return { activityCount, dbSize, dateRange, apiUsage }
@@ -169,11 +170,11 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { capturing: false }
     }
 
-    if (deps.recorder.isCapturingNow()) {
-      void deps.activityManager.forceClose()
-      deps.recorder.stopCapture()
+    if (deps.capture.isCapturingNow()) {
+      void deps.capture.forceClose()
+      deps.capture.stopCapture()
     } else {
-      deps.recorder.startCapture()
+      deps.capture.startCapture()
     }
 
     void updateTrayMenu()
@@ -195,7 +196,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
     try {
       deps.apiKeyManager.saveApiKey(key)
-      deps.classifierService.updateApiKey(key)
+      deps.semanticService.updateApiKey(key)
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -209,7 +210,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
     try {
       deps.apiKeyManager.deleteApiKey()
-      deps.classifierService.updateApiKey(null)
+      deps.semanticService.updateApiKey(null)
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -238,7 +239,10 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       }
       try {
         deps.customEndpointManager.saveEndpoint(config)
-        deps.classifierService.updateEndpoint(config)
+        deps.semanticService.updateEndpoint({
+          serverURL: config.serverURL,
+          apiKey: config.apiKey,
+        })
         return { success: true }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'
@@ -254,7 +258,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     try {
       deps.customEndpointManager.deleteEndpoint()
       const openRouterKey = deps.apiKeyManager.getApiKey()
-      deps.classifierService.updateEndpoint(null, openRouterKey)
+      deps.semanticService.updateEndpoint(null, openRouterKey)
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -266,12 +270,12 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   deps.managedKeyService.setUpdateCallback((status, payload) => {
     if (payload?.key && deps) {
       deps.apiKeyManager.saveApiKey(payload.key, 'managed')
-      deps.classifierService.updateApiKey(payload.key)
+      deps.semanticService.updateApiKey(payload.key)
     }
     if (payload?.invalidate && deps && deps.apiKeyManager.getKeySource() === 'managed') {
       log.info('[MainWindow] Invalidating stale managed key')
       deps.apiKeyManager.deleteApiKey()
-      deps.classifierService.updateApiKey(null)
+      deps.semanticService.updateApiKey(null)
     }
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('main-window:subscriptionUpdate', {
