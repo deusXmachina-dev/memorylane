@@ -25,6 +25,10 @@ interface EncoderAttempt {
   ffmpegArgs: string[]
 }
 
+function isPathInsideAsarArchive(filepath: string): boolean {
+  return /\.asar([/\\])/.test(filepath)
+}
+
 function escapeConcatPath(filepath: string): string {
   return filepath.replace(/'/g, "'\\''")
 }
@@ -89,6 +93,26 @@ function resolveAsarUnpackedPath(filepath: string): string {
   return filepath.replace(/\.asar([/\\])/, '.asar.unpacked$1')
 }
 
+function resolveExecutablePath(filepath: string, source: string): string {
+  const unpackedPath = resolveAsarUnpackedPath(filepath)
+
+  if (unpackedPath !== filepath && fs.existsSync(unpackedPath)) {
+    return unpackedPath
+  }
+
+  if (isPathInsideAsarArchive(filepath)) {
+    throw new Error(
+      `${source} resolved inside app.asar, but unpacked binary was not found: ${unpackedPath}`,
+    )
+  }
+
+  if (!fs.existsSync(filepath)) {
+    throw new Error(`${source} executable not found: ${filepath}`)
+  }
+
+  return filepath
+}
+
 function resolveFfmpegStaticPath(): string {
   let resolvedPath: string | null = null
   try {
@@ -103,23 +127,16 @@ function resolveFfmpegStaticPath(): string {
     throw new Error('ffmpeg-static did not provide a binary for this platform')
   }
 
-  const candidatePaths = [resolvedPath, resolveAsarUnpackedPath(resolvedPath)]
-  for (const candidate of candidatePaths) {
-    if (fs.existsSync(candidate)) {
-      return candidate
-    }
-  }
-
-  throw new Error(`ffmpeg-static executable not found at resolved path: ${resolvedPath}`)
+  return resolveExecutablePath(resolvedPath, 'ffmpeg-static')
 }
 
 function resolveFfmpegExecutable(): string {
   const overridePath = process.env[FFMPEG_EXECUTABLE_ENV]
   if (overridePath && overridePath.length > 0) {
-    if (!fs.existsSync(overridePath)) {
+    if (!fs.existsSync(overridePath) && resolveAsarUnpackedPath(overridePath) === overridePath) {
       throw new Error(`ffmpeg executable override does not exist: ${overridePath}`)
     }
-    return overridePath
+    return resolveExecutablePath(overridePath, 'ffmpeg executable override')
   }
 
   return resolveFfmpegStaticPath()
