@@ -18,7 +18,7 @@ const FFMPEG_X264_ENCODER = 'libx264'
 // Screen/text content looks poor at very low bitrates with VideoToolbox.
 // 600k keeps quality acceptable while staying well under the semantic 25MB video cap
 // for most activities (including long sessions).
-const FFMPEG_MAC_VIDEOTOOLBOX_TARGET_BITRATE_KBPS = 600
+const FFMPEG_MAC_VIDEOTOOLBOX_TARGET_BITRATE_KBPS = 400
 
 interface EncoderAttempt {
   label: string

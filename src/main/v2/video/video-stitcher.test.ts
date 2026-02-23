@@ -99,7 +99,7 @@ describe('FfmpegVideoStitcher', () => {
     if (process.platform === 'darwin') {
       expect(args).toContain('h264_videotoolbox')
       expect(args).toContain('-b:v')
-      expect(args).toContain('600k')
+      expect(args).toContain('400k')
       expect(args).toContain('-maxrate')
       expect(args).toContain('-bufsize')
       expect(args).not.toContain('-crf')
@@ -393,7 +393,7 @@ describe('FfmpegVideoStitcher', () => {
     expect(args).toContain('-c:v')
     expect(args).toContain('h264_videotoolbox')
     expect(args).toContain('-b:v')
-    expect(args).toContain('600k')
+    expect(args).toContain('400k')
     expect(args).toContain('-maxrate')
     expect(args).toContain('-bufsize')
     expect(args).not.toContain('-crf')
