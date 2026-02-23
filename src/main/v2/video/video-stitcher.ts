@@ -10,7 +10,7 @@ import type {
 
 const DEFAULT_FRAME_DURATION_MS = 1_000
 const FFMPEG_EXECUTABLE_ENV = 'MEMORYLANE_FFMPEG_EXECUTABLE'
-const FFMPEG_VIDEO_PRESET = 'veryfast'
+const FFMPEG_VIDEO_PRESET = 'ultrafast'
 const FFMPEG_VIDEO_CRF = '28'
 
 function isPathInsideAsarArchive(filepath: string): boolean {
