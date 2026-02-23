@@ -96,20 +96,11 @@ describe('FfmpegVideoStitcher', () => {
     expect(args).toContain('-safe')
     expect(args).toContain('0')
     expect(args).toContain('-c:v')
-    if (process.platform === 'darwin') {
-      expect(args).toContain('h264_videotoolbox')
-      expect(args).toContain('-b:v')
-      expect(args).toContain('200k')
-      expect(args).toContain('-maxrate')
-      expect(args).toContain('-bufsize')
-      expect(args).not.toContain('-crf')
-    } else {
-      expect(args).toContain('libx264')
-      expect(args).toContain('-preset')
-      expect(args).toContain('veryfast')
-      expect(args).toContain('-crf')
-      expect(args).toContain('28')
-    }
+    expect(args).toContain('libx264')
+    expect(args).toContain('-preset')
+    expect(args).toContain('veryfast')
+    expect(args).toContain('-crf')
+    expect(args).toContain('28')
     expect(args).toContain('-vf')
     expect(args).toContain('scale=trunc(iw/2)*2:trunc(ih/2)*2')
     expect(args).toContain('-pix_fmt')
@@ -285,17 +276,10 @@ describe('FfmpegVideoStitcher', () => {
     const frameA = createFrame(tempDir, 'a.png')
     const frameB = createFrame(tempDir, 'b.png')
 
-    const firstChild = createMockChildProcess()
-    const secondChild = createMockChildProcess()
-    if (process.platform === 'darwin') {
-      vi.mocked(childProcess.spawn)
-        .mockReturnValueOnce(firstChild as unknown as ReturnType<typeof childProcess.spawn>)
-        .mockReturnValueOnce(secondChild as unknown as ReturnType<typeof childProcess.spawn>)
-    } else {
-      vi.mocked(childProcess.spawn).mockReturnValue(
-        firstChild as unknown as ReturnType<typeof childProcess.spawn>,
-      )
-    }
+    const mockChild = createMockChildProcess()
+    vi.mocked(childProcess.spawn).mockReturnValue(
+      mockChild as unknown as ReturnType<typeof childProcess.spawn>,
+    )
 
     const stitcher = new FfmpegVideoStitcher()
     const promise = stitcher.stitch({
@@ -311,13 +295,8 @@ describe('FfmpegVideoStitcher', () => {
     const concatPath = args[args.indexOf('-i') + 1]
     expect(fs.existsSync(concatPath)).toBe(true)
 
-    firstChild.stderr.emit('data', 'encoder failed')
-    firstChild.emit('close', 1)
-    if (process.platform === 'darwin') {
-      await Promise.resolve()
-      secondChild.stderr.emit('data', 'encoder failed')
-      secondChild.emit('close', 1)
-    }
+    mockChild.stderr.emit('data', 'encoder failed')
+    mockChild.emit('close', 1)
 
     await expect(promise).rejects.toThrow('ffmpeg exited with code 1: encoder failed')
     expect(fs.existsSync(concatPath)).toBe(false)
@@ -329,17 +308,10 @@ describe('FfmpegVideoStitcher', () => {
     const frameA = createFrame(tempDir, 'a.png')
     const frameB = createFrame(tempDir, 'b.png')
 
-    const firstChild = createMockChildProcess()
-    const secondChild = createMockChildProcess()
-    if (process.platform === 'darwin') {
-      vi.mocked(childProcess.spawn)
-        .mockReturnValueOnce(firstChild as unknown as ReturnType<typeof childProcess.spawn>)
-        .mockReturnValueOnce(secondChild as unknown as ReturnType<typeof childProcess.spawn>)
-    } else {
-      vi.mocked(childProcess.spawn).mockReturnValue(
-        firstChild as unknown as ReturnType<typeof childProcess.spawn>,
-      )
-    }
+    const mockChild = createMockChildProcess()
+    vi.mocked(childProcess.spawn).mockReturnValue(
+      mockChild as unknown as ReturnType<typeof childProcess.spawn>,
+    )
 
     const stitcher = new FfmpegVideoStitcher()
     const promise = stitcher.stitch({
@@ -353,93 +325,8 @@ describe('FfmpegVideoStitcher', () => {
 
     const error = new Error('spawn ffmpeg ENOENT') as NodeJS.ErrnoException
     error.code = 'ENOENT'
-    firstChild.emit('error', error)
-    if (process.platform === 'darwin') {
-      await Promise.resolve()
-      const error2 = new Error('spawn ffmpeg ENOENT') as NodeJS.ErrnoException
-      error2.code = 'ENOENT'
-      secondChild.emit('error', error2)
-    }
+    mockChild.emit('error', error)
 
     await expect(promise).rejects.toThrow(`ffmpeg executable not found: ${ffmpegExecutablePath}`)
-  })
-
-  it('uses h264_videotoolbox by default on macOS', async () => {
-    if (process.platform !== 'darwin') return
-
-    const childProcess = await import('child_process')
-    const tempDir = createTempDir()
-    const frameA = createFrame(tempDir, 'a.png')
-    const frameB = createFrame(tempDir, 'b.png')
-    const outputPath = path.join(tempDir, 'out.mp4')
-
-    const mockChild = createMockChildProcess()
-    vi.mocked(childProcess.spawn).mockReturnValue(
-      mockChild as unknown as ReturnType<typeof childProcess.spawn>,
-    )
-
-    const stitcher = new FfmpegVideoStitcher()
-    const promise = stitcher.stitch({
-      activityId: 'activity-vt-1',
-      frames: [
-        { filepath: frameA, timestamp: 1_000 },
-        { filepath: frameB, timestamp: 2_000 },
-      ],
-      outputPath,
-    })
-
-    expect(childProcess.spawn).toHaveBeenCalledTimes(1)
-    const [, args] = vi.mocked(childProcess.spawn).mock.calls[0]
-    expect(args).toContain('-c:v')
-    expect(args).toContain('h264_videotoolbox')
-    expect(args).toContain('-b:v')
-    expect(args).toContain('200k')
-    expect(args).toContain('-maxrate')
-    expect(args).toContain('-bufsize')
-    expect(args).not.toContain('-crf')
-
-    mockChild.emit('close', 0)
-    await expect(promise).resolves.toMatchObject({ frameCount: 2 })
-  })
-
-  it('falls back to libx264 when default h264_videotoolbox encode fails on macOS', async () => {
-    if (process.platform !== 'darwin') return
-
-    const childProcess = await import('child_process')
-    const tempDir = createTempDir()
-    const frameA = createFrame(tempDir, 'a.png')
-    const frameB = createFrame(tempDir, 'b.png')
-    const outputPath = path.join(tempDir, 'out.mp4')
-
-    const firstChild = createMockChildProcess()
-    const secondChild = createMockChildProcess()
-    vi.mocked(childProcess.spawn)
-      .mockReturnValueOnce(firstChild as unknown as ReturnType<typeof childProcess.spawn>)
-      .mockReturnValueOnce(secondChild as unknown as ReturnType<typeof childProcess.spawn>)
-
-    const stitcher = new FfmpegVideoStitcher()
-    const promise = stitcher.stitch({
-      activityId: 'activity-vt-fallback',
-      frames: [
-        { filepath: frameA, timestamp: 1_000 },
-        { filepath: frameB, timestamp: 2_000 },
-      ],
-      outputPath,
-    })
-
-    expect(childProcess.spawn).toHaveBeenCalledTimes(1)
-    const [, firstArgs] = vi.mocked(childProcess.spawn).mock.calls[0]
-    expect(firstArgs).toContain('h264_videotoolbox')
-
-    firstChild.stderr.emit('data', 'videotoolbox failed')
-    firstChild.emit('close', 1)
-    await Promise.resolve()
-
-    expect(childProcess.spawn).toHaveBeenCalledTimes(2)
-    const [, secondArgs] = vi.mocked(childProcess.spawn).mock.calls[1]
-    expect(secondArgs).toContain('libx264')
-
-    secondChild.emit('close', 0)
-    await expect(promise).resolves.toMatchObject({ frameCount: 2 })
   })
 })
