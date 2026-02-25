@@ -71,6 +71,11 @@ src/
 
 ````
 
+### Native Sidecars (`native/`)
+
+`native/` contains first-party native sidecar binaries (different from native Node.js addons in `node_modules`). Example is app-watcher module for windows.
+
+
 ### Main Components
 
 1. **Main Process** (`src/main/index.ts`): Entry point and tray management
