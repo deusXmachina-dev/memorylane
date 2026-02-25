@@ -32,6 +32,7 @@ interface CaptureProvider {
 
 export class ActivityManager {
   private currentActivity: Activity | null = null
+  private currentActivityDisplayId: number | undefined = undefined
   private periodicTimer: NodeJS.Timeout | null = null
   private callbacks: OnActivityCompleteCallback[] = []
   private captureProvider: CaptureProvider
@@ -78,7 +79,10 @@ export class ActivityManager {
     log.info('[ActivityManager] Force-closing current activity')
 
     try {
-      const endScreenshot = await this.captureProvider.captureImmediate('activity_end')
+      const endScreenshot = await this.captureProvider.captureImmediate(
+        'activity_end',
+        this.currentActivityDisplayId,
+      )
       this.addScreenshot(endScreenshot)
     } catch (error) {
       log.warn('[ActivityManager] Failed to capture end screenshot on force-close:', error)
@@ -102,8 +106,6 @@ export class ActivityManager {
     const newApp = event.activeWindow
     if (!newApp) return
 
-    console.log('newApp', newApp)
-
     const newProcessName = newApp.processName
 
     // Skip transient apps (Spotlight, notification center, etc.)
@@ -113,6 +115,9 @@ export class ActivityManager {
       )
       if (this.currentActivity) {
         this.currentActivity.interactions.push(event)
+        if (event.displayId !== undefined) {
+          this.currentActivityDisplayId = event.displayId
+        }
       }
       return
     }
@@ -121,6 +126,9 @@ export class ActivityManager {
     if (this.currentActivity && !this.isActivityBoundary(event)) {
       // Same app, same context — just accumulate the event
       this.currentActivity.interactions.push(event)
+      if (event.displayId !== undefined) {
+        this.currentActivityDisplayId = event.displayId
+      }
       return
     }
 
@@ -128,6 +136,10 @@ export class ActivityManager {
     // Capture the OLD window by title — even though the new app is foregrounded,
     // desktopCapturer can capture background windows individually.
     if (this.currentActivity) {
+      let endScreenshot: ActivityScreenshot | null = null
+      const boundaryDisplayId =
+        event.previousDisplayId ?? this.currentActivityDisplayId ?? event.displayId
+
       if (this.captureProvider.captureWindowByTitle) {
         try {
           const oldTitle = event.previousWindow?.title || this.currentActivity.windowTitle
@@ -135,16 +147,25 @@ export class ActivityManager {
             `[ActivityManager] Capturing end screenshot by window title: "${oldTitle}" ` +
               `(previousWindow: "${event.previousWindow?.title}", activity windowTitle: "${this.currentActivity.windowTitle}")`,
           )
-          const endScreenshot = await this.captureProvider.captureWindowByTitle(
-            oldTitle,
-            'activity_end',
-          )
-          if (endScreenshot) {
-            this.addScreenshot(endScreenshot)
-          }
+          endScreenshot = await this.captureProvider.captureWindowByTitle(oldTitle, 'activity_end')
         } catch (error) {
           log.warn('[ActivityManager] Failed to capture end window screenshot:', error)
         }
+      }
+
+      if (!endScreenshot) {
+        try {
+          endScreenshot = await this.captureProvider.captureImmediate(
+            'activity_end',
+            boundaryDisplayId,
+          )
+        } catch (error) {
+          log.warn('[ActivityManager] Failed fallback end screenshot capture:', error)
+        }
+      }
+
+      if (endScreenshot) {
+        this.addScreenshot(endScreenshot)
       }
       await this.finalizeCurrentActivity()
     }
@@ -190,11 +211,17 @@ export class ActivityManager {
 
     // Accumulate the interaction
     this.currentActivity.interactions.push(event)
+    if (event.displayId !== undefined) {
+      this.currentActivityDisplayId = event.displayId
+    }
 
     // Try visual-change-gated capture for non-app-change interactions
     if (this.currentActivity.screenshots.length < ACTIVITY_CONFIG.MAX_SCREENSHOTS_PER_ACTIVITY) {
       try {
-        const screenshot = await this.captureProvider.captureIfVisualChange('visual_change')
+        const screenshot = await this.captureProvider.captureIfVisualChange(
+          'visual_change',
+          this.currentActivityDisplayId,
+        )
         if (screenshot) {
           this.addScreenshot(screenshot)
         }
@@ -212,6 +239,9 @@ export class ActivityManager {
     const window = event.activeWindow!
     const url = window.url ?? undefined
     const tld = extractTld(url) ?? undefined
+    if (event.displayId !== undefined) {
+      this.currentActivityDisplayId = event.displayId
+    }
 
     this.currentActivity = {
       id: uuidv4(),
@@ -231,7 +261,10 @@ export class ActivityManager {
 
     // Capture start screenshot
     try {
-      const startScreenshot = await this.captureProvider.captureImmediate('activity_start')
+      const startScreenshot = await this.captureProvider.captureImmediate(
+        'activity_start',
+        this.currentActivityDisplayId,
+      )
       this.addScreenshot(startScreenshot)
     } catch (error) {
       log.warn('[ActivityManager] Failed to capture start screenshot:', error)
@@ -248,6 +281,7 @@ export class ActivityManager {
 
     const activity = this.currentActivity
     this.currentActivity = null
+    this.currentActivityDisplayId = undefined
 
     activity.endTimestamp = Date.now()
     const durationMs = activity.endTimestamp - activity.startTimestamp
@@ -290,7 +324,10 @@ export class ActivityManager {
         log.info(`[ActivityManager] Max activity duration exceeded (${elapsed}ms), force-splitting`)
         // Capture end, finalize, and start a new activity for the same app
         try {
-          const endScreenshot = await this.captureProvider.captureImmediate('activity_end')
+          const endScreenshot = await this.captureProvider.captureImmediate(
+            'activity_end',
+            this.currentActivityDisplayId,
+          )
           this.addScreenshot(endScreenshot)
         } catch (error) {
           log.warn('[ActivityManager] Failed to capture end screenshot for force-split:', error)
@@ -300,6 +337,7 @@ export class ActivityManager {
         const currentAppEvent: InteractionContext = {
           type: 'app_change',
           timestamp: Date.now(),
+          displayId: this.currentActivityDisplayId,
           activeWindow: {
             title: this.currentActivity.windowTitle,
             processName: this.currentActivity.appName,

@@ -2,6 +2,7 @@ export interface InteractionContext {
   type: 'click' | 'keyboard' | 'scroll' | 'app_change'
   timestamp: number
   displayId?: number // Electron Display.id of the screen where the interaction occurred
+  previousDisplayId?: number // Previous display for app_change boundaries
 
   // Click-specific
   clickPosition?: { x: number; y: number }
@@ -23,6 +24,7 @@ export interface InteractionContext {
     processName: string
     bundleId?: string
     url?: string // Browser tab URL (Chrome, Safari, Arc, etc.)
+    windowBounds?: { x: number; y: number; width: number; height: number }
   }
 
   // App change-specific
@@ -31,6 +33,7 @@ export interface InteractionContext {
     processName: string
     bundleId?: string
     url?: string
+    windowBounds?: { x: number; y: number; width: number; height: number }
   }
 }
 

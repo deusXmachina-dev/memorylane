@@ -256,6 +256,7 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
     processName: event.app ?? '',
     ...(event.bundleId && { bundleId: event.bundleId }),
     ...(event.url && { url: event.url }),
+    ...(event.windowBounds && { windowBounds: event.windowBounds }),
   }
 
   // Cache window title for keyboard context enrichment
@@ -290,6 +291,7 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
     type: 'app_change',
     timestamp: event.timestamp,
     displayId: resolvedDisplayId,
+    previousDisplayId: previousWindowDisplayId ?? undefined,
     activeWindow: current,
     previousWindow: previousWindow ?? undefined,
   }
