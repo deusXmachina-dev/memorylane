@@ -133,17 +133,22 @@ playground/
 .debug-pipeline/
 debug-pipeline/
 .debug-native-screenshot/
+.debug-native-screenshot-win/
 .debug-screen-capturer/
 .debug-video-stitcher/
 .debug-v2-semantic/
 .debug-v2-semantic-live-smoke/
 .debug-v2-semantic-ollama/
+.tmp-v2-harness/
+.tmp-v2-harness-display-retarget/
+.tmp-v2-harness-extractor/
 
 # Compiled Swift binaries (built during packaging)
 build/swift/
 build/rust/
 build/ffmpeg/
 native/windows/app-watcher/target/
+native/windows/screenshot-capturer/target/
 
 # Benchmarks
 benchmarks/
