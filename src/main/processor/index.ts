@@ -27,6 +27,15 @@ export class ActivityProcessor {
    */
   public async processActivity(activity: Activity): Promise<void> {
     const { id, screenshots } = activity
+    const endTimestamp =
+      activity.endTimestamp !== undefined
+        ? Math.max(activity.endTimestamp, activity.startTimestamp)
+        : activity.startTimestamp
+    if (activity.endTimestamp === undefined) {
+      log.warn(
+        `[ActivityProcessor] Activity ${id} missing endTimestamp at processing time, clamping to startTimestamp`,
+      )
+    }
     log.info(
       `[ActivityProcessor] Processing activity ${id}: ${activity.appName} "${activity.windowTitle}" (${screenshots.length} screenshots, ${activity.interactions.length} interactions)`,
     )
@@ -72,7 +81,7 @@ export class ActivityProcessor {
       await this.storageService.addActivity({
         id: activity.id,
         startTimestamp: activity.startTimestamp,
-        endTimestamp: activity.endTimestamp ?? Date.now(),
+        endTimestamp,
         appName: activity.appName,
         windowTitle: activity.windowTitle,
         tld: activity.tld ?? null,
@@ -81,7 +90,7 @@ export class ActivityProcessor {
         vector,
       })
 
-      const durationMs = (activity.endTimestamp ?? Date.now()) - activity.startTimestamp
+      const durationMs = endTimestamp - activity.startTimestamp
       log.info(`[ActivityProcessor] Stored activity ${id} (${activity.appName}, ${durationMs}ms)`)
 
       // 7. Delete all screenshot files

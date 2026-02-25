@@ -77,6 +77,7 @@ export class ActivityManager {
     if (!this.currentActivity) return
 
     log.info('[ActivityManager] Force-closing current activity')
+    const boundaryTimestamp = Date.now()
 
     try {
       const endScreenshot = await this.captureProvider.captureImmediate(
@@ -88,7 +89,7 @@ export class ActivityManager {
       log.warn('[ActivityManager] Failed to capture end screenshot on force-close:', error)
     }
 
-    await this.finalizeCurrentActivity()
+    await this.finalizeCurrentActivity(boundaryTimestamp)
   }
 
   /**
@@ -167,7 +168,14 @@ export class ActivityManager {
       if (endScreenshot) {
         this.addScreenshot(endScreenshot)
       }
-      await this.finalizeCurrentActivity()
+      const boundaryTimestamp = this.getMonotonicBoundaryTimestamp(
+        event.timestamp,
+        this.currentActivity.startTimestamp,
+      )
+      await this.finalizeCurrentActivity(boundaryTimestamp)
+      // Use the same boundary timestamp to guarantee old.end === new.start.
+      await this.startNewActivity(event, boundaryTimestamp)
+      return
     }
 
     // Start new activity
@@ -235,7 +243,10 @@ export class ActivityManager {
   // Private: Activity lifecycle
   // ---------------------------------------------------------------------------
 
-  private async startNewActivity(event: InteractionContext): Promise<void> {
+  private async startNewActivity(
+    event: InteractionContext,
+    startTimestampOverride?: number,
+  ): Promise<void> {
     const window = event.activeWindow!
     const url = window.url ?? undefined
     const tld = extractTld(url) ?? undefined
@@ -245,7 +256,7 @@ export class ActivityManager {
 
     this.currentActivity = {
       id: uuidv4(),
-      startTimestamp: event.timestamp,
+      startTimestamp: startTimestampOverride ?? event.timestamp,
       appName: window.processName,
       bundleId: window.bundleId,
       windowTitle: window.title,
@@ -274,7 +285,7 @@ export class ActivityManager {
     this.startPeriodicTimer()
   }
 
-  private async finalizeCurrentActivity(): Promise<void> {
+  private async finalizeCurrentActivity(endTimestamp: number): Promise<void> {
     if (!this.currentActivity) return
 
     this.stopPeriodicTimer()
@@ -283,7 +294,7 @@ export class ActivityManager {
     this.currentActivity = null
     this.currentActivityDisplayId = undefined
 
-    activity.endTimestamp = Date.now()
+    activity.endTimestamp = endTimestamp
     const durationMs = activity.endTimestamp - activity.startTimestamp
 
     // Discard activities shorter than minimum duration
@@ -322,6 +333,7 @@ export class ActivityManager {
       const elapsed = Date.now() - this.currentActivity.startTimestamp
       if (elapsed >= ACTIVITY_CONFIG.MAX_ACTIVITY_DURATION_MS) {
         log.info(`[ActivityManager] Max activity duration exceeded (${elapsed}ms), force-splitting`)
+        const boundaryTimestamp = Date.now()
         // Capture end, finalize, and start a new activity for the same app
         try {
           const endScreenshot = await this.captureProvider.captureImmediate(
@@ -336,7 +348,7 @@ export class ActivityManager {
         // Save current app info before finalize clears it
         const currentAppEvent: InteractionContext = {
           type: 'app_change',
-          timestamp: Date.now(),
+          timestamp: boundaryTimestamp,
           displayId: this.currentActivityDisplayId,
           activeWindow: {
             title: this.currentActivity.windowTitle,
@@ -346,8 +358,8 @@ export class ActivityManager {
           },
         }
 
-        await this.finalizeCurrentActivity()
-        await this.startNewActivity(currentAppEvent)
+        await this.finalizeCurrentActivity(boundaryTimestamp)
+        await this.startNewActivity(currentAppEvent, boundaryTimestamp)
       }
     }, ACTIVITY_CONFIG.FORCE_SPLIT_CHECK_INTERVAL_MS)
   }
@@ -377,5 +389,13 @@ export class ActivityManager {
     log.debug(
       `[ActivityManager] Added ${screenshot.trigger} screenshot to activity ${this.currentActivity.id} (total: ${this.currentActivity.screenshots.length})`,
     )
+  }
+
+  private getMonotonicBoundaryTimestamp(candidate: number, startTimestamp: number): number {
+    if (candidate >= startTimestamp) return candidate
+    log.warn(
+      `[ActivityManager] Boundary timestamp ${candidate} is before start ${startTimestamp}, clamping`,
+    )
+    return startTimestamp
   }
 }
