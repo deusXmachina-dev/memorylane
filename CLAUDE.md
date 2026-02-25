@@ -40,7 +40,10 @@ npm run format:check
 
 # Run tests
 npm run test
-```
+## E2E Tests
+
+- Standalone E2E runners live in `e2e-tests/`.
+- they will usually contain helpers in packge.json
 
 ## Architecture
 
@@ -49,22 +52,24 @@ npm run test
 This is a tray-only application (no main window). The source follows electron-vite's directory convention:
 
 ```
+
 src/
-├── main/           # Main process
-│   ├── index.ts    # Entry point, tray management
-│   ├── recorder/   # Screenshot capture module
-│   ├── processor/  # OCR, embeddings, storage
-│   └── mcp/        # MCP server integration
-├── preload/        # Preload scripts
-│   └── index.ts
-├── renderer/       # Renderer process (minimal for tray app)
-│   ├── index.html
-│   ├── index.ts
-│   └── index.css
-└── shared/         # Shared types and constants
-    ├── types.ts
-    └── constants.ts
-```
+├── main/ # Main process
+│ ├── index.ts # Entry point, tray management
+│ ├── recorder/ # Screenshot capture module
+│ ├── processor/ # OCR, embeddings, storage
+│ └── mcp/ # MCP server integration
+├── preload/ # Preload scripts
+│ └── index.ts
+├── renderer/ # Renderer process (minimal for tray app)
+│ ├── index.html
+│ ├── index.ts
+│ └── index.css
+└── shared/ # Shared types and constants
+├── types.ts
+└── constants.ts
+
+````
 
 ### Main Components
 
@@ -152,7 +157,7 @@ onScreenshot(callback: OnScreenshotCallback): void  // Register callback for new
 // Utility
 getScreenshotsDir(): string  // Get screenshots directory path
 isCapturingNow(): boolean    // Check if currently capturing
-```
+````
 
 ### Screenshot Data Structure
 
