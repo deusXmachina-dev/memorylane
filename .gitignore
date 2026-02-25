@@ -129,6 +129,7 @@ Desktop.ini
 playground/
 
 # Debug pipeline output (dev only)
+.debug-app-watcher-win/
 .debug-pipeline/
 debug-pipeline/
 .debug-native-screenshot/
@@ -140,7 +141,9 @@ debug-pipeline/
 
 # Compiled Swift binaries (built during packaging)
 build/swift/
+build/rust/
 build/ffmpeg/
+native/windows/app-watcher/target/
 
 # Benchmarks
 benchmarks/
