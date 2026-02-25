@@ -75,8 +75,10 @@ git push origin HEAD --tags
 ### 8. Build Windows artifacts
 
 ```bash
-npm run make:win
+npm run make:win:signed
 ```
+
+This command expects Azure Trusted Signing auth variables (`AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`) to be available (loaded from `.env` by the wrapper script).
 
 ### 9. Verify generated files
 
