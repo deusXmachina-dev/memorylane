@@ -3,6 +3,7 @@ import { uIOhook, UiohookMouseEvent, UiohookWheelEvent } from 'uiohook-napi'
 import { INTERACTION_MONITOR_CONFIG } from '@constants'
 import { InteractionContext } from '../../shared/types'
 import { startAppWatcher, stopAppWatcher, AppWatcherEvent } from './app-watcher'
+import { resolveAppWatcherDisplay } from './app-watcher-display'
 import log from '../logger'
 
 // State
@@ -260,14 +261,13 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
   // Cache window title for keyboard context enrichment
   cachedWindowTitle = current.title
 
-  const resolvedDisplayId = (() => {
-    if (event.displayId !== undefined) {
-      return event.displayId
-    }
-    // Fallback to cursor-based approximation if watcher display metadata is unavailable.
-    const cursorPoint = screen.getCursorScreenPoint()
-    return getDisplayIdForPoint(cursorPoint.x, cursorPoint.y)
-  })()
+  const resolvedDisplay = resolveAppWatcherDisplay(event)
+  if (resolvedDisplay.source === 'cursor_fallback' && event.windowBounds) {
+    log.warn(
+      '[Interaction Monitor] Falling back from windowBounds display resolution to cursor-based resolution',
+    )
+  }
+  const resolvedDisplayId = resolvedDisplay.displayId
 
   // Skip if nothing actually changed
   if (

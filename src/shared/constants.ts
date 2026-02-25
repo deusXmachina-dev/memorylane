@@ -16,7 +16,7 @@ export const INTERACTION_MONITOR_CONFIG = {
   SCROLL_DEBOUNCE_MS: 2000, // Wait for scrolling to stop before emitting event (200-2000ms)
 }
 
-// App Watcher Configuration (native Swift subprocess for app/window change detection)
+// App Watcher Configuration (platform-native subprocess for app/window change detection)
 export const APP_WATCHER_CONFIG = {
   MAX_RESTART_RETRIES: 3, // Max automatic restarts after crashes
   RESTART_BACKOFF_MS: 1000, // Base delay between restarts (multiplied by attempt number)

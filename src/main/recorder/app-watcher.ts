@@ -1,4 +1,5 @@
 import { startAppWatcherMac, stopAppWatcherMac, isAppWatcherRunningMac } from './app-watcher-mac'
+import { startAppWatcherWin, stopAppWatcherWin, isAppWatcherRunningWin } from './app-watcher-win'
 import log from '../logger'
 
 export interface AppWatcherEvent {
@@ -30,6 +31,11 @@ const PLATFORM_APP_WATCHER_BACKENDS: Partial<Record<NodeJS.Platform, AppWatcherB
     start: startAppWatcherMac,
     stop: stopAppWatcherMac,
     isRunning: isAppWatcherRunningMac,
+  },
+  win32: {
+    start: startAppWatcherWin,
+    stop: stopAppWatcherWin,
+    isRunning: isAppWatcherRunningWin,
   },
 }
 
