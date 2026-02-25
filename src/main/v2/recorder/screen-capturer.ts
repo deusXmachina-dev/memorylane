@@ -3,6 +3,12 @@ import log from '../../logger'
 import { SCREEN_CAPTURER_CONFIG } from '@constants'
 import { captureDesktop } from './native-screenshot'
 import type { DurableStream } from '../streams/stream'
+import {
+  createScreenCapturerWin,
+  isScreenCapturerWinSupported,
+  type ScreenCapturerWin,
+  type ScreenCapturerWinFrameEvent,
+} from './screen-capturer-win'
 
 const MAX_TRANSIENT_CAPTURE_FAILURES = 20
 
@@ -29,6 +35,7 @@ export class ScreenCapturer {
   private displayId: number | undefined
   private readonly maxDimensionPx: number | undefined
   private readonly stream: DurableStream<Frame>
+  private readonly winCapturer: ScreenCapturerWin | null
   private _capturing = false
   private timer: ReturnType<typeof setTimeout> | null = null
   private _sequenceNumber = 0
@@ -40,6 +47,20 @@ export class ScreenCapturer {
     this.displayId = config.displayId
     this.maxDimensionPx = config.maxDimensionPx ?? SCREEN_CAPTURER_CONFIG.MAX_DIMENSION_PX
     this.stream = config.stream
+    const isVitestRuntime = process.env.VITEST === 'true'
+    const allowSidecarInVitest = process.env.RUN_WINDOWS_INTEGRATION === '1'
+    const shouldUseWindowsSidecar =
+      process.platform === 'win32' &&
+      isScreenCapturerWinSupported() &&
+      (!isVitestRuntime || allowSidecarInVitest)
+    this.winCapturer = shouldUseWindowsSidecar
+      ? createScreenCapturerWin({
+          onFrame: (event) => this.handleWindowsFrame(event),
+          onError: (error) => {
+            log.error('[ScreenCapturer] Windows sidecar failed:', error)
+          },
+        })
+      : null
   }
 
   get capturing(): boolean {
@@ -48,11 +69,21 @@ export class ScreenCapturer {
 
   setDisplayId(displayId: number | undefined): void {
     this.displayId = displayId
+    this.winCapturer?.setDisplayId(displayId)
   }
 
   start(): void {
     if (this._capturing) return
     this._capturing = true
+    if (this.winCapturer) {
+      this.winCapturer.start({
+        outputDir: this.outputDir,
+        intervalMs: this.intervalMs,
+        maxDimensionPx: this.maxDimensionPx,
+        displayId: this.displayId,
+      })
+      return
+    }
     this.tick()
   }
 
@@ -62,6 +93,7 @@ export class ScreenCapturer {
       clearTimeout(this.timer)
       this.timer = null
     }
+    this.winCapturer?.stop()
   }
 
   private tick(): void {
@@ -100,6 +132,23 @@ export class ScreenCapturer {
       sequenceNumber: seq,
     }
 
+    this.enqueueFrame(frame)
+  }
+
+  private handleWindowsFrame(event: ScreenCapturerWinFrameEvent): void {
+    if (!this._capturing) {
+      return
+    }
+
+    const sequenceNumber = this._sequenceNumber++
+    const frame: Frame = {
+      filepath: event.filepath,
+      timestamp: event.timestamp,
+      width: event.width,
+      height: event.height,
+      displayId: event.displayId,
+      sequenceNumber,
+    }
     this.enqueueFrame(frame)
   }
 
