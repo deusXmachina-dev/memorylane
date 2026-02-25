@@ -98,6 +98,8 @@ export interface CustomEndpointStatus {
   hasApiKey: boolean
 }
 
+export type SubscriptionPlan = 'standard' | 'pro'
+
 export type SubscriptionStatus = 'idle' | 'awaiting_checkout' | 'polling' | 'error'
 
 export interface SubscriptionUpdate {
@@ -160,7 +162,7 @@ export interface MainWindowAPI {
   saveCustomEndpoint: (config: CustomEndpointConfig) => Promise<SaveResult>
   deleteCustomEndpoint: () => Promise<SaveResult>
   // Subscription
-  startCheckout: () => Promise<void>
+  startCheckout: (plan: SubscriptionPlan) => Promise<void>
   openSubscriptionPortal: () => Promise<void>
   getSubscriptionStatus: () => Promise<SubscriptionStatus>
   onSubscriptionUpdate: (callback: (update: SubscriptionUpdate) => void) => void

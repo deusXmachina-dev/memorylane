@@ -56,7 +56,7 @@ function SliderRow({
   )
 }
 
-export function CaptureSettingsPage({ onBack }: { onBack: () => void }): React.JSX.Element {
+export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.JSX.Element {
   const api = useMainWindowAPI()
   const [form, setForm] = useState<CaptureSettings | null>(null)
   const [dirty, setDirty] = useState(false)

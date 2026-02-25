@@ -114,7 +114,7 @@ export function CustomEndpointSection({
       </button>
 
       {open && endpointStatus.enabled && !editing && (
-        <div className="pl-3.5 space-y-2">
+        <div className="space-y-2">
           <div className="flex flex-wrap gap-1.5">
             <Badge variant="outline" className="font-mono text-xs">
               {endpointStatus.serverURL}
@@ -145,7 +145,7 @@ export function CustomEndpointSection({
       )}
 
       {showForm && (
-        <div className="pl-3.5 space-y-2">
+        <div className="space-y-2">
           <Input
             type="text"
             placeholder="http://localhost:11434/v1"

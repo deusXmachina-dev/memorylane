@@ -91,35 +91,38 @@ export function ManageKeySection({
   )
 
   const canDelete = keyStatus.source === 'stored' || keyStatus.source === 'managed'
+  const showInput = !keyStatus.hasKey || (!isManaged && expanded)
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="font-mono text-xs">
-            {keyStatus.maskedKey}
-          </Badge>
-          {keyStatus.source === 'env' && (
-            <span className="text-xs text-muted-foreground">(from env)</span>
+      {keyStatus.hasKey && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="font-mono text-xs">
+              {keyStatus.maskedKey}
+            </Badge>
+            {keyStatus.source === 'env' && (
+              <span className="text-xs text-muted-foreground">(from env)</span>
+            )}
+          </div>
+          {isManaged ? (
+            <Button variant="ghost" size="sm" onClick={() => void handleManageSubscription()}>
+              Manage Subscription
+            </Button>
+          ) : (
+            <Button variant="ghost" size="sm" onClick={() => setExpanded(!expanded)}>
+              {expanded ? 'Cancel' : 'Manage Key'}
+            </Button>
           )}
         </div>
-        {isManaged ? (
-          <Button variant="ghost" size="sm" onClick={() => void handleManageSubscription()}>
-            Manage Subscription
-          </Button>
-        ) : (
-          <Button variant="ghost" size="sm" onClick={() => setExpanded(!expanded)}>
-            {expanded ? 'Cancel' : 'Manage Key'}
-          </Button>
-        )}
-      </div>
+      )}
 
-      {!isManaged && expanded && (
-        <div className="space-y-3 pt-2 border-t">
+      {showInput && (
+        <div className={`space-y-3 ${keyStatus.hasKey ? 'pt-2 border-t' : ''}`}>
           <div className="relative">
             <Input
               type={passwordVisible ? 'text' : 'password'}
-              placeholder="Enter new key to replace..."
+              placeholder={keyStatus.hasKey ? 'Enter new key to replace...' : 'sk-or-v1-...'}
               autoComplete="off"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
@@ -144,19 +147,43 @@ export function ManageKeySection({
               disabled={saving}
               onClick={() => void handleSave()}
             >
-              {saving ? 'Saving...' : 'Update Key'}
+              {saving ? 'Saving...' : keyStatus.hasKey ? 'Update Key' : 'Save Key'}
             </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={!canDelete || deleting}
-              onClick={() => void handleDelete()}
-            >
-              {deleting ? 'Deleting...' : 'Delete Key'}
-            </Button>
+            {keyStatus.hasKey && (
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={!canDelete || deleting}
+                onClick={() => void handleDelete()}
+              >
+                {deleting ? 'Deleting...' : 'Delete Key'}
+              </Button>
+            )}
           </div>
         </div>
       )}
+
+      <p className="text-xs text-muted-foreground">
+        We use{' '}
+        <a
+          href="https://openrouter.ai"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-foreground"
+        >
+          OpenRouter
+        </a>{' '}
+        because they are transparent about{' '}
+        <a
+          href="https://openrouter.ai/models?order=newest&supported_parameters=reasoning&fmt=free%2Cfixed%2Cinput%2Coutput&policies=ZDR"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-foreground"
+        >
+          Zero Data Retention
+        </a>{' '}
+        policies. Your key is encrypted and stored locally.
+      </p>
     </div>
   )
 }

@@ -18,7 +18,12 @@ import type { CustomEndpointManager } from '../settings/custom-endpoint-manager'
 import type { SemanticClassifierService } from '../processor/semantic-classifier'
 import type { ManagedKeyService } from '../services/managed-key-service'
 import type { ActivityManager } from '../processor/activity-manager'
-import type { CustomEndpointConfig, MainWindowStats, CaptureSettings } from '../../shared/types'
+import type {
+  CustomEndpointConfig,
+  MainWindowStats,
+  CaptureSettings,
+  SubscriptionPlan,
+} from '../../shared/types'
 import type { CaptureSettingsManager } from '../settings/capture-settings-manager'
 
 interface MainWindowDependencies {
@@ -281,9 +286,9 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
   })
 
-  ipcMain.handle('main-window:startCheckout', async () => {
+  ipcMain.handle('main-window:startCheckout', async (_event, plan: SubscriptionPlan) => {
     if (!deps) return
-    await deps.managedKeyService.startCheckout()
+    await deps.managedKeyService.startCheckout(plan)
   })
 
   ipcMain.handle('main-window:openSubscriptionPortal', async () => {

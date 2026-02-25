@@ -2,12 +2,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { Toaster } from '@components/ui/sonner'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { Logo } from './components/Logo'
-import { ApiKeySetupSection } from './components/ApiKeySetupSection'
+import { PlanPicker } from './components/PlanPicker'
 import { CaptureControlSection } from './components/CaptureControlSection'
 import { StatsDisplay } from './components/StatsDisplay'
 import { IntegrationsSection } from './components/IntegrationsSection'
 import { Button } from '@components/ui/button'
-import { CaptureSettingsPage } from './CaptureSettingsPage'
+import { AdvancedSettingsPage } from './AdvancedSettingsPage'
 import type { CustomEndpointStatus, KeyStatus, MainWindowStats } from '@types'
 
 export function MainWindowApp(): React.JSX.Element {
@@ -85,7 +85,7 @@ export function MainWindowApp(): React.JSX.Element {
   if (page === 'settings') {
     return (
       <div className="min-h-screen antialiased select-none">
-        <CaptureSettingsPage
+        <AdvancedSettingsPage
           onBack={() => {
             setPage('home')
             void loadAll()
@@ -102,7 +102,7 @@ export function MainWindowApp(): React.JSX.Element {
         <Logo />
 
         {!isConfigured ? (
-          <ApiKeySetupSection api={api} onKeySet={loadKeyStatus} />
+          <PlanPicker api={api} onKeySet={loadKeyStatus} />
         ) : (
           <>
             <CaptureControlSection

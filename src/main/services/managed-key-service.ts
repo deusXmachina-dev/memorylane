@@ -2,7 +2,7 @@ import { shell } from 'electron'
 import log from '../logger'
 import { MANAGED_KEY_CONFIG } from '../../shared/constants'
 import type { DeviceIdentity } from '../settings/device-identity'
-import type { SubscriptionStatus } from '../../shared/types'
+import type { SubscriptionPlan, SubscriptionStatus } from '../../shared/types'
 
 interface ManagedKeyPayload {
   error?: string
@@ -54,7 +54,7 @@ export class ManagedKeyService {
   /**
    * Open checkout in the system browser and start polling for the provisioned key.
    */
-  public async startCheckout(): Promise<void> {
+  public async startCheckout(plan: SubscriptionPlan = 'standard'): Promise<void> {
     if (this.status === 'polling' || this.status === 'awaiting_checkout') {
       log.warn('[ManagedKeyService] Checkout already in progress')
       return
@@ -64,6 +64,7 @@ export class ManagedKeyService {
 
     const url = new URL('/subscription/checkout', MANAGED_KEY_CONFIG.BACKEND_URL)
     url.searchParams.set('device_id', deviceId)
+    url.searchParams.set('plan', plan)
 
     this.setStatus('awaiting_checkout')
 

@@ -27,7 +27,7 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
     ipcRenderer.invoke('main-window:saveCustomEndpoint', config),
   deleteCustomEndpoint: () => ipcRenderer.invoke('main-window:deleteCustomEndpoint'),
   // Subscription
-  startCheckout: () => ipcRenderer.invoke('main-window:startCheckout'),
+  startCheckout: (plan: string) => ipcRenderer.invoke('main-window:startCheckout', plan),
   openSubscriptionPortal: () => ipcRenderer.invoke('main-window:openSubscriptionPortal'),
   getSubscriptionStatus: () => ipcRenderer.invoke('main-window:getSubscriptionStatus'),
   onSubscriptionUpdate: (callback: (update: unknown) => void) => {
