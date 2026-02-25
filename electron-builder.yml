@@ -63,6 +63,11 @@ mac:
         - arm64
 
 win:
+  extraResources:
+    - from: build/rust
+      to: rust
+      filter:
+        - app-watcher-windows.exe
   target:
     - target: nsis
       arch:
