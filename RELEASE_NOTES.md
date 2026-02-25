@@ -1,15 +1,13 @@
-# MemoryLane v0.11.0-win-beta.1
+# MemoryLane v0.11.1-win-beta.1
 
-Windows pre-release focused on native app watching, signed installer packaging, and update artifacts required by `electron-updater`.
+Patch-level Windows prerelease focused on settings and subscription flow refinements.
 
 ## What's Changed
 
-- **Native Windows watcher sidecar** - added a Rust-based app watcher binary and wired it into the recorder backend for app-change-aware capture
-- **Improved capture context on app switches** - display routing now applies app-change context more accurately, and Explorer noise events are filtered out
-- **Activity window overlap fix** - processor time window handling now avoids overlapping activity spans
-- **Windows signed build workflow** - added Trusted Signing scripts and `make:win:signed` path to produce signed Windows installers
-- **Windows packaging updates** - sidecar resources are now packaged with platform-specific handling for cleaner distribution
-- **Windows watcher test coverage** - added unit and E2E tests for watcher/display integration paths
+- **Settings UI reshaping** - renamed the capture settings page to advanced settings and updated main-window wiring accordingly
+- **Plan picker support** - added a dedicated plan picker component and integrated it into the main settings flow
+- **Subscription and key management cleanup** - simplified setup/manage key sections and removed older duplicate subscription entry components
+- **Main process wiring updates** - adjusted preload/main window/main process types for the new settings and plan-selection behavior
 
 ## Notes for Testers
 
@@ -19,4 +17,4 @@ Windows pre-release focused on native app watching, signed installer packaging, 
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v0.11.0...v0.11.0-win-beta.1
+https://github.com/deusXmachina-dev/memorylane/compare/v0.11.0-win-beta.1...v0.11.1-win-beta.1
