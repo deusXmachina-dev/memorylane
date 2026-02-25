@@ -20,16 +20,6 @@ extraResources:
     to: assets
     filter:
       - '**/*'
-  - from: build/swift
-    to: swift
-    filter:
-      - ocr
-      - app-watcher
-      - screenshot
-  - from: src/main/processor/powershell
-    to: powershell
-    filter:
-      - '*.ps1'
 
 asar: true
 asarUnpack:
@@ -44,6 +34,13 @@ asarUnpack:
 afterSign: build/notarize.js
 
 mac:
+  extraResources:
+    - from: build/swift
+      to: swift
+      filter:
+        - ocr
+        - app-watcher
+        - screenshot
   notarize: false
   category: public.app-category.productivity
   extendInfo:
@@ -68,6 +65,10 @@ win:
       to: rust
       filter:
         - app-watcher-windows.exe
+    - from: src/main/processor/powershell
+      to: powershell
+      filter:
+        - windows-ocr.ps1
   target:
     - target: nsis
       arch:
