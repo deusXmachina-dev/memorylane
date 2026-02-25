@@ -37,6 +37,12 @@ let cachedDisplayId: number | null = null
 // Cached window title from latest app-watcher event (for keyboard context enrichment)
 let cachedWindowTitle: string | null = null
 
+function isExplorerProcessName(appName?: string): boolean {
+  if (!appName) return false
+  const normalized = appName.trim().toLowerCase()
+  return normalized === 'explorer' || normalized === 'explorer.exe'
+}
+
 /**
  * Resolve which Electron Display contains the given global coordinate.
  */
@@ -247,6 +253,13 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
   }
   if (event.type === 'error') {
     log.warn(`[Interaction Monitor] AppWatcher error: ${event.error}`)
+    return
+  }
+
+  if (isExplorerProcessName(event.app)) {
+    log.debug(
+      `[Interaction Monitor] Ignoring Explorer event: app=${event.app} title=${event.title}`,
+    )
     return
   }
 
