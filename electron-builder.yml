@@ -69,6 +69,11 @@ win:
       to: powershell
       filter:
         - windows-ocr.ps1
+  azureSignOptions:
+    publisherName: 'SenseFlow, Inc.'
+    endpoint: 'https://eus.codesigning.azure.net/'
+    certificateProfileName: 'memorylane-codesign'
+    codeSigningAccountName: 'azure-signing-dxm'
   target:
     - target: nsis
       arch:
