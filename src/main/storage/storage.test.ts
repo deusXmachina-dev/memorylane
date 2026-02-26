@@ -38,6 +38,7 @@ const createStoredActivity = (
   ocrText: overrides.ocrText ?? 'Sample OCR text',
   vector: overrides.vector ?? v(0.1, 0.2, 0.3),
 })
+const BACKUP_DB_PATH = path.join(process.cwd(), 'temp_storage_backup_test.db')
 
 describe('StorageService', () => {
   const TEST_DB_PATH = path.join(process.cwd(), 'temp_test.db')
@@ -52,6 +53,7 @@ describe('StorageService', () => {
   afterEach(async () => {
     await storage.close()
     deleteDbFiles(TEST_DB_PATH)
+    deleteDbFiles(BACKUP_DB_PATH)
   })
 
   it('should add and retrieve an activity with all fields', async () => {
@@ -473,6 +475,32 @@ describe('StorageService', () => {
 
       await storage.addActivity(createStoredActivity({ id: 'count-2' }))
       expect(await storage.countRows()).toBe(2)
+    })
+
+    it('should create a readable backup while database is open', async () => {
+      storage = new StorageService(TEST_DB_PATH)
+      storage.activities.add({
+        id: 'backup-1',
+        startTimestamp: 1000,
+        endTimestamp: 2000,
+        appName: 'BackupApp',
+        windowTitle: 'Backup Window',
+        tld: null,
+        summary: 'backup summary',
+        ocrText: 'backup text',
+        vector: v(0.25),
+      })
+
+      await storage.backupToFile(BACKUP_DB_PATH)
+
+      const backupDb = new Database(BACKUP_DB_PATH)
+      sqliteVec.load(backupDb)
+      const row = backupDb
+        .prepare('SELECT COUNT(*) as count FROM activities WHERE id = ?')
+        .get('backup-1') as { count: number }
+      backupDb.close()
+
+      expect(row.count).toBe(1)
     })
   })
 })

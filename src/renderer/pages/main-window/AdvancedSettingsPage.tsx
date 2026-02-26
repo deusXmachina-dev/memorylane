@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { Slider } from '@components/ui/slider'
 import { Label } from '@components/ui/label'
 import { Button } from '@components/ui/button'
+import { DatabaseExportSection } from './components/DatabaseExportSection'
 import { CustomEndpointSection } from './components/CustomEndpointSection'
 import { ManageKeySection } from './components/ManageKeySection'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
@@ -143,6 +144,10 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
           </>
         )}
       </section>
+
+      <div className="border-t border-border" />
+
+      <DatabaseExportSection api={api} />
 
       {form && (
         <>

@@ -9,6 +9,7 @@ import { app, BrowserWindow, ipcMain, IpcMainInvokeEvent } from 'electron'
 import path from 'node:path'
 import log from '../logger'
 import { updateTrayMenu } from './tray'
+import { exportDatabaseZip } from './database-export'
 import { registerWithClaudeDesktop } from '../integrations/claude-desktop'
 import { registerWithCursor } from '../integrations/cursor'
 import { registerWithClaudeCode } from '../integrations/claude-code'
@@ -303,6 +304,14 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
 
   // Stats
   ipcMain.handle('main-window:getStats', () => buildStats())
+
+  // Database export
+  ipcMain.handle('main-window:exportDatabaseZip', async () => {
+    if (!deps) {
+      return { success: false, error: 'Dependencies not initialized' }
+    }
+    return exportDatabaseZip({ storage: deps.storage, parentWindow: getMainWindow() })
+  })
 
   // Capture settings
   ipcMain.handle('main-window:getCaptureSettings', () => {
