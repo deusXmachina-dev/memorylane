@@ -310,7 +310,10 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     if (!deps) {
       return { success: false, error: 'Dependencies not initialized' }
     }
-    return exportDatabaseZip({ storage: deps.storage, parentWindow: getMainWindow() })
+    return exportDatabaseZip({
+      storage: deps.processor.getStorageService(),
+      parentWindow: getMainWindow(),
+    })
   })
 
   // Capture settings
