@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { Slider } from '@components/ui/slider'
 import { Label } from '@components/ui/label'
 import { Button } from '@components/ui/button'
+import { DatabaseExportSection } from './components/DatabaseExportSection'
 import { CustomEndpointSection } from './components/CustomEndpointSection'
 import { ManageKeySection } from './components/ManageKeySection'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
@@ -62,7 +63,6 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
   const [dirty, setDirty] = useState(false)
   const [endpointStatus, setEndpointStatus] = useState<CustomEndpointStatus | null>(null)
   const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null)
-  const [isExportingDb, setIsExportingDb] = useState(false)
 
   const load = useCallback(async () => {
     const [s, ep, ks] = await Promise.all([
@@ -95,24 +95,6 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
   const handleReset = async (): Promise<void> => {
     await api.resetCaptureSettings()
     await load()
-  }
-
-  const handleExportDatabase = async (): Promise<void> => {
-    setIsExportingDb(true)
-    try {
-      const result = await api.exportDatabaseZip()
-      if (result.cancelled) return
-      if (!result.success) {
-        toast.error(result.error ?? 'Database export failed')
-        return
-      }
-      toast.success(`Database exported: ${result.outputPath ?? 'ZIP created'}`)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Database export failed'
-      toast.error(message)
-    } finally {
-      setIsExportingDb(false)
-    }
   }
 
   return (
@@ -165,19 +147,7 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
 
       <div className="border-t border-border" />
 
-      <section className="space-y-3">
-        <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Database Export
-          </p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Export a ZIP snapshot of your local MemoryLane database.
-          </p>
-        </div>
-        <Button size="sm" onClick={() => void handleExportDatabase()} disabled={isExportingDb}>
-          {isExportingDb ? 'Exporting...' : 'Export Database (.zip)'}
-        </Button>
-      </section>
+      <DatabaseExportSection api={api} />
 
       {form && (
         <>
