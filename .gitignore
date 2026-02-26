@@ -134,6 +134,7 @@ playground/
 debug-pipeline/
 .debug-native-screenshot/
 .debug-screen-capturer/
+.debug-screenshot-capturer-mac/
 .debug-video-stitcher/
 .debug-v2-semantic/
 .debug-v2-semantic-live-smoke/
@@ -144,6 +145,7 @@ build/swift/
 build/rust/
 build/ffmpeg/
 native/windows/app-watcher/target/
+native/mac/screenshot-capturer/target/
 
 # Benchmarks
 benchmarks/

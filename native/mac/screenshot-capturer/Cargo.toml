@@ -1,0 +1,9 @@
+[package]
+name = "screenshot-capturer-mac"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cidre = { version = "0.14.2", features = ["ax", "cg", "cf", "iio"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
