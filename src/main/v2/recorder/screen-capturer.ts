@@ -3,6 +3,7 @@ import log from '../../logger'
 import { SCREEN_CAPTURER_CONFIG } from '@constants'
 import { captureDesktop } from './native-screenshot'
 import type { DurableStream } from '../streams/stream'
+import { MacScreenCapturerSidecar, type MacSidecarFrame } from './screen-capturer-mac-sidecar'
 
 const MAX_TRANSIENT_CAPTURE_FAILURES = 20
 
@@ -29,6 +30,7 @@ export class ScreenCapturer {
   private displayId: number | undefined
   private readonly maxDimensionPx: number | undefined
   private readonly stream: DurableStream<Frame>
+  private readonly macSidecar: MacScreenCapturerSidecar | null
   private _capturing = false
   private timer: ReturnType<typeof setTimeout> | null = null
   private _sequenceNumber = 0
@@ -40,6 +42,7 @@ export class ScreenCapturer {
     this.displayId = config.displayId
     this.maxDimensionPx = config.maxDimensionPx ?? SCREEN_CAPTURER_CONFIG.MAX_DIMENSION_PX
     this.stream = config.stream
+    this.macSidecar = process.platform === 'darwin' ? new MacScreenCapturerSidecar() : null
   }
 
   get capturing(): boolean {
@@ -48,16 +51,27 @@ export class ScreenCapturer {
 
   setDisplayId(displayId: number | undefined): void {
     this.displayId = displayId
+    this.macSidecar?.setDisplayId(displayId)
   }
 
   start(): void {
     if (this._capturing) return
     this._capturing = true
+    if (this.macSidecar) {
+      this.macSidecar.start({
+        outputDir: this.outputDir,
+        intervalMs: this.intervalMs,
+        onFrame: (frame) => this.handleMacSidecarFrame(frame),
+        onError: (error) => log.error(`[ScreenCapturer] mac sidecar error: ${error}`),
+      })
+      return
+    }
     this.tick()
   }
 
   stop(): void {
     this._capturing = false
+    this.macSidecar?.stop()
     if (this.timer !== null) {
       clearTimeout(this.timer)
       this.timer = null
@@ -82,6 +96,23 @@ export class ScreenCapturer {
         const delay = Math.max(0, this.intervalMs - elapsed)
         this.timer = setTimeout(() => this.tick(), delay)
       })
+  }
+
+  private handleMacSidecarFrame(sidecarFrame: MacSidecarFrame): void {
+    if (!this._capturing) {
+      return
+    }
+
+    const frame: Frame = {
+      filepath: sidecarFrame.filepath,
+      timestamp: sidecarFrame.timestamp,
+      width: sidecarFrame.width,
+      height: sidecarFrame.height,
+      displayId: sidecarFrame.displayId,
+      sequenceNumber: this._sequenceNumber++,
+    }
+
+    this.enqueueFrame(frame)
   }
 
   private async captureFrame(): Promise<void> {

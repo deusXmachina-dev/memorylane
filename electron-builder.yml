@@ -45,6 +45,11 @@ asarUnpack:
 afterSign: build/notarize.js
 
 mac:
+  extraResources:
+    - from: build/rust
+      to: rust
+      filter:
+        - screenshot-capturer-mac
   notarize: false
   category: public.app-category.productivity
   extendInfo:

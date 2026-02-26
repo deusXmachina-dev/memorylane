@@ -63,6 +63,11 @@ export const SCREEN_CAPTURER_CONFIG = {
   MAX_DIMENSION_PX: 1_920,
 }
 
+export const SCREEN_CAPTURER_SIDECAR_CONFIG = {
+  MAX_RESTART_RETRIES: 3,
+  RESTART_BACKOFF_MS: 1000,
+}
+
 // Pattern Detection Configuration
 export const PATTERN_DETECTION_CONFIG = {
   MODEL: 'moonshotai/kimi-k2.5',
