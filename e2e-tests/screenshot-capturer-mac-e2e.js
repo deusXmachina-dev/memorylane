@@ -4,10 +4,11 @@ const path = require('path')
 const { spawn } = require('child_process')
 const { createInterface } = require('readline')
 
-const WATCH_DURATION_MS = 3200
+const WATCH_DURATION_MS = 10_000
 const OUTPUT_ROOT_DIR = path.resolve(process.cwd(), '.debug-screenshot-capturer-mac')
 const RUN_OUTPUT_DIR = path.join(OUTPUT_ROOT_DIR, new Date().toISOString().replace(/[:.]/g, '-'))
 const FRAMES_DIR = path.join(RUN_OUTPUT_DIR, 'frames')
+const RUN_BINARY_PATH = path.join(RUN_OUTPUT_DIR, 'screenshot-capturer-mac')
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
 function resolveBinaryPath() {
@@ -20,6 +21,22 @@ function resolveBinaryPath() {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function terminateChild(child, closePromise) {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    await closePromise
+    return
+  }
+
+  child.kill('SIGTERM')
+  await Promise.race([closePromise, sleep(2000)])
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return
+  }
+
+  child.kill('SIGKILL')
+  await Promise.race([closePromise, sleep(2000)])
 }
 
 function writeJsonLines(pathname, records) {
@@ -81,12 +98,14 @@ async function main() {
   }
 
   fs.mkdirSync(FRAMES_DIR, { recursive: true })
+  fs.copyFileSync(sidecarBinaryPath, RUN_BINARY_PATH)
+  fs.chmodSync(RUN_BINARY_PATH, 0o755)
 
   const allEvents = []
   const screenshotEvents = []
   const parseErrors = []
 
-  const child = spawn(sidecarBinaryPath, ['--output-dir', FRAMES_DIR, '--interval-ms', '1000'], {
+  const child = spawn(RUN_BINARY_PATH, ['--output-dir', FRAMES_DIR, '--interval-ms', '1000'], {
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   console.log(`[ScreenshotCapturerMacE2E] Spawned sidecar pid=${child.pid}`)
@@ -125,12 +144,12 @@ async function main() {
       resolve()
     })
   })
+  child.on('error', (error) => {
+    stderrLines.push(`spawn error: ${error.message}`)
+  })
 
   await sleep(WATCH_DURATION_MS)
-  if (!child.killed) {
-    child.kill('SIGTERM')
-  }
-  await Promise.race([closePromise, sleep(5000)])
+  await terminateChild(child, closePromise)
   rl.close()
 
   const summary = {
