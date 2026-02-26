@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-cidre = { version = "0.14.2", features = ["ax", "cg", "cf", "iio"] }
+objc2-application-services = "0.3.2"
+objc2-core-foundation = "0.3.2"
+objc2-core-graphics = "0.3.2"
+objc2-image-io = "0.3.2"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"

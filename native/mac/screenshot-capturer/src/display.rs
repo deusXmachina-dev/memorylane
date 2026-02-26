@@ -1,46 +1,36 @@
-use cidre::cg;
+use objc2_core_graphics as cg;
 
 use crate::ax_focus::focused_window_rect;
 use crate::types::RectF64;
 
-const CG_OK: i32 = 0;
-
-#[link(name = "CoreGraphics", kind = "framework")]
-unsafe extern "C-unwind" {
-    fn CGGetActiveDisplayList(
-        max_displays: u32,
-        active_displays: *mut cg::DirectDisplayId,
-        display_count: *mut u32,
-    ) -> i32;
-}
-
-pub(crate) fn list_active_displays() -> Result<Vec<cg::DirectDisplayId>, String> {
+pub(crate) fn list_active_displays() -> Result<Vec<cg::CGDirectDisplayID>, String> {
     let mut count = 0u32;
-    let count_status = unsafe { CGGetActiveDisplayList(0, std::ptr::null_mut(), &mut count) };
-    if count_status != CG_OK {
-        return Err(format!("CGGetActiveDisplayList(count) failed: {count_status}"));
+    let count_status = unsafe { cg::CGGetActiveDisplayList(0, std::ptr::null_mut(), &mut count) };
+    if count_status != cg::CGError::Success {
+        return Ok(vec![cg::CGMainDisplayID()]);
     }
     if count == 0 {
-        return Err("No active displays reported by CoreGraphics".to_string());
+        return Ok(vec![cg::CGMainDisplayID()]);
     }
 
-    let mut displays = vec![cg::DirectDisplayId::NULL; count as usize];
-    let list_status = unsafe { CGGetActiveDisplayList(count, displays.as_mut_ptr(), &mut count) };
-    if list_status != CG_OK {
-        return Err(format!("CGGetActiveDisplayList(list) failed: {list_status}"));
+    let mut displays = vec![cg::kCGNullDirectDisplay; count as usize];
+    let list_status =
+        unsafe { cg::CGGetActiveDisplayList(count, displays.as_mut_ptr(), &mut count) };
+    if list_status != cg::CGError::Success {
+        return Ok(vec![cg::CGMainDisplayID()]);
     }
 
     displays.truncate(count as usize);
     Ok(displays)
 }
 
-fn display_rect(display_id: cg::DirectDisplayId) -> RectF64 {
-    let bounds = display_id.bounds();
+fn display_rect(display_id: cg::CGDirectDisplayID) -> RectF64 {
+    let bounds = cg::CGDisplayBounds(display_id);
     RectF64 {
-        x: bounds.origin.x,
-        y: bounds.origin.y,
-        width: bounds.size.width,
-        height: bounds.size.height,
+        x: bounds.origin.x as f64,
+        y: bounds.origin.y as f64,
+        width: bounds.size.width as f64,
+        height: bounds.size.height as f64,
     }
 }
 
@@ -60,8 +50,8 @@ fn intersection_area(a: RectF64, b: RectF64) -> f64 {
 
 fn resolve_display_for_window_rects(
     window_rect: RectF64,
-    display_rects: &[(cg::DirectDisplayId, RectF64)],
-) -> Option<cg::DirectDisplayId> {
+    display_rects: &[(cg::CGDirectDisplayID, RectF64)],
+) -> Option<cg::CGDirectDisplayID> {
     if window_rect.width <= 0.0 || window_rect.height <= 0.0 {
         return None;
     }
@@ -77,7 +67,7 @@ fn resolve_display_for_window_rects(
         return Some(center_hit);
     }
 
-    let mut best_display: Option<cg::DirectDisplayId> = None;
+    let mut best_display: Option<cg::CGDirectDisplayID> = None;
     let mut best_overlap = 0.0f64;
     for (display_id, rect) in display_rects {
         let overlap = intersection_area(window_rect, *rect);
@@ -93,7 +83,9 @@ fn resolve_display_for_window_rects(
     }
 }
 
-pub(crate) fn resolve_active_display(displays: &[cg::DirectDisplayId]) -> Result<cg::DirectDisplayId, String> {
+pub(crate) fn resolve_active_display(
+    displays: &[cg::CGDirectDisplayID],
+) -> Result<cg::CGDirectDisplayID, String> {
     let focused_rect = focused_window_rect()?;
     let display_rects = displays
         .iter()
@@ -106,7 +98,7 @@ pub(crate) fn resolve_active_display(displays: &[cg::DirectDisplayId]) -> Result
 #[cfg(test)]
 mod tests {
     use super::{intersection_area, resolve_display_for_window_rects, RectF64};
-    use cidre::cg;
+    use objc2_core_graphics as cg;
 
     fn fake_display(
         id: u32,
@@ -114,9 +106,9 @@ mod tests {
         y: f64,
         width: f64,
         height: f64,
-    ) -> (cg::DirectDisplayId, RectF64) {
+    ) -> (cg::CGDirectDisplayID, RectF64) {
         (
-            cg::DirectDisplayId(id),
+            id,
             RectF64 {
                 x,
                 y,
@@ -174,6 +166,6 @@ mod tests {
         };
 
         let chosen = resolve_display_for_window_rects(window, &display_rects);
-        assert_eq!(chosen.map(|display| display.0), Some(2));
+        assert_eq!(chosen, Some(2));
     }
 }

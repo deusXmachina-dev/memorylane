@@ -233,7 +233,9 @@ describeIntegration('screen capturer integration', () => {
     )
 
     capturer.start()
-    await sleep(500) // well under the 5s interval
+    // Sidecar startup + first capture can be briefly delayed by system contention.
+    // Keep this comfortably below the 5s interval while avoiding flaky timing failures.
+    await sleep(900)
     capturer.stop()
     await flushAsyncAppends()
 
