@@ -113,6 +113,17 @@ export class StorageService {
   }
 
   /**
+   * Writes a consistent SQLite backup snapshot to the destination path.
+   * Safe to use while the database is open and operating in WAL mode.
+   */
+  public async backupToFile(destinationPath: string): Promise<void> {
+    if (!this.db) {
+      throw new Error('Database is closed')
+    }
+    await this.db.backup(destinationPath)
+  }
+
+  /**
    * Closes the database connection.
    */
   public close(): void {

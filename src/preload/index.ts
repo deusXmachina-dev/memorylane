@@ -40,6 +40,8 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   resetCaptureSettings: () => ipcRenderer.invoke('main-window:resetCaptureSettings'),
   // Stats
   getStats: () => ipcRenderer.invoke('main-window:getStats'),
+  // Database export
+  exportDatabaseZip: () => ipcRenderer.invoke('main-window:exportDatabaseZip'),
 })
 
 console.log('[Preload] mainWindowAPI exposed to renderer')

@@ -117,6 +117,13 @@ export interface SaveResult {
   error?: string | undefined
 }
 
+export interface DatabaseExportResult {
+  success: boolean
+  cancelled?: boolean | undefined
+  outputPath?: string | undefined
+  error?: string | undefined
+}
+
 export interface SettingsAPI {
   getKeyStatus: () => Promise<KeyStatus>
   saveApiKey: (key: string) => Promise<SaveResult>
@@ -177,6 +184,8 @@ export interface MainWindowAPI {
   resetCaptureSettings: () => Promise<SaveResult>
   // Stats
   getStats: () => Promise<MainWindowStats>
+  // Database export
+  exportDatabaseZip: () => Promise<DatabaseExportResult>
   // Updater
   getUpdateState: () => Promise<UpdateState>
   onUpdateStateChanged: (callback: (state: UpdateState) => void) => void
