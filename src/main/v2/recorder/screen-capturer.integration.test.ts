@@ -9,7 +9,12 @@ const RUN_INTEGRATION =
   process.platform === 'darwin' && process.env.RUN_NATIVE_SCREENSHOT_INTEGRATION === '1'
 const describeIntegration = RUN_INTEGRATION ? describe.sequential : describe.skip
 
-const SCREENSHOT_BINARY_PATH = path.resolve(process.cwd(), 'build', 'swift', 'screenshot')
+const SCREENSHOT_CAPTURER_BINARY_PATH = path.resolve(
+  process.cwd(),
+  'build',
+  'rust',
+  'screenshot-capturer-mac',
+)
 const OUTPUT_ROOT_DIR = path.resolve(process.cwd(), '.debug-screen-capturer')
 const RUN_OUTPUT_DIR = path.join(OUTPUT_ROOT_DIR, new Date().toISOString().replace(/[:.]/g, '-'))
 
@@ -41,9 +46,9 @@ describeIntegration('screen capturer integration', () => {
   let subscriptions: StreamSubscription[] = []
 
   beforeAll(() => {
-    if (!fs.existsSync(SCREENSHOT_BINARY_PATH)) {
+    if (!fs.existsSync(SCREENSHOT_CAPTURER_BINARY_PATH)) {
       throw new Error(
-        `Missing screenshot binary at ${SCREENSHOT_BINARY_PATH}. Run "npm run build:swift" first.`,
+        `Missing screenshot sidecar binary at ${SCREENSHOT_CAPTURER_BINARY_PATH}. Run "npm run build:rust" first.`,
       )
     }
 
@@ -66,7 +71,7 @@ describeIntegration('screen capturer integration', () => {
   })
 
   afterAll(() => {
-    delete process.env.MEMORYLANE_SCREENSHOT_EXECUTABLE
+    delete process.env.MEMORYLANE_SCREENSHOT_CAPTURER_MAC_EXECUTABLE
   })
 
   it('captures frames at regular intervals', async () => {
