@@ -4,9 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-objc2-application-services = "0.3.2"
-objc2-core-foundation = "0.3.2"
-objc2-core-graphics = "0.3.2"
-objc2-image-io = "0.3.2"
+cidre = { version = "0.14.2", default-features = false, features = ["async", "av", "blocks", "cv", "dispatch", "iio", "sc", "macos_13_1"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"

@@ -1,36 +1,23 @@
-use objc2_core_graphics as cg;
+use std::sync::mpsc;
+use std::time::Duration;
 
-use crate::ax_focus::focused_window_rect;
+use cidre::{arc, blocks, cg, sc};
+
 use crate::types::RectF64;
 
-pub(crate) fn list_active_displays() -> Result<Vec<cg::CGDirectDisplayID>, String> {
-    let mut count = 0u32;
-    let count_status = unsafe { cg::CGGetActiveDisplayList(0, std::ptr::null_mut(), &mut count) };
-    if count_status != cg::CGError::Success {
-        return Ok(vec![cg::CGMainDisplayID()]);
-    }
-    if count == 0 {
-        return Ok(vec![cg::CGMainDisplayID()]);
-    }
+const SHAREABLE_CONTENT_TIMEOUT: Duration = Duration::from_millis(750);
 
-    let mut displays = vec![cg::kCGNullDirectDisplay; count as usize];
-    let list_status =
-        unsafe { cg::CGGetActiveDisplayList(count, displays.as_mut_ptr(), &mut count) };
-    if list_status != cg::CGError::Success {
-        return Ok(vec![cg::CGMainDisplayID()]);
-    }
-
-    displays.truncate(count as usize);
-    Ok(displays)
+pub(crate) struct SelectedDisplay {
+    pub(crate) display: arc::R<sc::Display>,
+    pub(crate) display_id: u32,
 }
 
-fn display_rect(display_id: cg::CGDirectDisplayID) -> RectF64 {
-    let bounds = cg::CGDisplayBounds(display_id);
+fn rect_from_cg(rect: cg::Rect) -> RectF64 {
     RectF64 {
-        x: bounds.origin.x as f64,
-        y: bounds.origin.y as f64,
-        width: bounds.size.width as f64,
-        height: bounds.size.height as f64,
+        x: rect.origin.x,
+        y: rect.origin.y,
+        width: rect.size.width,
+        height: rect.size.height,
     }
 }
 
@@ -50,15 +37,14 @@ fn intersection_area(a: RectF64, b: RectF64) -> f64 {
 
 fn resolve_display_for_window_rects(
     window_rect: RectF64,
-    display_rects: &[(cg::CGDirectDisplayID, RectF64)],
-) -> Option<cg::CGDirectDisplayID> {
+    display_rects: &[(u32, RectF64)],
+) -> Option<u32> {
     if window_rect.width <= 0.0 || window_rect.height <= 0.0 {
         return None;
     }
 
     let center_x = window_rect.x + (window_rect.width / 2.0);
     let center_y = window_rect.y + (window_rect.height / 2.0);
-
     if let Some(center_hit) = display_rects
         .iter()
         .find(|(_, rect)| contains_point(*rect, center_x, center_y))
@@ -67,7 +53,7 @@ fn resolve_display_for_window_rects(
         return Some(center_hit);
     }
 
-    let mut best_display: Option<cg::CGDirectDisplayID> = None;
+    let mut best_display: Option<u32> = None;
     let mut best_overlap = 0.0f64;
     for (display_id, rect) in display_rects {
         let overlap = intersection_area(window_rect, *rect);
@@ -76,6 +62,7 @@ fn resolve_display_for_window_rects(
             best_display = Some(*display_id);
         }
     }
+
     if best_overlap > 0.0 {
         best_display
     } else {
@@ -83,30 +70,79 @@ fn resolve_display_for_window_rects(
     }
 }
 
-pub(crate) fn resolve_active_display(
-    displays: &[cg::CGDirectDisplayID],
-) -> Result<cg::CGDirectDisplayID, String> {
-    let focused_rect = focused_window_rect()?;
+fn load_shareable_content() -> Result<arc::R<sc::ShareableContent>, String> {
+    let (tx, rx) = mpsc::sync_channel(1);
+    let mut handler = blocks::ResultCh::<sc::ShareableContent>::new2(
+        move |content: Option<&sc::ShareableContent>, error: Option<&cidre::ns::Error>| {
+            let result = match error {
+                Some(err) => Err(format!("ScreenCaptureKit content query failed: {err}")),
+                None => content.map(|value| value.retained()).ok_or_else(|| {
+                    "ScreenCaptureKit content query returned no content".to_string()
+                }),
+            };
+            let _ = tx.send(result);
+        },
+    );
+    sc::ShareableContent::current_with_ch_block(&mut handler);
+
+    match rx.recv_timeout(SHAREABLE_CONTENT_TIMEOUT) {
+        Ok(result) => result,
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            Err("Timed out waiting for ScreenCaptureKit shareable content".to_string())
+        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            Err("ScreenCaptureKit shareable content callback disconnected".to_string())
+        }
+    }
+}
+
+pub(crate) fn resolve_active_display() -> Result<SelectedDisplay, String> {
+    let content = load_shareable_content()?;
+    let displays = content.displays();
+    if displays.is_empty() {
+        return Err("ScreenCaptureKit returned no displays".to_string());
+    }
+
     let display_rects = displays
         .iter()
-        .map(|display| (*display, display_rect(*display)))
+        .map(|display| (display.display_id().0, rect_from_cg(display.frame())))
         .collect::<Vec<_>>();
-    resolve_display_for_window_rects(focused_rect, &display_rects)
-        .ok_or_else(|| "Could not map focused window to an active display".to_string())
+
+    let active_window_display_id = content
+        .windows()
+        .iter()
+        .find(|window| window.is_on_screen() && window.is_active())
+        .and_then(|window| {
+            resolve_display_for_window_rects(rect_from_cg(window.frame()), &display_rects)
+        });
+
+    let main_display_id = cg::DirectDisplayId::main().0;
+    let selected_display_id = active_window_display_id
+        .or_else(|| {
+            displays
+                .iter()
+                .any(|display| display.display_id().0 == main_display_id)
+                .then_some(main_display_id)
+        })
+        .unwrap_or(display_rects[0].0);
+
+    let selected_display = displays
+        .iter()
+        .find(|display| display.display_id().0 == selected_display_id)
+        .map(|display| display.retained())
+        .ok_or_else(|| format!("ScreenCaptureKit display {selected_display_id} is unavailable"))?;
+
+    Ok(SelectedDisplay {
+        display: selected_display,
+        display_id: selected_display_id,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::{intersection_area, resolve_display_for_window_rects, RectF64};
-    use objc2_core_graphics as cg;
 
-    fn fake_display(
-        id: u32,
-        x: f64,
-        y: f64,
-        width: f64,
-        height: f64,
-    ) -> (cg::CGDirectDisplayID, RectF64) {
+    fn fake_display(id: u32, x: f64, y: f64, width: f64, height: f64) -> (u32, RectF64) {
         (
             id,
             RectF64 {

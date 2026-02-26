@@ -2,7 +2,7 @@
 
 Rust sidecar for macOS active-screen screenshot capture.
 
-This process runs continuously, determines which display contains the currently focused window, captures that display every interval, and writes PNG files to disk.
+This process runs continuously and uses ScreenCaptureKit (`SCScreenshotManager`) to capture one display every interval. It prefers the display containing the active on-screen window, then falls back to the main display (or first available display), and writes PNG files to disk.
 
 ## Event Contract
 

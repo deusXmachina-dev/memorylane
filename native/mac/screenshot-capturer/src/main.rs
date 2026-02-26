@@ -1,4 +1,3 @@
-mod ax_focus;
 mod capture;
 mod cli;
 mod display;
