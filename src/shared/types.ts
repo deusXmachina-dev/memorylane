@@ -147,6 +147,7 @@ export interface MainWindowStats {
 }
 
 export interface CaptureSettings {
+  captureMode: 'v1' | 'v2'
   visualThreshold: number
   typingDebounceMs: number
   scrollDebounceMs: number

@@ -1,12 +1,16 @@
-import { app, desktopCapturer } from 'electron'
+import { app, desktopCapturer, nativeImage } from 'electron'
 // eslint-disable-next-line import/no-unresolved
 import { v4 as uuidv4 } from 'uuid'
 import * as fs from 'fs'
 import * as path from 'path'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import { ActivityScreenshot } from '../../shared/types'
 import * as visualDetector from './visual-detector'
 import * as interactionMonitor from './interaction-monitor'
 import log from '../logger'
+
+const execFileAsync = promisify(execFile)
 
 // Configuration
 const SCREENSHOTS_DIR = path.join(app.getPath('userData'), 'screenshots')
@@ -28,6 +32,82 @@ function parseDisplayId(sourceId: string): number {
   return parseInt(sourceId.split(':')[1] || '0', 10)
 }
 
+// ---------------------------------------------------------------------------
+// macOS native screen capture (uses ScreenCaptureKit via screencapture CLI)
+//
+// Electron's desktopCapturer.getSources() returns empty thumbnails on macOS 26+
+// when the app runs as an accessory (dock hidden). The system `screencapture`
+// tool works reliably because it uses ScreenCaptureKit internally.
+// ---------------------------------------------------------------------------
+
+/**
+ * Capture the screen to a PNG file using macOS `screencapture`.
+ */
+async function screencaptureToPng(filepath: string): Promise<void> {
+  await execFileAsync('/usr/sbin/screencapture', ['-x', '-t', 'png', filepath])
+}
+
+/**
+ * Capture a screenshot and return it as an ActivityScreenshot (macOS path).
+ */
+async function captureImmediateMacOS(
+  trigger: ActivityScreenshot['trigger'],
+  displayId?: number,
+): Promise<ActivityScreenshot> {
+  ensureScreenshotsDir()
+
+  const id = uuidv4()
+  const timestamp = Date.now()
+  const filename = `${timestamp}_${id}.png`
+  const filepath = path.join(SCREENSHOTS_DIR, filename)
+
+  await screencaptureToPng(filepath)
+
+  const img = nativeImage.createFromPath(filepath)
+  if (img.isEmpty()) {
+    fs.unlinkSync(filepath)
+    throw new Error('screencapture produced an empty image')
+  }
+  const size = img.getSize()
+
+  log.info(`[Capture] Screenshot saved: ${path.basename(filepath)} (trigger: ${trigger})`)
+
+  return {
+    id,
+    filepath,
+    timestamp,
+    trigger,
+    display: { id: displayId ?? 0, width: size.width, height: size.height },
+  }
+}
+
+/**
+ * Capture a low-res sample bitmap for visual change detection (macOS path).
+ */
+async function captureSampleBitmapMacOS(): Promise<Buffer> {
+  ensureScreenshotsDir()
+  const tmpPath = path.join(SCREENSHOTS_DIR, `_sample_${Date.now()}.png`)
+  try {
+    await screencaptureToPng(tmpPath)
+    const img = nativeImage.createFromPath(tmpPath)
+    if (img.isEmpty()) {
+      throw new Error('screencapture produced an empty sample image')
+    }
+    const resized = img.resize({ width: SAMPLE_SIZE.width, height: SAMPLE_SIZE.height })
+    return resized.toBitmap()
+  } finally {
+    try {
+      fs.unlinkSync(tmpPath)
+    } catch {
+      // best-effort cleanup
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// desktopCapturer path (non-macOS fallback)
+// ---------------------------------------------------------------------------
+
 /**
  * Persist a captured source's thumbnail to disk and build the ActivityScreenshot metadata.
  */
@@ -36,6 +116,10 @@ function saveScreenshot(
   trigger: ActivityScreenshot['trigger'],
 ): ActivityScreenshot {
   ensureScreenshotsDir()
+
+  if (source.thumbnail.isEmpty()) {
+    throw new Error(`Empty thumbnail for source "${source.name}" (trigger: ${trigger})`)
+  }
 
   const id = uuidv4()
   const timestamp = Date.now()
@@ -92,9 +176,16 @@ async function captureScreen(
  * (desktopCapturer treats thumbnailSize as a bounding box, not an exact size).
  */
 async function captureSampleBitmap(displayId?: number): Promise<Buffer> {
+  if (process.platform === 'darwin') {
+    return captureSampleBitmapMacOS()
+  }
   const source = await captureScreen(SAMPLE_SIZE, displayId)
   return source.thumbnail.toBitmap()
 }
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 
 /**
  * Capture a screenshot immediately.
@@ -104,6 +195,10 @@ export async function captureImmediate(
   trigger: ActivityScreenshot['trigger'],
   displayId?: number,
 ): Promise<ActivityScreenshot> {
+  if (process.platform === 'darwin') {
+    return captureImmediateMacOS(trigger, displayId)
+  }
+
   const source = await captureScreen(FULL_RES_SIZE, displayId)
   const screenshot = saveScreenshot(source, trigger)
   log.info(
@@ -141,7 +236,7 @@ export async function captureIfVisualChange(
  * Capture a specific window by its title.
  * Uses desktopCapturer with types: ['window'] which on macOS uses CGWindowListCopyWindowInfo,
  * allowing capture of background windows regardless of z-order.
- * Returns null if no window with the given title is found.
+ * Returns null if no window with the given title is found or if the thumbnail is empty.
  */
 export async function captureWindowByTitle(
   title: string,
@@ -161,6 +256,11 @@ export async function captureWindowByTitle(
     log.info(
       `[Capture] Window not found by title: "${title}" (${sources.length} windows available)`,
     )
+    return null
+  }
+
+  if (source.thumbnail.isEmpty()) {
+    log.info(`[Capture] Window thumbnail is empty for "${title}", skipping`)
     return null
   }
 

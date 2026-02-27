@@ -33,6 +33,9 @@ export const SCREENSHOT_CLEANUP_CONFIG = {
   CLEANUP_INTERVAL_MS: 10 * 60 * 1000, // Run cleanup every 10 minutes
 }
 
+// Capture Mode Configuration
+export const DEFAULT_CAPTURE_MODE: 'v1' | 'v2' = 'v2'
+
 // Activity Window Configuration
 export const ACTIVITY_CONFIG = {
   MIN_ACTIVITY_DURATION_MS: 3_000, // Discard activities shorter than 3s

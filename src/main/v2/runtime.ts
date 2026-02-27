@@ -4,6 +4,7 @@ import { app } from 'electron'
 import log from '../logger'
 import { ApiKeyManager } from '../settings/api-key-manager'
 import { CustomEndpointManager } from '../settings/custom-endpoint-manager'
+import { CaptureSettingsManager } from '../settings/capture-settings-manager'
 import { DeviceIdentity } from '../settings/device-identity'
 import { ManagedKeyService } from '../services/managed-key-service'
 import { StorageService } from '../storage'
@@ -20,22 +21,33 @@ import {
   type RuntimeCapture,
   type RuntimeCaptureController,
 } from './capture-controller'
+import { CustomEndpointConfig } from '../../shared/types'
 
-export interface V2MainRuntime {
+interface SemanticService {
+  updateApiKey(apiKey: string | null): void
+  updateEndpoint(config: CustomEndpointConfig | null, openRouterKey?: string | null): void
+}
+
+export interface MainRuntime {
   capture: RuntimeCapture
   storage: StorageService
   usageTracker: UsageTracker
   apiKeyManager: ApiKeyManager
   customEndpointManager: CustomEndpointManager
-  semanticService: V2ActivitySemanticService
+  semanticService: SemanticService
   managedKeyService: ManagedKeyService
   dispose(): Promise<void>
 }
 
-export async function createV2MainRuntime(params?: {
+export type V2MainRuntime = MainRuntime
+
+export async function createMainRuntime(params?: {
   onCaptureStateChanged?: () => void
-}): Promise<V2MainRuntime> {
+  captureSettingsManager?: CaptureSettingsManager
+}): Promise<MainRuntime> {
   const onCaptureStateChanged = params?.onCaptureStateChanged ?? (() => undefined)
+  const captureSettingsManager = params?.captureSettingsManager ?? new CaptureSettingsManager()
+  const captureMode = captureSettingsManager.get().captureMode
 
   const interactionMonitor = await import('../recorder/interaction-monitor')
 
@@ -43,6 +55,64 @@ export async function createV2MainRuntime(params?: {
   const customEndpointManager = new CustomEndpointManager()
   const storage = new StorageService(StorageService.getDefaultDbPath())
   const usageTracker = new UsageTracker()
+
+  const outputDir = path.join(app.getPath('userData'), 'screenshots')
+  fs.mkdirSync(outputDir, { recursive: true })
+
+  const deviceIdentity = new DeviceIdentity()
+  const managedKeyService = new ManagedKeyService(deviceIdentity)
+
+  if (captureMode === 'v1') {
+    return createV1Runtime({
+      onCaptureStateChanged,
+      interactionMonitor,
+      apiKeyManager,
+      customEndpointManager,
+      storage,
+      usageTracker,
+      managedKeyService,
+      outputDir,
+    })
+  }
+
+  return createV2Runtime({
+    onCaptureStateChanged,
+    interactionMonitor,
+    apiKeyManager,
+    customEndpointManager,
+    storage,
+    usageTracker,
+    managedKeyService,
+    outputDir,
+  })
+}
+
+export const createV2MainRuntime = createMainRuntime
+
+// ---------------------------------------------------------------------------
+// v2 runtime (video pipeline)
+// ---------------------------------------------------------------------------
+
+async function createV2Runtime(shared: {
+  onCaptureStateChanged: () => void
+  interactionMonitor: typeof import('../recorder/interaction-monitor')
+  apiKeyManager: ApiKeyManager
+  customEndpointManager: CustomEndpointManager
+  storage: StorageService
+  usageTracker: UsageTracker
+  managedKeyService: ManagedKeyService
+  outputDir: string
+}): Promise<MainRuntime> {
+  const {
+    onCaptureStateChanged,
+    interactionMonitor,
+    apiKeyManager,
+    customEndpointManager,
+    storage,
+    usageTracker,
+    managedKeyService,
+    outputDir,
+  } = shared
 
   const debugDumper =
     !app.isPackaged && process.env.DEBUG_PIPELINE
@@ -65,9 +135,6 @@ export async function createV2MainRuntime(params?: {
         }
       : undefined,
   })
-
-  const outputDir = path.join(app.getPath('userData'), 'screenshots')
-  fs.mkdirSync(outputDir, { recursive: true })
 
   const transformer = new DefaultActivityTransformer(
     new FfmpegVideoStitcher(),
@@ -95,9 +162,6 @@ export async function createV2MainRuntime(params?: {
     harness.handleEvent(event)
   }
   interactionMonitor.onInteraction(interactionHandler)
-
-  const deviceIdentity = new DeviceIdentity()
-  const managedKeyService = new ManagedKeyService(deviceIdentity)
 
   let disposePromise: Promise<void> | null = null
 
@@ -131,6 +195,144 @@ export async function createV2MainRuntime(params?: {
           storage.close()
         } catch (error) {
           log.warn('[V2Runtime] Failed to close storage:', error)
+        }
+      })()
+
+      return disposePromise
+    },
+  }
+}
+
+// ---------------------------------------------------------------------------
+// v1 runtime (event-driven snapshot pipeline)
+// ---------------------------------------------------------------------------
+
+async function createV1Runtime(shared: {
+  onCaptureStateChanged: () => void
+  interactionMonitor: typeof import('../recorder/interaction-monitor')
+  apiKeyManager: ApiKeyManager
+  customEndpointManager: CustomEndpointManager
+  storage: StorageService
+  usageTracker: UsageTracker
+  managedKeyService: ManagedKeyService
+  outputDir: string
+}): Promise<MainRuntime> {
+  const {
+    onCaptureStateChanged,
+    interactionMonitor,
+    apiKeyManager,
+    customEndpointManager,
+    storage,
+    usageTracker,
+    managedKeyService,
+    outputDir,
+  } = shared
+
+  const recorder = await import('../recorder/recorder')
+  const { ActivityManager } = await import('../processor/activity-manager')
+  const { ActivityProcessor } = await import('../processor/index')
+  const { SemanticClassifierService } = await import('../processor/semantic-classifier')
+
+  const savedEndpoint = customEndpointManager.getEndpoint()
+  const classifierService = new SemanticClassifierService(
+    apiKeyManager.getApiKey() || undefined,
+    undefined, // default model
+    undefined, // default maxHistorySize
+    usageTracker,
+    undefined, // no debug writer
+    savedEndpoint
+      ? {
+          serverURL: savedEndpoint.serverURL,
+          model: savedEndpoint.model,
+          apiKey: savedEndpoint.apiKey,
+        }
+      : undefined,
+  )
+
+  const embeddingService = new EmbeddingService()
+  const processor = new ActivityProcessor(embeddingService, storage, classifierService)
+
+  const activityManager = new ActivityManager({
+    captureImmediate: recorder.captureImmediate,
+    captureIfVisualChange: recorder.captureIfVisualChange,
+    captureWindowByTitle: recorder.captureWindowByTitle,
+  })
+
+  activityManager.onActivityComplete((activity) => {
+    void processor.processActivity(activity)
+  })
+
+  let interactionHandler:
+    | ((event: import('../../shared/types').InteractionContext) => void)
+    | null = null
+
+  const capture: RuntimeCaptureController = {
+    isCapturingNow(): boolean {
+      return recorder.isCapturingNow()
+    },
+    startCapture(): void {
+      interactionHandler = (event) => {
+        void activityManager.handleInteraction(event)
+      }
+      interactionMonitor.onInteraction(interactionHandler)
+      recorder.startCapture()
+      onCaptureStateChanged()
+      log.info('[V1Runtime] Started capture')
+    },
+    stopCapture(): void {
+      recorder.stopCapture()
+      if (interactionHandler) {
+        interactionMonitor.clearInteractionCallback(interactionHandler)
+        interactionHandler = null
+      }
+      onCaptureStateChanged()
+      log.info('[V1Runtime] Stopped capture')
+    },
+    async forceClose(): Promise<void> {
+      await activityManager.forceClose()
+    },
+    getScreenshotsDir(): string {
+      return outputDir
+    },
+    waitForIdle(): Promise<void> {
+      return Promise.resolve()
+    },
+  }
+
+  let disposePromise: Promise<void> | null = null
+
+  return {
+    capture,
+    storage,
+    usageTracker,
+    apiKeyManager,
+    customEndpointManager,
+    semanticService: classifierService,
+    managedKeyService,
+    async dispose(): Promise<void> {
+      if (disposePromise) return disposePromise
+
+      disposePromise = (async () => {
+        try {
+          await activityManager.forceClose()
+          recorder.stopCapture()
+        } catch (error) {
+          log.warn('[V1Runtime] Error while stopping capture during dispose:', error)
+        }
+
+        if (interactionHandler) {
+          try {
+            interactionMonitor.clearInteractionCallback(interactionHandler)
+            interactionHandler = null
+          } catch (error) {
+            log.warn('[V1Runtime] Failed to clear interaction callback:', error)
+          }
+        }
+
+        try {
+          storage.close()
+        } catch (error) {
+          log.warn('[V1Runtime] Failed to close storage:', error)
         }
       })()
 

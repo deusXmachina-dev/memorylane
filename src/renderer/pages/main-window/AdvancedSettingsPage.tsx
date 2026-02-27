@@ -80,7 +80,7 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
     void load()
   }, [load])
 
-  const set = (key: keyof CaptureSettings, value: number): void => {
+  const set = (key: keyof CaptureSettings, value: number | string): void => {
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev))
     setDirty(true)
   }
@@ -151,6 +151,40 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
 
       {form && (
         <>
+          <div className="border-t border-border" />
+
+          <section className="space-y-3">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Processing Mode
+            </p>
+            <div className="flex gap-2">
+              <button
+                className={`flex-1 text-xs px-3 py-1.5 rounded-md border transition-colors ${
+                  form.captureMode === 'v1'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-transparent text-muted-foreground border-border hover:text-foreground'
+                }`}
+                onClick={() => set('captureMode', 'v1')}
+              >
+                Classic (v1)
+              </button>
+              <button
+                className={`flex-1 text-xs px-3 py-1.5 rounded-md border transition-colors ${
+                  form.captureMode === 'v2'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-transparent text-muted-foreground border-border hover:text-foreground'
+                }`}
+                onClick={() => set('captureMode', 'v2')}
+              >
+                Video (v2)
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Classic mode captures on interaction with visual change detection. Video mode captures
+              continuously and uses video analysis. Restart required to apply.
+            </p>
+          </section>
+
           <div className="border-t border-border" />
 
           <section className="space-y-3">

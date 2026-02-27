@@ -11,7 +11,7 @@ import log from './logger'
 import { startPowerMonitoring, shouldPause } from './power-monitor'
 import { CaptureSettingsManager } from './settings/capture-settings-manager'
 import { PatternDetector } from './services/pattern-detector'
-import { createV2MainRuntime, type V2MainRuntime } from './v2/runtime'
+import { createMainRuntime, type MainRuntime } from './v2/runtime'
 
 try {
   loadEnv()
@@ -29,7 +29,7 @@ app.on('window-all-closed', () => {
   // Don't quit - this is a tray app
 })
 
-let runtime: V2MainRuntime | null = null
+let runtime: MainRuntime | null = null
 let patternDetector: PatternDetector | null = null
 
 app.on('before-quit', () => {
@@ -63,11 +63,12 @@ app.on('ready', async () => {
   const { initMainWindowIPC, openMainWindow, sendStatusToRenderer } =
     await import('./ui/main-window')
 
-  runtime = await createV2MainRuntime({
+  runtime = await createMainRuntime({
     onCaptureStateChanged: () => {
       void updateTrayMenu()
       void sendStatusToRenderer()
     },
+    captureSettingsManager,
   })
 
   patternDetector = new PatternDetector(runtime.storage, runtime.apiKeyManager)
@@ -122,8 +123,9 @@ app.on('ready', async () => {
     },
   })
 
+  const mode = captureSettingsManager.get().captureMode
   log.info(
-    'MemoryLane started (v2 pipeline). Frame output dir:',
+    `MemoryLane started (${mode} pipeline). Frame output dir:`,
     runtime.capture.getScreenshotsDir(),
   )
 })
