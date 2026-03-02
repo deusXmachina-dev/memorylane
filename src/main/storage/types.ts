@@ -16,6 +16,7 @@ export interface ActivitySummary {
   startTimestamp: number
   endTimestamp: number
   appName: string
+  windowTitle: string
   summary: string
 }
 

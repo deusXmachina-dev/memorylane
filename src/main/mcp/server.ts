@@ -46,7 +46,7 @@ reasoning. \
 100-500 is a good default limit for searches over many hours.
 - **search_context** — targeted recall like "when did I review PR #142?", \
 "find my work on the auth module", or "that error I saw in the terminal". \
-Results are ranked by semantic relevance and return summary-first context.
+Results are ranked by semantic relevance and return summary-first context, including app and window title.
 - **get_activity_details** — fetch full activity details including OCR screen text \
 for specific activity IDs returned by the other tools. Use this only when exact \
 on-screen text is needed; do not use OCR as the primary source for inferring user activity.

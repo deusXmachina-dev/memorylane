@@ -57,7 +57,7 @@ export class ActivityRepository {
 
     const rows = this.db
       .prepare(
-        `SELECT a.id, a.start_timestamp, a.end_timestamp, a.app_name, a.summary
+        `SELECT a.id, a.start_timestamp, a.end_timestamp, a.app_name, a.window_title, a.summary
        FROM activities_fts fts
        JOIN activities a ON a.rowid = fts.rowid
        WHERE activities_fts MATCH ?
@@ -84,7 +84,7 @@ export class ActivityRepository {
       const effectiveLimit = Math.min(limit, SQLITE_VEC_KNN_MAX)
       const rows = this.db
         .prepare(
-          `SELECT a.id, a.start_timestamp, a.end_timestamp, a.app_name, a.summary
+          `SELECT a.id, a.start_timestamp, a.end_timestamp, a.app_name, a.window_title, a.summary
          FROM (
            SELECT id, distance
            FROM activities_vec
@@ -105,7 +105,7 @@ export class ActivityRepository {
 
     const rows = this.db
       .prepare(
-        `SELECT a.id, a.start_timestamp, a.end_timestamp, a.app_name, a.summary
+        `SELECT a.id, a.start_timestamp, a.end_timestamp, a.app_name, a.window_title, a.summary
        FROM (
          SELECT id, distance
          FROM activities_vec
@@ -148,7 +148,7 @@ export class ActivityRepository {
 
     const rows = this.db
       .prepare(
-        `SELECT id, start_timestamp, end_timestamp, app_name, summary
+        `SELECT id, start_timestamp, end_timestamp, app_name, window_title, summary
        FROM activities
        ${whereClause}
        ORDER BY start_timestamp ASC`,
@@ -222,6 +222,7 @@ export class ActivityRepository {
       startTimestamp: row.start_timestamp as number,
       endTimestamp: row.end_timestamp as number,
       appName: row.app_name as string,
+      windowTitle: row.window_title as string,
       summary: row.summary as string,
     }
   }

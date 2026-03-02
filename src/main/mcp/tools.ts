@@ -26,7 +26,7 @@ export function registerTools(
     'search_context',
     {
       description:
-        'Semantic search over recorded screen activity sessions. Each result includes id, time, app, and AI summary for summary-first activity reasoning. Use this for targeted questions (e.g. "when did I review PR #142?", "find my work on the auth module"). For exact strings, call get_activity_details to inspect OCR text. If query is omitted, returns activities chronologically (requires startTime or endTime).',
+        'Semantic search over recorded screen activity sessions. Each result includes id, time, app, window title, and AI summary for summary-first activity reasoning. Use this for targeted questions (e.g. "when did I review PR #142?", "find my work on the auth module"). For exact strings, call get_activity_details to inspect OCR text. If query is omitted, returns activities chronologically (requires startTime or endTime).',
       inputSchema: {
         query: z
           .string()
@@ -62,7 +62,7 @@ export function registerTools(
     'browse_timeline',
     {
       description:
-        'List activity during a time period — best for broad "what did I do?" questions. Each result is a one-line summary (~20 tokens), so use higher limits (30-50) to get a full picture. Supports uniform sampling to cover long ranges. Returns id, timestamp, app, and summary for activity inference; call get_activity_details only when exact OCR text is needed.',
+        'List activity during a time period — best for broad "what did I do?" questions. Each result is a one-line summary (~20 tokens), so use higher limits (30-50) to get a full picture. Supports uniform sampling to cover long ranges. Returns id, timestamp, app, window title, and summary for activity inference; call get_activity_details only when exact OCR text is needed.',
       inputSchema: {
         startTime: z
           .string()

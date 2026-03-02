@@ -133,6 +133,7 @@ describe('ActivityRepository', () => {
       storage.activities.add(
         createStoredActivity({
           id: 'fts-light',
+          windowTitle: 'Feature Request.md',
           summary: 'Lightweight check',
           ocrText: 'should not appear',
         }),
@@ -142,6 +143,7 @@ describe('ActivityRepository', () => {
 
       expect(results.length).toBe(1)
       expect(results[0]).toHaveProperty('id')
+      expect(results[0].windowTitle).toBe('Feature Request.md')
       expect(results[0]).toHaveProperty('summary')
       expect(results[0]).not.toHaveProperty('ocrText')
       expect(results[0]).not.toHaveProperty('vector')
@@ -281,6 +283,7 @@ describe('ActivityRepository', () => {
       storage.activities.add(
         createStoredActivity({
           id: 'vec-light',
+          windowTitle: 'src/main/mcp/tools.ts',
           vector: v(1.0),
           ocrText: 'should not appear',
         }),
@@ -290,6 +293,7 @@ describe('ActivityRepository', () => {
 
       expect(results.length).toBe(1)
       expect(results[0]).toHaveProperty('id')
+      expect(results[0].windowTitle).toBe('src/main/mcp/tools.ts')
       expect(results[0]).toHaveProperty('summary')
       expect(results[0]).not.toHaveProperty('ocrText')
       expect(results[0]).not.toHaveProperty('vector')
@@ -401,6 +405,7 @@ describe('ActivityRepository', () => {
         createStoredActivity({
           id: 'light-1',
           startTimestamp: 1000,
+          windowTitle: 'Q - KeePassXC',
           ocrText: 'should not appear',
         }),
       )
@@ -409,6 +414,7 @@ describe('ActivityRepository', () => {
 
       expect(results.length).toBe(1)
       expect(results[0]).toHaveProperty('id')
+      expect(results[0].windowTitle).toBe('Q - KeePassXC')
       expect(results[0]).toHaveProperty('summary')
       expect(results[0]).not.toHaveProperty('ocrText')
       expect(results[0]).not.toHaveProperty('vector')
