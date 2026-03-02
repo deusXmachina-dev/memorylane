@@ -35,7 +35,7 @@ describe('CaptureSettingsManager', () => {
     it('defaults match the constants values', () => {
       const manager = new CaptureSettingsManager(configPath)
       const defaults = manager.getDefaults()
-      expect(defaults.autoStartEnabled).toBe(false)
+      expect(defaults.autoStartEnabled).toBe(true)
       expect(defaults.visualThreshold).toBe(VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT)
       expect(defaults.typingDebounceMs).toBe(INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS)
       expect(defaults.scrollDebounceMs).toBe(INTERACTION_MONITOR_CONFIG.SCROLL_DEBOUNCE_MS)
