@@ -10,6 +10,7 @@ import * as path from 'path'
 import { app } from 'electron'
 import { config as loadEnv } from 'dotenv'
 import { shouldStartHiddenOnLaunch } from './auto-start'
+import { createCaptureCoordinator } from './capture-orchestrator'
 import log from './logger'
 import { ActivityProcessor } from './processor/index'
 import { EmbeddingService } from './processor/embedding'
@@ -24,6 +25,7 @@ import { ActivityManager } from './processor/activity-manager'
 import { ProcessingQueue } from './processor/processing-queue'
 import { startPowerMonitoring, shouldPause } from './power-monitor'
 import { SCREENSHOT_CLEANUP_CONFIG } from '../shared/constants'
+import { CaptureStateManager } from './settings/capture-state-manager'
 import { CaptureSettingsManager } from './settings/capture-settings-manager'
 
 if (!app.requestSingleInstanceLock()) {
@@ -33,15 +35,13 @@ if (!app.requestSingleInstanceLock()) {
 try {
   loadEnv()
 } catch {
-  // cwd might not be available in packaged app context — expected, we don't need .env there
+  // cwd might not be available in packaged app context - expected, we don't need .env there
 }
 
-// Hide dock icon on macOS for pure tray experience
 if (process.platform === 'darwin') {
   app.dock?.hide()
 }
 
-// Prevent app from quitting when all windows are closed (tray app)
 app.on('window-all-closed', () => {
   // Don't quit - this is a tray app
 })
@@ -67,7 +67,6 @@ const initServices = async (): Promise<void> => {
   const storageService = new StorageService(StorageService.getDefaultDbPath())
   const debugWriter = DebugPipelineWriter.create()
 
-  // Build endpoint config from saved custom endpoint (if any)
   const savedEndpoint = customEndpointManager.getEndpoint()
   const endpointConfig = savedEndpoint
     ? {
@@ -120,21 +119,27 @@ app.on('ready', async () => {
   }
 
   const captureSettingsManager = new CaptureSettingsManager()
+  const captureStateManager = new CaptureStateManager()
   captureSettingsManager.applyToConstants()
 
   await initServices()
 
-  // Set up ActivityManager with recorder as capture provider
   activityManager = new ActivityManager({
     captureImmediate: recorder.captureImmediate,
     captureIfVisualChange: recorder.captureIfVisualChange,
     captureWindowByTitle: recorder.captureWindowByTitle,
   })
 
-  const { setupTray, updateTrayMenu } = await import('./ui/tray')
-  setupTray({
+  const captureCoordinator = createCaptureCoordinator({
     recorder,
     activityManager: activityManager!,
+    captureStateManager,
+    isPaused: shouldPause,
+  })
+
+  const { setupTray, updateTrayMenu } = await import('./ui/tray')
+  setupTray({
+    capture: captureCoordinator.controls,
     processor: processor!,
   })
 
@@ -146,8 +151,7 @@ app.on('ready', async () => {
   const { initMainWindowIPC, openMainWindow, sendStatusToRenderer } =
     await import('./ui/main-window')
   initMainWindowIPC({
-    recorder,
-    activityManager: activityManager!,
+    capture: captureCoordinator.controls,
     processor: processor!,
     apiKeyManager: apiKeyManager!,
     customEndpointManager: customEndpointManager!,
@@ -161,11 +165,12 @@ app.on('ready', async () => {
     void managedKeyService!.tryFetchKey()
   }
 
+  captureCoordinator.resumeCaptureIfDesired('startup')
+
   if (!startHidden) {
     openMainWindow()
   }
 
-  // When an activity completes, enqueue it for processing (backpressure)
   const processingQueue = new ProcessingQueue((activity) => processor!.processActivity(activity))
 
   activityManager.onActivityComplete((activity) => {
@@ -182,7 +187,6 @@ app.on('ready', async () => {
       })
   })
 
-  // Route all interaction events through the ActivityManager
   interactionMonitor.onInteraction((event) => {
     void activityManager!.handleInteraction(event)
   })
@@ -193,20 +197,14 @@ app.on('ready', async () => {
 
   startPowerMonitoring({
     onPause: () => {
-      // Force-close current activity before stopping capture
-      if (activityManager) {
-        void activityManager.forceClose()
-      }
-      if (recorder.isCapturingNow()) {
+      if (captureCoordinator.controls.isCapturingNow()) {
+        void captureCoordinator.controls.forceClose()
         log.info('[Main] Pausing capture (power state: locked/suspended)')
-        recorder.stopCapture()
+        captureCoordinator.controls.stopCaptureForShutdown()
       }
     },
     onResume: () => {
-      if (!recorder.isCapturingNow() && !shouldPause()) {
-        log.info('[Main] Resuming capture (power state: active)')
-        recorder.startCapture()
-      }
+      captureCoordinator.resumeCaptureIfDesired('resume')
     },
   })
 

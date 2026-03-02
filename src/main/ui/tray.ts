@@ -7,18 +7,17 @@ import path from 'node:path'
 import log from '../logger'
 import { formatBytes, formatNumber } from '../utils/formatters'
 import type { ActivityProcessor } from '../processor/index'
-import type { ActivityManager } from '../processor/activity-manager'
 import { sendStatusToRenderer, openMainWindow } from './main-window'
 import { getUpdateState, quitAndInstall } from '../updater'
 
 interface TrayDependencies {
-  recorder: {
+  capture: {
     isCapturingNow: () => boolean
-    startCapture: () => void
-    stopCapture: () => void
-    getScreenshotsDir: () => string
+    requestStartCapture: () => void
+    requestStopCapture: () => void
+    stopCaptureForShutdown: () => void
+    forceClose: () => Promise<void>
   }
-  activityManager: ActivityManager
   processor: ActivityProcessor
 }
 
@@ -31,18 +30,12 @@ app.on('before-quit', () => {
     tray = null
   }
 
-  // Safety net: force-exit if graceful shutdown takes too long.
-  // In-flight async work (OCR subprocesses, embedding inference, API calls)
-  // can keep the event loop alive indefinitely after app.quit().
   setTimeout(() => {
-    log.warn('[Quit] Graceful shutdown timed out — force exiting')
+    log.warn('[Quit] Graceful shutdown timed out - force exiting')
     app.exit(0)
   }, 3000).unref()
 })
 
-/**
- * Build the usage stats submenu with API and storage statistics
- */
 const buildUsageStatsSubmenu = async (): Promise<Electron.MenuItemConstructorOptions[]> => {
   const submenu: Electron.MenuItemConstructorOptions[] = []
 
@@ -81,17 +74,13 @@ const buildUsageStatsSubmenu = async (): Promise<Electron.MenuItemConstructorOpt
   return submenu
 }
 
-/**
- * Update the tray context menu with current state
- */
 export const updateTrayMenu = async (): Promise<void> => {
   if (!tray || !deps) return
 
-  const isCapturing = deps.recorder.isCapturingNow()
-
+  const isCapturing = deps.capture.isCapturingNow()
   const usageStatsSubmenu = await buildUsageStatsSubmenu()
-
   const updateState = getUpdateState()
+
   const contextMenu = Menu.buildFromTemplate([
     ...(updateState === 'ready'
       ? [
@@ -105,10 +94,9 @@ export const updateTrayMenu = async (): Promise<void> => {
       label: isCapturing ? 'Stop Capture' : 'Start Capture',
       click: () => {
         if (isCapturing) {
-          void deps!.activityManager.forceClose()
-          deps!.recorder.stopCapture()
+          deps!.capture.requestStopCapture()
         } else {
-          deps!.recorder.startCapture()
+          deps!.capture.requestStartCapture()
         }
         void updateTrayMenu()
         void sendStatusToRenderer()
@@ -129,8 +117,8 @@ export const updateTrayMenu = async (): Promise<void> => {
     {
       label: 'Quit',
       click: () => {
-        void deps!.activityManager.forceClose()
-        deps!.recorder.stopCapture()
+        void deps!.capture.forceClose()
+        deps!.capture.stopCaptureForShutdown()
         app.quit()
       },
     },
@@ -139,9 +127,6 @@ export const updateTrayMenu = async (): Promise<void> => {
   tray.setContextMenu(contextMenu)
 }
 
-/**
- * Setup the system tray with icon, tooltip, and menu
- */
 export const setupTray = (dependencies: TrayDependencies): void => {
   deps = dependencies
 

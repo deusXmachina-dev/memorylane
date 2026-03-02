@@ -19,7 +19,6 @@ import type { ApiKeyManager } from '../settings/api-key-manager'
 import type { CustomEndpointManager } from '../settings/custom-endpoint-manager'
 import type { SemanticClassifierService } from '../processor/semantic-classifier'
 import type { ManagedKeyService } from '../services/managed-key-service'
-import type { ActivityManager } from '../processor/activity-manager'
 import type {
   CustomEndpointConfig,
   MainWindowStats,
@@ -29,12 +28,12 @@ import type {
 import type { CaptureSettingsManager } from '../settings/capture-settings-manager'
 
 interface MainWindowDependencies {
-  recorder: {
+  capture: {
     isCapturingNow: () => boolean
-    startCapture: () => void
-    stopCapture: () => void
+    requestStartCapture: () => void
+    requestStopCapture: () => void
+    forceClose: () => Promise<void>
   }
-  activityManager: ActivityManager
   processor: ActivityProcessor
   apiKeyManager: ApiKeyManager
   customEndpointManager: CustomEndpointManager
@@ -52,13 +51,10 @@ let deps: MainWindowDependencies | null = null
 
 function buildStatus(): MainWindowStatus {
   return {
-    capturing: deps?.recorder.isCapturingNow() ?? false,
+    capturing: deps?.capture.isCapturingNow() ?? false,
   }
 }
 
-/**
- * Send current status to the renderer process
- */
 export function sendStatusToRenderer(): void {
   if (!mainWindow || mainWindow.isDestroyed()) return
 
@@ -66,9 +62,6 @@ export function sendStatusToRenderer(): void {
   mainWindow.webContents.send('main-window:statusChanged', status)
 }
 
-/**
- * Open (or focus) the main application window
- */
 export function openMainWindow(): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.show()
@@ -106,9 +99,6 @@ export function openMainWindow(): void {
   })
 }
 
-/**
- * Get the main window instance
- */
 export function getMainWindow(): BrowserWindow | null {
   if (mainWindow && !mainWindow.isDestroyed()) {
     return mainWindow
@@ -116,9 +106,6 @@ export function getMainWindow(): BrowserWindow | null {
   return null
 }
 
-/**
- * Build stats for the main window
- */
 async function buildStats(): Promise<MainWindowStats> {
   if (!deps) {
     return {
@@ -159,9 +146,6 @@ async function buildStats(): Promise<MainWindowStats> {
   return { activityCount, dbSize, dateRange, apiUsage }
 }
 
-/**
- * Initialize IPC handlers for the main window
- */
 export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   deps = dependencies
 
@@ -176,11 +160,10 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { capturing: false }
     }
 
-    if (deps.recorder.isCapturingNow()) {
-      void deps.activityManager.forceClose()
-      deps.recorder.stopCapture()
+    if (deps.capture.isCapturingNow()) {
+      deps.capture.requestStopCapture()
     } else {
-      deps.recorder.startCapture()
+      deps.capture.requestStartCapture()
     }
 
     void updateTrayMenu()
@@ -188,7 +171,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     return buildStatus()
   })
 
-  // API key management
   ipcMain.handle('main-window:getKeyStatus', () => {
     if (!deps) {
       return { hasKey: false, source: 'none', maskedKey: null }
@@ -224,12 +206,10 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
   })
 
-  // Integrations
   ipcMain.handle('main-window:addToClaude', () => registerWithClaudeDesktop())
   ipcMain.handle('main-window:addToCursor', () => registerWithCursor())
   ipcMain.handle('main-window:addToClaudeCode', () => registerWithClaudeCode())
 
-  // Custom endpoint management
   ipcMain.handle('main-window:getCustomEndpoint', () => {
     if (!deps) {
       return { enabled: false, serverURL: null, model: null, hasApiKey: false }
@@ -269,7 +249,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
   })
 
-  // Subscription / managed key
   deps.managedKeyService.setUpdateCallback((status, payload) => {
     if (payload?.key && deps) {
       deps.apiKeyManager.saveApiKey(payload.key, 'managed')
@@ -303,10 +282,8 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     return deps.managedKeyService.getStatus()
   })
 
-  // Stats
   ipcMain.handle('main-window:getStats', () => buildStats())
 
-  // Database export
   ipcMain.handle('main-window:exportDatabaseZip', async () => {
     if (!deps) {
       return { success: false, error: 'Dependencies not initialized' }
@@ -317,7 +294,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     })
   })
 
-  // Capture settings
   ipcMain.handle('main-window:getCaptureSettings', () => {
     if (!deps) return null
     return deps.captureSettingsManager.get()
