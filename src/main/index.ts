@@ -9,7 +9,11 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { app } from 'electron'
 import { config as loadEnv } from 'dotenv'
-import { shouldStartHiddenOnLaunch } from './auto-start'
+import {
+  canSyncAutoStartSetting,
+  shouldStartHiddenOnLaunch,
+  syncAutoStartSetting,
+} from './auto-start'
 import { createCaptureCoordinator } from './capture-orchestrator'
 import log from './logger'
 import { ActivityProcessor } from './processor/index'
@@ -123,6 +127,11 @@ app.on('ready', async () => {
   captureSettingsManager.applyToConstants()
 
   await initServices()
+
+  if (!captureStateManager.isAutoStartInitialized() && canSyncAutoStartSetting()) {
+    syncAutoStartSetting(captureSettingsManager.get().autoStartEnabled)
+    captureStateManager.setAutoStartInitialized(true)
+  }
 
   activityManager = new ActivityManager({
     captureImmediate: recorder.captureImmediate,

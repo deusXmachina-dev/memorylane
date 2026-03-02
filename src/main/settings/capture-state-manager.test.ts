@@ -20,6 +20,7 @@ describe('CaptureStateManager', () => {
   it('defaults to capture disabled when no file exists', () => {
     const manager = new CaptureStateManager(statePath)
     expect(manager.isCaptureEnabled()).toBe(false)
+    expect(manager.isAutoStartInitialized()).toBe(false)
   })
 
   it('persists capture enabled state to disk', () => {
@@ -28,15 +29,18 @@ describe('CaptureStateManager', () => {
 
     expect(fs.existsSync(statePath)).toBe(true)
     expect(JSON.parse(fs.readFileSync(statePath, 'utf-8'))).toEqual({
+      autoStartInitialized: false,
       captureEnabled: true,
     })
   })
 
   it('loads persisted state in a new instance', () => {
     const manager = new CaptureStateManager(statePath)
+    manager.setAutoStartInitialized(true)
     manager.setCaptureEnabled(true)
 
     const reloaded = new CaptureStateManager(statePath)
+    expect(reloaded.isAutoStartInitialized()).toBe(true)
     expect(reloaded.isCaptureEnabled()).toBe(true)
   })
 
@@ -44,6 +48,7 @@ describe('CaptureStateManager', () => {
     fs.writeFileSync(statePath, 'not-json{{{')
 
     const manager = new CaptureStateManager(statePath)
+    expect(manager.isAutoStartInitialized()).toBe(false)
     expect(manager.isCaptureEnabled()).toBe(false)
   })
 })
