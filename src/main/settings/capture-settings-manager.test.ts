@@ -35,6 +35,7 @@ describe('CaptureSettingsManager', () => {
     it('defaults match the constants values', () => {
       const manager = new CaptureSettingsManager(configPath)
       const defaults = manager.getDefaults()
+      expect(defaults.autoStartEnabled).toBe(false)
       expect(defaults.visualThreshold).toBe(VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT)
       expect(defaults.typingDebounceMs).toBe(INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS)
       expect(defaults.scrollDebounceMs).toBe(INTERACTION_MONITOR_CONFIG.SCROLL_DEBOUNCE_MS)
@@ -56,9 +57,10 @@ describe('CaptureSettingsManager', () => {
   describe('save and load', () => {
     it('persists settings to disk', () => {
       const manager = new CaptureSettingsManager(configPath)
-      manager.save({ typingDebounceMs: 5000 })
+      manager.save({ autoStartEnabled: true, typingDebounceMs: 5000 })
       expect(fs.existsSync(configPath)).toBe(true)
       const raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+      expect(raw.autoStartEnabled).toBe(true)
       expect(raw.typingDebounceMs).toBe(5000)
     })
 
@@ -73,10 +75,15 @@ describe('CaptureSettingsManager', () => {
 
     it('a new instance loads previously saved settings', () => {
       const manager1 = new CaptureSettingsManager(configPath)
-      manager1.save({ typingDebounceMs: 7000, visualThreshold: 3 })
+      manager1.save({
+        autoStartEnabled: true,
+        typingDebounceMs: 7000,
+        visualThreshold: 3,
+      })
 
       const manager2 = new CaptureSettingsManager(configPath)
       const settings = manager2.get()
+      expect(settings.autoStartEnabled).toBe(true)
       expect(settings.typingDebounceMs).toBe(7000)
       expect(settings.visualThreshold).toBe(3)
     })

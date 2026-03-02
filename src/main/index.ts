@@ -8,6 +8,8 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { app } from 'electron'
+import { config as loadEnv } from 'dotenv'
+import { shouldStartHiddenOnLaunch } from './auto-start'
 import log from './logger'
 import { ActivityProcessor } from './processor/index'
 import { EmbeddingService } from './processor/embedding'
@@ -23,7 +25,10 @@ import { ProcessingQueue } from './processor/processing-queue'
 import { startPowerMonitoring, shouldPause } from './power-monitor'
 import { SCREENSHOT_CLEANUP_CONFIG } from '../shared/constants'
 import { CaptureSettingsManager } from './settings/capture-settings-manager'
-import { config as loadEnv } from 'dotenv'
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+}
 
 try {
   loadEnv()
@@ -86,8 +91,15 @@ const initServices = async (): Promise<void> => {
   managedKeyService = new ManagedKeyService(deviceIdentity)
 }
 
+app.on('second-instance', () => {
+  void import('./ui/main-window').then(({ openMainWindow }) => {
+    openMainWindow()
+  })
+})
+
 app.on('ready', async () => {
   DebugPipelineWriter.cleanDebugDir()
+  const startHidden = shouldStartHiddenOnLaunch()
 
   try {
     const { ensurePermissions } = await import('./ui/permissions')
@@ -149,7 +161,9 @@ app.on('ready', async () => {
     void managedKeyService!.tryFetchKey()
   }
 
-  openMainWindow()
+  if (!startHidden) {
+    openMainWindow()
+  }
 
   // When an activity completes, enqueue it for processing (backpressure)
   const processingQueue = new ProcessingQueue((activity) => processor!.processActivity(activity))

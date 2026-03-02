@@ -7,6 +7,7 @@
 
 import { app, BrowserWindow, ipcMain, IpcMainInvokeEvent } from 'electron'
 import path from 'node:path'
+import { syncAutoStartSetting } from '../auto-start'
 import log from '../logger'
 import { updateTrayMenu } from './tray'
 import { exportDatabaseZip } from './database-export'
@@ -329,6 +330,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       try {
         deps.captureSettingsManager.save(partial)
         deps.captureSettingsManager.applyToConstants()
+        syncAutoStartSetting(deps.captureSettingsManager.get().autoStartEnabled)
         return { success: true }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'
@@ -342,6 +344,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     try {
       deps.captureSettingsManager.reset()
       deps.captureSettingsManager.applyToConstants()
+      syncAutoStartSetting(deps.captureSettingsManager.get().autoStartEnabled)
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'

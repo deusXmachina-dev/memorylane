@@ -10,7 +10,7 @@ import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import type { CaptureSettings, CustomEndpointStatus, KeyStatus } from '@types'
 
 // base-ui fires onValueChange with `number | readonly number[]` depending on
-// how the value prop was typed — normalise to a plain number either way.
+// how the value prop was typed - normalise to a plain number either way.
 function sliderVal(v: number | readonly number[]): number {
   return typeof v === 'number' ? v : v[0]
 }
@@ -80,16 +80,34 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
     void load()
   }, [load])
 
-  const set = (key: keyof CaptureSettings, value: number): void => {
+  type NumericCaptureSetting = Exclude<keyof CaptureSettings, 'autoStartEnabled'>
+
+  const set = (key: NumericCaptureSetting, value: number): void => {
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev))
     setDirty(true)
   }
 
   const handleSave = async (): Promise<void> => {
     if (!form) return
-    await api.saveCaptureSettings(form)
+    const result = await api.saveCaptureSettings(form)
+    if (!result.success) {
+      toast.error(result.error ?? 'Failed to save settings')
+      return
+    }
     setDirty(false)
     toast.success('Settings saved')
+  }
+
+  const setAutoStartEnabled = (enabled: boolean): void => {
+    if (!form) return
+    setForm((prev) => (prev ? { ...prev, autoStartEnabled: enabled } : prev))
+    void api.saveCaptureSettings({ autoStartEnabled: enabled }).then((result) => {
+      if (!result.success) {
+        toast.error(result.error ?? 'Failed to update launch at login')
+        return
+      }
+      toast.success(enabled ? 'Launch at login enabled' : 'Launch at login disabled')
+    })
   }
 
   const handleReset = async (): Promise<void> => {
@@ -104,7 +122,7 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
           onClick={onBack}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
-          ← Back
+          {'<-'} Back
         </button>
       </div>
 
@@ -147,6 +165,44 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
 
       <div className="border-t border-border" />
 
+      {form && (
+        <>
+          <section className="space-y-3">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                App Startup
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Packaged macOS and Windows builds can launch at login and stay hidden in the tray.
+              </p>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">
+                Development builds save the preference but do not register a login item.
+              </p>
+              <div className="grid shrink-0 grid-cols-2 gap-2">
+                <Button
+                  variant={form.autoStartEnabled ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setAutoStartEnabled(true)}
+                >
+                  On
+                </Button>
+                <Button
+                  variant={!form.autoStartEnabled ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setAutoStartEnabled(false)}
+                >
+                  Off
+                </Button>
+              </div>
+            </div>
+          </section>
+
+          <div className="border-t border-border" />
+        </>
+      )}
+
       <DatabaseExportSection api={api} />
 
       {form && (
@@ -164,7 +220,7 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
               max={20}
               step={1}
               format={(v) =>
-                `${v}% — ${v <= 5 ? 'more captures' : v >= 15 ? 'fewer captures' : 'balanced'}`
+                `${v}% - ${v <= 5 ? 'more captures' : v >= 15 ? 'fewer captures' : 'balanced'}`
               }
               onChange={(v) => set('visualThreshold', v)}
             />
