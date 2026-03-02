@@ -1,13 +1,13 @@
-# MemoryLane v0.11.1-win-beta.1
+# MemoryLane v0.11.2-win-beta.1
 
-Patch-level Windows prerelease focused on settings and subscription flow refinements.
+Patch-level Windows prerelease focused on startup behavior and data export improvements.
 
 ## What's Changed
 
-- **Settings UI reshaping** - renamed the capture settings page to advanced settings and updated main-window wiring accordingly
-- **Plan picker support** - added a dedicated plan picker component and integrated it into the main settings flow
-- **Subscription and key management cleanup** - simplified setup/manage key sections and removed older duplicate subscription entry components
-- **Main process wiring updates** - adjusted preload/main window/main process types for the new settings and plan-selection behavior
+- **Auto-start controls** - added a launch-at-login setting in advanced settings for packaged Windows and macOS builds
+- **Auto-start enabled by default** - packaged builds now register launch at login on first run and can start hidden in the tray
+- **Capture state persistence** - capture resumes based on the last saved state after restart or wake/resume flows
+- **Database export flow** - added a UI action to export a zipped local database backup from the app
 
 ## Notes for Testers
 
@@ -17,4 +17,4 @@ Patch-level Windows prerelease focused on settings and subscription flow refinem
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v0.11.0-win-beta.1...v0.11.1-win-beta.1
+https://github.com/deusXmachina-dev/memorylane/compare/v0.11.1-win-beta.1...v0.11.2-win-beta.1
