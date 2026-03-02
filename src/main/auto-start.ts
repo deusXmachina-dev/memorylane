@@ -8,6 +8,10 @@ function isSupportedPlatform(): boolean {
   return process.platform === 'darwin' || process.platform === 'win32'
 }
 
+export function canSyncAutoStartSetting(): boolean {
+  return isSupportedPlatform() && app.isPackaged
+}
+
 export function shouldStartHiddenOnLaunch(): boolean {
   if (process.argv.includes(AUTO_START_HIDDEN_ARG)) {
     return true

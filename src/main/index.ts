@@ -7,7 +7,11 @@
 
 import { app } from 'electron'
 import { config as loadEnv } from 'dotenv'
-import { shouldStartHiddenOnLaunch } from './auto-start'
+import {
+  canSyncAutoStartSetting,
+  shouldStartHiddenOnLaunch,
+  syncAutoStartSetting,
+} from './auto-start'
 import { createCaptureCoordinator } from './capture-orchestrator'
 import log from './logger'
 import { startPowerMonitoring, shouldPause } from './power-monitor'
@@ -74,6 +78,11 @@ app.on('ready', async () => {
   const captureSettingsManager = new CaptureSettingsManager()
   const captureStateManager = new CaptureStateManager()
   captureSettingsManager.applyToConstants()
+
+  if (!captureStateManager.isAutoStartInitialized() && canSyncAutoStartSetting()) {
+    syncAutoStartSetting(captureSettingsManager.get().autoStartEnabled)
+    captureStateManager.setAutoStartInitialized(true)
+  }
 
   const { setupTray, updateTrayMenu } = await import('./ui/tray')
   const { initMainWindowIPC, openMainWindow, sendStatusToRenderer } =
