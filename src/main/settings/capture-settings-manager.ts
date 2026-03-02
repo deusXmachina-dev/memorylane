@@ -9,7 +9,7 @@ import {
 } from '../../shared/constants'
 
 const DEFAULTS: CaptureSettings = {
-  autoStartEnabled: false,
+  autoStartEnabled: true,
   visualThreshold: VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT,
   typingDebounceMs: INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS,
   scrollDebounceMs: INTERACTION_MONITOR_CONFIG.SCROLL_DEBOUNCE_MS,
