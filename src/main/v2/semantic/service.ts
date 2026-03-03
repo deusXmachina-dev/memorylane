@@ -158,7 +158,7 @@ export class V2ActivitySemanticService implements ActivitySemanticService {
 
   async summarizeFromVideo(input: {
     activity: V2Activity
-    videoPath: string
+    videoPath?: string
     ocrText: string
   }): Promise<string> {
     this.assertInput(input)
@@ -200,7 +200,7 @@ export class V2ActivitySemanticService implements ActivitySemanticService {
             model: this.customEndpointModel,
           }),
         )
-      } else {
+      } else if (typeof input.videoPath === 'string' && input.videoPath.trim().length > 0) {
         const videoAsset = tryLoadVideoAsDataUrl(input.videoPath, this.maxVideoBytes)
         if (videoAsset) {
           diagnostics.videoSizeBytes = videoAsset.sizeBytes
@@ -243,6 +243,8 @@ export class V2ActivitySemanticService implements ActivitySemanticService {
         } else {
           diagnostics.fallbackReason = 'video unavailable or exceeds configured size limit'
         }
+      } else {
+        diagnostics.fallbackReason = 'video unavailable'
       }
     } else {
       diagnostics.fallbackReason = 'video pipeline disabled by preference'
@@ -336,15 +338,12 @@ export class V2ActivitySemanticService implements ActivitySemanticService {
     }
   }
 
-  private assertInput(input: { activity: V2Activity; videoPath: string; ocrText: string }): void {
+  private assertInput(input: { activity: V2Activity; videoPath?: string; ocrText: string }): void {
     if (!input.activity || typeof input.activity !== 'object') {
       throw new Error('summarizeFromVideo requires a valid activity object')
     }
     if (!input.activity.id || input.activity.id.trim().length === 0) {
       throw new Error('summarizeFromVideo requires activity.id')
-    }
-    if (typeof input.videoPath !== 'string' || input.videoPath.trim().length === 0) {
-      throw new Error('summarizeFromVideo requires a non-empty videoPath')
     }
   }
 

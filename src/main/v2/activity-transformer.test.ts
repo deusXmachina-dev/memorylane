@@ -134,6 +134,24 @@ describe('DefaultActivityTransformer', () => {
     })
   })
 
+  it('skips video stitching when pipeline preference is image', async () => {
+    const { stitcher, ocr, semantic, embedder } = makeDeps()
+    const transformer = new DefaultActivityTransformer(stitcher, ocr, semantic, embedder, {
+      outputDir: OUTPUT_DIR,
+      getPipelinePreference: () => 'image',
+    })
+
+    const activity = makeActivity(3)
+    await transformer.transform(activity)
+
+    expect(stitcher.stitch).not.toHaveBeenCalled()
+    expect(semantic.summarizeFromVideo).toHaveBeenCalledWith({
+      activity,
+      videoPath: undefined,
+      ocrText: 'ocr text',
+    })
+  })
+
   it('uses the 5th screenshot from the end for OCR when there are at least 5 frames', async () => {
     const { stitcher, ocr, semantic, embedder } = makeDeps()
     ;(ocr.extractText as ReturnType<typeof vi.fn>).mockResolvedValue('Selected OCR text')

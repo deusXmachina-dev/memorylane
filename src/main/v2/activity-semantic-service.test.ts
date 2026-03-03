@@ -404,10 +404,9 @@ describe('V2ActivitySemanticService', () => {
     expect(diagnostics?.chosenMode).toBe('snapshot')
   })
 
-  it('supports image-only mode without attempting video', async () => {
+  it('supports image-only mode without attempting video or requiring a stitched file', async () => {
     const tempDir = createTempDir()
     tempDirs.push(tempDir)
-    const videoPath = createVideoFile(tempDir)
 
     const frames = [
       makeFrame(createImageFile(tempDir, 'f0.png'), 1_000, 0),
@@ -423,7 +422,6 @@ describe('V2ActivitySemanticService', () => {
 
     const result = await service.summarizeFromVideo({
       activity: makeActivity({ frames }),
-      videoPath,
       ocrText: 'ignored',
     })
 
