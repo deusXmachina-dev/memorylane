@@ -7,6 +7,7 @@ import type {
   ActivitySemanticService,
   ActivityEmbeddingService,
 } from './activity-transformer-types'
+import log from '../logger'
 
 export interface DefaultActivityTransformerConfig {
   outputDir: string
@@ -65,6 +66,11 @@ export class DefaultActivityTransformer implements ActivityTransformer {
         ? activity.frames[activity.frames.length - OCR_FRAME_POSITION_FROM_END]
         : activity.frames[0]
 
-    return this.ocr.extractText(ocrFrame.frame.filepath)
+    try {
+      return await this.ocr.extractText(ocrFrame.frame.filepath)
+    } catch (error) {
+      log.warn(`[ActivityTransformer] OCR failed for activity ${activity.id}:`, error)
+      return ''
+    }
   }
 }

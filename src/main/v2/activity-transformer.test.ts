@@ -9,6 +9,16 @@ import type {
   ActivityVideoAsset,
 } from './activity-transformer-types'
 import type { Frame } from './recorder/screen-capturer'
+import log from '../logger'
+
+vi.mock('../logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}))
 
 function makeFrame(index: number): V2ActivityFrame {
   return {
@@ -182,7 +192,7 @@ describe('DefaultActivityTransformer', () => {
       await expect(transformer.transform(makeActivity(1))).rejects.toThrow('stitch failed')
     })
 
-    it('propagates OCR errors', async () => {
+    it('continues when OCR errors', async () => {
       const { stitcher, ocr, semantic, embedder } = makeDeps()
       ;(ocr.extractText as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('ocr failed'))
 
@@ -190,7 +200,33 @@ describe('DefaultActivityTransformer', () => {
         outputDir: OUTPUT_DIR,
       })
 
-      await expect(transformer.transform(makeActivity(1))).rejects.toThrow('ocr failed')
+      await expect(transformer.transform(makeActivity(1))).resolves.toEqual(
+        expect.objectContaining({
+          summary: 'A summary of the activity',
+          ocrText: '',
+        }),
+      )
+      expect(semantic.summarizeFromVideo).toHaveBeenCalledWith({
+        activity: makeActivity(1),
+        videoPath: '/output/activity-1.mp4',
+        ocrText: '',
+      })
+      expect(embedder.embed).toHaveBeenCalledWith('A summary of the activity')
+      expect(log.warn).toHaveBeenCalled()
+    })
+
+    it('falls back to empty OCR text for embedding when OCR and summary both fail soft', async () => {
+      const { stitcher, ocr, semantic, embedder } = makeDeps()
+      ;(ocr.extractText as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('ocr failed'))
+      ;(semantic.summarizeFromVideo as ReturnType<typeof vi.fn>).mockResolvedValue('')
+
+      const transformer = new DefaultActivityTransformer(stitcher, ocr, semantic, embedder, {
+        outputDir: OUTPUT_DIR,
+      })
+
+      await transformer.transform(makeActivity(1))
+
+      expect(embedder.embed).toHaveBeenCalledWith('')
     })
 
     it('propagates semantic errors', async () => {
