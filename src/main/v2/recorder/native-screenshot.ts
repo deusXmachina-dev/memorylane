@@ -2,7 +2,16 @@ import { type ChildProcess, spawn } from 'child_process'
 import * as fs from 'fs'
 import * as readline from 'readline'
 import log from '../../logger'
-import { getExecutable } from './native-screenshot-mac'
+import {
+  buildMacCommandPayload,
+  buildMacSpawnArgs,
+  getExecutable as getMacExecutable,
+} from './native-screenshot-mac'
+import {
+  buildWindowsCommandPayload,
+  buildWindowsSpawnArgs,
+  getExecutable as getWindowsExecutable,
+} from './native-screenshot-win'
 
 // MARK: - Push-based backend interface
 
@@ -21,9 +30,20 @@ export interface CaptureBackendConfig {
   onFrame: (frame: CapturedFrame) => void
 }
 
+export interface ScreenshotExecutable {
+  readonly command: string
+  readonly args: readonly string[]
+}
+
 export type CaptureBackendCommand = {
   displayId?: number | null // null = reset to main display
   intervalMs?: number
+}
+
+export interface ScreenshotPlatformAdapter {
+  getExecutable(): ScreenshotExecutable
+  buildSpawnArgs(config: CaptureBackendConfig): string[]
+  buildCommandPayload(command: CaptureBackendCommand): Record<string, unknown>
 }
 
 export interface ScreenCaptureBackend {
@@ -35,7 +55,18 @@ export interface ScreenCaptureBackend {
 const PLATFORM_SCREEN_CAPTURE_BACKENDS: Partial<
   Record<NodeJS.Platform, () => ScreenCaptureBackend>
 > = {
-  darwin: () => new ScreenshotDaemon(),
+  darwin: () =>
+    new ScreenshotDaemon({
+      getExecutable: getMacExecutable,
+      buildSpawnArgs: buildMacSpawnArgs,
+      buildCommandPayload: buildMacCommandPayload,
+    }),
+  win32: () =>
+    new ScreenshotDaemon({
+      getExecutable: getWindowsExecutable,
+      buildSpawnArgs: buildWindowsSpawnArgs,
+      buildCommandPayload: buildWindowsCommandPayload,
+    }),
 }
 
 export function createScreenCaptureBackend(): ScreenCaptureBackend {
@@ -52,6 +83,8 @@ const DAEMON_MAX_RESTARTS = 5
 const DAEMON_RESTART_BACKOFF_MS = 1_000
 
 export class ScreenshotDaemon implements ScreenCaptureBackend {
+  constructor(private readonly adapter?: ScreenshotPlatformAdapter) {}
+
   private process: ChildProcess | null = null
   private rl: readline.Interface | null = null
   private restartCount = 0
@@ -82,40 +115,21 @@ export class ScreenshotDaemon implements ScreenCaptureBackend {
       return
     }
 
-    const payload: Record<string, unknown> = {}
-    if (command.displayId !== undefined) {
-      payload.displayId = command.displayId
-    }
-    if (command.intervalMs !== undefined) {
-      payload.intervalMs = command.intervalMs
-    }
+    const payload = this.getAdapter().buildCommandPayload(command)
 
     this.process.stdin.write(JSON.stringify(payload) + '\n')
   }
 
   private async spawnDaemon(): Promise<void> {
-    const { command, args } = getExecutable()
+    const adapter = this.getAdapter()
+    const { command, args } = adapter.getExecutable()
     const config = this.config!
-
-    const daemonArgs = [
-      ...args,
-      '--outputDir',
-      config.outputDir,
-      '--intervalMs',
-      String(config.intervalMs ?? 1000),
-      '--format',
-      'jpeg',
-      '--quality',
-      '80',
-    ]
-
-    if (config.maxDimensionPx !== undefined) {
-      daemonArgs.push('--maxDimension', String(config.maxDimensionPx))
-    }
+    const daemonArgs = [...args, ...adapter.buildSpawnArgs(config)]
 
     log.info('[ScreenshotDaemon] Spawning daemon process')
     const proc = spawn(command, daemonArgs, {
       stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
     })
 
     this.process = proc
@@ -212,5 +226,23 @@ export class ScreenshotDaemon implements ScreenCaptureBackend {
     }
     this.rl?.close()
     this.rl = null
+  }
+
+  private getAdapter(): ScreenshotPlatformAdapter {
+    if (this.adapter) {
+      return this.adapter
+    }
+
+    const factory = PLATFORM_SCREEN_CAPTURE_BACKENDS[process.platform]
+    if (!factory) {
+      throw new Error(`Screen capture is not supported on platform "${process.platform}"`)
+    }
+
+    const backend = factory()
+    if (!(backend instanceof ScreenshotDaemon) || !backend.adapter) {
+      throw new Error(`Platform "${process.platform}" does not provide a screenshot adapter`)
+    }
+
+    return backend.adapter
   }
 }

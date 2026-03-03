@@ -69,6 +69,10 @@ export class ScreenCapturer {
         })
       },
     })
+
+    if (this._currentDisplayId !== undefined) {
+      this.backend.send({ displayId: this._currentDisplayId })
+    }
   }
 
   async stop(): Promise<void> {

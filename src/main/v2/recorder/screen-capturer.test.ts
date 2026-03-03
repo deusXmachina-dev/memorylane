@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ScreenCaptureBackend } from './native-screenshot'
 
 vi.mock('../../logger', () => ({
@@ -25,6 +25,12 @@ const { ScreenCapturer } = await import('./screen-capturer')
 const { InMemoryStream } = await import('../streams/in-memory-stream')
 
 describe('ScreenCapturer.setDisplayId', () => {
+  beforeEach(() => {
+    vi.mocked(mockBackend.start).mockClear()
+    vi.mocked(mockBackend.stop).mockClear()
+    vi.mocked(mockBackend.send).mockClear()
+  })
+
   it('does not send command when displayId has not changed', () => {
     const stream = new InMemoryStream()
     const capturer = new ScreenCapturer({ outputDir: '/tmp/test', stream })
@@ -65,7 +71,6 @@ describe('ScreenCapturer.setDisplayId', () => {
   })
 
   it('sends command when switching back to a previous displayId', () => {
-    vi.mocked(mockBackend.send).mockClear()
     const stream = new InMemoryStream()
     const capturer = new ScreenCapturer({ outputDir: '/tmp/test', stream })
 
@@ -74,5 +79,19 @@ describe('ScreenCapturer.setDisplayId', () => {
     capturer.setDisplayId(1)
 
     expect(mockBackend.send).toHaveBeenCalledTimes(3)
+  })
+
+  it('replays the active display selection after start', async () => {
+    const stream = new InMemoryStream()
+    const capturer = new ScreenCapturer({ outputDir: '/tmp/test', stream })
+
+    capturer.setDisplayId(4)
+    vi.mocked(mockBackend.send).mockClear()
+
+    await capturer.start()
+
+    expect(mockBackend.start).toHaveBeenCalledTimes(1)
+    expect(mockBackend.send).toHaveBeenCalledTimes(1)
+    expect(mockBackend.send).toHaveBeenCalledWith({ displayId: 4 })
   })
 })

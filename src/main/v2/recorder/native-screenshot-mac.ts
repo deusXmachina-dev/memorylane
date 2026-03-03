@@ -1,12 +1,12 @@
 import * as fs from 'fs'
 import * as path from 'path'
+import type {
+  CaptureBackendCommand,
+  CaptureBackendConfig,
+  ScreenshotExecutable,
+} from './native-screenshot'
 
 const SCREENSHOT_EXECUTABLE_ENV = 'MEMORYLANE_SCREENSHOT_EXECUTABLE'
-
-interface ScreenshotExecutable {
-  readonly command: string
-  readonly args: readonly string[]
-}
 
 export function getExecutable(): ScreenshotExecutable {
   const overridePath = process.env[SCREENSHOT_EXECUTABLE_ENV]
@@ -41,4 +41,34 @@ export function getExecutable(): ScreenshotExecutable {
   throw new Error(
     `screenshot binary not found at ${devBinaryPath}. Run "npm run build:swift" before starting capture.`,
   )
+}
+
+export function buildMacSpawnArgs(config: CaptureBackendConfig): string[] {
+  const daemonArgs = [
+    '--outputDir',
+    config.outputDir,
+    '--intervalMs',
+    String(config.intervalMs ?? 1000),
+    '--format',
+    'jpeg',
+    '--quality',
+    '80',
+  ]
+
+  if (config.maxDimensionPx !== undefined) {
+    daemonArgs.push('--maxDimension', String(config.maxDimensionPx))
+  }
+
+  return daemonArgs
+}
+
+export function buildMacCommandPayload(command: CaptureBackendCommand): Record<string, unknown> {
+  const payload: Record<string, unknown> = {}
+  if (command.displayId !== undefined) {
+    payload.displayId = command.displayId
+  }
+  if (command.intervalMs !== undefined) {
+    payload.intervalMs = command.intervalMs
+  }
+  return payload
 }
