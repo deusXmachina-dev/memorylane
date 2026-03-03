@@ -433,10 +433,10 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
                     onCommit={(v) => commit('maxActivityDurationMs', v)}
                   />
                   <SliderRow
-                    label="Max screenshots per activity"
+                    label="Max snapshots for AI"
                     value={form.maxScreenshotsPerActivity}
-                    min={5}
-                    max={50}
+                    min={1}
+                    max={12}
                     step={1}
                     format={(v) => `${v}`}
                     onChange={(v) => set('maxScreenshotsPerActivity', v)}

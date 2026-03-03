@@ -42,7 +42,7 @@ describe('CaptureSettingsManager', () => {
       expect(defaults.clickDebounceMs).toBe(INTERACTION_MONITOR_CONFIG.CLICK_DEBOUNCE_MS)
       expect(defaults.minActivityDurationMs).toBe(ACTIVITY_CONFIG.MIN_ACTIVITY_DURATION_MS)
       expect(defaults.maxActivityDurationMs).toBe(ACTIVITY_CONFIG.MAX_ACTIVITY_DURATION_MS)
-      expect(defaults.maxScreenshotsPerActivity).toBe(ACTIVITY_CONFIG.MAX_SCREENSHOTS_PER_ACTIVITY)
+      expect(defaults.maxScreenshotsPerActivity).toBe(ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM)
       expect(defaults.semanticRequestTimeoutMs).toBe(ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS)
       expect(defaults.semanticPipelineMode).toBe('auto')
     })
@@ -137,7 +137,7 @@ describe('CaptureSettingsManager', () => {
       clickDebounceMs: INTERACTION_MONITOR_CONFIG.CLICK_DEBOUNCE_MS,
       minActivityDurationMs: ACTIVITY_CONFIG.MIN_ACTIVITY_DURATION_MS,
       maxActivityDurationMs: ACTIVITY_CONFIG.MAX_ACTIVITY_DURATION_MS,
-      maxScreenshotsPerActivity: ACTIVITY_CONFIG.MAX_SCREENSHOTS_PER_ACTIVITY,
+      maxScreenshotsPerActivity: ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM,
       semanticRequestTimeoutMs: ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS,
     }
 
@@ -148,18 +148,19 @@ describe('CaptureSettingsManager', () => {
       INTERACTION_MONITOR_CONFIG.CLICK_DEBOUNCE_MS = original.clickDebounceMs
       ACTIVITY_CONFIG.MIN_ACTIVITY_DURATION_MS = original.minActivityDurationMs
       ACTIVITY_CONFIG.MAX_ACTIVITY_DURATION_MS = original.maxActivityDurationMs
-      ACTIVITY_CONFIG.MAX_SCREENSHOTS_PER_ACTIVITY = original.maxScreenshotsPerActivity
+      ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM = original.maxScreenshotsPerActivity
       ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS = original.semanticRequestTimeoutMs
     })
 
     it('mutates the shared constants to match saved settings', () => {
       const p = makeTmpPath()
       const manager = new CaptureSettingsManager(p)
-      manager.save({ typingDebounceMs: 8000, visualThreshold: 3 })
+      manager.save({ typingDebounceMs: 8000, visualThreshold: 3, maxScreenshotsPerActivity: 4 })
       manager.applyToConstants()
 
       expect(INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS).toBe(8000)
       expect(VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT).toBe(3)
+      expect(ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM).toBe(4)
     })
 
     it('applies semantic timeout to shared constants', () => {

@@ -16,7 +16,7 @@ const DEFAULTS: CaptureSettings = {
   clickDebounceMs: INTERACTION_MONITOR_CONFIG.CLICK_DEBOUNCE_MS,
   minActivityDurationMs: ACTIVITY_CONFIG.MIN_ACTIVITY_DURATION_MS,
   maxActivityDurationMs: ACTIVITY_CONFIG.MAX_ACTIVITY_DURATION_MS,
-  maxScreenshotsPerActivity: ACTIVITY_CONFIG.MAX_SCREENSHOTS_PER_ACTIVITY,
+  maxScreenshotsPerActivity: ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM,
   semanticRequestTimeoutMs: ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS,
   semanticPipelineMode: 'auto',
 }
@@ -94,7 +94,7 @@ export class CaptureSettingsManager {
     INTERACTION_MONITOR_CONFIG.CLICK_DEBOUNCE_MS = cs.clickDebounceMs
     ACTIVITY_CONFIG.MIN_ACTIVITY_DURATION_MS = cs.minActivityDurationMs
     ACTIVITY_CONFIG.MAX_ACTIVITY_DURATION_MS = cs.maxActivityDurationMs
-    ACTIVITY_CONFIG.MAX_SCREENSHOTS_PER_ACTIVITY = cs.maxScreenshotsPerActivity
+    ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM = cs.maxScreenshotsPerActivity
     ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS = cs.semanticRequestTimeoutMs
   }
 }

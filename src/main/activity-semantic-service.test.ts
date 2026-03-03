@@ -723,10 +723,10 @@ describe('ActivitySemanticService', () => {
     ])
   })
 
-  it('snapshot sampling obeys ACTIVITY_CONFIG.MAX_SCREENSHOTS_PER_ACTIVITY=6', async () => {
+  it('snapshot sampling obeys ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM=6', async () => {
     const tempDir = createTempDir()
     tempDirs.push(tempDir)
-    ACTIVITY_CONFIG.MAX_SCREENSHOTS_PER_ACTIVITY = 6
+    ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM = 6
     VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT = 0
 
     const frames: ActivityFrame[] = []
@@ -892,7 +892,7 @@ describe('ActivitySemanticService', () => {
   it('snapshot sampling always includes first and last when available', async () => {
     const tempDir = createTempDir()
     tempDirs.push(tempDir)
-    ACTIVITY_CONFIG.MAX_SCREENSHOTS_PER_ACTIVITY = 3
+    ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM = 3
     VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT = 0
 
     const frames = [
