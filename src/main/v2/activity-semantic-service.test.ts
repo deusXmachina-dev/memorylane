@@ -404,10 +404,9 @@ describe('V2ActivitySemanticService', () => {
     expect(diagnostics?.chosenMode).toBe('snapshot')
   })
 
-  it('supports image-only mode without attempting video', async () => {
+  it('supports image-only mode without attempting video or requiring a stitched file', async () => {
     const tempDir = createTempDir()
     tempDirs.push(tempDir)
-    const videoPath = createVideoFile(tempDir)
 
     const frames = [
       makeFrame(createImageFile(tempDir, 'f0.png'), 1_000, 0),
@@ -423,7 +422,6 @@ describe('V2ActivitySemanticService', () => {
 
     const result = await service.summarizeFromVideo({
       activity: makeActivity({ frames }),
-      videoPath,
       ocrText: 'ignored',
     })
 
@@ -673,10 +671,10 @@ describe('V2ActivitySemanticService', () => {
     ])
   })
 
-  it('snapshot sampling obeys ACTIVITY_CONFIG.MAX_SCREENSHOTS_PER_ACTIVITY=6', async () => {
+  it('snapshot sampling obeys ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM=6', async () => {
     const tempDir = createTempDir()
     tempDirs.push(tempDir)
-    ACTIVITY_CONFIG.MAX_SCREENSHOTS_PER_ACTIVITY = 6
+    ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM = 6
     VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT = 0
 
     const frames: V2ActivityFrame[] = []
@@ -842,7 +840,7 @@ describe('V2ActivitySemanticService', () => {
   it('snapshot sampling always includes first and last when available', async () => {
     const tempDir = createTempDir()
     tempDirs.push(tempDir)
-    ACTIVITY_CONFIG.MAX_SCREENSHOTS_PER_ACTIVITY = 3
+    ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM = 3
     VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT = 0
 
     const frames = [

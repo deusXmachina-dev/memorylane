@@ -77,7 +77,10 @@ export async function createV2MainRuntime(params?: {
     activityOcrService,
     semanticService,
     new EmbeddingService(),
-    { outputDir },
+    {
+      outputDir,
+      getPipelinePreference: () => semanticService.getPipelinePreference(),
+    },
   )
   const sink = new SqliteActivitySink(storage.activities)
 

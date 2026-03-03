@@ -7,10 +7,12 @@ import type {
   ActivitySemanticService,
   ActivityEmbeddingService,
 } from './activity-transformer-types'
+import type { SemanticPipelinePreference } from './activity-semantic-service'
 import log from '../logger'
 
 export interface DefaultActivityTransformerConfig {
   outputDir: string
+  getPipelinePreference?: () => SemanticPipelinePreference
 }
 
 const OCR_FRAME_POSITION_FROM_END = 5
@@ -30,16 +32,19 @@ export class DefaultActivityTransformer implements ActivityTransformer {
       timestamp: f.frame.timestamp,
     }))
 
-    const outputPath = `${this.config.outputDir}/${activity.id}.mp4`
+    const shouldStitchVideo = this.config.getPipelinePreference?.() !== 'image'
+    const outputPath = shouldStitchVideo ? `${this.config.outputDir}/${activity.id}.mp4` : undefined
 
     const [videoAsset, ocrText] = await Promise.all([
-      this.stitcher.stitch({ activityId: activity.id, frames, outputPath }),
+      shouldStitchVideo && outputPath
+        ? this.stitcher.stitch({ activityId: activity.id, frames, outputPath })
+        : Promise.resolve(null),
       this.extractOcrText(activity),
     ])
 
     const summary = await this.semantic.summarizeFromVideo({
       activity,
-      videoPath: videoAsset.videoPath,
+      videoPath: videoAsset?.videoPath,
       ocrText,
     })
 
