@@ -1,15 +1,17 @@
 ---
 name: release
-description: Run the full release workflow for MemoryLane — bump version, update release notes, commit, tag, push, build, and create a GitHub release. Use when the user asks to release, ship, publish, bump version, or cut a new version.
+description: Run the stable macOS release workflow for MemoryLane - bump version, update release notes, commit, tag, push, build, and create a GitHub release. Use when the user asks to release, ship, publish, bump version, or cut a stable version.
 ---
 
-# Release Workflow
+# Stable macOS Release Workflow
+
+Use this skill for normal stable releases. For Windows prerelease distribution, use the `windows-prerelease` skill instead.
 
 ## Prerequisites
 
 - Working tree is clean (`git status` shows nothing to commit)
 - On the `main` branch, up to date with origin
-- `gh` CLI is authenticated (`gh auth status` — run with `required_permissions: ["all"]`)
+- `gh` CLI is authenticated (`gh auth status` - run with `required_permissions: ["all"]`)
 
 ## Steps
 
@@ -24,7 +26,7 @@ git log --oneline $(git describe --tags --abbrev=0)..HEAD
 git diff --stat $(git describe --tags --abbrev=0)..HEAD
 ```
 
-Summarize the key changes — this drives the release notes.
+Summarize the key changes. This drives the release notes.
 
 ### 3. Bump version in `package.json`
 
@@ -35,10 +37,10 @@ Update the `"version"` field to the new version.
 Follow the existing format in the file. Key sections to update:
 
 - **Title**: `# MemoryLane vX.Y.Z`
-- **What's Changed**: Summarize the commits into user-facing bullet points. Reference GitHub issues where applicable (e.g., `closes #4`).
+- **What's Changed**: Summarize the commits into user-facing bullet points. Reference GitHub issues where applicable (for example `closes #4`).
 - **Features**: Update the feature list if new capabilities were added.
 - **Known Issues & Limitations**: Remove any issues that have been resolved. Add new ones if applicable.
-- **Installation**: Keep the curl one-liner and permission instructions up to date.
+- **Installation**: Keep the macOS stable install path current, and keep Windows wording consistent with the prerelease-only channel.
 - **Full Changelog**: Update the tag reference in the URL.
 
 ### 5. Update `README.md` if needed
@@ -60,43 +62,33 @@ git commit -m "release: vX.Y.Z"
 git tag vX.Y.Z
 ```
 
-Push requires network access — run outside the sandbox (`required_permissions: ["all"]`):
+Push requires network access - run outside the sandbox (`required_permissions: ["all"]`):
 
 ```bash
 git push origin main --tags
 ```
 
-Push before building. The build is deterministic (runs from the local working tree
-pinned to the tagged commit) and can take a long time due to notarization. Pushing
-first ensures the tag is on the remote immediately, regardless of how long the build
-takes or whether other commits land on `main` in the meantime.
+Push before building. The build is deterministic (runs from the local working tree pinned to the tagged commit) and can take a long time due to notarization. Pushing first ensures the tag is on the remote immediately, regardless of how long the build takes or whether other commits land on `main` in the meantime.
 
-### 8. Build the app
+### 8. Build the macOS app
 
 ```bash
 npm run make:mac
 ```
 
-The build produces both a ZIP and a DMG in `dist/` with **stable filenames**
-(no version number). Verify they exist and `latest-mac.yml` contains the correct
-version:
+The build produces both a ZIP and a DMG in `dist/` with stable filenames (no version number). Verify they exist and `latest-mac.yml` contains the correct version:
 
 ```bash
 ls dist/MemoryLane-arm64-mac.zip
 ls dist/MemoryLane-arm64-mac.zip.blockmap
 ls dist/MemoryLane-arm64-mac.dmg
 ls dist/MemoryLane-arm64-mac.dmg.blockmap
-cat dist/latest-mac.yml  # version field must match the new release
+cat dist/latest-mac.yml
 ```
 
-These stable names are configured via `artifactName` in `electron-builder.yml`.
-They allow `https://github.com/{owner}/{repo}/releases/latest/download/{asset}`
-URLs to always resolve to the latest release, which `install.sh` depends on.
+These stable names are configured via `artifactName` in `electron-builder.yml`. They allow `https://github.com/{owner}/{repo}/releases/latest/download/{asset}` URLs to always resolve to the latest release, which `install.sh` depends on.
 
-Notarization runs automatically via `build/notarize.js` (requires `APPLE_ID` and
-`APPLE_APP_PASSWORD` in `.env`). The build will take a few extra minutes while Apple
-processes the notarization request. If the env vars are not set, notarization is
-skipped and the app is only code-signed.
+Notarization runs automatically via `build/notarize.js` (requires `APPLE_ID` and `APPLE_APP_PASSWORD` in `.env`). The build will take a few extra minutes while Apple processes the notarization request. If the env vars are not set, notarization is skipped and the app is only code-signed.
 
 After the build completes, verify notarization and code signing:
 
@@ -122,7 +114,7 @@ gh release create vX.Y.Z \
   --notes-file RELEASE_NOTES.md
 ```
 
-`latest-mac.yml` is required by `electron-updater` to detect new versions. The `.blockmap` files are required by `electron-updater` for differential (delta) updates — without them, the updater falls back to downloading the full file. All five artifacts must be uploaded with every release.
+`latest-mac.yml` is required by `electron-updater` to detect new versions. The `.blockmap` files are required by `electron-updater` for differential updates. All five artifacts must be uploaded with every release.
 
 ## Checklist
 

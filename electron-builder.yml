@@ -70,6 +70,11 @@ win:
       filter:
         - app-watcher-windows.exe
         - screenshot-capturer-windows.exe
+  azureSignOptions:
+    publisherName: 'SenseFlow, Inc.'
+    endpoint: 'https://eus.codesigning.azure.net/'
+    certificateProfileName: 'memorylane-codesign'
+    codeSigningAccountName: 'azure-signing-dxm'
   target:
     - target: nsis
       arch:

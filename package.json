@@ -16,6 +16,7 @@
     "make": "npm run build && npm run build:swift && electron-builder --publish never",
     "make:mac": "npm run build && npm run build:swift && electron-builder --mac --publish never",
     "make:win": "npm run build && npm run build:rust && electron-builder --win --publish never",
+    "make:win:signed": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-win-signed.ps1",
     "make:linux": "npm run build && electron-builder --linux --publish never",
     "lint": "eslint --ext .ts,.tsx .",
     "format": "prettier --write .",
@@ -40,6 +41,7 @@
     "mcp:dev:off": "node ./scripts/enode.js ./node_modules/.bin/tsx scripts/mcp-dev.ts off",
     "mcp:dev:status": "node ./scripts/enode.js ./node_modules/.bin/tsx scripts/mcp-dev.ts status",
     "install:local": "node ./scripts/install-local.js",
+    "sign:win": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/sign-windows.ps1",
     "detect-patterns": "node ./scripts/enode.js ./node_modules/.bin/tsx scripts/detect-patterns.ts",
     "mcpb:pack": "npx @anthropic-ai/mcpb pack mcpb/"
   },
