@@ -133,7 +133,9 @@ playground/
 .debug-pipeline/
 debug-pipeline/
 .debug-native-screenshot/
+.debug-native-screenshot-win/
 .debug-screen-capturer/
+.debug-screen-capturer-win/
 .debug-video-stitcher/
 .debug-v2-semantic/
 .debug-v2-semantic-live-smoke/
@@ -144,6 +146,7 @@ build/swift/
 build/rust/
 build/ffmpeg/
 native/windows/app-watcher/target/
+native/windows/screenshot-capturer/target/
 
 # Benchmarks
 benchmarks/

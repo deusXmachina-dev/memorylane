@@ -69,6 +69,7 @@ win:
       to: rust
       filter:
         - app-watcher-windows.exe
+        - screenshot-capturer-windows.exe
   target:
     - target: nsis
       arch:
