@@ -94,6 +94,11 @@ export class SlackIntegrationService {
     log.info(
       `[SlackIntegration] Running for ${config.ownerUserId}. Watching ${config.watchedChannelIds.join(', ')}`,
     )
+    if (!this.semanticLayer.isConfigured()) {
+      log.info(
+        '[SlackIntegration] Slack semantic replies are currently supported only with an OpenRouter key',
+      )
+    }
 
     await this.runPollCycle()
     this.intervalId = setInterval(() => {
@@ -166,14 +171,10 @@ export class SlackIntegrationService {
     }
 
     const replyText = proposal.text
-    if (proposal.source === 'semantic') {
-      log.info(
-        `[SlackIntegration] ${messageKey} relevance decided relevant: ${proposal.relevanceReason}`,
-      )
-      log.info(`[SlackIntegration] ${messageKey} draft generated`)
-    } else {
-      log.info(`[SlackIntegration] ${messageKey} using legacy draft fallback`)
-    }
+    log.info(
+      `[SlackIntegration] ${messageKey} relevance decided relevant: ${proposal.relevanceReason}`,
+    )
+    log.info(`[SlackIntegration] ${messageKey} draft generated`)
 
     if (this.activeConfig.allwaysApprove) {
       await this.client.chat.postMessage({

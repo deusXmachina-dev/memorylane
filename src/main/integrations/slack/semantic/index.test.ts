@@ -35,7 +35,7 @@ function response(content: string): { choices: Array<{ message: { content: strin
 }
 
 describe('SlackSemanticLayer', () => {
-  it('falls back to the legacy reply when no model client is available', async () => {
+  it('skips replies when no model client is available', async () => {
     const layer = new SlackSemanticLayer({
       activities: makeRepo([makeActivity()]),
       apiKeyManager: makeApiKeyManager(null),
@@ -49,9 +49,10 @@ describe('SlackSemanticLayer', () => {
     })
 
     expect(result).toEqual({
-      kind: 'reply',
-      source: 'legacy',
-      text: 'Thanks, I saw your message: Can you take a look at this?',
+      kind: 'no_reply',
+      source: 'semantic',
+      stage: 'config',
+      reason: 'Slack semantic replies currently require an OpenRouter key',
     })
   })
 

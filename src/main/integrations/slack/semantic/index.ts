@@ -1,7 +1,6 @@
 import { OpenRouter } from '@openrouter/sdk'
 import type { ActivityRepository } from '../../../storage'
 import type { ApiKeyManager } from '../../../settings/api-key-manager'
-import { buildDraftReply, summarizeSourceText } from '../messages'
 import { SlackContextBuilder } from './context-builder'
 import { SlackDraftService } from './draft-service'
 import { SlackResearchService } from './research-service'
@@ -32,6 +31,14 @@ export class SlackSemanticLayer {
     this.injectedClient = deps.client ?? null
   }
 
+  public isConfigured(): boolean {
+    if (this.injectedClient) {
+      return true
+    }
+
+    return Boolean(this.deps.apiKeyManager.getApiKey())
+  }
+
   public async proposeReply(message: SlackSemanticMessage): Promise<SlackReplyProposal> {
     const analysis = await this.analyzeMessage(message)
     return analysis.proposal
@@ -47,9 +54,10 @@ export class SlackSemanticLayer {
         context,
         clientConfigured: false,
         proposal: {
-          kind: 'reply',
-          source: 'legacy',
-          text: buildDraftReply(summarizeSourceText(message.text)),
+          kind: 'no_reply',
+          source: 'semantic',
+          stage: 'config',
+          reason: 'Slack semantic replies currently require an OpenRouter key',
         },
       }
     }

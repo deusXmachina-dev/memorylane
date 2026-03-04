@@ -30,9 +30,13 @@ export type RelevanceDecision =
 export type DraftResult = { kind: 'no_reply'; reason: string } | { kind: 'reply'; text: string }
 
 export type SlackReplyProposal =
-  | { kind: 'reply'; source: 'legacy'; text: string }
   | { kind: 'reply'; source: 'semantic'; text: string; relevanceReason: string }
-  | { kind: 'no_reply'; source: 'semantic'; stage: 'relevance' | 'draft'; reason: string }
+  | {
+      kind: 'no_reply'
+      source: 'semantic'
+      stage: 'config' | 'relevance' | 'draft'
+      reason: string
+    }
 
 export interface SlackSemanticAnalysis {
   context: SlackSemanticContext

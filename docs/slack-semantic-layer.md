@@ -5,7 +5,7 @@ Goal: only draft a Slack reply when recent MemoryLane activity is clearly useful
 ## Flow
 
 1. Slack message is detected by the poller.
-2. If no OpenRouter key is configured, keep the current placeholder reply flow.
+2. If no OpenRouter key is configured, log that Slack semantic replies currently require an OpenRouter key and skip reply generation.
 3. Otherwise load a small activity slice from `storage.activities` using the Slack message timestamp:
    - 30 minutes back
    - 2 minutes forward
