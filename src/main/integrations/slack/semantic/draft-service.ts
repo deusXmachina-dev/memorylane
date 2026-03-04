@@ -42,7 +42,7 @@ function parseDraftResult(text: string): DraftResult {
     const reason = typeof parsed.reason === 'string' ? parsed.reason.trim() : ''
     return {
       kind,
-      reason: reason || 'recent activity was still not enough to draft a useful reply',
+      reason: reason || 'the researched findings were still not enough to draft a useful reply',
     }
   }
 

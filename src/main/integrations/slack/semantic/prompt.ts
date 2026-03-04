@@ -36,7 +36,7 @@ export function buildDraftPrompt(
 } {
   return {
     system: [
-      'Write a short Slack reply using the message and recent computer activity.',
+      'Write a short Slack reply using the message and the researched MemoryLane findings.',
       'Do not mention MemoryLane, screenshots, OCR, or hidden context.',
       'Be direct and brief.',
       'Return JSON only.',
