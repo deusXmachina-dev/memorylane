@@ -22,11 +22,11 @@ Goal: only draft a Slack reply when recent MemoryLane activity is clearly useful
 
 ## Files
 
-- [service.ts](/Users/filip/Documents/dxm/memorylane/src/main/integrations/slack/service.ts)
-- [index.ts](/Users/filip/Documents/dxm/memorylane/src/main/integrations/slack/semantic/index.ts)
-- [context-builder.ts](/Users/filip/Documents/dxm/memorylane/src/main/integrations/slack/semantic/context-builder.ts)
-- [relevance-service.ts](/Users/filip/Documents/dxm/memorylane/src/main/integrations/slack/semantic/relevance-service.ts)
-- [draft-service.ts](/Users/filip/Documents/dxm/memorylane/src/main/integrations/slack/semantic/draft-service.ts)
+- [service.ts](../src/main/integrations/slack/service.ts)
+- [index.ts](../src/main/integrations/slack/semantic/index.ts)
+- [context-builder.ts](../src/main/integrations/slack/semantic/context-builder.ts)
+- [relevance-service.ts](../src/main/integrations/slack/semantic/relevance-service.ts)
+- [draft-service.ts](../src/main/integrations/slack/semantic/draft-service.ts)
 
 ## Rules
 
