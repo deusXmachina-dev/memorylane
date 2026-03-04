@@ -1,7 +1,6 @@
-import { formatActivitiesForPrompt } from './context-builder'
-import type { SlackSemanticContext } from './types'
+import type { SlackSemanticInput } from './types'
 
-export function buildRelevancePrompt(context: SlackSemanticContext): {
+export function buildRelevancePrompt(input: SlackSemanticInput): {
   system: string
   user: string
 } {
@@ -15,23 +14,21 @@ export function buildRelevancePrompt(context: SlackSemanticContext): {
       'Mark relevant only when the recent activity clearly helps answer the message.',
     ].join('\n'),
     user: [
-      `Slack message: ${JSON.stringify(context.message.text)}`,
-      `Channel ID: ${context.message.channelId}`,
-      `Sender user ID: ${context.message.senderUserId}`,
-      `Message timestamp: ${new Date(context.messageTimestampMs).toISOString()}`,
-      'Recent MemoryLane activities:',
-      formatActivitiesForPrompt(context.activities),
+      `Slack message: ${JSON.stringify(input.message.text)}`,
+      `Channel ID: ${input.message.channelId}`,
+      `Sender user ID: ${input.message.senderUserId}`,
+      `Message timestamp: ${new Date(input.messageTimestampMs).toISOString()}`,
     ].join('\n'),
   }
 }
 
-export function buildDraftPrompt(context: SlackSemanticContext): {
+export function buildDraftPrompt(input: SlackSemanticInput): {
   system: string
   user: string
 }
 
 export function buildDraftPrompt(
-  context: SlackSemanticContext,
+  input: SlackSemanticInput,
   research?: { notes?: string; activityIds?: string[] },
 ): {
   system: string
@@ -48,13 +45,11 @@ export function buildDraftPrompt(
       '{"kind":"no_reply","reason":"short reason"}',
     ].join('\n'),
     user: [
-      `Slack message: ${JSON.stringify(context.message.text)}`,
+      `Slack message: ${JSON.stringify(input.message.text)}`,
       research?.notes ? `Relevant MemoryLane findings: ${research.notes}` : null,
       research?.activityIds?.length
         ? `Relevant activity IDs: ${research.activityIds.join(', ')}`
         : null,
-      'Recent MemoryLane activities:',
-      formatActivitiesForPrompt(context.activities),
     ]
       .filter(Boolean)
       .join('\n'),

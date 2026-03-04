@@ -56,10 +56,14 @@ describe('SlackSemanticLayer', () => {
     })
   })
 
-  it('skips replies when no recent activities match the Slack message timestamp', async () => {
+  it('still runs semantic relevance even when no nearby activities are preloaded', async () => {
     const client: SlackChatClient = {
       chat: {
-        send: vi.fn(),
+        send: vi
+          .fn()
+          .mockResolvedValueOnce(
+            response('{"kind":"not_relevant","reason":"no useful memorylane evidence found"}'),
+          ),
       },
     }
 
@@ -80,9 +84,9 @@ describe('SlackSemanticLayer', () => {
       kind: 'no_reply',
       source: 'semantic',
       stage: 'relevance',
-      reason: 'no recent MemoryLane activity matched the message timestamp',
+      reason: 'no useful memorylane evidence found',
     })
-    expect(client.chat.send).not.toHaveBeenCalled()
+    expect(client.chat.send).toHaveBeenCalledTimes(1)
   })
 
   it('uses the relevance model first and then drafts a reply', async () => {

@@ -1,10 +1,9 @@
 import { OpenRouter, stepCountIs } from '@openrouter/sdk'
 import { callModel } from '@openrouter/sdk/funcs/call-model'
 import { EmbeddingService } from '../../../processor/embedding'
-import { formatActivitiesForPrompt } from './context-builder'
 import { buildSlackResearchTools, type SlackResearchEmbeddingService } from './research-tools'
 import type { ActivityRepository } from '../../../storage'
-import type { RelevanceDecision, SlackResearchTrace, SlackSemanticContext } from './types'
+import type { RelevanceDecision, SlackResearchTrace, SlackSemanticInput } from './types'
 
 const RESEARCH_MODEL = 'google/gemini-3-flash-preview'
 
@@ -19,7 +18,7 @@ export class SlackResearchService {
     this.embeddingService = embeddingService ?? new EmbeddingService()
   }
 
-  public async decide(context: SlackSemanticContext): Promise<{
+  public async decide(input: SlackSemanticInput): Promise<{
     decision: RelevanceDecision
     trace: SlackResearchTrace[]
   }> {
@@ -45,7 +44,7 @@ export class SlackResearchService {
         '{"kind":"not_relevant","reason":"short reason","notes":"short evidence summary","activityIds":[]}',
         'Mark relevant only when the found activity actually helps answer the Slack message.',
       ].join('\n'),
-      input: buildResearchInput(context),
+      input: buildResearchInput(input),
       tools,
       stopWhen: stepCountIs(6),
     })
@@ -58,16 +57,13 @@ export class SlackResearchService {
   }
 }
 
-function buildResearchInput(context: SlackSemanticContext): string {
-  const messageTimeIso = new Date(context.messageTimestampMs).toISOString()
+function buildResearchInput(input: SlackSemanticInput): string {
+  const messageTimeIso = new Date(input.messageTimestampMs).toISOString()
   return [
-    `Slack message: ${JSON.stringify(context.message.text)}`,
-    `Channel ID: ${context.message.channelId}`,
-    `Sender user ID: ${context.message.senderUserId}`,
+    `Slack message: ${JSON.stringify(input.message.text)}`,
+    `Channel ID: ${input.message.channelId}`,
+    `Sender user ID: ${input.message.senderUserId}`,
     `Message timestamp: ${messageTimeIso}`,
-    'Recent nearby activity for orientation:',
-    formatActivitiesForPrompt(context.activities),
-    '',
     'Goal: find whether MemoryLane has evidence that would help answer the Slack message.',
   ].join('\n')
 }

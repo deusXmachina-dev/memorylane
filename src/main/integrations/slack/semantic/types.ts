@@ -1,5 +1,3 @@
-import type { ActivitySummary } from '../../../storage'
-
 export interface SlackSemanticMessage {
   channelId: string
   senderUserId: string
@@ -7,10 +5,9 @@ export interface SlackSemanticMessage {
   text: string
 }
 
-export interface SlackSemanticContext {
+export interface SlackSemanticInput {
   message: SlackSemanticMessage
   messageTimestampMs: number
-  activities: ActivitySummary[]
 }
 
 export type RelevanceDecision =
@@ -39,7 +36,7 @@ export type SlackReplyProposal =
     }
 
 export interface SlackSemanticAnalysis {
-  context: SlackSemanticContext
+  input: SlackSemanticInput
   clientConfigured: boolean
   relevanceDecision?: RelevanceDecision
   draftResult?: DraftResult

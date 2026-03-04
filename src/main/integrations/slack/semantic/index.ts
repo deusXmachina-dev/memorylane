@@ -1,7 +1,6 @@
 import { OpenRouter } from '@openrouter/sdk'
 import type { ActivityRepository } from '../../../storage'
 import type { ApiKeyManager } from '../../../settings/api-key-manager'
-import { SlackContextBuilder } from './context-builder'
 import { SlackDraftService } from './draft-service'
 import { SlackResearchService } from './research-service'
 import { SlackRelevanceService } from './relevance-service'
@@ -10,6 +9,7 @@ import type {
   SlackReplyProposal,
   SlackResearchTrace,
   SlackSemanticAnalysis,
+  SlackSemanticInput,
   SlackSemanticMessage,
 } from './types'
 
@@ -23,11 +23,9 @@ export interface SlackSemanticLayerDeps {
 }
 
 export class SlackSemanticLayer {
-  private readonly contextBuilder: SlackContextBuilder
   private readonly injectedClient: SlackChatClient | null
 
   constructor(private readonly deps: SlackSemanticLayerDeps) {
-    this.contextBuilder = new SlackContextBuilder(deps.activities)
     this.injectedClient = deps.client ?? null
   }
 
@@ -45,13 +43,16 @@ export class SlackSemanticLayer {
   }
 
   public async analyzeMessage(message: SlackSemanticMessage): Promise<SlackSemanticAnalysis> {
-    const context = this.contextBuilder.build(message)
+    const input = {
+      message,
+      messageTimestampMs: parseSlackTsToMs(message.messageTs),
+    } satisfies SlackSemanticInput
     const openRouterClient = this.getOpenRouterClient()
     const client = this.getChatClient(openRouterClient)
 
     if (!client) {
       return {
-        context,
+        input,
         clientConfigured: false,
         proposal: {
           kind: 'no_reply',
@@ -62,35 +63,22 @@ export class SlackSemanticLayer {
       }
     }
 
-    if (this.injectedClient && context.activities.length === 0) {
-      return {
-        context,
-        clientConfigured: true,
-        proposal: {
-          kind: 'no_reply',
-          source: 'semantic',
-          stage: 'relevance',
-          reason: 'no recent MemoryLane activity matched the message timestamp',
-        },
-      }
-    }
-
     const researchOutcome =
       this.injectedClient === null && openRouterClient
         ? await new SlackResearchService(
             openRouterClient,
             this.deps.activities,
             this.deps.embeddingService,
-          ).decide(context)
+          ).decide(input)
         : {
-            decision: await new SlackRelevanceService(client).decide(context),
+            decision: await new SlackRelevanceService(client).decide(input),
             trace: [] as SlackResearchTrace[],
           }
 
     const relevance = researchOutcome.decision
     if (relevance.kind === 'not_relevant') {
       return {
-        context,
+        input,
         clientConfigured: true,
         relevanceDecision: relevance,
         researchTrace: researchOutcome.trace,
@@ -103,13 +91,13 @@ export class SlackSemanticLayer {
       }
     }
 
-    const draft = await new SlackDraftService(client).draft(context, {
+    const draft = await new SlackDraftService(client).draft(input, {
       notes: relevance.notes,
       activityIds: relevance.activityIds,
     })
     if (draft.kind === 'no_reply') {
       return {
-        context,
+        input,
         clientConfigured: true,
         relevanceDecision: relevance,
         draftResult: draft,
@@ -124,7 +112,7 @@ export class SlackSemanticLayer {
     }
 
     return {
-      context,
+      input,
       clientConfigured: true,
       relevanceDecision: relevance,
       draftResult: draft,
@@ -158,4 +146,12 @@ export class SlackSemanticLayer {
 
     return openRouterClient as unknown as SlackChatClient
   }
+}
+
+function parseSlackTsToMs(ts: string): number {
+  const parsed = Number.parseFloat(ts)
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Invalid Slack timestamp: ${ts}`)
+  }
+  return Math.round(parsed * 1000)
 }

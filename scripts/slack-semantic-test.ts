@@ -92,10 +92,6 @@ function printUsage(): void {
   console.error(`  --ts now (${new Date().toISOString()})`)
 }
 
-function formatLocal(timestampMs: number): string {
-  return new Date(timestampMs).toLocaleString()
-}
-
 async function main() {
   const args = parseArgs()
 
@@ -143,7 +139,7 @@ async function main() {
             dbPath: args.dbPath,
             query: args.query,
             messageTs: args.messageTs,
-            messageTimeIso: new Date(analysis.context.messageTimestampMs).toISOString(),
+            messageTimeIso: new Date(analysis.input.messageTimestampMs).toISOString(),
             ...analysis,
           },
           null,
@@ -156,18 +152,8 @@ async function main() {
     console.log('=== Slack Semantic Test ===')
     console.log(`Database: ${args.dbPath}`)
     console.log(`Query:    ${args.query}`)
-    console.log(`Time:     ${new Date(analysis.context.messageTimestampMs).toISOString()}`)
-    console.log(
-      `Client:   ${analysis.clientConfigured ? 'configured' : 'not configured (legacy fallback)'}`,
-    )
-    console.log('')
-
-    console.log(`Context activities: ${analysis.context.activities.length}`)
-    for (const activity of analysis.context.activities) {
-      console.log(
-        `- ${formatLocal(activity.startTimestamp)} | ${activity.appName} | ${activity.summary || '(no summary)'}`,
-      )
-    }
+    console.log(`Time:     ${new Date(analysis.input.messageTimestampMs).toISOString()}`)
+    console.log(`Client:   ${analysis.clientConfigured ? 'configured' : 'not configured'}`)
 
     if (analysis.relevanceDecision) {
       console.log('')

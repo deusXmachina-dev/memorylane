@@ -1,4 +1,4 @@
-import type { DraftResult, SlackChatClient, SlackSemanticContext } from './types'
+import type { DraftResult, SlackChatClient, SlackSemanticInput } from './types'
 import { buildDraftPrompt } from './prompt'
 
 const DRAFT_MODEL = 'google/gemini-3-flash-preview'
@@ -7,10 +7,10 @@ export class SlackDraftService {
   constructor(private readonly client: SlackChatClient) {}
 
   public async draft(
-    context: SlackSemanticContext,
+    input: SlackSemanticInput,
     research?: { notes?: string; activityIds?: string[] },
   ): Promise<DraftResult> {
-    const prompt = buildDraftPrompt(context, research)
+    const prompt = buildDraftPrompt(input, research)
     const response = await this.client.chat.send({
       model: DRAFT_MODEL,
       messages: [

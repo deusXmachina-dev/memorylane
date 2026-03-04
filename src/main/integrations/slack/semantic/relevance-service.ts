@@ -1,4 +1,4 @@
-import type { SlackChatClient, RelevanceDecision, SlackSemanticContext } from './types'
+import type { SlackChatClient, RelevanceDecision, SlackSemanticInput } from './types'
 import { buildRelevancePrompt } from './prompt'
 
 const RELEVANCE_MODEL = 'mistralai/mistral-small-3.2-24b-instruct'
@@ -6,8 +6,8 @@ const RELEVANCE_MODEL = 'mistralai/mistral-small-3.2-24b-instruct'
 export class SlackRelevanceService {
   constructor(private readonly client: SlackChatClient) {}
 
-  public async decide(context: SlackSemanticContext): Promise<RelevanceDecision> {
-    const prompt = buildRelevancePrompt(context)
+  public async decide(input: SlackSemanticInput): Promise<RelevanceDecision> {
+    const prompt = buildRelevancePrompt(input)
     const response = await this.client.chat.send({
       model: RELEVANCE_MODEL,
       messages: [
