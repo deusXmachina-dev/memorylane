@@ -43,7 +43,7 @@ export class EmbeddingService implements ActivityEmbeddingService {
     if (this.pipe) return
 
     log.info(`Loading embedding model: ${MODEL_NAME}`)
-    this.pipe = await pipeline('feature-extraction', MODEL_NAME, { dtype: 'fp32' })
+    this.pipe = await pipeline('feature-extraction', MODEL_NAME)
     log.info('Embedding model loaded.')
   }
 
