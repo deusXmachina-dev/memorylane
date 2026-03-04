@@ -4,13 +4,23 @@ import type { ApiKeyManager } from '../../../settings/api-key-manager'
 import { buildDraftReply, summarizeSourceText } from '../messages'
 import { SlackContextBuilder } from './context-builder'
 import { SlackDraftService } from './draft-service'
+import { SlackResearchService } from './research-service'
 import { SlackRelevanceService } from './relevance-service'
-import type { SlackChatClient, SlackReplyProposal, SlackSemanticMessage } from './types'
+import type {
+  SlackChatClient,
+  SlackReplyProposal,
+  SlackResearchTrace,
+  SlackSemanticAnalysis,
+  SlackSemanticMessage,
+} from './types'
 
 export interface SlackSemanticLayerDeps {
   activities: ActivityRepository
   apiKeyManager: ApiKeyManager
   client?: SlackChatClient
+  embeddingService?: {
+    generateEmbedding(text: string): Promise<number[]>
+  }
 }
 
 export class SlackSemanticLayer {
@@ -23,56 +33,106 @@ export class SlackSemanticLayer {
   }
 
   public async proposeReply(message: SlackSemanticMessage): Promise<SlackReplyProposal> {
-    const client = this.getClient()
+    const analysis = await this.analyzeMessage(message)
+    return analysis.proposal
+  }
+
+  public async analyzeMessage(message: SlackSemanticMessage): Promise<SlackSemanticAnalysis> {
+    const context = this.contextBuilder.build(message)
+    const openRouterClient = this.getOpenRouterClient()
+    const client = this.getChatClient(openRouterClient)
+
     if (!client) {
       return {
-        kind: 'reply',
-        source: 'legacy',
-        text: buildDraftReply(summarizeSourceText(message.text)),
+        context,
+        clientConfigured: false,
+        proposal: {
+          kind: 'reply',
+          source: 'legacy',
+          text: buildDraftReply(summarizeSourceText(message.text)),
+        },
       }
     }
 
-    const context = this.contextBuilder.build(message)
-    if (context.activities.length === 0) {
+    if (this.injectedClient && context.activities.length === 0) {
       return {
-        kind: 'no_reply',
-        source: 'semantic',
-        stage: 'relevance',
-        reason: 'no recent MemoryLane activity matched the message timestamp',
+        context,
+        clientConfigured: true,
+        proposal: {
+          kind: 'no_reply',
+          source: 'semantic',
+          stage: 'relevance',
+          reason: 'no recent MemoryLane activity matched the message timestamp',
+        },
       }
     }
 
-    const relevance = await new SlackRelevanceService(client).decide(context)
+    const researchOutcome =
+      this.injectedClient === null && openRouterClient
+        ? await new SlackResearchService(
+            openRouterClient,
+            this.deps.activities,
+            this.deps.embeddingService,
+          ).decide(context)
+        : {
+            decision: await new SlackRelevanceService(client).decide(context),
+            trace: [] as SlackResearchTrace[],
+          }
+
+    const relevance = researchOutcome.decision
     if (relevance.kind === 'not_relevant') {
       return {
-        kind: 'no_reply',
-        source: 'semantic',
-        stage: 'relevance',
-        reason: relevance.reason,
+        context,
+        clientConfigured: true,
+        relevanceDecision: relevance,
+        researchTrace: researchOutcome.trace,
+        proposal: {
+          kind: 'no_reply',
+          source: 'semantic',
+          stage: 'relevance',
+          reason: relevance.reason,
+        },
       }
     }
 
-    const draft = await new SlackDraftService(client).draft(context)
+    const draft = await new SlackDraftService(client).draft(context, {
+      notes: relevance.notes,
+      activityIds: relevance.activityIds,
+    })
     if (draft.kind === 'no_reply') {
       return {
-        kind: 'no_reply',
-        source: 'semantic',
-        stage: 'draft',
-        reason: draft.reason,
+        context,
+        clientConfigured: true,
+        relevanceDecision: relevance,
+        draftResult: draft,
+        researchTrace: researchOutcome.trace,
+        proposal: {
+          kind: 'no_reply',
+          source: 'semantic',
+          stage: 'draft',
+          reason: draft.reason,
+        },
       }
     }
 
     return {
-      kind: 'reply',
-      source: 'semantic',
-      text: draft.text,
-      relevanceReason: relevance.reason,
+      context,
+      clientConfigured: true,
+      relevanceDecision: relevance,
+      draftResult: draft,
+      researchTrace: researchOutcome.trace,
+      proposal: {
+        kind: 'reply',
+        source: 'semantic',
+        text: draft.text,
+        relevanceReason: relevance.reason,
+      },
     }
   }
 
-  private getClient(): SlackChatClient | null {
+  private getOpenRouterClient(): OpenRouter | null {
     if (this.injectedClient) {
-      return this.injectedClient
+      return null
     }
 
     const apiKey = this.deps.apiKeyManager.getApiKey()
@@ -80,6 +140,14 @@ export class SlackSemanticLayer {
       return null
     }
 
-    return new OpenRouter({ apiKey }) as unknown as SlackChatClient
+    return new OpenRouter({ apiKey })
+  }
+
+  private getChatClient(openRouterClient: OpenRouter | null): SlackChatClient | null {
+    if (this.injectedClient) {
+      return this.injectedClient
+    }
+
+    return openRouterClient as unknown as SlackChatClient
   }
 }

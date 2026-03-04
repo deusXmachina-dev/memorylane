@@ -28,6 +28,14 @@ export function buildRelevancePrompt(context: SlackSemanticContext): {
 export function buildDraftPrompt(context: SlackSemanticContext): {
   system: string
   user: string
+}
+
+export function buildDraftPrompt(
+  context: SlackSemanticContext,
+  research?: { notes?: string; activityIds?: string[] },
+): {
+  system: string
+  user: string
 } {
   return {
     system: [
@@ -41,8 +49,14 @@ export function buildDraftPrompt(context: SlackSemanticContext): {
     ].join('\n'),
     user: [
       `Slack message: ${JSON.stringify(context.message.text)}`,
+      research?.notes ? `Relevant MemoryLane findings: ${research.notes}` : null,
+      research?.activityIds?.length
+        ? `Relevant activity IDs: ${research.activityIds.join(', ')}`
+        : null,
       'Recent MemoryLane activities:',
       formatActivitiesForPrompt(context.activities),
-    ].join('\n'),
+    ]
+      .filter(Boolean)
+      .join('\n'),
   }
 }

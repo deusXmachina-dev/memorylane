@@ -14,8 +14,18 @@ export interface SlackSemanticContext {
 }
 
 export type RelevanceDecision =
-  | { kind: 'not_relevant'; reason: string }
-  | { kind: 'relevant'; reason: string }
+  | {
+      kind: 'not_relevant'
+      reason: string
+      notes?: string
+      activityIds?: string[]
+    }
+  | {
+      kind: 'relevant'
+      reason: string
+      notes?: string
+      activityIds?: string[]
+    }
 
 export type DraftResult = { kind: 'no_reply'; reason: string } | { kind: 'reply'; text: string }
 
@@ -23,6 +33,21 @@ export type SlackReplyProposal =
   | { kind: 'reply'; source: 'legacy'; text: string }
   | { kind: 'reply'; source: 'semantic'; text: string; relevanceReason: string }
   | { kind: 'no_reply'; source: 'semantic'; stage: 'relevance' | 'draft'; reason: string }
+
+export interface SlackSemanticAnalysis {
+  context: SlackSemanticContext
+  clientConfigured: boolean
+  relevanceDecision?: RelevanceDecision
+  draftResult?: DraftResult
+  researchTrace?: SlackResearchTrace[]
+  proposal: SlackReplyProposal
+}
+
+export interface SlackResearchTrace {
+  toolName: 'search_context' | 'browse_timeline' | 'get_activity_details'
+  arguments: Record<string, unknown>
+  resultSummary: string
+}
 
 export interface SlackChatResponse {
   choices?: Array<{

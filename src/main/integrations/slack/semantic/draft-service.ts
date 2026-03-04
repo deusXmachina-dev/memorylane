@@ -6,8 +6,11 @@ const DRAFT_MODEL = 'google/gemini-3-flash-preview'
 export class SlackDraftService {
   constructor(private readonly client: SlackChatClient) {}
 
-  public async draft(context: SlackSemanticContext): Promise<DraftResult> {
-    const prompt = buildDraftPrompt(context)
+  public async draft(
+    context: SlackSemanticContext,
+    research?: { notes?: string; activityIds?: string[] },
+  ): Promise<DraftResult> {
+    const prompt = buildDraftPrompt(context, research)
     const response = await this.client.chat.send({
       model: DRAFT_MODEL,
       messages: [
