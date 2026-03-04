@@ -19,6 +19,7 @@ import { CaptureStateManager } from './settings/capture-state-manager'
 import { CaptureSettingsManager } from './settings/capture-settings-manager'
 import { SlackIntegrationService } from './integrations/slack/service'
 import { SlackSettingsManager } from './integrations/slack/settings-manager'
+import { SlackSemanticLayer } from './integrations/slack/semantic'
 import { PatternDetector } from './services/pattern-detector'
 import { createMainRuntime, type MainRuntime } from './runtime'
 
@@ -80,7 +81,6 @@ app.on('ready', async () => {
   const captureSettingsManager = new CaptureSettingsManager()
   const captureStateManager = new CaptureStateManager()
   const slackSettingsManager = new SlackSettingsManager()
-  slackIntegrationService = new SlackIntegrationService(slackSettingsManager)
   captureSettingsManager.applyToConstants()
 
   if (!captureStateManager.isAutoStartInitialized() && canSyncAutoStartSetting()) {
@@ -99,6 +99,14 @@ app.on('ready', async () => {
     },
     semanticPipelinePreference: captureSettingsManager.get().semanticPipelineMode,
   })
+
+  slackIntegrationService = new SlackIntegrationService(
+    slackSettingsManager,
+    new SlackSemanticLayer({
+      activities: runtime.storage.activities,
+      apiKeyManager: runtime.apiKeyManager,
+    }),
+  )
 
   patternDetector = new PatternDetector(runtime.storage, runtime.apiKeyManager)
   const captureCoordinator = createCaptureCoordinator({

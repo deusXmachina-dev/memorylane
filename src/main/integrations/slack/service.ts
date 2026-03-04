@@ -1,15 +1,14 @@
 import { LogLevel, WebClient } from '@slack/web-api'
 import log from '../../logger'
 import {
-  buildDraftReply,
   compareTs,
   formatApprovalText,
-  getNewestTs,
   hasReactionFromUser,
   isPlainUserMessage,
   summarizeSourceText,
 } from './messages'
 import { SlackSettingsManager } from './settings-manager'
+import { SlackSemanticLayer } from './semantic'
 import type { PendingApproval, SlackMessage, SlackRuntimeConfig, SlackRuntimeState } from './types'
 
 export class SlackIntegrationService {
@@ -24,7 +23,10 @@ export class SlackIntegrationService {
   private pendingApprovals = new Map<string, PendingApproval>()
   private lastSeenByChannel = new Map<string, string>()
 
-  constructor(private readonly settingsManager: SlackSettingsManager) {}
+  constructor(
+    private readonly settingsManager: SlackSettingsManager,
+    private readonly semanticLayer: SlackSemanticLayer,
+  ) {}
 
   public getRuntimeState(): SlackRuntimeState {
     return {
@@ -147,8 +149,31 @@ export class SlackIntegrationService {
   private async queueApproval(message: SlackMessage, sourceChannelId: string): Promise<void> {
     if (!this.client || !this.activeConfig) throw new Error('Slack client not initialized')
 
+    const messageKey = `${sourceChannelId}:${message.ts}`
+    log.info(`[SlackIntegration] Message detected ${messageKey}`)
+
     const sourceText = summarizeSourceText(message.text ?? '')
-    const replyText = buildDraftReply(sourceText)
+    const proposal = await this.semanticLayer.proposeReply({
+      channelId: sourceChannelId,
+      senderUserId: message.user ?? '',
+      messageTs: message.ts,
+      text: message.text ?? '',
+    })
+
+    if (proposal.kind === 'no_reply') {
+      log.info(`[SlackIntegration] ${messageKey} skipped at ${proposal.stage}: ${proposal.reason}`)
+      return
+    }
+
+    const replyText = proposal.text
+    if (proposal.source === 'semantic') {
+      log.info(
+        `[SlackIntegration] ${messageKey} relevance decided relevant: ${proposal.relevanceReason}`,
+      )
+      log.info(`[SlackIntegration] ${messageKey} draft generated`)
+    } else {
+      log.info(`[SlackIntegration] ${messageKey} using legacy draft fallback`)
+    }
 
     if (this.activeConfig.allwaysApprove) {
       await this.client.chat.postMessage({
@@ -194,9 +219,8 @@ export class SlackIntegrationService {
 
       for (const message of messages) {
         await this.queueApproval(message, channelId)
+        this.lastSeenByChannel.set(channelId, message.ts)
       }
-
-      this.lastSeenByChannel.set(channelId, getNewestTs(messages, oldest))
     }
   }
 
