@@ -26,6 +26,17 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   saveCustomEndpoint: (config: { serverURL: string; model: string; apiKey?: string }) =>
     ipcRenderer.invoke('main-window:saveCustomEndpoint', config),
   deleteCustomEndpoint: () => ipcRenderer.invoke('main-window:deleteCustomEndpoint'),
+  // Slack integration
+  getSlackSettings: () => ipcRenderer.invoke('main-window:getSlackSettings'),
+  saveSlackSettings: (config: {
+    enabled: boolean
+    ownerUserId: string
+    watchedChannelIds: string
+    pollIntervalMs: number
+    allwaysApprove: boolean
+    botToken?: string
+  }) => ipcRenderer.invoke('main-window:saveSlackSettings', config),
+  resetSlackSettings: () => ipcRenderer.invoke('main-window:resetSlackSettings'),
   // Subscription
   startCheckout: (plan: string) => ipcRenderer.invoke('main-window:startCheckout', plan),
   openSubscriptionPortal: () => ipcRenderer.invoke('main-window:openSubscriptionPortal'),

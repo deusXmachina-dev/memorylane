@@ -76,6 +76,27 @@ export interface CustomEndpointStatus {
   hasApiKey: boolean
 }
 
+export interface SlackIntegrationConfig {
+  enabled: boolean
+  ownerUserId: string
+  watchedChannelIds: string
+  pollIntervalMs: number
+  allwaysApprove: boolean
+  botToken?: string | undefined
+}
+
+export interface SlackIntegrationStatus {
+  enabled: boolean
+  running: boolean
+  hasBotToken: boolean
+  maskedBotToken: string | null
+  ownerUserId: string
+  watchedChannelIds: string
+  pollIntervalMs: number
+  allwaysApprove: boolean
+  lastError: string | null
+}
+
 export type SubscriptionPlan = 'standard' | 'pro'
 
 export type SubscriptionStatus = 'idle' | 'awaiting_checkout' | 'polling' | 'error'
@@ -150,6 +171,10 @@ export interface MainWindowAPI {
   getCustomEndpoint: () => Promise<CustomEndpointStatus>
   saveCustomEndpoint: (config: CustomEndpointConfig) => Promise<SaveResult>
   deleteCustomEndpoint: () => Promise<SaveResult>
+  // Slack integration
+  getSlackSettings: () => Promise<SlackIntegrationStatus>
+  saveSlackSettings: (config: SlackIntegrationConfig) => Promise<SaveResult>
+  resetSlackSettings: () => Promise<SaveResult>
   // Subscription
   startCheckout: (plan: SubscriptionPlan) => Promise<void>
   openSubscriptionPortal: () => Promise<void>

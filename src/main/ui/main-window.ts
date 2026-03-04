@@ -14,6 +14,8 @@ import { exportDatabaseZip } from './database-export'
 import { registerWithClaudeDesktop } from '../integrations/claude-desktop'
 import { registerWithCursor } from '../integrations/cursor'
 import { registerWithClaudeCode } from '../integrations/claude-code'
+import { SlackSettingsManager } from '../integrations/slack/settings-manager'
+import { SlackIntegrationService } from '../integrations/slack/service'
 import type { ApiKeyManager } from '../settings/api-key-manager'
 import type { CustomEndpointManager } from '../settings/custom-endpoint-manager'
 import type { ManagedKeyService } from '../services/managed-key-service'
@@ -22,6 +24,7 @@ import type {
   MainWindowStats,
   CaptureSettings,
   SemanticPipelineMode,
+  SlackIntegrationConfig,
   SubscriptionPlan,
 } from '../../shared/types'
 import type { CaptureSettingsManager } from '../settings/capture-settings-manager'
@@ -52,6 +55,8 @@ interface MainWindowDependencies {
   semanticService: SemanticService
   managedKeyService: ManagedKeyService
   captureSettingsManager: CaptureSettingsManager
+  slackSettingsManager: SlackSettingsManager
+  slackIntegrationService: SlackIntegrationService
 }
 
 interface MainWindowStatus {
@@ -270,6 +275,55 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       deps.customEndpointManager.deleteEndpoint()
       const openRouterKey = deps.apiKeyManager.getApiKey()
       deps.semanticService.updateEndpoint(null, openRouterKey)
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      return { success: false, error: message }
+    }
+  })
+
+  ipcMain.handle('main-window:getSlackSettings', () => {
+    if (!deps) {
+      return {
+        enabled: false,
+        running: false,
+        hasBotToken: false,
+        maskedBotToken: null,
+        ownerUserId: '',
+        watchedChannelIds: '',
+        pollIntervalMs: 30000,
+        allwaysApprove: true,
+        lastError: null,
+      }
+    }
+
+    return deps.slackSettingsManager.getStatus(deps.slackIntegrationService.getRuntimeState())
+  })
+
+  ipcMain.handle(
+    'main-window:saveSlackSettings',
+    async (_event: IpcMainInvokeEvent, config: SlackIntegrationConfig) => {
+      if (!deps) {
+        return { success: false, error: 'Dependencies not initialized' }
+      }
+      try {
+        deps.slackSettingsManager.save(config)
+        await deps.slackIntegrationService.reload()
+        return { success: true }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        return { success: false, error: message }
+      }
+    },
+  )
+
+  ipcMain.handle('main-window:resetSlackSettings', async () => {
+    if (!deps) {
+      return { success: false, error: 'Dependencies not initialized' }
+    }
+    try {
+      deps.slackSettingsManager.reset()
+      await deps.slackIntegrationService.reload()
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'

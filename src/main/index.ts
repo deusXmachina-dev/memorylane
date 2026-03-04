@@ -17,6 +17,8 @@ import log from './logger'
 import { startPowerMonitoring, shouldPause } from './power-monitor'
 import { CaptureStateManager } from './settings/capture-state-manager'
 import { CaptureSettingsManager } from './settings/capture-settings-manager'
+import { SlackIntegrationService } from './integrations/slack/service'
+import { SlackSettingsManager } from './integrations/slack/settings-manager'
 import { PatternDetector } from './services/pattern-detector'
 import { createMainRuntime, type MainRuntime } from './runtime'
 
@@ -42,10 +44,10 @@ app.on('window-all-closed', () => {
 
 let runtime: MainRuntime | null = null
 let patternDetector: PatternDetector | null = null
+let slackIntegrationService: SlackIntegrationService | null = null
 
 app.on('before-quit', () => {
-  if (!runtime) return
-  void runtime.dispose()
+  void Promise.all([runtime?.dispose(), slackIntegrationService?.stop()])
 })
 
 app.on('second-instance', () => {
@@ -77,6 +79,8 @@ app.on('ready', async () => {
 
   const captureSettingsManager = new CaptureSettingsManager()
   const captureStateManager = new CaptureStateManager()
+  const slackSettingsManager = new SlackSettingsManager()
+  slackIntegrationService = new SlackIntegrationService(slackSettingsManager)
   captureSettingsManager.applyToConstants()
 
   if (!captureStateManager.isAutoStartInitialized() && canSyncAutoStartSetting()) {
@@ -123,7 +127,11 @@ app.on('ready', async () => {
     semanticService: runtime.semanticService,
     managedKeyService: runtime.managedKeyService,
     captureSettingsManager,
+    slackSettingsManager,
+    slackIntegrationService,
   })
+
+  await slackIntegrationService.reload()
 
   const keySource = runtime.apiKeyManager.getKeySource()
   if (keySource === 'none' || keySource === 'managed') {

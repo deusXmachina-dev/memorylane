@@ -6,8 +6,15 @@ import { Button } from '@components/ui/button'
 import { DatabaseExportSection } from './components/DatabaseExportSection'
 import { CustomEndpointSection } from './components/CustomEndpointSection'
 import { ManageKeySection } from './components/ManageKeySection'
+import { SlackIntegrationSection } from './components/SlackIntegrationSection'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
-import type { CaptureSettings, CustomEndpointStatus, KeyStatus, SemanticPipelineMode } from '@types'
+import type {
+  CaptureSettings,
+  CustomEndpointStatus,
+  KeyStatus,
+  SemanticPipelineMode,
+  SlackIntegrationStatus,
+} from '@types'
 
 function sliderVal(v: number | readonly number[]): number {
   return typeof v === 'number' ? v : v[0]
@@ -84,20 +91,24 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
   const [form, setForm] = useState<CaptureSettings | null>(null)
   const [endpointStatus, setEndpointStatus] = useState<CustomEndpointStatus | null>(null)
   const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null)
+  const [slackStatus, setSlackStatus] = useState<SlackIntegrationStatus | null>(null)
   const [llmOpen, setLlmOpen] = useState(false)
   const [dataOpen, setDataOpen] = useState(false)
   const [startupOpen, setStartupOpen] = useState(false)
   const [captureOpen, setCaptureOpen] = useState(false)
+  const [slackOpen, setSlackOpen] = useState(false)
 
   const load = useCallback(async () => {
-    const [s, ep, ks] = await Promise.all([
+    const [s, ep, ks, slack] = await Promise.all([
       api.getCaptureSettings(),
       api.getCustomEndpoint(),
       api.getKeyStatus(),
+      api.getSlackSettings(),
     ])
     setForm(s)
     setEndpointStatus(ep)
     setKeyStatus(ks)
+    setSlackStatus(slack)
   }, [api])
 
   useEffect(() => {
@@ -157,7 +168,7 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
   }
 
   return (
-    <div className="p-6 max-w-xl mx-auto space-y-4">
+    <div className="p-6 max-w-xl mx-auto space-y-4 overflow-y-auto max-h-screen">
       <button
         onClick={onBack}
         className="text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -263,6 +274,25 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
 
       {form && (
         <>
+          <div className="border-t border-border" />
+
+          <section>
+            <SectionToggle
+              label="Slack Integration"
+              open={slackOpen}
+              onToggle={() => setSlackOpen((value) => !value)}
+            />
+            {slackOpen && slackStatus && (
+              <div className="mt-3">
+                <SlackIntegrationSection
+                  api={api}
+                  status={slackStatus}
+                  onChanged={() => void load()}
+                />
+              </div>
+            )}
+          </section>
+
           <div className="border-t border-border" />
 
           {/* ── Capture Settings ── */}
