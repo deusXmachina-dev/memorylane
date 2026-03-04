@@ -1,8 +1,34 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
 import type { ActivityRepository, ActivitySummary } from '../../../storage'
 import type { ApiKeyManager } from '../../../settings/api-key-manager'
+
+const mocks = vi.hoisted(() => ({
+  researchDecide: vi.fn(),
+  draft: vi.fn(),
+  openRouter: vi.fn(),
+}))
+
+vi.mock('@openrouter/sdk', () => ({
+  OpenRouter: class {
+    constructor(options: unknown) {
+      mocks.openRouter(options)
+    }
+  },
+}))
+
+vi.mock('./research-service', () => ({
+  SlackResearchService: class {
+    public decide = mocks.researchDecide
+  },
+}))
+
+vi.mock('./draft-service', () => ({
+  SlackDraftService: class {
+    public draft = mocks.draft
+  },
+}))
+
 import { SlackSemanticLayer } from './index'
-import type { SlackChatClient } from './types'
 
 function makeActivity(overrides?: Partial<ActivitySummary>): ActivitySummary {
   return {
@@ -28,13 +54,13 @@ function makeApiKeyManager(apiKey: string | null): ApiKeyManager {
   } as unknown as ApiKeyManager
 }
 
-function response(content: string): { choices: Array<{ message: { content: string } }> } {
-  return {
-    choices: [{ message: { content } }],
-  }
-}
-
 describe('SlackSemanticLayer', () => {
+  beforeEach(() => {
+    mocks.researchDecide.mockReset()
+    mocks.draft.mockReset()
+    mocks.openRouter.mockReset()
+  })
+
   it('skips replies when no model client is available', async () => {
     const layer = new SlackSemanticLayer({
       activities: makeRepo([makeActivity()]),
@@ -54,23 +80,22 @@ describe('SlackSemanticLayer', () => {
       stage: 'config',
       reason: 'Slack semantic replies currently require an OpenRouter key',
     })
+    expect(mocks.researchDecide).not.toHaveBeenCalled()
+    expect(mocks.draft).not.toHaveBeenCalled()
   })
 
-  it('still runs semantic relevance even when no nearby activities are preloaded', async () => {
-    const client: SlackChatClient = {
-      chat: {
-        send: vi
-          .fn()
-          .mockResolvedValueOnce(
-            response('{"kind":"not_relevant","reason":"no useful memorylane evidence found"}'),
-          ),
+  it('uses research first and skips when it finds no relevant evidence', async () => {
+    mocks.researchDecide.mockResolvedValue({
+      decision: {
+        kind: 'not_relevant',
+        reason: 'no useful memorylane evidence found',
       },
-    }
+      trace: [],
+    })
 
     const layer = new SlackSemanticLayer({
       activities: makeRepo([]),
       apiKeyManager: makeApiKeyManager('test-key'),
-      client,
     })
 
     const result = await layer.proposeReply({
@@ -86,64 +111,73 @@ describe('SlackSemanticLayer', () => {
       stage: 'relevance',
       reason: 'no useful memorylane evidence found',
     })
-    expect(client.chat.send).toHaveBeenCalledTimes(1)
+    expect(mocks.researchDecide).toHaveBeenCalledTimes(1)
+    expect(mocks.draft).not.toHaveBeenCalled()
   })
 
-  it('uses the relevance model first and then drafts a reply', async () => {
-    const send = vi
-      .fn()
-      .mockResolvedValueOnce(
-        response('{"kind":"relevant","reason":"recent code review is relevant"}'),
-      )
-      .mockResolvedValueOnce(
-        response('{"kind":"reply","text":"I was just reviewing that code path and can help."}'),
-      )
+  it('uses research findings and then drafts a reply', async () => {
+    mocks.researchDecide.mockResolvedValue({
+      decision: {
+        kind: 'relevant',
+        reason: 'found a relevant deployment record',
+        notes: 'n8n is running on Google Cloud Run',
+        activityIds: ['activity-1'],
+      },
+      trace: [],
+    })
+    mocks.draft.mockResolvedValue({
+      kind: 'reply',
+      text: 'We run n8n on Google Cloud Run.',
+    })
 
     const layer = new SlackSemanticLayer({
       activities: makeRepo([makeActivity()]),
       apiKeyManager: makeApiKeyManager('test-key'),
-      client: {
-        chat: { send },
-      },
     })
 
     const result = await layer.proposeReply({
       channelId: 'C123',
       senderUserId: 'U123',
       messageTs: '1710000000.000100',
-      text: 'Do you know what changed here?',
+      text: 'Do you know where n8n runs?',
     })
 
     expect(result).toEqual({
       kind: 'reply',
       source: 'semantic',
-      text: 'I was just reviewing that code path and can help.',
-      relevanceReason: 'recent code review is relevant',
+      text: 'We run n8n on Google Cloud Run.',
+      relevanceReason: 'found a relevant deployment record',
     })
-
-    expect(send).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ model: 'mistralai/mistral-small-3.2-24b-instruct' }),
-    )
-    expect(send).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ model: 'google/gemini-3-flash-preview' }),
+    expect(mocks.researchDecide).toHaveBeenCalledTimes(1)
+    expect(mocks.draft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.objectContaining({ text: 'Do you know where n8n runs?' }),
+      }),
+      {
+        notes: 'n8n is running on Google Cloud Run',
+        activityIds: ['activity-1'],
+      },
     )
   })
 
-  it('skips replies when the relevance decision is negative', async () => {
-    const send = vi
-      .fn()
-      .mockResolvedValueOnce(
-        response('{"kind":"not_relevant","reason":"recent activity is unrelated"}'),
-      )
+  it('returns a draft-stage no-reply when research is relevant but draft declines', async () => {
+    mocks.researchDecide.mockResolvedValue({
+      decision: {
+        kind: 'relevant',
+        reason: 'found relevant activity',
+        notes: 'there was some evidence',
+        activityIds: ['activity-1'],
+      },
+      trace: [],
+    })
+    mocks.draft.mockResolvedValue({
+      kind: 'no_reply',
+      reason: 'the researched findings were still not enough to draft a useful reply',
+    })
 
     const layer = new SlackSemanticLayer({
       activities: makeRepo([makeActivity()]),
       apiKeyManager: makeApiKeyManager('test-key'),
-      client: {
-        chat: { send },
-      },
     })
 
     const result = await layer.proposeReply({
@@ -156,9 +190,10 @@ describe('SlackSemanticLayer', () => {
     expect(result).toEqual({
       kind: 'no_reply',
       source: 'semantic',
-      stage: 'relevance',
-      reason: 'recent activity is unrelated',
+      stage: 'draft',
+      reason: 'the researched findings were still not enough to draft a useful reply',
     })
-    expect(send).toHaveBeenCalledTimes(1)
+    expect(mocks.researchDecide).toHaveBeenCalledTimes(1)
+    expect(mocks.draft).toHaveBeenCalledTimes(1)
   })
 })

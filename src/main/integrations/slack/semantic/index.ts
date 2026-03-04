@@ -3,11 +3,8 @@ import type { ActivityRepository } from '../../../storage'
 import type { ApiKeyManager } from '../../../settings/api-key-manager'
 import { SlackDraftService } from './draft-service'
 import { SlackResearchService } from './research-service'
-import { SlackRelevanceService } from './relevance-service'
 import type {
-  SlackChatClient,
   SlackReplyProposal,
-  SlackResearchTrace,
   SlackSemanticAnalysis,
   SlackSemanticInput,
   SlackSemanticMessage,
@@ -16,24 +13,15 @@ import type {
 export interface SlackSemanticLayerDeps {
   activities: ActivityRepository
   apiKeyManager: ApiKeyManager
-  client?: SlackChatClient
   embeddingService?: {
     generateEmbedding(text: string): Promise<number[]>
   }
 }
 
 export class SlackSemanticLayer {
-  private readonly injectedClient: SlackChatClient | null
-
-  constructor(private readonly deps: SlackSemanticLayerDeps) {
-    this.injectedClient = deps.client ?? null
-  }
+  constructor(private readonly deps: SlackSemanticLayerDeps) {}
 
   public isConfigured(): boolean {
-    if (this.injectedClient) {
-      return true
-    }
-
     return Boolean(this.deps.apiKeyManager.getApiKey())
   }
 
@@ -47,8 +35,7 @@ export class SlackSemanticLayer {
       message,
       messageTimestampMs: parseSlackTsToMs(message.messageTs),
     } satisfies SlackSemanticInput
-    const openRouterClient = this.getOpenRouterClient()
-    const client = this.getChatClient(openRouterClient)
+    const client = this.getOpenRouterClient()
 
     if (!client) {
       return {
@@ -63,17 +50,11 @@ export class SlackSemanticLayer {
       }
     }
 
-    const researchOutcome =
-      this.injectedClient === null && openRouterClient
-        ? await new SlackResearchService(
-            openRouterClient,
-            this.deps.activities,
-            this.deps.embeddingService,
-          ).decide(input)
-        : {
-            decision: await new SlackRelevanceService(client).decide(input),
-            trace: [] as SlackResearchTrace[],
-          }
+    const researchOutcome = await new SlackResearchService(
+      client,
+      this.deps.activities,
+      this.deps.embeddingService,
+    ).decide(input)
 
     const relevance = researchOutcome.decision
     if (relevance.kind === 'not_relevant') {
@@ -127,24 +108,12 @@ export class SlackSemanticLayer {
   }
 
   private getOpenRouterClient(): OpenRouter | null {
-    if (this.injectedClient) {
-      return null
-    }
-
     const apiKey = this.deps.apiKeyManager.getApiKey()
     if (!apiKey) {
       return null
     }
 
     return new OpenRouter({ apiKey })
-  }
-
-  private getChatClient(openRouterClient: OpenRouter | null): SlackChatClient | null {
-    if (this.injectedClient) {
-      return this.injectedClient
-    }
-
-    return openRouterClient as unknown as SlackChatClient
   }
 }
 
