@@ -35,6 +35,7 @@
     "db:search": "node ./scripts/enode.js ./node_modules/.bin/tsx scripts/db-search.ts",
     "db:stats": "node ./scripts/enode.js ./node_modules/.bin/tsx scripts/db-stats.ts",
     "db:explore": "jupyter notebook tools/explore-db.ipynb",
+    "slack:semantic:test": "node ./scripts/enode.js ./node_modules/.bin/tsx scripts/slack-semantic-test.ts",
     "mcp:start": "node ./scripts/enode.js ./node_modules/.bin/tsx scripts/mcp-server.ts",
     "mcp:inspector": "npx @modelcontextprotocol/inspector npm run mcp:start",
     "mcp:dev": "node ./scripts/enode.js ./node_modules/.bin/tsx scripts/mcp-dev.ts on",
