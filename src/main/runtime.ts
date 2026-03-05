@@ -36,6 +36,7 @@ export interface MainRuntime {
 export async function createMainRuntime(params?: {
   onCaptureStateChanged?: () => void
   semanticPipelinePreference?: SemanticPipelinePreference
+  semanticRequestTimeoutMs?: number
 }): Promise<MainRuntime> {
   const onCaptureStateChanged = params?.onCaptureStateChanged ?? (() => undefined)
 
@@ -60,6 +61,7 @@ export async function createMainRuntime(params?: {
     usageTracker,
     debugDumper,
     pipelinePreference: params?.semanticPipelinePreference,
+    requestTimeoutMs: params?.semanticRequestTimeoutMs,
     endpointConfig: savedEndpoint
       ? {
           serverURL: savedEndpoint.serverURL,

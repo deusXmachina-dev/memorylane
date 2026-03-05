@@ -35,6 +35,7 @@ interface SemanticService {
   updateApiKey(apiKey: string | null): void
   updateEndpoint(config: CustomEndpointConfig | null, openRouterKey?: string | null): void
   updatePipelinePreference(preference: SemanticPipelineMode): void
+  updateRequestTimeoutMs(timeoutMs: number): void
 }
 
 interface MainWindowDependencies {
@@ -396,6 +397,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
           maxActivityDurationMs: updated.maxActivityDurationMs,
         })
         deps.semanticService.updatePipelinePreference(updated.semanticPipelineMode)
+        deps.semanticService.updateRequestTimeoutMs(updated.semanticRequestTimeoutMs)
         return { success: true }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'
@@ -416,6 +418,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         maxActivityDurationMs: updated.maxActivityDurationMs,
       })
       deps.semanticService.updatePipelinePreference(updated.semanticPipelineMode)
+      deps.semanticService.updateRequestTimeoutMs(updated.semanticRequestTimeoutMs)
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'

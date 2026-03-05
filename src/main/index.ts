@@ -98,6 +98,7 @@ app.on('ready', async () => {
       void sendStatusToRenderer()
     },
     semanticPipelinePreference: captureSettingsManager.get().semanticPipelineMode,
+    semanticRequestTimeoutMs: captureSettingsManager.get().semanticRequestTimeoutMs,
   })
 
   slackIntegrationService = new SlackIntegrationService(

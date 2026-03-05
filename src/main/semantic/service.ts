@@ -33,7 +33,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
   private readonly videoModels: string[]
   private readonly snapshotModels: string[]
   private readonly maxVideoBytes: number
-  private readonly requestTimeoutMs: number
+  private requestTimeoutMs: number
   private pipelinePreference: SemanticPipelinePreference
   private readonly usageTracker: ActivitySemanticServiceConfig['usageTracker']
   private readonly debugDumper: ActivitySemanticServiceConfig['debugDumper']
@@ -54,7 +54,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
       ? [...config.snapshotModels]
       : [...DEFAULT_SNAPSHOT_MODELS]
     this.maxVideoBytes = config?.maxVideoBytes ?? 25 * 1024 * 1024
-    this.requestTimeoutMs = config?.requestTimeoutMs ?? 45_000
+    this.requestTimeoutMs = config?.requestTimeoutMs ?? ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS
     this.pipelinePreference = this.normalizePipelinePreference(config?.pipelinePreference)
     this.usageTracker = config?.usageTracker ?? new UsageTracker()
     this.debugDumper = config?.debugDumper
@@ -62,9 +62,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
     if (!Number.isFinite(this.maxVideoBytes) || this.maxVideoBytes <= 0) {
       throw new Error('maxVideoBytes must be > 0')
     }
-    if (!Number.isFinite(this.requestTimeoutMs) || this.requestTimeoutMs <= 0) {
-      throw new Error('requestTimeoutMs must be > 0')
-    }
+    this.assertValidRequestTimeoutMs(this.requestTimeoutMs)
 
     this.openRouterApiKey = apiKey && apiKey.trim().length > 0 ? apiKey : null
     this.usesInjectedClient = Boolean(config?.client)
@@ -150,6 +148,11 @@ export class ActivitySemanticService implements SemanticServiceContract {
 
   updatePipelinePreference(preference: SemanticPipelinePreference): void {
     this.pipelinePreference = this.normalizePipelinePreference(preference)
+  }
+
+  updateRequestTimeoutMs(timeoutMs: number): void {
+    this.assertValidRequestTimeoutMs(timeoutMs)
+    this.requestTimeoutMs = timeoutMs
   }
 
   getPipelinePreference(): SemanticPipelinePreference {
@@ -414,6 +417,12 @@ export class ActivitySemanticService implements SemanticServiceContract {
       return fromSettings
     }
     return 1
+  }
+
+  private assertValidRequestTimeoutMs(timeoutMs: number): void {
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+      throw new Error('requestTimeoutMs must be > 0')
+    }
   }
 
   private dumpRoundTripSafe(input: {

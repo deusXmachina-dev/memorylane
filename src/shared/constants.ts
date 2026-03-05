@@ -40,6 +40,7 @@ export const ACTIVITY_CONFIG = {
   FORCE_SPLIT_CHECK_INTERVAL_MS: 60_000, // Check for max-duration force-split every 60s
   MAX_SCREENSHOTS_PER_ACTIVITY: 20, // Cap intermediate screenshots
   MAX_SCREENSHOTS_FOR_LLM: 6, // Max images sent to LLM
+  SEMANTIC_REQUEST_TIMEOUT_MS: 120_000, // Per-model semantic request timeout
 }
 
 // Event Capturer Configuration (gap-based session windowing)

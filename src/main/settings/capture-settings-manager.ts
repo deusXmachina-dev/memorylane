@@ -17,6 +17,7 @@ const DEFAULTS: CaptureSettings = {
   minActivityDurationMs: ACTIVITY_CONFIG.MIN_ACTIVITY_DURATION_MS,
   maxActivityDurationMs: ACTIVITY_CONFIG.MAX_ACTIVITY_DURATION_MS,
   maxScreenshotsPerActivity: ACTIVITY_CONFIG.MAX_SCREENSHOTS_PER_ACTIVITY,
+  semanticRequestTimeoutMs: ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS,
   semanticPipelineMode: 'auto',
 }
 
@@ -94,5 +95,6 @@ export class CaptureSettingsManager {
     ACTIVITY_CONFIG.MIN_ACTIVITY_DURATION_MS = cs.minActivityDurationMs
     ACTIVITY_CONFIG.MAX_ACTIVITY_DURATION_MS = cs.maxActivityDurationMs
     ACTIVITY_CONFIG.MAX_SCREENSHOTS_PER_ACTIVITY = cs.maxScreenshotsPerActivity
+    ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS = cs.semanticRequestTimeoutMs
   }
 }

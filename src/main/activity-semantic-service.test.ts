@@ -139,16 +139,19 @@ describe('ActivitySemanticService', () => {
   const tempDirs: string[] = []
   const originalSnapshotCap = ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM
   const originalVisualThreshold = VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT
+  const originalSemanticTimeout = ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS
 
   beforeEach(() => {
     vi.clearAllMocks()
     ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM = originalSnapshotCap
     VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT = originalVisualThreshold
+    ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS = originalSemanticTimeout
   })
 
   afterEach(() => {
     ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM = originalSnapshotCap
     VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT = originalVisualThreshold
+    ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS = originalSemanticTimeout
     while (tempDirs.length > 0) {
       const dir = tempDirs.pop()
       if (dir) {
@@ -163,6 +166,55 @@ describe('ActivitySemanticService', () => {
     })
 
     expect(OpenRouter).toHaveBeenCalledWith({ apiKey: 'test-key' })
+  })
+
+  it('uses shared semantic timeout default when requestTimeoutMs is not provided', async () => {
+    ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS = 5
+    const tempDir = createTempDir()
+    tempDirs.push(tempDir)
+    const videoPath = createVideoFile(tempDir)
+
+    const service = new ActivitySemanticService(undefined, {
+      client: { chat: { send: () => new Promise(() => undefined) } },
+      videoModels: ['slow/model'],
+      snapshotModels: [],
+      pipelinePreference: 'video',
+      usageTracker: { recordUsage: vi.fn() },
+    })
+
+    await service.summarizeFromVideo({
+      activity: makeActivity(),
+      videoPath,
+      ocrText: 'ignored',
+    })
+
+    const diagnostics = service.getLastRunDiagnostics()
+    expect(diagnostics?.attempts[0]?.error).toContain('semantic model request timed out after 5ms')
+  })
+
+  it('supports runtime semantic timeout updates', async () => {
+    const tempDir = createTempDir()
+    tempDirs.push(tempDir)
+    const videoPath = createVideoFile(tempDir)
+
+    const service = new ActivitySemanticService(undefined, {
+      client: { chat: { send: () => new Promise(() => undefined) } },
+      requestTimeoutMs: 60_000,
+      videoModels: ['slow/model'],
+      snapshotModels: [],
+      pipelinePreference: 'video',
+      usageTracker: { recordUsage: vi.fn() },
+    })
+
+    service.updateRequestTimeoutMs(7)
+    await service.summarizeFromVideo({
+      activity: makeActivity(),
+      videoPath,
+      ocrText: 'ignored',
+    })
+
+    const diagnostics = service.getLastRunDiagnostics()
+    expect(diagnostics?.attempts[0]?.error).toContain('semantic model request timed out after 7ms')
   })
 
   it('passes serverURL to OpenRouter when custom endpoint is provided', () => {

@@ -149,6 +149,7 @@ export interface CaptureSettings {
   minActivityDurationMs: number
   maxActivityDurationMs: number
   maxScreenshotsPerActivity: number
+  semanticRequestTimeoutMs: number
   semanticPipelineMode: SemanticPipelineMode
 }
 

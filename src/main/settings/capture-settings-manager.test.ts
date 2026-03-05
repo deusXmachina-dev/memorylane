@@ -43,6 +43,7 @@ describe('CaptureSettingsManager', () => {
       expect(defaults.minActivityDurationMs).toBe(ACTIVITY_CONFIG.MIN_ACTIVITY_DURATION_MS)
       expect(defaults.maxActivityDurationMs).toBe(ACTIVITY_CONFIG.MAX_ACTIVITY_DURATION_MS)
       expect(defaults.maxScreenshotsPerActivity).toBe(ACTIVITY_CONFIG.MAX_SCREENSHOTS_PER_ACTIVITY)
+      expect(defaults.semanticRequestTimeoutMs).toBe(ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS)
       expect(defaults.semanticPipelineMode).toBe('auto')
     })
 
@@ -137,6 +138,7 @@ describe('CaptureSettingsManager', () => {
       minActivityDurationMs: ACTIVITY_CONFIG.MIN_ACTIVITY_DURATION_MS,
       maxActivityDurationMs: ACTIVITY_CONFIG.MAX_ACTIVITY_DURATION_MS,
       maxScreenshotsPerActivity: ACTIVITY_CONFIG.MAX_SCREENSHOTS_PER_ACTIVITY,
+      semanticRequestTimeoutMs: ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS,
     }
 
     afterEach(() => {
@@ -147,6 +149,7 @@ describe('CaptureSettingsManager', () => {
       ACTIVITY_CONFIG.MIN_ACTIVITY_DURATION_MS = original.minActivityDurationMs
       ACTIVITY_CONFIG.MAX_ACTIVITY_DURATION_MS = original.maxActivityDurationMs
       ACTIVITY_CONFIG.MAX_SCREENSHOTS_PER_ACTIVITY = original.maxScreenshotsPerActivity
+      ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS = original.semanticRequestTimeoutMs
     })
 
     it('mutates the shared constants to match saved settings', () => {
@@ -157,6 +160,15 @@ describe('CaptureSettingsManager', () => {
 
       expect(INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS).toBe(8000)
       expect(VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT).toBe(3)
+    })
+
+    it('applies semantic timeout to shared constants', () => {
+      const p = makeTmpPath()
+      const manager = new CaptureSettingsManager(p)
+      manager.save({ semanticRequestTimeoutMs: 180_000 })
+      manager.applyToConstants()
+
+      expect(ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS).toBe(180_000)
     })
 
     it('after reset, applyToConstants restores constants to defaults', () => {
