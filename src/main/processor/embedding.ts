@@ -1,3 +1,4 @@
+import * as fs from 'fs'
 import * as path from 'path'
 import { pipeline, env } from '@huggingface/transformers'
 import log from '../logger'
@@ -14,7 +15,31 @@ function getModelCacheDir(): string {
   return path.join(path.dirname(getDefaultDbPath()), 'models')
 }
 
-env.cacheDir = getModelCacheDir()
+/**
+ * Returns the bundled model directory when running in a packaged Electron app,
+ * or null otherwise (dev mode).
+ */
+function getBundledModelPath(): string | null {
+  if (!process.versions.electron) return null
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { app } = require('electron')
+    if (!app?.isPackaged) return null
+  } catch {
+    return null
+  }
+  const bundled = path.join(process.resourcesPath, 'models')
+  return fs.existsSync(bundled) ? bundled : null
+}
+
+const bundledPath = getBundledModelPath()
+if (bundledPath) {
+  env.localModelPath = bundledPath
+  env.allowRemoteModels = false
+  log.info(`Using bundled embedding model from ${bundledPath}`)
+} else {
+  env.cacheDir = getModelCacheDir()
+}
 
 export class EmbeddingService implements ActivityEmbeddingService {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

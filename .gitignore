@@ -145,6 +145,7 @@ debug-pipeline/
 build/swift/
 build/rust/
 build/ffmpeg/
+build/models/
 native/windows/app-watcher/target/
 native/windows/screenshot-capturer/target/
 

@@ -30,6 +30,10 @@ extraResources:
     to: powershell
     filter:
       - '*.ps1'
+  - from: build/models
+    to: models
+    filter:
+      - '**/*'
 
 asar: true
 asarUnpack:
