@@ -37,7 +37,6 @@ export const SCREENSHOT_CLEANUP_CONFIG = {
 export const ACTIVITY_CONFIG = {
   MIN_ACTIVITY_DURATION_MS: 3_000, // Discard activities shorter than 3s
   MAX_ACTIVITY_DURATION_MS: 5 * 60 * 1000, // Force-split after 5 minutes
-  FORCE_SPLIT_CHECK_INTERVAL_MS: 60_000, // Check for max-duration force-split every 60s
   MAX_SCREENSHOTS_FOR_LLM: 6, // Max images sent to LLM
   SEMANTIC_REQUEST_TIMEOUT_MS: 120_000, // Per-model semantic request timeout
 }
