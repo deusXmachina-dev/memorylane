@@ -436,7 +436,7 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
                     label="Max screenshots for LLM"
                     value={form.maxScreenshotsForLlm}
                     min={1}
-                    max={12}
+                    max={20}
                     step={1}
                     format={(v) => `${v}`}
                     onChange={(v) => set('maxScreenshotsForLlm', v)}
