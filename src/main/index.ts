@@ -23,7 +23,9 @@ import { SlackSemanticLayer } from './integrations/slack/semantic'
 import { PatternDetector } from './services/pattern-detector'
 import { createMainRuntime, type MainRuntime } from './runtime'
 
-if (!app.requestSingleInstanceLock()) {
+// Keep single-instance behavior in packaged app, but allow dev to run
+// alongside production for local debugging.
+if (app.isPackaged && !app.requestSingleInstanceLock()) {
   app.quit()
 }
 

@@ -26,6 +26,14 @@ function formatMs(ms: number): string {
   return `${Math.round(ms / 60_000)}min`
 }
 
+function formatMinSec(ms: number): string {
+  const totalSeconds = Math.round(ms / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  if (minutes === 0) return `${seconds}s`
+  return `${minutes}m ${seconds}s`
+}
+
 type SliderRowProps = {
   label: string
   value: number
@@ -345,7 +353,7 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
                     min={15_000}
                     max={300_000}
                     step={5_000}
-                    format={formatMs}
+                    format={formatMinSec}
                     onChange={(v) => set('semanticRequestTimeoutMs', v)}
                     onCommit={(v) => commit('semanticRequestTimeoutMs', v)}
                   />
