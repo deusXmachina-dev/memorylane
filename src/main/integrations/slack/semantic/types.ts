@@ -31,7 +31,7 @@ export type SlackReplyProposal =
   | {
       kind: 'no_reply'
       source: 'semantic'
-      stage: 'config' | 'relevance' | 'draft'
+      stage: 'config' | 'policy' | 'relevance' | 'draft'
       reason: string
     }
 
