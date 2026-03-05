@@ -108,6 +108,30 @@ describe('SlackSemanticLayer', () => {
     expect(mocks.draft).not.toHaveBeenCalled()
   })
 
+  it('skips password and secrets requests before running research or drafting', async () => {
+    const layer = new SlackSemanticLayer({
+      activities: makeRepo([makeActivity()]),
+      apiKeyManager: makeApiKeyManager('test-key'),
+    })
+
+    const result = await layer.proposeReply({
+      channelId: 'C123',
+      senderUserId: 'U123',
+      messageTs: '1710000000.000100',
+      text: 'Can you share the production API key?',
+    })
+
+    expect(result).toEqual({
+      kind: 'no_reply',
+      source: 'semantic',
+      stage: 'policy',
+      reason: 'sensitive topic (passwords/secrets) is out of scope',
+    })
+    expect(mocks.openRouter).not.toHaveBeenCalled()
+    expect(mocks.researchDecide).not.toHaveBeenCalled()
+    expect(mocks.draft).not.toHaveBeenCalled()
+  })
+
   it('uses research first and skips when it finds no relevant evidence', async () => {
     mocks.researchDecide.mockResolvedValue({
       decision: {

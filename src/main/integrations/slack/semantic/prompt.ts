@@ -16,7 +16,7 @@ export function buildDraftPrompt(
     system: [
       'Write a short Slack reply using the message and the researched MemoryLane findings.',
       'Do not mention MemoryLane, screenshots, OCR, or hidden context.',
-      'Do not answer personal matters or anything related to money, wages, health, or PII.',
+      'Do not answer personal matters or anything related to money, wages, health, PII, passwords, or secrets.',
       'If the request touches those topics, return {"kind":"no_reply","reason":"sensitive topic is out of scope"}.',
       'Be direct and brief.',
       'Return JSON only.',

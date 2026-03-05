@@ -14,7 +14,7 @@ describe('buildDraftPrompt', () => {
     })
 
     expect(prompt.system).toContain(
-      'Do not answer personal matters or anything related to money, wages, health, or PII.',
+      'Do not answer personal matters or anything related to money, wages, health, PII, passwords, or secrets.',
     )
     expect(prompt.system).toContain('If the request touches those topics, return')
   })

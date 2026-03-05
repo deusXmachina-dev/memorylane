@@ -162,6 +162,11 @@ function detectSensitiveTopic(text: string): string | null {
       pattern:
         /\b(ssn|social security|passport|driver'?s license|date of birth|dob|phone number|email address|home address|bank account|credit card)\b/i,
     },
+    {
+      topic: 'passwords/secrets',
+      pattern:
+        /\b(password|passcode|secret|secrets|api key|apikey|access token|token|credentials|private key|seed phrase)\b/i,
+    },
   ]
 
   for (const matcher of topicMatchers) {
