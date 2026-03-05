@@ -170,7 +170,7 @@ export class SlackIntegrationService {
       return
     }
 
-    const replyText = proposal.text
+    const replyText = this.formatReplyText(proposal.text)
     log.info(
       `[SlackIntegration] ${messageKey} relevance decided relevant: ${proposal.relevanceReason}`,
     )
@@ -285,6 +285,15 @@ export class SlackIntegrationService {
     if (!this.activeConfig.allwaysApprove) {
       await this.ensureOwnerDmChannelId()
     }
+  }
+
+  private formatReplyText(replyText: string): string {
+    const ownerUserId = this.activeConfig?.ownerUserId.trim()
+    if (!ownerUserId) {
+      return replyText
+    }
+
+    return `Based on context from <@${ownerUserId}>: ${replyText}`
   }
 
   private async runPollCycle(): Promise<void> {
