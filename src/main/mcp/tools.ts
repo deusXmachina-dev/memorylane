@@ -17,6 +17,22 @@ export interface MCPServices {
   embeddingService: EmbeddingService
 }
 
+export type MCPToolName =
+  | 'search_context'
+  | 'browse_timeline'
+  | 'get_activity_details'
+  | 'list_patterns'
+  | 'search_patterns'
+  | 'get_pattern_details'
+
+interface MCPToolResult {
+  content: Array<{
+    type: 'text'
+    text: string
+  }>
+  isError?: boolean
+}
+
 /**
  * Registers all MCP tools on the given server.
  *
@@ -57,7 +73,7 @@ export function registerTools(server: McpServer, getServices: () => MCPServices 
           ),
       },
     },
-    (params) => handleSearchContext(getServices(), params),
+    (params) => executeMCPTool(getServices(), 'search_context', params),
   )
 
   server.registerTool(
@@ -91,7 +107,7 @@ export function registerTools(server: McpServer, getServices: () => MCPServices 
           ),
       },
     },
-    (params) => handleBrowseTimeline(getServices(), params),
+    (params) => executeMCPTool(getServices(), 'browse_timeline', params),
   )
 
   server.registerTool(
@@ -107,7 +123,7 @@ export function registerTools(server: McpServer, getServices: () => MCPServices 
           .describe('Activity IDs to fetch (from search_context or browse_timeline results)'),
       },
     },
-    (params) => handleGetActivityDetails(getServices(), params),
+    (params) => executeMCPTool(getServices(), 'get_activity_details', params),
   )
 
   // ---------------------------------------------------------------------------
@@ -124,7 +140,7 @@ export function registerTools(server: McpServer, getServices: () => MCPServices 
         'Use search_patterns for keyword filtering.',
       inputSchema: {},
     },
-    () => handleListPatterns(getServices()),
+    () => executeMCPTool(getServices(), 'list_patterns', {}),
   )
 
   server.registerTool(
@@ -139,7 +155,7 @@ export function registerTools(server: McpServer, getServices: () => MCPServices 
           .describe('Search keyword to match against pattern name, description, or apps'),
       },
     },
-    (params) => handleSearchPatterns(getServices(), params),
+    (params) => executeMCPTool(getServices(), 'search_patterns', params),
   )
 
   server.registerTool(
@@ -159,8 +175,40 @@ export function registerTools(server: McpServer, getServices: () => MCPServices 
           .describe('Optional: filter sightings to a specific detection run ID'),
       },
     },
-    (params) => handleGetPatternDetails(getServices(), params),
+    (params) => executeMCPTool(getServices(), 'get_pattern_details', params),
   )
+}
+
+export async function executeMCPTool(
+  services: MCPServices | null,
+  toolName: MCPToolName,
+  params: unknown,
+): Promise<MCPToolResult> {
+  switch (toolName) {
+    case 'search_context':
+      return handleSearchContext(services, params as Parameters<typeof handleSearchContext>[1])
+    case 'browse_timeline':
+      return handleBrowseTimeline(services, params as Parameters<typeof handleBrowseTimeline>[1])
+    case 'get_activity_details':
+      return handleGetActivityDetails(
+        services,
+        params as Parameters<typeof handleGetActivityDetails>[1],
+      )
+    case 'list_patterns':
+      return handleListPatterns(services)
+    case 'search_patterns':
+      return handleSearchPatterns(services, params as Parameters<typeof handleSearchPatterns>[1])
+    case 'get_pattern_details':
+      return handleGetPatternDetails(
+        services,
+        params as Parameters<typeof handleGetPatternDetails>[1],
+      )
+    default:
+      return {
+        content: [{ type: 'text', text: `Unsupported tool: ${String(toolName)}` }],
+        isError: true,
+      }
+  }
 }
 
 // ---------------------------------------------------------------------------
