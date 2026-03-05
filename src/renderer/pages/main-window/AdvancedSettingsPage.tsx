@@ -348,7 +348,7 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
                         : 'Uses only image snapshots and skips video requests.'}
                   </p>
                   <SliderRow
-                    label="Semantic request timeout"
+                    label="LLM request timeout"
                     value={form.semanticRequestTimeoutMs}
                     min={15_000}
                     max={300_000}
@@ -357,9 +357,6 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
                     onChange={(v) => set('semanticRequestTimeoutMs', v)}
                     onCommit={(v) => commit('semanticRequestTimeoutMs', v)}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Per-model timeout for semantic summaries. Increase for slower local models.
-                  </p>
                 </div>
 
                 <div className="space-y-2">
