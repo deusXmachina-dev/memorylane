@@ -2,6 +2,7 @@ import { OpenRouter } from '@openrouter/sdk'
 import type { ActivityRepository } from '../../../storage'
 import type { ApiKeyManager } from '../../../settings/api-key-manager'
 import { SlackDraftService } from './draft-service'
+import { SlackPolicyService } from './policy-service'
 import { SlackResearchService } from './research-service'
 import type {
   SlackReplyProposal,
@@ -36,20 +37,6 @@ export class SlackSemanticLayer {
       messageTimestampMs: parseSlackTsToMs(message.messageTs),
     } satisfies SlackSemanticInput
 
-    const sensitiveTopic = detectSensitiveTopic(message.text)
-    if (sensitiveTopic) {
-      return {
-        input,
-        clientConfigured: this.isConfigured(),
-        proposal: {
-          kind: 'no_reply',
-          source: 'semantic',
-          stage: 'policy',
-          reason: `sensitive topic (${sensitiveTopic}) is out of scope`,
-        },
-      }
-    }
-
     const client = this.getOpenRouterClient()
 
     if (!client) {
@@ -61,6 +48,20 @@ export class SlackSemanticLayer {
           source: 'semantic',
           stage: 'config',
           reason: 'Slack semantic replies currently require an OpenRouter key',
+        },
+      }
+    }
+
+    const policy = await new SlackPolicyService(client).classify(input)
+    if (policy.kind === 'deny') {
+      return {
+        input,
+        clientConfigured: true,
+        proposal: {
+          kind: 'no_reply',
+          source: 'semantic',
+          stage: 'policy',
+          reason: `${policy.reason} (${policy.category})`,
         },
       }
     }
@@ -138,42 +139,4 @@ function parseSlackTsToMs(ts: string): number {
     throw new Error(`Invalid Slack timestamp: ${ts}`)
   }
   return Math.round(parsed * 1000)
-}
-
-function detectSensitiveTopic(text: string): string | null {
-  const topicMatchers: Array<{ topic: string; pattern: RegExp }> = [
-    {
-      topic: 'personal',
-      pattern:
-        /\b(personal|private life|family|relationship|spouse|partner|children|kids|confidential)\b/i,
-    },
-    {
-      topic: 'money/wages',
-      pattern:
-        /\b(money|salary|salaries|wage|wages|compensation|payroll|pay raise|bonus|income|earnings)\b/i,
-    },
-    {
-      topic: 'health',
-      pattern:
-        /\b(health|medical|medication|diagnosis|illness|therapy|mental health|doctor|hospital)\b/i,
-    },
-    {
-      topic: 'PII',
-      pattern:
-        /\b(ssn|social security|passport|driver'?s license|date of birth|dob|phone number|email address|home address|bank account|credit card)\b/i,
-    },
-    {
-      topic: 'passwords/secrets',
-      pattern:
-        /\b(password|passcode|secret|secrets|api key|apikey|access token|token|credentials|private key|seed phrase)\b/i,
-    },
-  ]
-
-  for (const matcher of topicMatchers) {
-    if (matcher.pattern.test(text)) {
-      return matcher.topic
-    }
-  }
-
-  return null
 }

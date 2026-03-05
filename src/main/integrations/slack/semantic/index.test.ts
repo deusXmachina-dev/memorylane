@@ -3,6 +3,7 @@ import type { ActivityRepository, ActivitySummary } from '../../../storage'
 import type { ApiKeyManager } from '../../../settings/api-key-manager'
 
 const mocks = vi.hoisted(() => ({
+  policyClassify: vi.fn(),
   researchDecide: vi.fn(),
   draft: vi.fn(),
   openRouter: vi.fn(),
@@ -19,6 +20,12 @@ vi.mock('@openrouter/sdk', () => ({
 vi.mock('./research-service', () => ({
   SlackResearchService: class {
     public decide = mocks.researchDecide
+  },
+}))
+
+vi.mock('./policy-service', () => ({
+  SlackPolicyService: class {
+    public classify = mocks.policyClassify
   },
 }))
 
@@ -56,6 +63,7 @@ function makeApiKeyManager(apiKey: string | null): ApiKeyManager {
 
 describe('SlackSemanticLayer', () => {
   beforeEach(() => {
+    mocks.policyClassify.mockReset()
     mocks.researchDecide.mockReset()
     mocks.draft.mockReset()
     mocks.openRouter.mockReset()
@@ -80,11 +88,18 @@ describe('SlackSemanticLayer', () => {
       stage: 'config',
       reason: 'Slack semantic replies currently require an OpenRouter key',
     })
+    expect(mocks.policyClassify).not.toHaveBeenCalled()
     expect(mocks.researchDecide).not.toHaveBeenCalled()
     expect(mocks.draft).not.toHaveBeenCalled()
   })
 
-  it('skips sensitive topics before running research or drafting', async () => {
+  it('skips sensitive topics when policy classifier denies', async () => {
+    mocks.policyClassify.mockResolvedValue({
+      kind: 'deny',
+      category: 'money/wages',
+      reason: 'sensitive topic is out of scope',
+    })
+
     const layer = new SlackSemanticLayer({
       activities: makeRepo([makeActivity()]),
       apiKeyManager: makeApiKeyManager('test-key'),
@@ -101,14 +116,21 @@ describe('SlackSemanticLayer', () => {
       kind: 'no_reply',
       source: 'semantic',
       stage: 'policy',
-      reason: 'sensitive topic (money/wages) is out of scope',
+      reason: 'sensitive topic is out of scope (money/wages)',
     })
-    expect(mocks.openRouter).not.toHaveBeenCalled()
+    expect(mocks.openRouter).toHaveBeenCalledTimes(1)
+    expect(mocks.policyClassify).toHaveBeenCalledTimes(1)
     expect(mocks.researchDecide).not.toHaveBeenCalled()
     expect(mocks.draft).not.toHaveBeenCalled()
   })
 
-  it('skips password and secrets requests before running research or drafting', async () => {
+  it('skips password and secrets requests when policy classifier denies', async () => {
+    mocks.policyClassify.mockResolvedValue({
+      kind: 'deny',
+      category: 'passwords/secrets',
+      reason: 'credentials request is out of scope',
+    })
+
     const layer = new SlackSemanticLayer({
       activities: makeRepo([makeActivity()]),
       apiKeyManager: makeApiKeyManager('test-key'),
@@ -125,14 +147,18 @@ describe('SlackSemanticLayer', () => {
       kind: 'no_reply',
       source: 'semantic',
       stage: 'policy',
-      reason: 'sensitive topic (passwords/secrets) is out of scope',
+      reason: 'credentials request is out of scope (passwords/secrets)',
     })
-    expect(mocks.openRouter).not.toHaveBeenCalled()
+    expect(mocks.openRouter).toHaveBeenCalledTimes(1)
+    expect(mocks.policyClassify).toHaveBeenCalledTimes(1)
     expect(mocks.researchDecide).not.toHaveBeenCalled()
     expect(mocks.draft).not.toHaveBeenCalled()
   })
 
   it('uses research first and skips when it finds no relevant evidence', async () => {
+    mocks.policyClassify.mockResolvedValue({
+      kind: 'allow',
+    })
     mocks.researchDecide.mockResolvedValue({
       decision: {
         kind: 'not_relevant',
@@ -159,11 +185,15 @@ describe('SlackSemanticLayer', () => {
       stage: 'relevance',
       reason: 'no useful memorylane evidence found',
     })
+    expect(mocks.policyClassify).toHaveBeenCalledTimes(1)
     expect(mocks.researchDecide).toHaveBeenCalledTimes(1)
     expect(mocks.draft).not.toHaveBeenCalled()
   })
 
   it('uses research findings and then drafts a reply', async () => {
+    mocks.policyClassify.mockResolvedValue({
+      kind: 'allow',
+    })
     mocks.researchDecide.mockResolvedValue({
       decision: {
         kind: 'relevant',
@@ -196,6 +226,7 @@ describe('SlackSemanticLayer', () => {
       text: 'We run n8n on Google Cloud Run.',
       relevanceReason: 'found a relevant deployment record',
     })
+    expect(mocks.policyClassify).toHaveBeenCalledTimes(1)
     expect(mocks.researchDecide).toHaveBeenCalledTimes(1)
     expect(mocks.draft).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -209,6 +240,9 @@ describe('SlackSemanticLayer', () => {
   })
 
   it('returns a draft-stage no-reply when research is relevant but draft declines', async () => {
+    mocks.policyClassify.mockResolvedValue({
+      kind: 'allow',
+    })
     mocks.researchDecide.mockResolvedValue({
       decision: {
         kind: 'relevant',
@@ -241,6 +275,7 @@ describe('SlackSemanticLayer', () => {
       stage: 'draft',
       reason: 'the researched findings were still not enough to draft a useful reply',
     })
+    expect(mocks.policyClassify).toHaveBeenCalledTimes(1)
     expect(mocks.researchDecide).toHaveBeenCalledTimes(1)
     expect(mocks.draft).toHaveBeenCalledTimes(1)
   })
