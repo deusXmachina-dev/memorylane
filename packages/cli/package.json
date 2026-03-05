@@ -9,7 +9,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup"
+    "build": "tsup",
+    "test": "node ../../scripts/enode.js ./node_modules/.bin/vitest run"
   },
   "engines": {
     "node": ">=18"
@@ -25,7 +26,8 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.2.1",
     "tsup": "^8.4.0",
-    "typescript": "~5.7.0"
+    "typescript": "~5.7.0",
+    "vitest": "^4.0.18"
   },
   "license": "GPL-3.0-or-later"
 }

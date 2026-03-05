@@ -13,7 +13,7 @@ import { resolveDbPath, setDbPath, getConfigFilePath } from './config'
 // Error class for CLI validation failures
 // ---------------------------------------------------------------------------
 
-class CliError extends Error {
+export class CliError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'CliError'
@@ -33,7 +33,7 @@ interface ParsedArgs {
   positional: string[]
 }
 
-function parseFlags(args: string[]): ParsedArgs {
+export function parseFlags(args: string[]): ParsedArgs {
   const flags: Record<string, string | true> = {}
   const positional: string[] = []
 
@@ -56,7 +56,7 @@ function parseFlags(args: string[]): ParsedArgs {
   return { flags, positional }
 }
 
-function parseGlobalArgs(argv: string[]): {
+export function parseGlobalArgs(argv: string[]): {
   dbPathFlag: string | undefined
   command: string
   rest: string[]
@@ -79,7 +79,7 @@ function parseGlobalArgs(argv: string[]): {
   return { dbPathFlag, command, rest }
 }
 
-function parseTime(value: string | true | undefined, name: string): number | undefined {
+export function parseTime(value: string | true | undefined, name: string): number | undefined {
   if (!value || value === true) return undefined
   const ts = parseTimeString(value)
   if (ts === null) fail(`Invalid time for --${name}: ${value}`)
@@ -90,7 +90,7 @@ function parseTime(value: string | true | undefined, name: string): number | und
 // Subcommands
 // ---------------------------------------------------------------------------
 
-async function cmdStats(storage: StorageService): Promise<unknown> {
+export async function cmdStats(storage: StorageService): Promise<unknown> {
   const count = storage.activities.count()
   const dateRange = storage.activities.getDateRange()
   const dbSize = storage.getDbSize()
@@ -108,7 +108,7 @@ async function cmdStats(storage: StorageService): Promise<unknown> {
   }
 }
 
-async function cmdSearch(rest: string[], storage: StorageService): Promise<unknown> {
+export async function cmdSearch(rest: string[], storage: StorageService): Promise<unknown> {
   const { flags, positional } = parseFlags(rest)
   const query = positional.join(' ')
   if (!query)
@@ -151,7 +151,7 @@ async function cmdSearch(rest: string[], storage: StorageService): Promise<unkno
   return result
 }
 
-async function cmdTimeline(rest: string[], storage: StorageService): Promise<unknown> {
+export async function cmdTimeline(rest: string[], storage: StorageService): Promise<unknown> {
   const { flags } = parseFlags(rest)
 
   const startTime = parseTime(flags.start, 'start') ?? null
@@ -170,7 +170,7 @@ async function cmdTimeline(rest: string[], storage: StorageService): Promise<unk
   }
 }
 
-async function cmdActivity(rest: string[], storage: StorageService): Promise<unknown> {
+export async function cmdActivity(rest: string[], storage: StorageService): Promise<unknown> {
   const { flags, positional } = parseFlags(rest)
   if (positional.length === 0) fail('Usage: activity <id...> [--include-ocr] [--include-vector]')
 
@@ -191,7 +191,7 @@ async function cmdActivity(rest: string[], storage: StorageService): Promise<unk
   return activities
 }
 
-async function cmdPatterns(rest: string[], storage: StorageService): Promise<unknown> {
+export async function cmdPatterns(rest: string[], storage: StorageService): Promise<unknown> {
   const { flags } = parseFlags(rest)
   const query = flags.query as string | undefined
 
@@ -201,7 +201,7 @@ async function cmdPatterns(rest: string[], storage: StorageService): Promise<unk
   return storage.patterns.getAllPatterns()
 }
 
-async function cmdPattern(rest: string[], storage: StorageService): Promise<unknown> {
+export async function cmdPattern(rest: string[], storage: StorageService): Promise<unknown> {
   const { flags, positional } = parseFlags(rest)
   if (positional.length === 0) fail('Usage: pattern <id> [--run-id ID]')
 
@@ -316,9 +316,16 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
-  process.stdout.write(
-    JSON.stringify({ error: err instanceof Error ? err.message : String(err) }) + '\n',
-  )
-  process.exit(1)
-})
+// Only run when executed directly (not when imported by tests)
+const isDirectRun =
+  process.argv[1] &&
+  (process.argv[1].endsWith('/index.js') || process.argv[1].endsWith('/index.ts'))
+
+if (isDirectRun) {
+  main().catch((err) => {
+    process.stdout.write(
+      JSON.stringify({ error: err instanceof Error ? err.message : String(err) }) + '\n',
+    )
+    process.exit(1)
+  })
+}

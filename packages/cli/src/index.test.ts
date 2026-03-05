@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest'
 import * as path from 'path'
-import log from '../src/main/logger'
-import { StorageService } from '../src/main/storage'
-import { v, deleteDbFiles, createStoredActivity } from '../src/main/storage/test-utils'
+import log from '@main/logger'
+import { StorageService } from '@main/storage'
+import { v, deleteDbFiles, createStoredActivity } from '@main/storage/test-utils'
 import {
   CliError,
   parseFlags,
@@ -14,7 +14,7 @@ import {
   cmdActivity,
   cmdPatterns,
   cmdPattern,
-} from './cli'
+} from './index'
 
 const TEST_DB_PATH = path.join(process.cwd(), 'temp_cli_test.db')
 
@@ -85,7 +85,7 @@ describe('parseGlobalArgs', () => {
 
   it('should extract --db-path from anywhere', () => {
     const result = parseGlobalArgs(['node', 'cli.ts', '--db-path', '/tmp/test.db', 'stats'])
-    expect(result.dbPath).toBe('/tmp/test.db')
+    expect(result.dbPathFlag).toBe('/tmp/test.db')
     expect(result.command).toBe('stats')
     expect(result.rest).toEqual([])
   })
@@ -99,7 +99,7 @@ describe('parseGlobalArgs', () => {
       '/tmp/test.db',
       'query',
     ])
-    expect(result.dbPath).toBe('/tmp/test.db')
+    expect(result.dbPathFlag).toBe('/tmp/test.db')
     expect(result.command).toBe('search')
     expect(result.rest).toEqual(['query'])
   })

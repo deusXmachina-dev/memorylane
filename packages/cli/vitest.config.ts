@@ -4,13 +4,13 @@ import { resolve } from 'path'
 export default defineConfig({
   resolve: {
     alias: {
-      '@constants': resolve(__dirname, 'src/shared/constants'),
+      '@main': resolve(__dirname, '../../src/main'),
     },
   },
   test: {
     globals: true,
     environment: 'node',
-    include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
+    include: ['src/**/*.test.ts'],
     server: {
       deps: {
         external: ['better-sqlite3'],
