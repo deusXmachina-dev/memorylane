@@ -151,3 +151,7 @@ native/windows/screenshot-capturer/target/
 # Benchmarks
 benchmarks/
 .benchmarks/
+
+# CLI package build output
+packages/cli/dist/
+packages/cli/node_modules/

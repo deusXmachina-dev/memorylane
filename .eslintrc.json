@@ -18,7 +18,12 @@
   "settings": {
     "import/resolver": {
       "typescript": {
-        "project": ["./tsconfig.json", "./tsconfig.web.json", "./tsconfig.node.json"]
+        "project": [
+          "./tsconfig.json",
+          "./tsconfig.web.json",
+          "./tsconfig.node.json",
+          "./packages/cli/tsconfig.json"
+        ]
       }
     }
   }

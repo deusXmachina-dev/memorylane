@@ -44,7 +44,9 @@
     "sign:win": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/sign-windows.ps1",
     "cli": "node ./scripts/enode.js ./node_modules/.bin/tsx scripts/cli.ts",
     "detect-patterns": "node ./scripts/enode.js ./node_modules/.bin/tsx scripts/detect-patterns.ts",
-    "mcpb:pack": "npx @anthropic-ai/mcpb pack mcpb/"
+    "mcpb:pack": "npx @anthropic-ai/mcpb pack mcpb/",
+    "cli:build": "cd packages/cli && npm run build",
+    "cli:link": "cd packages/cli && npm link"
   },
   "keywords": [],
   "author": {
