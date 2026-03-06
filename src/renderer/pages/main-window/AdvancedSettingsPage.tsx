@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Slider } from '@components/ui/slider'
 import { Label } from '@components/ui/label'
@@ -18,6 +18,47 @@ import type {
 } from '@types'
 
 const MODIFIER_KEYS = new Set(['Meta', 'Control', 'Shift', 'Alt'])
+type HotkeyPlatform = 'mac' | 'windows' | 'linux' | 'other'
+
+function detectHotkeyPlatform(): HotkeyPlatform {
+  const platform = navigator.userAgentData?.platform ?? navigator.platform ?? ''
+  const normalized = platform.toLowerCase()
+  if (normalized.includes('mac')) return 'mac'
+  if (normalized.includes('win')) return 'windows'
+  if (normalized.includes('linux')) return 'linux'
+  return 'other'
+}
+
+function formatHotkeyForDisplay(accelerator: string, platform: HotkeyPlatform): string {
+  return accelerator
+    .split('+')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const normalized = part.toLowerCase()
+
+      if (normalized === 'commandorcontrol' || normalized === 'cmdorctrl') {
+        return platform === 'mac' ? 'Cmd' : 'Ctrl'
+      }
+      if (normalized === 'command' || normalized === 'cmd') {
+        return 'Cmd'
+      }
+      if (normalized === 'control' || normalized === 'ctrl') {
+        return 'Ctrl'
+      }
+      if (normalized === 'alt' || normalized === 'option') {
+        return platform === 'mac' ? 'Option' : 'Alt'
+      }
+      if (normalized === 'super' || normalized === 'meta') {
+        return platform === 'mac' ? 'Cmd' : 'Win'
+      }
+      if (part.length === 1) {
+        return part.toUpperCase()
+      }
+      return part
+    })
+    .join('+')
+}
 
 function toAcceleratorKey(event: KeyboardEvent): string | null {
   if (event.code.startsWith('Key')) {
@@ -160,6 +201,7 @@ function SectionToggle({
 
 export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.JSX.Element {
   const api = useMainWindowAPI()
+  const hotkeyPlatform = useMemo(() => detectHotkeyPlatform(), [])
   const [form, setForm] = useState<CaptureSettings | null>(null)
   const [endpointStatus, setEndpointStatus] = useState<CustomEndpointStatus | null>(null)
   const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null)
@@ -242,24 +284,6 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
     setForm((prev) => (prev ? { ...prev, captureHotkeyAccelerator: value } : prev))
   }
 
-  const commitCaptureHotkeyAccelerator = async (): Promise<void> => {
-    if (!form) return
-    const result = await api.saveCaptureSettings({
-      captureHotkeyAccelerator: form.captureHotkeyAccelerator,
-    })
-    if (!result.success) {
-      toast.error(result.error ?? 'Failed to save settings', {
-        id: 'auto-save-error',
-        duration: 3000,
-      })
-      await load()
-      return
-    }
-
-    toast.success('Capture hotkey saved', { id: 'auto-save', duration: 1500 })
-    await load()
-  }
-
   useEffect(() => {
     if (!recordingHotkey) return
 
@@ -303,6 +327,9 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
       window.removeEventListener('keydown', onKeyDown, true)
     }
   }, [api, load, recordingHotkey, setCaptureHotkeyAccelerator])
+
+  const hotkeyPrimaryModifier = hotkeyPlatform === 'mac' ? 'Cmd' : 'Ctrl'
+  const hotkeyAltModifier = hotkeyPlatform === 'mac' ? 'Option' : 'Alt'
 
   const handleReset = async (): Promise<void> => {
     await api.resetCaptureSettings()
@@ -496,18 +523,14 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-muted-foreground">Capture Hotkey</p>
                   <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Electron accelerator</Label>
+                    <Label className="text-xs text-muted-foreground">Shortcut</Label>
                     <div className="flex items-center gap-2">
                       <Input
-                        value={form.captureHotkeyAccelerator}
-                        placeholder="CommandOrControl+Shift+M"
-                        onChange={(event) => setCaptureHotkeyAccelerator(event.target.value)}
-                        onBlur={() => void commitCaptureHotkeyAccelerator()}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.currentTarget.blur()
-                          }
-                        }}
+                        value={formatHotkeyForDisplay(
+                          form.captureHotkeyAccelerator,
+                          hotkeyPlatform,
+                        )}
+                        readOnly
                       />
                       <Button
                         type="button"
@@ -521,7 +544,7 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
                     <p className="text-xs text-muted-foreground">
                       {recordingHotkey
                         ? 'Press your key combination now (Esc to cancel).'
-                        : 'Example: CommandOrControl+Shift+M or CommandOrControl+Alt+P'}
+                        : `Example: ${hotkeyPrimaryModifier}+Shift+M or ${hotkeyPrimaryModifier}+${hotkeyAltModifier}+P`}
                     </p>
                   </div>
                 </div>
