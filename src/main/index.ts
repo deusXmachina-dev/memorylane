@@ -182,7 +182,6 @@ app.on('ready', async () => {
   setupTray({
     capture: captureCoordinator.controls,
     storage: runtime.storage,
-    getCaptureHotkeyLabel: captureHotkeyLabel,
   })
 
   const { initAutoUpdater } = await import('./updater')
