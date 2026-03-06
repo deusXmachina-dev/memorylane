@@ -521,10 +521,11 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
                 </div>
 
                 <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Capture Hotkey</p>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Shortcut</Label>
-                    <div className="flex items-center gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <Label className="text-xs font-medium text-muted-foreground sm:w-24 sm:shrink-0">
+                      Capture Hotkey
+                    </Label>
+                    <div className="flex flex-1 items-center gap-2">
                       <Input
                         value={formatHotkeyForDisplay(
                           form.captureHotkeyAccelerator,
@@ -541,12 +542,12 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
                         {recordingHotkey ? 'Cancel' : 'Record'}
                       </Button>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {recordingHotkey
-                        ? 'Press your key combination now (Esc to cancel).'
-                        : `Example: ${hotkeyPrimaryModifier}+Shift+M or ${hotkeyPrimaryModifier}+${hotkeyAltModifier}+P`}
-                    </p>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    {recordingHotkey
+                      ? 'Press your key combination now (Esc to cancel).'
+                      : `Example: ${hotkeyPrimaryModifier}+Shift+M or ${hotkeyPrimaryModifier}+${hotkeyAltModifier}+P`}
+                  </p>
                 </div>
 
                 <div className="space-y-2">
