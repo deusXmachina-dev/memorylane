@@ -1,36 +1,10 @@
-import * as fs from 'fs'
-import * as path from 'path'
 import { pipeline, env } from '@huggingface/transformers'
 import log from '../logger'
 import type { ActivityEmbeddingService } from '../activity-transformer-types'
-import { getDefaultDbPath } from '../paths'
+import { getBundledModelPath, getModelCacheDir } from '../paths'
 
 // 'all-MiniLM-L6-v2' is a good balance of speed and quality for local embeddings.
 const MODEL_NAME = 'Xenova/all-MiniLM-L6-v2'
-
-// Use an absolute cache path under the app's data directory.
-// A relative path like './.cache' breaks when the cwd is '/' (macOS launches
-// packaged apps with cwd='/'), causing ENOENT on mkdir.
-function getModelCacheDir(): string {
-  return path.join(path.dirname(getDefaultDbPath()), 'models')
-}
-
-/**
- * Returns the bundled model directory when running in a packaged Electron app,
- * or null otherwise (dev mode).
- */
-function getBundledModelPath(): string | null {
-  if (!process.versions.electron) return null
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { app } = require('electron')
-    if (!app?.isPackaged) return null
-  } catch {
-    return null
-  }
-  const bundled = path.join(process.resourcesPath, 'models')
-  return fs.existsSync(bundled) ? bundled : null
-}
 
 const bundledPath = getBundledModelPath()
 if (bundledPath) {
@@ -39,6 +13,7 @@ if (bundledPath) {
   log.info(`Using bundled embedding model from ${bundledPath}`)
 } else {
   env.cacheDir = getModelCacheDir()
+  log.info(`Using remote embedding model from ${env.cacheDir}`)
 }
 
 export class EmbeddingService implements ActivityEmbeddingService {

@@ -5,7 +5,8 @@ loadEnv({ quiet: true })
 
 import * as fs from 'fs'
 import * as os from 'os'
-import { buildFallbackDbPath } from '../src/main/paths'
+import * as path from 'path'
+import { buildAppDataPath } from '../src/main/paths'
 import type { StorageService } from '../src/main/storage'
 import type { ApiKeyManager } from '../src/main/settings/api-key-manager'
 
@@ -22,7 +23,10 @@ interface CLIArgs {
 function parseArgs(): CLIArgs {
   const args = process.argv.slice(2)
   let query = ''
-  let dbPath = buildFallbackDbPath(process.platform, os.homedir(), process.env.APPDATA, false)
+  let dbPath = path.join(
+    buildAppDataPath(process.platform, os.homedir(), process.env.APPDATA, false),
+    'memorylane.db',
+  )
   let messageTs = `${Date.now() / 1000}`
   let channelId = 'C_TEST'
   let senderUserId = 'U_TEST'
@@ -87,7 +91,7 @@ function printUsage(): void {
   console.error('')
   console.error('Defaults:')
   console.error(
-    `  --db-path ${buildFallbackDbPath(process.platform, os.homedir(), process.env.APPDATA, false)}`,
+    `  --db-path ${path.join(buildAppDataPath(process.platform, os.homedir(), process.env.APPDATA, false), 'memorylane.db')}`,
   )
   console.error(`  --ts now (${new Date().toISOString()})`)
 }

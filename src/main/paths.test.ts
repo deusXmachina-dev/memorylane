@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildFallbackDbPath, isPackagedElectronExecutable } from './paths'
+import { buildAppDataPath, isPackagedElectronExecutable } from './paths'
 
 describe('isPackagedElectronExecutable', () => {
   it('detects the installed MemoryLane executable as packaged', () => {
@@ -13,26 +13,33 @@ describe('isPackagedElectronExecutable', () => {
   })
 })
 
-describe('fallback database paths', () => {
-  it('uses the packaged Windows app directory and production database name', () => {
+describe('buildAppDataPath', () => {
+  it('returns the production Windows app data directory', () => {
     expect(
-      buildFallbackDbPath(
+      buildAppDataPath(
         'win32',
         'C:\\Users\\Example',
         'C:\\Users\\Example\\AppData\\Roaming',
         false,
       ),
-    ).toBe('C:\\Users\\Example\\AppData\\Roaming\\MemoryLane\\memorylane.db')
+    ).toBe('C:\\Users\\Example\\AppData\\Roaming\\MemoryLane')
   })
 
-  it('uses the dev Windows app directory and dev database name', () => {
+  it('returns the dev Windows app data directory', () => {
     expect(
-      buildFallbackDbPath(
-        'win32',
-        'C:\\Users\\Example',
-        'C:\\Users\\Example\\AppData\\Roaming',
-        true,
-      ),
-    ).toBe('C:\\Users\\Example\\AppData\\Roaming\\MemoryLane-dev\\memorylane-dev.db')
+      buildAppDataPath('win32', 'C:\\Users\\Example', 'C:\\Users\\Example\\AppData\\Roaming', true),
+    ).toBe('C:\\Users\\Example\\AppData\\Roaming\\MemoryLane-dev')
+  })
+
+  it('returns the macOS app data directory', () => {
+    expect(buildAppDataPath('darwin', '/Users/example', undefined, false)).toBe(
+      '/Users/example/Library/Application Support/MemoryLane',
+    )
+  })
+
+  it('returns the Linux app data directory', () => {
+    expect(buildAppDataPath('linux', '/home/example', undefined, false)).toBe(
+      '/home/example/.config/MemoryLane',
+    )
   })
 })
