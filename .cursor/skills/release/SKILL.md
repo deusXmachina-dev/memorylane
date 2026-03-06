@@ -11,10 +11,19 @@ Use this skill for both normal releases and prereleases. The GitHub Actions rele
 
 - Working tree is clean (`git status` shows nothing to commit)
 - On the `main` branch, up to date with origin
+- Dependencies installed with `bun install`
 
 ## Steps
 
-### 1. Determine the new version
+### 1. Install dependencies
+
+```bash
+bun install
+```
+
+Always run this first so all workspace packages are present before any release edits, checks, or git operations.
+
+### 2. Determine the new version
 
 Ask the user if not provided.
 
@@ -23,7 +32,7 @@ Ask the user if not provided.
 
 The git tag format is always `v<version>`.
 
-### 2. Review changes since the last tag
+### 3. Review changes since the last tag
 
 ```bash
 git log --oneline $(git describe --tags --abbrev=0)..HEAD
@@ -32,11 +41,11 @@ git diff --stat $(git describe --tags --abbrev=0)..HEAD
 
 Summarize the key user-facing changes. This drives `RELEASE_NOTES.md`.
 
-### 3. Bump version in `package.json`
+### 4. Bump version in `package.json`
 
 Update the `"version"` field to the new version.
 
-### 4. Update `RELEASE_NOTES.md`
+### 5. Update `RELEASE_NOTES.md`
 
 Follow the existing format in the file. Keep the wording brief and current.
 
@@ -47,18 +56,18 @@ Follow the existing format in the file. Keep the wording brief and current.
 - **Installation**: Keep the macOS and Windows install guidance aligned with the current release channel.
 - **Full Changelog**: Update the tag reference in the URL.
 
-### 5. Update `README.md` if needed
+### 6. Update `README.md` if needed
 
 Check the "Coming Soon" and "Limitations" sections. If a released feature is listed there, move or remove it.
 
-### 6. Format and lint
+### 7. Format and lint
 
 ```bash
-npm run format
-npm run lint
+bun run format
+bun run lint
 ```
 
-### 7. Commit and tag
+### 8. Commit and tag
 
 Stage only the files you changed:
 
@@ -95,7 +104,7 @@ git rev-parse vX.Y.Z-label.N
 
 These SHAs must match before pushing.
 
-### 8. Push the commit and tag
+### 9. Push the commit and tag
 
 
 ```bash
@@ -121,6 +130,7 @@ Before finishing, verify:
 - [ ] `RELEASE_NOTES.md` title and changelog link reference the new version
 - [ ] Resolved known issues are removed from release notes
 - [ ] `README.md` "Coming Soon" doesn't list shipped features
-- [ ] `npm run format` and `npm run lint` pass
+- [ ] `bun install` has been run before release steps
+- [ ] `bun run format` and `bun run lint` pass
 - [ ] Commit message matches the version tag
 - [ ] The correct `v<version>` tag is pushed to origin
