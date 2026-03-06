@@ -2,25 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_CAPTURE_HOTKEY_ACCELERATOR,
   formatCaptureHotkeyLabel,
-  getCaptureHotkeyConfig,
   normalizeCaptureHotkeyAccelerator,
 } from './hotkey-capture'
-
-describe('getCaptureHotkeyConfig', () => {
-  it('returns a mac-specific shortcut', () => {
-    expect(getCaptureHotkeyConfig('darwin')).toEqual({
-      accelerator: DEFAULT_CAPTURE_HOTKEY_ACCELERATOR,
-      label: 'Cmd+Shift+M',
-    })
-  })
-
-  it('returns a windows/linux shortcut', () => {
-    expect(getCaptureHotkeyConfig('win32')).toEqual({
-      accelerator: DEFAULT_CAPTURE_HOTKEY_ACCELERATOR,
-      label: 'Ctrl+Shift+M',
-    })
-  })
-})
 
 describe('normalizeCaptureHotkeyAccelerator', () => {
   it('falls back to the default shortcut when empty', () => {
@@ -35,11 +18,22 @@ describe('normalizeCaptureHotkeyAccelerator', () => {
 })
 
 describe('formatCaptureHotkeyLabel', () => {
-  it('maps CommandOrControl to Cmd on mac', () => {
+  it('maps CommandOrControl to Cmd on mac and Ctrl on windows', () => {
     expect(formatCaptureHotkeyLabel('darwin', 'CommandOrControl+Shift+M')).toBe('Cmd+Shift+M')
+    expect(formatCaptureHotkeyLabel('win32', 'CommandOrControl+Shift+M')).toBe('Ctrl+Shift+M')
   })
 
-  it('maps CommandOrControl to Ctrl on windows', () => {
-    expect(formatCaptureHotkeyLabel('win32', 'CommandOrControl+Shift+M')).toBe('Ctrl+Shift+M')
+  it('maps Alt/Option tokens by platform', () => {
+    expect(formatCaptureHotkeyLabel('darwin', 'CommandOrControl+Alt+P')).toBe('Cmd+Option+P')
+    expect(formatCaptureHotkeyLabel('win32', 'CommandOrControl+Option+P')).toBe('Ctrl+Alt+P')
+  })
+
+  it('maps Meta/Super tokens by platform', () => {
+    expect(formatCaptureHotkeyLabel('darwin', 'Meta+M')).toBe('Cmd+M')
+    expect(formatCaptureHotkeyLabel('win32', 'Super+M')).toBe('Win+M')
+  })
+
+  it('normalizes casing for single-key tokens', () => {
+    expect(formatCaptureHotkeyLabel('darwin', 'commandorcontrol+shift+m')).toBe('Cmd+Shift+M')
   })
 })

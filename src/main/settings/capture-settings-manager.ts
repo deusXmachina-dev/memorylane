@@ -55,6 +55,7 @@ export class CaptureSettingsManager {
             typeof data.maxScreenshotsForLlm === 'number'
               ? data.maxScreenshotsForLlm
               : DEFAULTS.maxScreenshotsForLlm,
+          // Backward compatibility for settings persisted before capture-hotkey rename.
           captureHotkeyAccelerator: normalizeCaptureHotkeyAccelerator(
             data.captureHotkeyAccelerator ?? data.pauseHotkeyAccelerator,
           ),

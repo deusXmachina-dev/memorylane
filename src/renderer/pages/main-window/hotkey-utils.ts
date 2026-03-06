@@ -28,6 +28,9 @@ export function formatHotkeyForDisplay(accelerator: string, platform: HotkeyPlat
       if (normalized === 'control' || normalized === 'ctrl') {
         return 'Ctrl'
       }
+      if (normalized === 'shift') {
+        return 'Shift'
+      }
       if (normalized === 'alt' || normalized === 'option') {
         return platform === 'mac' ? 'Option' : 'Alt'
       }

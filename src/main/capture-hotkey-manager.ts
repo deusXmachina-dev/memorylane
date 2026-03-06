@@ -1,7 +1,7 @@
 import { globalShortcut } from 'electron'
 import {
+  DEFAULT_CAPTURE_HOTKEY_ACCELERATOR,
   formatCaptureHotkeyLabel,
-  getCaptureHotkeyConfig,
   normalizeCaptureHotkeyAccelerator,
 } from './hotkey-capture'
 
@@ -21,7 +21,7 @@ export function createCaptureHotkeyManager({
   onTriggered,
 }: CreateCaptureHotkeyManagerOptions): CaptureHotkeyManager {
   let registered = false
-  let accelerator = getCaptureHotkeyConfig(platform).accelerator
+  let accelerator = DEFAULT_CAPTURE_HOTKEY_ACCELERATOR
 
   const handleHotkeyTrigger = (): void => {
     onTriggered(accelerator)
