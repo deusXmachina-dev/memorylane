@@ -7,6 +7,7 @@ import {
   INTERACTION_MONITOR_CONFIG,
   ACTIVITY_CONFIG,
 } from '../../shared/constants'
+import { DEFAULT_PAUSE_HOTKEY_ACCELERATOR, normalizePauseHotkeyAccelerator } from '../hotkey-pause'
 
 const DEFAULTS: CaptureSettings = {
   autoStartEnabled: true,
@@ -19,6 +20,7 @@ const DEFAULTS: CaptureSettings = {
   maxScreenshotsForLlm: ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM,
   semanticRequestTimeoutMs: ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS,
   semanticPipelineMode: 'auto',
+  captureHotkeyAccelerator: DEFAULT_PAUSE_HOTKEY_ACCELERATOR,
 }
 
 export class CaptureSettingsManager {
@@ -39,9 +41,10 @@ export class CaptureSettingsManager {
   private load(): CaptureSettings {
     try {
       if (fs.existsSync(this.configPath)) {
-        const data = JSON.parse(
-          fs.readFileSync(this.configPath, 'utf-8'),
-        ) as Partial<CaptureSettings>
+        type StoredCaptureSettings = Partial<CaptureSettings> & {
+          pauseHotkeyAccelerator?: string
+        }
+        const data = JSON.parse(fs.readFileSync(this.configPath, 'utf-8')) as StoredCaptureSettings
         return {
           ...DEFAULTS,
           ...data,
@@ -49,6 +52,9 @@ export class CaptureSettingsManager {
             typeof data.maxScreenshotsForLlm === 'number'
               ? data.maxScreenshotsForLlm
               : DEFAULTS.maxScreenshotsForLlm,
+          captureHotkeyAccelerator: normalizePauseHotkeyAccelerator(
+            data.captureHotkeyAccelerator ?? data.pauseHotkeyAccelerator,
+          ),
         }
       }
     } catch (error) {
@@ -62,7 +68,13 @@ export class CaptureSettingsManager {
   }
 
   public save(partial: Partial<CaptureSettings>): void {
-    this.settings = { ...this.settings, ...partial }
+    this.settings = {
+      ...this.settings,
+      ...partial,
+      captureHotkeyAccelerator: normalizePauseHotkeyAccelerator(
+        partial.captureHotkeyAccelerator ?? this.settings.captureHotkeyAccelerator,
+      ),
+    }
     try {
       fs.writeFileSync(this.configPath, JSON.stringify(this.settings, null, 2))
       log.info('[CaptureSettings] Settings saved')

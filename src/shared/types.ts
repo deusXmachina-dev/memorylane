@@ -131,6 +131,7 @@ export interface SettingsAPI {
 
 export interface MainWindowStatus {
   capturing: boolean
+  captureHotkeyLabel: string
 }
 
 export interface MainWindowStats {
@@ -151,6 +152,7 @@ export interface CaptureSettings {
   maxScreenshotsForLlm: number
   semanticRequestTimeoutMs: number
   semanticPipelineMode: SemanticPipelineMode
+  captureHotkeyAccelerator: string
 }
 
 export type SemanticPipelineMode = 'auto' | 'video' | 'image'

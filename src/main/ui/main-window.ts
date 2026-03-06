@@ -21,6 +21,7 @@ import type { CustomEndpointManager } from '../settings/custom-endpoint-manager'
 import type { ManagedKeyService } from '../services/managed-key-service'
 import type {
   CustomEndpointConfig,
+  MainWindowStatus,
   MainWindowStats,
   CaptureSettings,
   SemanticPipelineMode,
@@ -58,10 +59,8 @@ interface MainWindowDependencies {
   captureSettingsManager: CaptureSettingsManager
   slackSettingsManager: SlackSettingsManager
   slackIntegrationService: SlackIntegrationService
-}
-
-interface MainWindowStatus {
-  capturing: boolean
+  getCaptureHotkeyLabel: () => string
+  reconfigureCaptureHotkey: (accelerator: string) => { success: boolean; error?: string }
 }
 
 let mainWindow: BrowserWindow | null = null
@@ -75,6 +74,7 @@ app.on('before-quit', () => {
 function buildStatus(): MainWindowStatus {
   return {
     capturing: deps?.capture.isCapturingNow() ?? false,
+    captureHotkeyLabel: deps?.getCaptureHotkeyLabel() ?? '',
   }
 }
 
@@ -188,7 +188,10 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
 
   ipcMain.handle('main-window:toggleCapture', () => {
     if (!deps) {
-      return { capturing: false }
+      return {
+        capturing: false,
+        captureHotkeyLabel: '',
+      }
     }
 
     if (deps.capture.isCapturingNow()) {
@@ -387,7 +390,21 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     'main-window:saveCaptureSettings',
     (_event: IpcMainInvokeEvent, partial: Partial<CaptureSettings>) => {
       if (!deps) return { success: false, error: 'Dependencies not initialized' }
+      const previous = deps.captureSettingsManager.get()
       try {
+        if (
+          partial.captureHotkeyAccelerator !== undefined &&
+          partial.captureHotkeyAccelerator !== previous.captureHotkeyAccelerator
+        ) {
+          const hotkeyResult = deps.reconfigureCaptureHotkey(partial.captureHotkeyAccelerator)
+          if (!hotkeyResult.success) {
+            return {
+              success: false,
+              error: hotkeyResult.error ?? 'Failed to update capture hotkey',
+            }
+          }
+        }
+
         deps.captureSettingsManager.save(partial)
         deps.captureSettingsManager.applyToConstants()
         const updated = deps.captureSettingsManager.get()
@@ -398,8 +415,16 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         })
         deps.semanticService.updatePipelinePreference(updated.semanticPipelineMode)
         deps.semanticService.updateRequestTimeoutMs(updated.semanticRequestTimeoutMs)
+        void updateTrayMenu()
+        sendStatusToRenderer()
         return { success: true }
       } catch (error) {
+        if (
+          partial.captureHotkeyAccelerator !== undefined &&
+          partial.captureHotkeyAccelerator !== previous.captureHotkeyAccelerator
+        ) {
+          deps.reconfigureCaptureHotkey(previous.captureHotkeyAccelerator)
+        }
         const message = error instanceof Error ? error.message : 'Unknown error'
         return { success: false, error: message }
       }
@@ -408,10 +433,17 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
 
   ipcMain.handle('main-window:resetCaptureSettings', () => {
     if (!deps) return { success: false, error: 'Dependencies not initialized' }
+    const previous = deps.captureSettingsManager.get()
     try {
       deps.captureSettingsManager.reset()
       deps.captureSettingsManager.applyToConstants()
       const updated = deps.captureSettingsManager.get()
+      const hotkeyResult = deps.reconfigureCaptureHotkey(updated.captureHotkeyAccelerator)
+      if (!hotkeyResult.success) {
+        deps.captureSettingsManager.save(previous)
+        deps.captureSettingsManager.applyToConstants()
+        return { success: false, error: hotkeyResult.error ?? 'Failed to reset capture hotkey' }
+      }
       syncAutoStartSetting(updated.autoStartEnabled)
       deps.capture.updateActivityWindowConfig({
         minActivityDurationMs: updated.minActivityDurationMs,
@@ -419,8 +451,11 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       })
       deps.semanticService.updatePipelinePreference(updated.semanticPipelineMode)
       deps.semanticService.updateRequestTimeoutMs(updated.semanticRequestTimeoutMs)
+      void updateTrayMenu()
+      sendStatusToRenderer()
       return { success: true }
     } catch (error) {
+      deps.reconfigureCaptureHotkey(previous.captureHotkeyAccelerator)
       const message = error instanceof Error ? error.message : 'Unknown error'
       return { success: false, error: message }
     }

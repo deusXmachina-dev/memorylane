@@ -19,6 +19,7 @@ interface TrayDependencies {
     forceClose: () => Promise<void>
   }
   storage: StorageService
+  getCaptureHotkeyLabel: () => string
 }
 
 let tray: Tray | null = null
@@ -89,6 +90,7 @@ export const updateTrayMenu = async (): Promise<void> => {
   const usageStatsSubmenu = await buildUsageStatsSubmenu()
 
   const updateState = getUpdateState()
+  const captureHotkeyLabel = deps.getCaptureHotkeyLabel()
   const contextMenu = Menu.buildFromTemplate([
     ...(updateState === 'ready'
       ? [
@@ -110,6 +112,14 @@ export const updateTrayMenu = async (): Promise<void> => {
         void sendStatusToRenderer()
       },
     },
+    ...(captureHotkeyLabel
+      ? [
+          {
+            label: `Capture Hotkey (Start/Stop): ${captureHotkeyLabel}`,
+            enabled: false,
+          },
+        ]
+      : []),
     { type: 'separator' },
     {
       label: 'Usage Stats',

@@ -16,6 +16,7 @@ export function MainWindowApp(): React.JSX.Element {
   const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null)
   const [endpointStatus, setEndpointStatus] = useState<CustomEndpointStatus | null>(null)
   const [capturing, setCapturing] = useState(false)
+  const [captureHotkeyLabel, setCaptureHotkeyLabel] = useState('')
   const [toggling, setToggling] = useState(false)
   const [stats, setStats] = useState<MainWindowStats | null>(null)
 
@@ -51,9 +52,13 @@ export function MainWindowApp(): React.JSX.Element {
   }, [loadKeyStatus, loadEndpointStatus, loadStats])
 
   useEffect(() => {
-    void api.getStatus().then((status) => setCapturing(status.capturing))
+    void api.getStatus().then((status) => {
+      setCapturing(status.capturing)
+      setCaptureHotkeyLabel(status.captureHotkeyLabel)
+    })
     api.onStatusChanged((status) => {
       setCapturing(status.capturing)
+      setCaptureHotkeyLabel(status.captureHotkeyLabel)
       void loadStats()
     })
     void loadAll()
@@ -62,7 +67,10 @@ export function MainWindowApp(): React.JSX.Element {
   useEffect(() => {
     const handleFocus = (): void => {
       void loadAll()
-      void api.getStatus().then((status) => setCapturing(status.capturing))
+      void api.getStatus().then((status) => {
+        setCapturing(status.capturing)
+        setCaptureHotkeyLabel(status.captureHotkeyLabel)
+      })
     }
     window.addEventListener('focus', handleFocus)
     return () => window.removeEventListener('focus', handleFocus)
@@ -73,6 +81,7 @@ export function MainWindowApp(): React.JSX.Element {
     try {
       const status = await api.toggleCapture()
       setCapturing(status.capturing)
+      setCaptureHotkeyLabel(status.captureHotkeyLabel)
     } finally {
       setToggling(false)
     }
@@ -107,6 +116,7 @@ export function MainWindowApp(): React.JSX.Element {
           <>
             <CaptureControlSection
               capturing={capturing}
+              captureHotkeyLabel={captureHotkeyLabel}
               toggling={toggling}
               onToggle={() => void handleToggle()}
             />

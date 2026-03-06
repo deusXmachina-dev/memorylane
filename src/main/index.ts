@@ -5,7 +5,7 @@
  * The MCP server runs separately via mcp-entry.ts under ELECTRON_RUN_AS_NODE=1.
  */
 
-import { app } from 'electron'
+import { app, globalShortcut } from 'electron'
 import path from 'node:path'
 import { config as loadEnv } from 'dotenv'
 import {
@@ -14,6 +14,11 @@ import {
   syncAutoStartSetting,
 } from './auto-start'
 import { createCaptureCoordinator } from './capture-orchestrator'
+import {
+  formatPauseHotkeyLabel,
+  getPauseHotkeyConfig,
+  normalizePauseHotkeyAccelerator,
+} from './hotkey-pause'
 import log from './logger'
 import { startPowerMonitoring, shouldPause } from './power-monitor'
 import { CaptureStateManager } from './settings/capture-state-manager'
@@ -52,9 +57,15 @@ app.on('window-all-closed', () => {
 let runtime: MainRuntime | null = null
 let patternDetector: PatternDetector | null = null
 let slackIntegrationService: SlackIntegrationService | null = null
+let hotkeyRegistered = false
+let hotkeyAccelerator = getPauseHotkeyConfig(process.platform).accelerator
 
 app.on('before-quit', () => {
   void Promise.all([runtime?.dispose(), slackIntegrationService?.stop()])
+})
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
 })
 
 app.on('second-instance', () => {
@@ -105,6 +116,9 @@ app.on('ready', async () => {
   const { initMainWindowIPC, openMainWindow, sendStatusToRenderer } =
     await import('./ui/main-window')
 
+  const captureHotkeyLabel = (): string =>
+    hotkeyRegistered ? formatPauseHotkeyLabel(process.platform, hotkeyAccelerator) : ''
+
   runtime = await createMainRuntime({
     onCaptureStateChanged: () => {
       void updateTrayMenu()
@@ -113,6 +127,41 @@ app.on('ready', async () => {
     semanticPipelinePreference: captureSettingsManager.get().semanticPipelineMode,
     semanticRequestTimeoutMs: captureSettingsManager.get().semanticRequestTimeoutMs,
   })
+
+  const reconfigureCaptureHotkey = (accelerator: string): { success: boolean; error?: string } => {
+    const previousAccelerator = hotkeyAccelerator
+    const previousRegistered = hotkeyRegistered
+    const normalizedAccelerator = normalizePauseHotkeyAccelerator(accelerator)
+
+    if (previousRegistered) {
+      globalShortcut.unregister(previousAccelerator)
+      hotkeyRegistered = false
+    }
+
+    try {
+      hotkeyRegistered = globalShortcut.register(normalizedAccelerator, toggleCaptureFromHotkey)
+    } catch (error) {
+      hotkeyRegistered = false
+      if (previousRegistered) {
+        hotkeyRegistered = globalShortcut.register(previousAccelerator, toggleCaptureFromHotkey)
+      }
+      const message = error instanceof Error ? error.message : 'Invalid shortcut'
+      return { success: false, error: `Failed to register capture hotkey: ${message}` }
+    }
+
+    if (!hotkeyRegistered) {
+      if (previousRegistered) {
+        hotkeyRegistered = globalShortcut.register(previousAccelerator, toggleCaptureFromHotkey)
+      }
+      return { success: false, error: 'Failed to register capture hotkey. Shortcut may be in use.' }
+    }
+
+    hotkeyAccelerator = normalizedAccelerator
+    log.info(`[Main] Registered capture hotkey: ${hotkeyAccelerator}`)
+    void updateTrayMenu()
+    void sendStatusToRenderer()
+    return { success: true }
+  }
 
   slackIntegrationService = new SlackIntegrationService(
     slackSettingsManager,
@@ -133,6 +182,7 @@ app.on('ready', async () => {
   setupTray({
     capture: captureCoordinator.controls,
     storage: runtime.storage,
+    getCaptureHotkeyLabel: captureHotkeyLabel,
   })
 
   const { initAutoUpdater } = await import('./updater')
@@ -151,6 +201,8 @@ app.on('ready', async () => {
     captureSettingsManager,
     slackSettingsManager,
     slackIntegrationService,
+    getCaptureHotkeyLabel: captureHotkeyLabel,
+    reconfigureCaptureHotkey,
   })
 
   await slackIntegrationService.reload()
@@ -169,6 +221,26 @@ app.on('ready', async () => {
   app.on('activate', () => {
     openMainWindow()
   })
+
+  const toggleCaptureFromHotkey = (): void => {
+    if (captureCoordinator.controls.isCapturingNow()) {
+      captureCoordinator.controls.requestStopCapture()
+      log.info(`[Main] Capture stopped by hotkey (${hotkeyAccelerator})`)
+    } else {
+      captureCoordinator.controls.requestStartCapture()
+      log.info(`[Main] Capture started by hotkey (${hotkeyAccelerator})`)
+    }
+    void updateTrayMenu()
+    void sendStatusToRenderer()
+  }
+
+  hotkeyAccelerator = captureSettingsManager.get().captureHotkeyAccelerator
+  const hotkeyResult = reconfigureCaptureHotkey(hotkeyAccelerator)
+  if (!hotkeyResult.success) {
+    log.warn(hotkeyResult.error)
+  } else {
+    hotkeyAccelerator = normalizePauseHotkeyAccelerator(hotkeyAccelerator)
+  }
 
   startPowerMonitoring({
     onPause: () => {

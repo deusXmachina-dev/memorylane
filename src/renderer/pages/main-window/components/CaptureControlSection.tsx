@@ -4,12 +4,14 @@ import { Card, CardContent } from '@components/ui/card'
 
 interface CaptureControlSectionProps {
   capturing: boolean
+  captureHotkeyLabel: string
   toggling: boolean
   onToggle: () => void
 }
 
 export function CaptureControlSection({
   capturing,
+  captureHotkeyLabel,
   toggling,
   onToggle,
 }: CaptureControlSectionProps): React.JSX.Element {
@@ -39,6 +41,11 @@ export function CaptureControlSection({
             </>
           )}
         </Button>
+        {captureHotkeyLabel ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Capture hotkey (start/stop): {captureHotkeyLabel}
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   )

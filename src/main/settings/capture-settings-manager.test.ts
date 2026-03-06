@@ -8,6 +8,7 @@ import {
   INTERACTION_MONITOR_CONFIG,
   ACTIVITY_CONFIG,
 } from '../../shared/constants'
+import { DEFAULT_PAUSE_HOTKEY_ACCELERATOR } from '../hotkey-pause'
 
 function makeTmpPath(): string {
   return path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ml-settings-test-')), 'settings.json')
@@ -45,6 +46,7 @@ describe('CaptureSettingsManager', () => {
       expect(defaults.maxScreenshotsForLlm).toBe(ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM)
       expect(defaults.semanticRequestTimeoutMs).toBe(ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS)
       expect(defaults.semanticPipelineMode).toBe('auto')
+      expect(defaults.captureHotkeyAccelerator).toBe(DEFAULT_PAUSE_HOTKEY_ACCELERATOR)
     })
 
     it('get() returns a copy, not the internal reference', () => {
@@ -82,6 +84,7 @@ describe('CaptureSettingsManager', () => {
         typingDebounceMs: 7000,
         visualThreshold: 3,
         semanticPipelineMode: 'image',
+        captureHotkeyAccelerator: 'CommandOrControl+Alt+P',
       })
 
       const manager2 = new CaptureSettingsManager(configPath)
@@ -90,6 +93,7 @@ describe('CaptureSettingsManager', () => {
       expect(settings.typingDebounceMs).toBe(7000)
       expect(settings.visualThreshold).toBe(3)
       expect(settings.semanticPipelineMode).toBe('image')
+      expect(settings.captureHotkeyAccelerator).toBe('CommandOrControl+Alt+P')
     })
 
     it('unknown keys in saved file are ignored (partial merge uses defaults)', () => {
@@ -111,6 +115,21 @@ describe('CaptureSettingsManager', () => {
       fs.writeFileSync(configPath, 'not-json{{{')
       const manager = new CaptureSettingsManager(configPath)
       expect(manager.get()).toEqual(manager.getDefaults())
+    })
+
+    it('normalizes an empty hotkey accelerator to the default', () => {
+      fs.writeFileSync(configPath, JSON.stringify({ captureHotkeyAccelerator: '   ' }))
+      const manager = new CaptureSettingsManager(configPath)
+      expect(manager.get().captureHotkeyAccelerator).toBe(DEFAULT_PAUSE_HOTKEY_ACCELERATOR)
+    })
+
+    it('reads legacy pauseHotkeyAccelerator values', () => {
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({ pauseHotkeyAccelerator: 'CommandOrControl+Alt+P' }),
+      )
+      const manager = new CaptureSettingsManager(configPath)
+      expect(manager.get().captureHotkeyAccelerator).toBe('CommandOrControl+Alt+P')
     })
   })
 

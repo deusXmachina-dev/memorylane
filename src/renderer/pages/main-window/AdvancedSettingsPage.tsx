@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { Slider } from '@components/ui/slider'
 import { Label } from '@components/ui/label'
 import { Button } from '@components/ui/button'
+import { Input } from '@components/ui/input'
 import { DatabaseExportSection } from './components/DatabaseExportSection'
 import { CustomEndpointSection } from './components/CustomEndpointSection'
 import { ManageKeySection } from './components/ManageKeySection'
@@ -15,6 +16,69 @@ import type {
   SemanticPipelineMode,
   SlackIntegrationStatus,
 } from '@types'
+
+const MODIFIER_KEYS = new Set(['Meta', 'Control', 'Shift', 'Alt'])
+
+function toAcceleratorKey(event: KeyboardEvent): string | null {
+  if (event.code.startsWith('Key')) {
+    return event.code.slice(3).toUpperCase()
+  }
+
+  if (event.code.startsWith('Digit')) {
+    return event.code.slice(5)
+  }
+
+  const key = event.key
+  if (/^F\d{1,2}$/i.test(key)) {
+    return key.toUpperCase()
+  }
+
+  switch (key) {
+    case 'Enter':
+      return 'Enter'
+    case 'Tab':
+      return 'Tab'
+    case 'Escape':
+      return 'Escape'
+    case 'Backspace':
+      return 'Backspace'
+    case 'Delete':
+      return 'Delete'
+    case 'ArrowUp':
+      return 'Up'
+    case 'ArrowDown':
+      return 'Down'
+    case 'ArrowLeft':
+      return 'Left'
+    case 'ArrowRight':
+      return 'Right'
+    case ' ':
+      return 'Space'
+    default:
+      return null
+  }
+}
+
+function toRecordedAccelerator(event: KeyboardEvent): string | null {
+  if (MODIFIER_KEYS.has(event.key)) return null
+
+  const key = toAcceleratorKey(event)
+  if (!key) return null
+
+  const parts: string[] = []
+  if (event.metaKey || event.ctrlKey) {
+    parts.push('CommandOrControl')
+  }
+  if (event.altKey) {
+    parts.push('Alt')
+  }
+  if (event.shiftKey) {
+    parts.push('Shift')
+  }
+
+  if (parts.length === 0) return null
+  return [...parts, key].join('+')
+}
 
 function sliderVal(v: number | readonly number[]): number {
   return typeof v === 'number' ? v : v[0]
@@ -105,6 +169,7 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
   const [startupOpen, setStartupOpen] = useState(false)
   const [captureOpen, setCaptureOpen] = useState(false)
   const [slackOpen, setSlackOpen] = useState(false)
+  const [recordingHotkey, setRecordingHotkey] = useState(false)
 
   const load = useCallback(async () => {
     const [s, ep, ks, slack] = await Promise.all([
@@ -142,7 +207,7 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
 
   type NumericCaptureSetting = Exclude<
     keyof CaptureSettings,
-    'autoStartEnabled' | 'semanticPipelineMode'
+    'autoStartEnabled' | 'semanticPipelineMode' | 'captureHotkeyAccelerator'
   >
 
   const set = (key: NumericCaptureSetting, value: number): void => {
@@ -153,22 +218,91 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
     if (!form) return
     const next = { ...form, [key]: value }
     setForm(next)
-    save(next)
+    save({ [key]: value } as Pick<CaptureSettings, NumericCaptureSetting>)
   }
 
   const setSemanticPipelineMode = (mode: SemanticPipelineMode): void => {
     if (!form) return
     const next = { ...form, semanticPipelineMode: mode }
     setForm(next)
-    save(next)
+    save({ semanticPipelineMode: mode })
   }
 
   const setAutoStartEnabled = (enabled: boolean): void => {
     if (!form) return
     const next = { ...form, autoStartEnabled: enabled }
     setForm(next)
-    save(next, enabled ? 'Launch at login enabled' : 'Launch at login disabled')
+    save(
+      { autoStartEnabled: enabled },
+      enabled ? 'Launch at login enabled' : 'Launch at login disabled',
+    )
   }
+
+  const setCaptureHotkeyAccelerator = (value: string): void => {
+    setForm((prev) => (prev ? { ...prev, captureHotkeyAccelerator: value } : prev))
+  }
+
+  const commitCaptureHotkeyAccelerator = async (): Promise<void> => {
+    if (!form) return
+    const result = await api.saveCaptureSettings({
+      captureHotkeyAccelerator: form.captureHotkeyAccelerator,
+    })
+    if (!result.success) {
+      toast.error(result.error ?? 'Failed to save settings', {
+        id: 'auto-save-error',
+        duration: 3000,
+      })
+      await load()
+      return
+    }
+
+    toast.success('Capture hotkey saved', { id: 'auto-save', duration: 1500 })
+    await load()
+  }
+
+  useEffect(() => {
+    if (!recordingHotkey) return
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      event.preventDefault()
+      event.stopPropagation()
+
+      if (event.key === 'Escape') {
+        setRecordingHotkey(false)
+        return
+      }
+
+      const accelerator = toRecordedAccelerator(event)
+      if (!accelerator) return
+
+      setCaptureHotkeyAccelerator(accelerator)
+      setRecordingHotkey(false)
+      void api
+        .saveCaptureSettings({ captureHotkeyAccelerator: accelerator })
+        .then(async (result) => {
+          if (!result.success) {
+            toast.error(result.error ?? 'Failed to save settings', {
+              id: 'auto-save-error',
+              duration: 3000,
+            })
+            await load()
+            return
+          }
+
+          toast.success('Capture hotkey saved', { id: 'auto-save', duration: 1500 })
+          await load()
+        })
+        .catch(async () => {
+          toast.error('Failed to save settings', { id: 'auto-save-error', duration: 3000 })
+          await load()
+        })
+    }
+
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+    }
+  }, [api, load, recordingHotkey, setCaptureHotkeyAccelerator])
 
   const handleReset = async (): Promise<void> => {
     await api.resetCaptureSettings()
@@ -357,6 +491,39 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
                     onChange={(v) => set('semanticRequestTimeoutMs', v)}
                     onCommit={(v) => commit('semanticRequestTimeoutMs', v)}
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Capture Hotkey</p>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Electron accelerator</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={form.captureHotkeyAccelerator}
+                        placeholder="CommandOrControl+Shift+M"
+                        onChange={(event) => setCaptureHotkeyAccelerator(event.target.value)}
+                        onBlur={() => void commitCaptureHotkeyAccelerator()}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.currentTarget.blur()
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant={recordingHotkey ? 'destructive' : 'outline'}
+                        size="sm"
+                        onClick={() => setRecordingHotkey((current) => !current)}
+                      >
+                        {recordingHotkey ? 'Cancel' : 'Record'}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {recordingHotkey
+                        ? 'Press your key combination now (Esc to cancel).'
+                        : 'Example: CommandOrControl+Shift+M or CommandOrControl+Alt+P'}
+                    </p>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
