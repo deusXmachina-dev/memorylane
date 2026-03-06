@@ -7,7 +7,10 @@ import {
   INTERACTION_MONITOR_CONFIG,
   ACTIVITY_CONFIG,
 } from '../../shared/constants'
-import { DEFAULT_PAUSE_HOTKEY_ACCELERATOR, normalizePauseHotkeyAccelerator } from '../hotkey-pause'
+import {
+  DEFAULT_CAPTURE_HOTKEY_ACCELERATOR,
+  normalizeCaptureHotkeyAccelerator,
+} from '../hotkey-capture'
 
 const DEFAULTS: CaptureSettings = {
   autoStartEnabled: true,
@@ -20,7 +23,7 @@ const DEFAULTS: CaptureSettings = {
   maxScreenshotsForLlm: ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM,
   semanticRequestTimeoutMs: ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS,
   semanticPipelineMode: 'auto',
-  captureHotkeyAccelerator: DEFAULT_PAUSE_HOTKEY_ACCELERATOR,
+  captureHotkeyAccelerator: DEFAULT_CAPTURE_HOTKEY_ACCELERATOR,
 }
 
 export class CaptureSettingsManager {
@@ -52,7 +55,7 @@ export class CaptureSettingsManager {
             typeof data.maxScreenshotsForLlm === 'number'
               ? data.maxScreenshotsForLlm
               : DEFAULTS.maxScreenshotsForLlm,
-          captureHotkeyAccelerator: normalizePauseHotkeyAccelerator(
+          captureHotkeyAccelerator: normalizeCaptureHotkeyAccelerator(
             data.captureHotkeyAccelerator ?? data.pauseHotkeyAccelerator,
           ),
         }
@@ -71,7 +74,7 @@ export class CaptureSettingsManager {
     this.settings = {
       ...this.settings,
       ...partial,
-      captureHotkeyAccelerator: normalizePauseHotkeyAccelerator(
+      captureHotkeyAccelerator: normalizeCaptureHotkeyAccelerator(
         partial.captureHotkeyAccelerator ?? this.settings.captureHotkeyAccelerator,
       ),
     }

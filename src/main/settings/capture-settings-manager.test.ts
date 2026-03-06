@@ -8,7 +8,7 @@ import {
   INTERACTION_MONITOR_CONFIG,
   ACTIVITY_CONFIG,
 } from '../../shared/constants'
-import { DEFAULT_PAUSE_HOTKEY_ACCELERATOR } from '../hotkey-pause'
+import { DEFAULT_CAPTURE_HOTKEY_ACCELERATOR } from '../hotkey-capture'
 
 function makeTmpPath(): string {
   return path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ml-settings-test-')), 'settings.json')
@@ -46,7 +46,7 @@ describe('CaptureSettingsManager', () => {
       expect(defaults.maxScreenshotsForLlm).toBe(ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM)
       expect(defaults.semanticRequestTimeoutMs).toBe(ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS)
       expect(defaults.semanticPipelineMode).toBe('auto')
-      expect(defaults.captureHotkeyAccelerator).toBe(DEFAULT_PAUSE_HOTKEY_ACCELERATOR)
+      expect(defaults.captureHotkeyAccelerator).toBe(DEFAULT_CAPTURE_HOTKEY_ACCELERATOR)
     })
 
     it('get() returns a copy, not the internal reference', () => {
@@ -120,7 +120,7 @@ describe('CaptureSettingsManager', () => {
     it('normalizes an empty hotkey accelerator to the default', () => {
       fs.writeFileSync(configPath, JSON.stringify({ captureHotkeyAccelerator: '   ' }))
       const manager = new CaptureSettingsManager(configPath)
-      expect(manager.get().captureHotkeyAccelerator).toBe(DEFAULT_PAUSE_HOTKEY_ACCELERATOR)
+      expect(manager.get().captureHotkeyAccelerator).toBe(DEFAULT_CAPTURE_HOTKEY_ACCELERATOR)
     })
 
     it('reads legacy pauseHotkeyAccelerator values', () => {
