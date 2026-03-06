@@ -2,7 +2,12 @@ import { describe, it, expect, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
 import * as sqliteVec from 'sqlite-vec'
 import { StorageService } from './index'
-import { getMigrationStatus, ensureMigrationsTable, runMigrations } from './migrator'
+import {
+  applyMigrations,
+  getMigrationStatus,
+  ensureMigrationsTable,
+  runMigrations,
+} from './migrator'
 import { migration as migration0001 } from './migrations/0001_initial_schema'
 import { migration as migration0002 } from './migrations/0002_migrate_context_events'
 import { migration as migration0003 } from './migrations/0003_fts_sync_triggers'
@@ -28,16 +33,19 @@ describe('StorageService', () => {
   describe('getDbPath and getDbSize', () => {
     it('should return the configured database path', () => {
       storage = new StorageService(TEST_DB_PATH)
+      applyMigrations(storage.getDatabase())
       expect(storage.getDbPath()).toBe(TEST_DB_PATH)
     })
 
     it('should return a positive size for an initialized database', () => {
       storage = new StorageService(TEST_DB_PATH)
+      applyMigrations(storage.getDatabase())
       expect(storage.getDbSize()).toBeGreaterThan(0)
     })
 
     it('should return 0 after close and file deletion', () => {
       storage = new StorageService(TEST_DB_PATH)
+      applyMigrations(storage.getDatabase())
       storage.close()
       deleteDbFiles(TEST_DB_PATH)
       expect(storage.getDbSize()).toBe(0)
@@ -47,6 +55,7 @@ describe('StorageService', () => {
   describe('lifecycle', () => {
     it('should allow close() then re-construct', () => {
       storage = new StorageService(TEST_DB_PATH)
+      applyMigrations(storage.getDatabase())
       storage.activities.add({
         id: 'life-1',
         startTimestamp: 1000,
@@ -61,6 +70,7 @@ describe('StorageService', () => {
       storage.close()
 
       const storage2 = new StorageService(TEST_DB_PATH)
+      applyMigrations(storage2.getDatabase())
       const results = storage2.activities.getByIds(['life-1'])
       expect(results.length).toBe(1)
       storage2.close()
@@ -68,12 +78,14 @@ describe('StorageService', () => {
 
     it('should handle double close() without error', () => {
       storage = new StorageService(TEST_DB_PATH)
+      applyMigrations(storage.getDatabase())
       storage.close()
       expect(() => storage.close()).not.toThrow()
     })
 
     it('should create a readable backup while database is open', async () => {
       storage = new StorageService(TEST_DB_PATH)
+      applyMigrations(storage.getDatabase())
       storage.activities.add({
         id: 'backup-1',
         startTimestamp: 1000,
@@ -184,6 +196,7 @@ describe('context_events migration', () => {
     ])
 
     const storage = new StorageService(MIGRATION_DB_PATH)
+    applyMigrations(storage.getDatabase())
     const rows = storage.activities.getByIds(['evt-1'])
     expect(rows.length).toBe(1)
     const row = rows[0]
@@ -213,6 +226,7 @@ describe('context_events migration', () => {
     ])
 
     const storage = new StorageService(MIGRATION_DB_PATH)
+    applyMigrations(storage.getDatabase())
     const results = storage.activities.searchFTS('compiling', 10)
     expect(results.length).toBe(1)
     expect(results[0].id).toBe('fts-evt')
@@ -234,6 +248,7 @@ describe('context_events migration', () => {
     ])
 
     const storage = new StorageService(MIGRATION_DB_PATH)
+    applyMigrations(storage.getDatabase())
     const results = storage.activities.searchVectors(v(1.0), 10)
     expect(results.length).toBe(1)
     expect(results[0].id).toBe('vec-evt')
@@ -255,6 +270,7 @@ describe('context_events migration', () => {
     ])
 
     const storage = new StorageService(MIGRATION_DB_PATH)
+    applyMigrations(storage.getDatabase())
     // Verify legacy tables are gone by opening a raw connection
     const db = new Database(MIGRATION_DB_PATH)
     const tables = db
@@ -285,6 +301,7 @@ describe('context_events migration', () => {
     ])
 
     const storage = new StorageService(MIGRATION_DB_PATH)
+    applyMigrations(storage.getDatabase())
     const rows = storage.activities.getByIds(['null-vec'])
     expect(rows.length).toBe(1)
     expect(rows[0].vector).toEqual([])
@@ -310,10 +327,12 @@ describe('context_events migration', () => {
     ])
 
     const storage1 = new StorageService(MIGRATION_DB_PATH)
+    applyMigrations(storage1.getDatabase())
     storage1.close()
 
     // Second construction on same DB — context_events already dropped, should not throw
     const storage2 = new StorageService(MIGRATION_DB_PATH)
+    applyMigrations(storage2.getDatabase())
 
     const rows = storage2.activities.getByIds(['idem-1'])
     expect(rows.length).toBe(1)
@@ -326,6 +345,7 @@ describe('context_events migration', () => {
     seedLegacyDb([]) // empty table
 
     const storage = new StorageService(MIGRATION_DB_PATH)
+    applyMigrations(storage.getDatabase())
     const db = new Database(MIGRATION_DB_PATH)
     const tables = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'context_events%'")
@@ -342,6 +362,7 @@ describe('context_events migration', () => {
 
     // Should not throw — no context_events table to migrate
     const storage = new StorageService(MIGRATION_DB_PATH)
+    applyMigrations(storage.getDatabase())
 
     const count = storage.activities.count()
     expect(count).toBe(0)
@@ -365,6 +386,7 @@ describe('migration system', () => {
     deleteDbFiles(SYSTEM_DB_PATH)
 
     const storage = new StorageService(SYSTEM_DB_PATH)
+    applyMigrations(storage.getDatabase())
     storage.close()
 
     const db = new Database(SYSTEM_DB_PATH)
@@ -383,9 +405,11 @@ describe('migration system', () => {
     deleteDbFiles(SYSTEM_DB_PATH)
 
     const storage1 = new StorageService(SYSTEM_DB_PATH)
+    applyMigrations(storage1.getDatabase())
     storage1.close()
 
     const storage2 = new StorageService(SYSTEM_DB_PATH)
+    applyMigrations(storage2.getDatabase())
     storage2.close()
 
     const db = new Database(SYSTEM_DB_PATH)
@@ -400,6 +424,7 @@ describe('migration system', () => {
     deleteDbFiles(SYSTEM_DB_PATH)
 
     const storage = new StorageService(SYSTEM_DB_PATH)
+    applyMigrations(storage.getDatabase())
     storage.close()
 
     const db = new Database(SYSTEM_DB_PATH)
@@ -470,6 +495,7 @@ describe('migration system', () => {
 
     // StorageService constructor should apply only the pending migrations 0002 and 0003
     const storage = new StorageService(SYSTEM_DB_PATH)
+    applyMigrations(storage.getDatabase())
     storage.close()
 
     const db = new Database(SYSTEM_DB_PATH)
@@ -520,6 +546,7 @@ describe('migration system', () => {
     legacyDb.close()
 
     const storage = new StorageService(SYSTEM_DB_PATH)
+    applyMigrations(storage.getDatabase())
 
     const rows = storage.activities.getByIds(['sys-1'])
     expect(rows.length).toBe(1)

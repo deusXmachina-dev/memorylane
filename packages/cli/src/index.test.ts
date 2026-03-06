@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest'
 import * as path from 'path'
 import log from '@main/logger'
 import { StorageService } from '@main/storage'
+import { applyMigrations } from '@main/storage/migrator'
 import { v, deleteDbFiles, createStoredActivity } from '@main/storage/test-utils'
 import {
   CliError,
@@ -151,6 +152,7 @@ describe('command handlers', () => {
 
   beforeEach(() => {
     storage = new StorageService(TEST_DB_PATH)
+    applyMigrations(storage.getDatabase())
 
     // Seed test data
     storage.activities.add(

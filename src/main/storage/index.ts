@@ -4,7 +4,6 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { getDefaultDbPath } from '../paths'
 import log from '../logger'
-import { ensureMigrationsTable, runMigrations } from './migrator'
 import { ActivityRepository } from './activity-repository'
 import { PatternRepository } from './pattern-repository'
 
@@ -77,9 +76,6 @@ export class StorageService {
 
       loadSqliteVecExtension(db)
 
-      ensureMigrationsTable(db)
-      runMigrations(db)
-
       this.db = db
       this.activities = new ActivityRepository(db)
       this.patterns = new PatternRepository(db)
@@ -95,6 +91,14 @@ export class StorageService {
    */
   public static getDefaultDbPath(): string {
     return getDefaultDbPath()
+  }
+
+  /**
+   * Returns the raw database handle.
+   */
+  public getDatabase(): Database.Database {
+    if (!this.db) throw new Error('Database not initialized')
+    return this.db
   }
 
   /**

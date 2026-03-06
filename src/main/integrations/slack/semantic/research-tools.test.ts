@@ -1,6 +1,7 @@
 import * as path from 'path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { StorageService } from '../../../storage'
+import { applyMigrations } from '../../../storage/migrator'
 import { createStoredActivity, deleteDbFiles, v } from '../../../storage/test-utils'
 import { buildSlackResearchTools } from './research-tools'
 import type { SlackResearchTrace } from './types'
@@ -12,6 +13,7 @@ describe('buildSlackResearchTools', () => {
   beforeEach(() => {
     deleteDbFiles(TEST_DB_PATH)
     storage = new StorageService(TEST_DB_PATH)
+    applyMigrations(storage.getDatabase())
   })
 
   afterEach(() => {

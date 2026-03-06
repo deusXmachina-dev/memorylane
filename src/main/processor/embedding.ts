@@ -11,15 +11,6 @@ const MODEL_NAME = 'Xenova/all-MiniLM-L6-v2'
 // A relative path like './.cache' breaks when the cwd is '/' (macOS launches
 // packaged apps with cwd='/'), causing ENOENT on mkdir.
 function getModelCacheDir(): string {
-  if (process.versions.electron) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { app } = require('electron')
-      if (app) return path.join(app.getPath('userData'), 'models')
-    } catch {
-      // ELECTRON_RUN_AS_NODE or app not ready — fall through
-    }
-  }
   return path.join(path.dirname(getDefaultDbPath()), 'models')
 }
 

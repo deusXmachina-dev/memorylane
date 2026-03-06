@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { StorageService } from './index'
+import { applyMigrations } from './migrator'
 import * as path from 'path'
 import { deleteDbFiles } from './test-utils'
 import type { Pattern, PatternSighting } from './pattern-repository'
@@ -40,6 +41,7 @@ describe('PatternRepository', () => {
   beforeEach(() => {
     deleteDbFiles(TEST_DB_PATH)
     storage = new StorageService(TEST_DB_PATH)
+    applyMigrations(storage.getDatabase())
   })
 
   afterEach(() => {

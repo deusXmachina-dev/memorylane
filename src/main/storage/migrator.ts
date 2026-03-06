@@ -47,6 +47,11 @@ export function runMigrations(db: Database.Database): void {
   }
 }
 
+export function applyMigrations(db: Database.Database): void {
+  ensureMigrationsTable(db)
+  runMigrations(db)
+}
+
 export function getMigrationStatus(db: Database.Database): MigrationStatus[] {
   const appliedRows = db
     .prepare('SELECT name, applied_at FROM schema_migrations')

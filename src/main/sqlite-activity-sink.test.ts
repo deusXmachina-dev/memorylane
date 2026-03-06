@@ -3,6 +3,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import type { ActivityRepository } from './storage/activity-repository'
 import { StorageService } from './storage'
+import { applyMigrations } from './storage/migrator'
 import type { ExtractedActivity } from './activity-extraction-types'
 import type { Activity } from './activity-types'
 import { SqliteActivitySink } from './sqlite-activity-sink'
@@ -117,6 +118,7 @@ describe('SqliteActivitySink', () => {
     deleteDbFiles()
 
     const storage = new StorageService(testDbPath)
+    applyMigrations(storage.getDatabase())
     const sink = new SqliteActivitySink(storage.activities)
     const activity = makeActivity('real-storage-1')
     const extracted = makeExtracted('real-storage-1')

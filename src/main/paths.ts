@@ -7,43 +7,20 @@ const DEV_APP_DIRECTORY_SUFFIX = '-dev'
 
 /**
  * Gets the default path for the SQLite database file.
- * Used when running outside of the main Electron process (e.g. CLI tools, MCP server standalone).
- * In the main Electron process, it is preferred to use app.getPath('userData').
+ * Pure Node.js resolution — mimics Electron's default userData paths
+ * without importing Electron. Used by CLI tools, MCP server, and other
+ * non-Electron entry points. The main Electron process should use
+ * app.getPath('userData') directly instead.
  */
 export function getDefaultDbPath(): string {
   const dev = isDevRuntime()
-  const dbFile = dev ? 'memorylane-dev.db' : 'memorylane.db'
-
-  if (process.versions.electron) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { app } = require('electron')
-      if (app) {
-        const userDataPath = app.getPath('userData')
-        return path.join(userDataPath, dbFile)
-      }
-    } catch {
-      // Ignore error if electron module is not available or app is not ready
-    }
-  }
-
-  // Fallback for CLI / Standalone mode (mimic Electron's default paths)
   return buildFallbackDbPath(process.platform, os.homedir(), process.env.APPDATA, dev)
 }
 
 export function isDevRuntime(): boolean {
-  if (process.versions.electron) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { app } = require('electron')
-      if (app) return !app.isPackaged
-    } catch {
-      // require('electron') can fail under ELECTRON_RUN_AS_NODE
-    }
-
-    return !isPackagedElectronExecutable(process.execPath)
-  }
-  return process.env.NODE_ENV !== 'production'
+  if (process.env.NODE_ENV === 'production') return false
+  if (process.versions.electron) return !isPackagedElectronExecutable(process.execPath)
+  return true
 }
 
 export function getAppDirectoryName(dev: boolean): string {

@@ -15,6 +15,7 @@
 // The MCP stdio protocol owns stdout exclusively — this prevents ANY module
 // (dotenv, native addons, etc.) from polluting the transport channel.
 import { Writable } from 'node:stream'
+import * as os from 'os'
 
 const realWrite = process.stdout.write.bind(process.stdout)
 const mcpStdout = new Writable({
@@ -25,10 +26,12 @@ const mcpStdout = new Writable({
 process.stdout.write = process.stderr.write.bind(process.stderr) as typeof process.stdout.write
 
 import { config as loadEnv } from 'dotenv'
-import { getDefaultDbPath, isPackagedElectronExecutable } from './paths'
+import { isPackagedElectronExecutable, buildFallbackDbPath } from './paths'
+
+const isPackaged = isPackagedElectronExecutable(process.execPath)
 
 try {
-  if (!isPackagedElectronExecutable(process.execPath)) {
+  if (!isPackaged) {
     loadEnv()
   }
 } catch {
@@ -38,8 +41,10 @@ try {
 import { MemoryLaneMCPServer } from './mcp/server'
 
 async function main(): Promise<void> {
+  const dev = !isPackaged
+  const dbPath = buildFallbackDbPath(process.platform, os.homedir(), process.env.APPDATA, dev)
   const server = new MemoryLaneMCPServer()
-  await server.start(getDefaultDbPath(), mcpStdout)
+  await server.start(dbPath, mcpStdout)
 }
 
 main().catch((error) => {

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
 import { StorageService } from './index'
+import { applyMigrations } from './migrator'
 import * as path from 'path'
 import { v, deleteDbFiles, createStoredActivity } from './test-utils'
 
@@ -11,6 +12,7 @@ describe('ActivityRepository', () => {
   beforeEach(() => {
     deleteDbFiles(TEST_DB_PATH)
     storage = new StorageService(TEST_DB_PATH)
+    applyMigrations(storage.getDatabase())
   })
 
   afterEach(() => {

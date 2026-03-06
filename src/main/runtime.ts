@@ -7,6 +7,7 @@ import { CustomEndpointManager } from './settings/custom-endpoint-manager'
 import { DeviceIdentity } from './settings/device-identity'
 import { ManagedKeyService } from './services/managed-key-service'
 import { StorageService } from './storage'
+import { applyMigrations } from './storage/migrator'
 import { EmbeddingService } from './processor/embedding'
 import { activityOcrService } from './processor/ocr'
 import { UsageTracker } from './services/usage-tracker'
@@ -44,7 +45,11 @@ export async function createMainRuntime(params?: {
 
   const apiKeyManager = new ApiKeyManager()
   const customEndpointManager = new CustomEndpointManager()
-  const storage = new StorageService(StorageService.getDefaultDbPath())
+  const dev = !app.isPackaged
+  const dbFile = dev ? 'memorylane-dev.db' : 'memorylane.db'
+  const dbPath = path.join(app.getPath('userData'), dbFile)
+  const storage = new StorageService(dbPath)
+  applyMigrations(storage.getDatabase())
   const usageTracker = new UsageTracker()
 
   const debugDumper =
