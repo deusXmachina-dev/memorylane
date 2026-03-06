@@ -322,11 +322,7 @@ async function main(): Promise<void> {
 }
 
 // Only run when executed directly (not when imported by tests)
-const isDirectRun =
-  process.argv[1] &&
-  (process.argv[1].endsWith('/index.js') || process.argv[1].endsWith('/index.ts'))
-
-if (isDirectRun) {
+if (require.main === module) {
   main().catch((err) => {
     process.stdout.write(
       JSON.stringify({ error: err instanceof Error ? err.message : String(err) }) + '\n',
