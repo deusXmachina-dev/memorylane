@@ -27,6 +27,8 @@ const { mockBackendState } = vi.hoisted(() => {
     frameTimer: null as ReturnType<typeof setInterval> | null,
     lastDisplayId: undefined as number | null | undefined,
     lastSentCommand: undefined as CaptureBackendCommand | undefined,
+    startCalls: 0,
+    stopCalls: 0,
   }
   return { mockBackendState }
 })
@@ -34,6 +36,7 @@ const { mockBackendState } = vi.hoisted(() => {
 vi.mock('./recorder/native-screenshot', () => ({
   createScreenCaptureBackend: () => ({
     start: vi.fn(async (config: CaptureBackendConfig) => {
+      mockBackendState.startCalls++
       mockBackendState.onFrame = config.onFrame
       mockBackendState.outputDir = config.outputDir
       mockBackendState.intervalMs = config.intervalMs ?? 1000
@@ -52,6 +55,7 @@ vi.mock('./recorder/native-screenshot', () => ({
       }, mockBackendState.intervalMs)
     }),
     stop: vi.fn(async () => {
+      mockBackendState.stopCalls++
       if (mockBackendState.frameTimer) {
         clearInterval(mockBackendState.frameTimer)
         mockBackendState.frameTimer = null
@@ -91,6 +95,8 @@ describe('pipeline harness', () => {
     mockBackendState.onFrame = null
     mockBackendState.lastDisplayId = undefined
     mockBackendState.lastSentCommand = undefined
+    mockBackendState.startCalls = 0
+    mockBackendState.stopCalls = 0
     if (mockBackendState.frameTimer) {
       clearInterval(mockBackendState.frameTimer)
       mockBackendState.frameTimer = null
@@ -268,6 +274,78 @@ describe('pipeline harness', () => {
     expect(transformedActivityIds).toHaveLength(1)
     expect(persistedActivityIds).toEqual(transformedActivityIds)
     expect(extractor.getStats().succeeded).toBe(1)
+
+    await harness.stop()
+  })
+
+  it('suppresses and resumes frame capture while running', async () => {
+    const harness = createPipelineHarness({
+      outputDir: path.join(process.cwd(), '.tmp-harness-suppression'),
+      frameIntervalMs: 10,
+    })
+
+    await harness.start()
+    await waitFor(
+      () => mockBackendState.startCalls >= 1,
+      'Expected backend.start to be called on harness start',
+    )
+    expect(mockBackendState.frameTimer).not.toBeNull()
+
+    await harness.setFrameCaptureSuppressed(true)
+    await waitFor(
+      () => mockBackendState.stopCalls >= 1,
+      'Expected backend.stop to be called when suppression is enabled',
+    )
+    expect(mockBackendState.frameTimer).toBeNull()
+
+    await harness.setFrameCaptureSuppressed(false)
+    await waitFor(
+      () => mockBackendState.startCalls >= 2,
+      'Expected backend.start to be called again when suppression is disabled',
+    )
+    expect(mockBackendState.frameTimer).not.toBeNull()
+
+    await harness.stop()
+  })
+
+  it('does not churn start/stop calls when suppression state is set repeatedly', async () => {
+    const harness = createPipelineHarness({
+      outputDir: path.join(process.cwd(), '.tmp-harness-suppression-idempotent'),
+      frameIntervalMs: 10,
+    })
+
+    await harness.start()
+    await waitFor(() => mockBackendState.startCalls >= 1, 'Expected initial backend start')
+
+    await harness.setFrameCaptureSuppressed(true)
+    await waitFor(() => mockBackendState.stopCalls >= 1, 'Expected stop after first suppression')
+    await harness.setFrameCaptureSuppressed(true)
+    expect(mockBackendState.stopCalls).toBe(1)
+
+    await harness.setFrameCaptureSuppressed(false)
+    await waitFor(() => mockBackendState.startCalls >= 2, 'Expected restart after unsuppress')
+    await harness.setFrameCaptureSuppressed(false)
+    expect(mockBackendState.startCalls).toBe(2)
+
+    await harness.stop()
+  })
+
+  it('respects suppression set before start', async () => {
+    const harness = createPipelineHarness({
+      outputDir: path.join(process.cwd(), '.tmp-harness-suppression-prestart'),
+      frameIntervalMs: 10,
+    })
+
+    await harness.setFrameCaptureSuppressed(true)
+    await harness.start()
+    await sleep(50)
+
+    expect(mockBackendState.startCalls).toBe(0)
+    expect(mockBackendState.frameTimer).toBeNull()
+
+    await harness.setFrameCaptureSuppressed(false)
+    await waitFor(() => mockBackendState.startCalls >= 1, 'Expected start after unsuppress')
+    expect(mockBackendState.frameTimer).not.toBeNull()
 
     await harness.stop()
   })
