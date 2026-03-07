@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@components/ui/button'
 import { Label } from '@components/ui/label'
 import { SectionToggle } from './SectionToggle'
@@ -52,26 +52,20 @@ export function PrivacySettingsSection({
     excludedWindowTitlePatternsText,
   )
   const [excludedUrlPatternsDraft, setExcludedUrlPatternsDraft] = useState(excludedUrlPatternsText)
-  const [advancedOpen, setAdvancedOpen] = useState(
-    excludedWindowTitlePatterns.length > 0 || excludedUrlPatterns.length > 0,
-  )
   const [hasPendingChanges, setHasPendingChanges] = useState(false)
-  const previousOpenRef = useRef(open)
 
   useEffect(() => {
+    if (hasPendingChanges) return
     setExcludedAppsDraft(excludedAppsText)
-  }, [excludedAppsText])
+  }, [excludedAppsText, hasPendingChanges])
   useEffect(() => {
+    if (hasPendingChanges) return
     setExcludedWindowTitlePatternsDraft(excludedWindowTitlePatternsText)
-  }, [excludedWindowTitlePatternsText])
+  }, [excludedWindowTitlePatternsText, hasPendingChanges])
   useEffect(() => {
+    if (hasPendingChanges) return
     setExcludedUrlPatternsDraft(excludedUrlPatternsText)
-  }, [excludedUrlPatternsText])
-  useEffect(() => {
-    if (excludedWindowTitlePatterns.length > 0 || excludedUrlPatterns.length > 0) {
-      setAdvancedOpen(true)
-    }
-  }, [excludedWindowTitlePatterns, excludedUrlPatterns])
+  }, [excludedUrlPatternsText, hasPendingChanges])
 
   const commitDrafts = (): void => {
     const nextExcludedApps = parseInputList(excludedAppsDraft)
@@ -89,26 +83,6 @@ export function PrivacySettingsSection({
       excludedUrlPatterns: nextExcludedUrlPatterns,
     })
   }
-
-  useEffect(() => {
-    if (previousOpenRef.current && !open && hasPendingChanges) {
-      commitDrafts()
-    }
-    previousOpenRef.current = open
-  }, [open, hasPendingChanges])
-
-  useEffect(() => {
-    return () => {
-      if (hasPendingChanges) {
-        commitDrafts()
-      }
-    }
-  }, [
-    hasPendingChanges,
-    excludedAppsDraft,
-    excludedWindowTitlePatternsDraft,
-    excludedUrlPatternsDraft,
-  ])
 
   return (
     <section>
@@ -161,51 +135,37 @@ export function PrivacySettingsSection({
             </p>
           </div>
 
-          <div className="space-y-1">
-            <button
-              type="button"
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              onClick={() => setAdvancedOpen((current) => !current)}
-            >
-              {advancedOpen ? 'Hide advanced wildcard rules' : 'Show advanced wildcard rules'}
-            </button>
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">
+              Excluded Window Titles (wildcards, one per line)
+            </Label>
+            <textarea
+              value={excludedWindowTitlePatternsDraft}
+              rows={3}
+              className="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 h-auto rounded-none border bg-transparent px-2.5 py-2 text-xs transition-colors placeholder:text-muted-foreground w-full min-w-0 outline-none resize-y"
+              placeholder={`*bank statement*\n*lab results*`}
+              onChange={(event) => {
+                setExcludedWindowTitlePatternsDraft(event.target.value)
+                setHasPendingChanges(true)
+              }}
+            />
           </div>
 
-          {advancedOpen && (
-            <>
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">
-                  Excluded Window Titles (wildcards, one per line)
-                </Label>
-                <textarea
-                  value={excludedWindowTitlePatternsDraft}
-                  rows={3}
-                  className="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 h-auto rounded-none border bg-transparent px-2.5 py-2 text-xs transition-colors placeholder:text-muted-foreground w-full min-w-0 outline-none resize-y"
-                  placeholder={`*bank statement*\n*lab results*`}
-                  onChange={(event) => {
-                    setExcludedWindowTitlePatternsDraft(event.target.value)
-                    setHasPendingChanges(true)
-                  }}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">
-                  Excluded URLs (wildcards, one per line)
-                </Label>
-                <textarea
-                  value={excludedUrlPatternsDraft}
-                  rows={3}
-                  className="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 h-auto rounded-none border bg-transparent px-2.5 py-2 text-xs transition-colors placeholder:text-muted-foreground w-full min-w-0 outline-none resize-y"
-                  placeholder={`*://*.bank.com/*\n*://mychart.*/*`}
-                  onChange={(event) => {
-                    setExcludedUrlPatternsDraft(event.target.value)
-                    setHasPendingChanges(true)
-                  }}
-                />
-              </div>
-            </>
-          )}
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">
+              Excluded URLs (wildcards, one per line)
+            </Label>
+            <textarea
+              value={excludedUrlPatternsDraft}
+              rows={3}
+              className="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 h-auto rounded-none border bg-transparent px-2.5 py-2 text-xs transition-colors placeholder:text-muted-foreground w-full min-w-0 outline-none resize-y"
+              placeholder={`*://*.bank.com/*\n*://mychart.*/*`}
+              onChange={(event) => {
+                setExcludedUrlPatternsDraft(event.target.value)
+                setHasPendingChanges(true)
+              }}
+            />
+          </div>
 
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">
@@ -215,7 +175,13 @@ export function PrivacySettingsSection({
           </div>
 
           <div className="flex justify-end">
-            <Button type="button" variant="outline" size="sm" onClick={commitDrafts}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={commitDrafts}
+              disabled={!hasPendingChanges}
+            >
               Save privacy rules
             </Button>
           </div>
