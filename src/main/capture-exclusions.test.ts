@@ -66,6 +66,13 @@ describe('capture exclusions', () => {
     ).toBe('whatsapp')
   })
 
+  it('matches when user enters whatsapp.root directly', () => {
+    const excludedApps = new Set(normalizeExcludedApps(['whatsapp.root']))
+    expect(
+      getExcludedAppMatch({ processName: 'WhatsApp', bundleId: 'whatsapp.root' }, excludedApps),
+    ).toBe('whatsapp')
+  })
+
   it('normalizes and deduplicates wildcard patterns', () => {
     expect(normalizeWildcardPatterns(['  *github*  ', '*github*', '', '  '])).toEqual(['*github*'])
   })
