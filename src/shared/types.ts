@@ -156,6 +156,8 @@ export interface CaptureSettings {
   semanticPipelineMode: SemanticPipelineMode
   captureHotkeyAccelerator: string
   excludedApps: string[]
+  excludedWindowTitlePatterns: string[]
+  excludedUrlPatterns: string[]
 }
 
 export type SemanticPipelineMode = 'auto' | 'video' | 'image'

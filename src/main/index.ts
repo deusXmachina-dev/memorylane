@@ -120,6 +120,8 @@ app.on('ready', async () => {
     semanticPipelinePreference: initialCaptureSettings.semanticPipelineMode,
     semanticRequestTimeoutMs: initialCaptureSettings.semanticRequestTimeoutMs,
     excludedApps: initialCaptureSettings.excludedApps,
+    excludedWindowTitlePatterns: initialCaptureSettings.excludedWindowTitlePatterns,
+    excludedUrlPatterns: initialCaptureSettings.excludedUrlPatterns,
   })
 
   slackIntegrationService = new SlackIntegrationService(
@@ -186,7 +188,7 @@ app.on('ready', async () => {
     slackIntegrationService,
     getCaptureHotkeyLabel: hotkeyManager.getLabel,
     reconfigureCaptureHotkey,
-    updateExcludedApps: (apps) => runtime?.updateExcludedApps(apps),
+    updateExclusions: (exclusions) => runtime?.updateExclusions(exclusions),
   })
 
   await slackIntegrationService.reload()

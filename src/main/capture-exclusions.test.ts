@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { getExcludedAppMatch, normalizeExcludedApps } from './capture-exclusions'
+import {
+  getExcludedAppMatch,
+  getExcludedUrlMatch,
+  getExcludedWindowTitleMatch,
+  normalizeExcludedApps,
+  normalizeWildcardPatterns,
+} from './capture-exclusions'
 
 describe('capture exclusions', () => {
   it('normalizes and deduplicates excluded apps', () => {
@@ -26,5 +32,33 @@ describe('capture exclusions', () => {
         excludedApps,
       ),
     ).toBe('chrome')
+  })
+
+  it('normalizes and deduplicates wildcard patterns', () => {
+    expect(normalizeWildcardPatterns(['  *github*  ', '*github*', '', '  '])).toEqual(['*github*'])
+  })
+
+  it('matches window title wildcard patterns', () => {
+    const patterns = normalizeWildcardPatterns(['*incognito*', 'private ?indow*'])
+    expect(
+      getExcludedWindowTitleMatch(
+        {
+          title: 'New Incognito Tab - Google Chrome (Incognito)',
+        },
+        patterns,
+      ),
+    ).toBe('*incognito*')
+  })
+
+  it('matches url wildcard patterns', () => {
+    const patterns = normalizeWildcardPatterns(['*://*.github.com/*'])
+    expect(
+      getExcludedUrlMatch(
+        {
+          url: 'https://deusXmachina-dev.github.com/memorylane',
+        },
+        patterns,
+      ),
+    ).toBe('*://*.github.com/*')
   })
 })

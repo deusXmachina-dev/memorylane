@@ -105,6 +105,22 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
     [save],
   )
 
+  const commitExcludedWindowTitlePatterns = useCallback(
+    (patterns: string[]): void => {
+      setForm((prev) => (prev ? { ...prev, excludedWindowTitlePatterns: patterns } : prev))
+      save({ excludedWindowTitlePatterns: patterns }, 'Excluded window title patterns updated')
+    },
+    [save],
+  )
+
+  const commitExcludedUrlPatterns = useCallback(
+    (patterns: string[]): void => {
+      setForm((prev) => (prev ? { ...prev, excludedUrlPatterns: patterns } : prev))
+      save({ excludedUrlPatterns: patterns }, 'Excluded URL patterns updated')
+    },
+    [save],
+  )
+
   const setCaptureHotkeyAccelerator = useCallback((value: string): void => {
     setForm((prev) => (prev ? { ...prev, captureHotkeyAccelerator: value } : prev))
   }, [])
@@ -223,7 +239,11 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
             open={privacyOpen}
             onToggle={() => setPrivacyOpen((v) => !v)}
             excludedApps={form.excludedApps}
+            excludedWindowTitlePatterns={form.excludedWindowTitlePatterns}
+            excludedUrlPatterns={form.excludedUrlPatterns}
             onExcludedAppsCommit={commitExcludedApps}
+            onExcludedWindowTitlePatternsCommit={commitExcludedWindowTitlePatterns}
+            onExcludedUrlPatternsCommit={commitExcludedUrlPatterns}
           />
 
           <div className="border-t border-border" />

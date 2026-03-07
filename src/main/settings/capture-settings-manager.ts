@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import log from '../logger'
 import type { CaptureSettings } from '../../shared/types'
-import { normalizeExcludedApps } from '../capture-exclusions'
+import { normalizeExcludedApps, normalizeWildcardPatterns } from '../capture-exclusions'
 import {
   VISUAL_DETECTOR_CONFIG,
   INTERACTION_MONITOR_CONFIG,
@@ -26,6 +26,8 @@ const DEFAULTS: CaptureSettings = {
   semanticPipelineMode: 'auto',
   captureHotkeyAccelerator: DEFAULT_CAPTURE_HOTKEY_ACCELERATOR,
   excludedApps: [],
+  excludedWindowTitlePatterns: [],
+  excludedUrlPatterns: [],
 }
 
 export class CaptureSettingsManager {
@@ -54,6 +56,8 @@ export class CaptureSettingsManager {
           ...DEFAULTS,
           ...data,
           excludedApps: normalizeExcludedApps(data.excludedApps),
+          excludedWindowTitlePatterns: normalizeWildcardPatterns(data.excludedWindowTitlePatterns),
+          excludedUrlPatterns: normalizeWildcardPatterns(data.excludedUrlPatterns),
           maxScreenshotsForLlm:
             typeof data.maxScreenshotsForLlm === 'number'
               ? data.maxScreenshotsForLlm
@@ -82,6 +86,12 @@ export class CaptureSettingsManager {
         partial.captureHotkeyAccelerator ?? this.settings.captureHotkeyAccelerator,
       ),
       excludedApps: normalizeExcludedApps(partial.excludedApps ?? this.settings.excludedApps),
+      excludedWindowTitlePatterns: normalizeWildcardPatterns(
+        partial.excludedWindowTitlePatterns ?? this.settings.excludedWindowTitlePatterns,
+      ),
+      excludedUrlPatterns: normalizeWildcardPatterns(
+        partial.excludedUrlPatterns ?? this.settings.excludedUrlPatterns,
+      ),
     }
     try {
       fs.writeFileSync(this.configPath, JSON.stringify(this.settings, null, 2))

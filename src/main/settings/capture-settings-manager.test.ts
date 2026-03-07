@@ -48,6 +48,8 @@ describe('CaptureSettingsManager', () => {
       expect(defaults.semanticPipelineMode).toBe('auto')
       expect(defaults.captureHotkeyAccelerator).toBe(DEFAULT_CAPTURE_HOTKEY_ACCELERATOR)
       expect(defaults.excludedApps).toEqual([])
+      expect(defaults.excludedWindowTitlePatterns).toEqual([])
+      expect(defaults.excludedUrlPatterns).toEqual([])
     })
 
     it('get() returns a copy, not the internal reference', () => {
@@ -104,6 +106,17 @@ describe('CaptureSettingsManager', () => {
       })
 
       expect(manager.get().excludedApps).toEqual(['keepassxc', 'signal'])
+    })
+
+    it('normalizes wildcard exclusion patterns', () => {
+      const manager = new CaptureSettingsManager(configPath)
+      manager.save({
+        excludedWindowTitlePatterns: [' *incognito* ', '*INCOGNITO*', ''],
+        excludedUrlPatterns: [' *://*.github.com/* ', '*://*.GITHUB.com/*', ''],
+      })
+
+      expect(manager.get().excludedWindowTitlePatterns).toEqual(['*incognito*'])
+      expect(manager.get().excludedUrlPatterns).toEqual(['*://*.github.com/*'])
     })
 
     it('unknown keys in saved file are ignored (partial merge uses defaults)', () => {

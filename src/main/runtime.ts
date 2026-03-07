@@ -32,7 +32,11 @@ export interface MainRuntime {
   customEndpointManager: CustomEndpointManager
   semanticService: ActivitySemanticService
   managedKeyService: ManagedKeyService
-  updateExcludedApps(apps: string[]): void
+  updateExclusions(exclusions: {
+    apps: string[]
+    windowTitlePatterns: string[]
+    urlPatterns: string[]
+  }): void
   dispose(): Promise<void>
 }
 
@@ -41,6 +45,8 @@ export async function createMainRuntime(params?: {
   semanticPipelinePreference?: SemanticPipelinePreference
   semanticRequestTimeoutMs?: number
   excludedApps?: string[]
+  excludedWindowTitlePatterns?: string[]
+  excludedUrlPatterns?: string[]
 }): Promise<MainRuntime> {
   const onCaptureStateChanged = params?.onCaptureStateChanged ?? (() => undefined)
 
@@ -127,6 +133,8 @@ export async function createMainRuntime(params?: {
 
   const blacklistCoordinator = createCaptureBlacklistCoordinator({
     initialExcludedApps: params?.excludedApps,
+    initialExcludedWindowTitlePatterns: params?.excludedWindowTitlePatterns,
+    initialExcludedUrlPatterns: params?.excludedUrlPatterns,
     forwardInteraction: (event) => {
       harness.handleEvent(event)
     },
@@ -156,8 +164,8 @@ export async function createMainRuntime(params?: {
     customEndpointManager,
     semanticService,
     managedKeyService,
-    updateExcludedApps(apps: string[]): void {
-      blacklistCoordinator.updateExcludedApps(apps)
+    updateExclusions(exclusions): void {
+      blacklistCoordinator.updateExclusions(exclusions)
     },
     async dispose(): Promise<void> {
       if (disposePromise) return disposePromise

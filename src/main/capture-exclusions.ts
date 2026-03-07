@@ -1,6 +1,8 @@
 export interface ExclusionWindowContext {
   processName?: string
   bundleId?: string
+  title?: string
+  url?: string
 }
 
 function normalizeToken(value: string): string {
@@ -18,6 +20,10 @@ function normalizeToken(value: string): string {
   return trimmed
 }
 
+function normalizePatternToken(value: string): string {
+  return value.trim().toLowerCase()
+}
+
 export function normalizeExcludedApps(values: readonly string[] | undefined): string[] {
   if (!Array.isArray(values)) return []
 
@@ -33,6 +39,53 @@ export function normalizeExcludedApps(values: readonly string[] | undefined): st
   }
 
   return normalized
+}
+
+export function normalizeWildcardPatterns(values: readonly string[] | undefined): string[] {
+  if (!Array.isArray(values)) return []
+
+  const seen = new Set<string>()
+  const normalized: string[] = []
+
+  for (const value of values) {
+    if (typeof value !== 'string') continue
+    const pattern = normalizePatternToken(value)
+    if (pattern.length === 0 || seen.has(pattern)) continue
+    seen.add(pattern)
+    normalized.push(pattern)
+  }
+
+  return normalized
+}
+
+const wildcardRegexCache = new Map<string, RegExp>()
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function wildcardPatternToRegex(pattern: string): RegExp {
+  const cached = wildcardRegexCache.get(pattern)
+  if (cached) return cached
+
+  const escapedPattern = escapeRegex(pattern)
+  const regex = new RegExp(`^${escapedPattern.replace(/\\\*/g, '.*').replace(/\\\?/g, '.')}$`)
+  wildcardRegexCache.set(pattern, regex)
+  return regex
+}
+
+function getWildcardMatch(value: string | undefined, patterns: readonly string[]): string | null {
+  if (!value || patterns.length === 0) return null
+  const normalizedValue = normalizePatternToken(value)
+  if (normalizedValue.length === 0) return null
+
+  for (const pattern of patterns) {
+    if (wildcardPatternToRegex(pattern).test(normalizedValue)) {
+      return pattern
+    }
+  }
+
+  return null
 }
 
 function collectCandidates(window: ExclusionWindowContext | undefined): string[] {
@@ -71,4 +124,18 @@ export function getExcludedAppMatch(
   }
 
   return null
+}
+
+export function getExcludedWindowTitleMatch(
+  window: ExclusionWindowContext | undefined,
+  patterns: readonly string[],
+): string | null {
+  return getWildcardMatch(window?.title, patterns)
+}
+
+export function getExcludedUrlMatch(
+  window: ExclusionWindowContext | undefined,
+  patterns: readonly string[],
+): string | null {
+  return getWildcardMatch(window?.url, patterns)
 }

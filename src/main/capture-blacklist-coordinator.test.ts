@@ -84,7 +84,11 @@ describe('capture blacklist coordinator', () => {
     })
 
     coordinator.handleInteraction(appChangeEvent('KeePassXC'))
-    coordinator.updateExcludedApps(['keepassxc'])
+    coordinator.updateExclusions({
+      apps: ['keepassxc'],
+      windowTitlePatterns: [],
+      urlPatterns: [],
+    })
 
     expect(flushCount).toBe(1)
     expect(suppressionTransitions).toEqual([true])
@@ -165,5 +169,62 @@ describe('capture blacklist coordinator', () => {
 
     expect(suppressionTransitions).toEqual([])
     expect(forwarded).toEqual([terminalEvent])
+  })
+
+  it('suppresses screenshots when window title matches excluded wildcard', () => {
+    const forwarded: InteractionContext[] = []
+    const suppressionTransitions: boolean[] = []
+    let flushCount = 0
+
+    const coordinator = createCaptureBlacklistCoordinator({
+      initialExcludedApps: [],
+      initialExcludedWindowTitlePatterns: ['*internal payroll*'],
+      forwardInteraction: (event) => forwarded.push(event),
+      flushEvents: () => {
+        flushCount++
+      },
+      setScreenshotsSuppressed: (suppressed) => {
+        suppressionTransitions.push(suppressed)
+      },
+    })
+
+    coordinator.handleInteraction(
+      appChangeEvent('Google Chrome', {
+        title: 'Internal Payroll - Google Chrome',
+      }),
+    )
+
+    expect(flushCount).toBe(1)
+    expect(suppressionTransitions).toEqual([true])
+    expect(forwarded).toHaveLength(0)
+  })
+
+  it('suppresses screenshots when url matches excluded wildcard', () => {
+    const forwarded: InteractionContext[] = []
+    const suppressionTransitions: boolean[] = []
+    let flushCount = 0
+
+    const coordinator = createCaptureBlacklistCoordinator({
+      initialExcludedApps: [],
+      initialExcludedUrlPatterns: ['*://mail.google.com/*'],
+      forwardInteraction: (event) => forwarded.push(event),
+      flushEvents: () => {
+        flushCount++
+      },
+      setScreenshotsSuppressed: (suppressed) => {
+        suppressionTransitions.push(suppressed)
+      },
+    })
+
+    coordinator.handleInteraction(
+      appChangeEvent('Google Chrome', {
+        title: 'Gmail',
+        url: 'https://mail.google.com/mail/u/0/#inbox',
+      }),
+    )
+
+    expect(flushCount).toBe(1)
+    expect(suppressionTransitions).toEqual([true])
+    expect(forwarded).toHaveLength(0)
   })
 })
