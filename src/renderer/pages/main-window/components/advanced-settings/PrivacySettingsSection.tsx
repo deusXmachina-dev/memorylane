@@ -88,9 +88,6 @@ export function PrivacySettingsSection({
                 </Button>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Detects Incognito/InPrivate browser windows and pauses capture automatically.
-            </p>
           </div>
 
           <div className="space-y-2">
