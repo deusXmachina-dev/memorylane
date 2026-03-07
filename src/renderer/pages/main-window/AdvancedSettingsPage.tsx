@@ -12,6 +12,7 @@ import { AppStartupSection } from './components/advanced-settings/AppStartupSect
 import { CaptureSettingsSection } from './components/advanced-settings/CaptureSettingsSection'
 import { DataManagementSection } from './components/advanced-settings/DataManagementSection'
 import { LlmConfigurationSection } from './components/advanced-settings/LlmConfigurationSection'
+import { PrivacySettingsSection } from './components/advanced-settings/PrivacySettingsSection'
 import { SlackSettingsSection } from './components/advanced-settings/SlackSettingsSection'
 import type { NumericCaptureSetting } from './components/advanced-settings/types'
 import { detectHotkeyPlatform, toRecordedAccelerator } from './hotkey-utils'
@@ -27,6 +28,7 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
   const [dataOpen, setDataOpen] = useState(false)
   const [startupOpen, setStartupOpen] = useState(false)
   const [captureOpen, setCaptureOpen] = useState(false)
+  const [privacyOpen, setPrivacyOpen] = useState(false)
   const [slackOpen, setSlackOpen] = useState(false)
   const [recordingHotkey, setRecordingHotkey] = useState(false)
 
@@ -217,6 +219,15 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
 
           <div className="border-t border-border" />
 
+          <PrivacySettingsSection
+            open={privacyOpen}
+            onToggle={() => setPrivacyOpen((v) => !v)}
+            excludedApps={form.excludedApps}
+            onExcludedAppsCommit={commitExcludedApps}
+          />
+
+          <div className="border-t border-border" />
+
           <CaptureSettingsSection
             open={captureOpen}
             onToggle={() => setCaptureOpen((v) => !v)}
@@ -227,7 +238,6 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
             onSemanticPipelineModeChange={setSemanticPipelineMode}
             onSettingChange={setNumericSetting}
             onSettingCommit={commitNumericSetting}
-            onExcludedAppsCommit={commitExcludedApps}
             onReset={() => void handleReset()}
           />
         </>
