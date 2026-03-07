@@ -37,6 +37,7 @@ const APP_TOKEN_ALIASES: Record<string, string> = {
   'mozilla firefox': 'firefox',
   brave: 'brave',
   'brave browser': 'brave',
+  'whatsapp.root': 'whatsapp',
   code: 'code',
   vscode: 'code',
   'visual studio code': 'code',

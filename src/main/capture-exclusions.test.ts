@@ -59,6 +59,13 @@ describe('capture exclusions', () => {
     ).toBe('chrome')
   })
 
+  it('matches whatsapp bundle id alias', () => {
+    const excludedApps = new Set(normalizeExcludedApps(['whatsapp']))
+    expect(
+      getExcludedAppMatch({ processName: 'WhatsApp', bundleId: 'whatsapp.root' }, excludedApps),
+    ).toBe('whatsapp')
+  })
+
   it('normalizes and deduplicates wildcard patterns', () => {
     expect(normalizeWildcardPatterns(['  *github*  ', '*github*', '', '  '])).toEqual(['*github*'])
   })
