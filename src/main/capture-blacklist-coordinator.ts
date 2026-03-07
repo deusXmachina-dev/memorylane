@@ -38,7 +38,35 @@ export function createCaptureBlacklistCoordinator(params: {
   let blockedByExcludedWindowTitle = false
   let blockedByExcludedUrl = false
   let blockedByAnonymousBrowser = false
+  const privateBrowserWindowHandles = new Set<string>()
   let lastActiveWindow: InteractionContext['activeWindow'] | undefined
+
+  const getWindowHandle = (activeWindow: InteractionContext['activeWindow']): string | null => {
+    const hwnd = activeWindow?.hwnd?.trim()
+    if (!hwnd) return null
+    return hwnd
+  }
+
+  const resolveAnonymousModeMatch = (
+    activeWindow: InteractionContext['activeWindow'],
+    detectedAnonymousModeMatch: string | null,
+  ): string | null => {
+    if (!excludePrivateBrowsing) return null
+
+    const hwnd = getWindowHandle(activeWindow)
+    if (detectedAnonymousModeMatch !== null) {
+      if (hwnd !== null) {
+        privateBrowserWindowHandles.add(hwnd)
+      }
+      return detectedAnonymousModeMatch
+    }
+
+    if (hwnd !== null && privateBrowserWindowHandles.has(hwnd)) {
+      return `hwnd=${hwnd}`
+    }
+
+    return null
+  }
 
   const setBlocked = (
     excludedAppMatch: string | null,
@@ -96,9 +124,10 @@ export function createCaptureBlacklistCoordinator(params: {
       excludedWindowTitlePatterns,
     )
     const excludedUrlMatch = getExcludedUrlMatch(activeWindow, excludedUrlPatterns)
-    const anonymousModeMatch = excludePrivateBrowsing
+    const detectedAnonymousModeMatch = excludePrivateBrowsing
       ? getAnonymousModeBrowserMatch(activeWindow)
       : null
+    const anonymousModeMatch = resolveAnonymousModeMatch(activeWindow, detectedAnonymousModeMatch)
     setBlocked(
       excludedAppMatch,
       excludedWindowTitleMatch,
@@ -141,6 +170,9 @@ export function createCaptureBlacklistCoordinator(params: {
       excludedWindowTitlePatterns = normalizeWildcardPatterns(exclusions.windowTitlePatterns)
       excludedUrlPatterns = normalizeWildcardPatterns(exclusions.urlPatterns)
       excludePrivateBrowsing = exclusions.excludePrivateBrowsing
+      if (!excludePrivateBrowsing) {
+        privateBrowserWindowHandles.clear()
+      }
       reconcileBlockingState('settings_update', lastActiveWindow)
     },
   }

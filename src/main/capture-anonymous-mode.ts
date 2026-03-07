@@ -23,9 +23,14 @@ const BROWSER_MARKERS = [
 const ANONYMOUS_MODE_MARKERS = [
   'incognito',
   'inprivate',
+  'in private',
+  'incognito mode',
+  'inprivate browsing',
   'private browsing',
   'private window',
+  'private tab',
   'private mode',
+  'edge://inprivate',
   'about:privatebrowsing',
   'about:incognito',
 ]

@@ -5,6 +5,7 @@ import { createCaptureBlacklistCoordinator } from './capture-blacklist-coordinat
 function appChangeEvent(
   appName: string,
   options?: {
+    hwnd?: string
     title?: string
     bundleId?: string
     url?: string
@@ -15,6 +16,7 @@ function appChangeEvent(
     timestamp: Date.now(),
     activeWindow: {
       processName: appName,
+      hwnd: options?.hwnd,
       title: options?.title ?? `${appName} window`,
       bundleId: options?.bundleId,
       url: options?.url,
@@ -150,6 +152,47 @@ describe('capture blacklist coordinator', () => {
     expect(forwarded).toEqual([normalEdgeWindow])
   })
 
+  it('keeps anonymous suppression for the same windows hwnd after title/url changes', () => {
+    const forwarded: InteractionContext[] = []
+    const suppressionTransitions: boolean[] = []
+    let flushCount = 0
+
+    const coordinator = createCaptureBlacklistCoordinator({
+      initialExcludedApps: [],
+      forwardInteraction: (event) => forwarded.push(event),
+      flushEvents: () => {
+        flushCount++
+      },
+      setScreenshotsSuppressed: (suppressed) => {
+        suppressionTransitions.push(suppressed)
+      },
+    })
+
+    coordinator.handleInteraction(
+      appChangeEvent('chrome', {
+        hwnd: '0x6B0A0A',
+        title: 'New Incognito tab - Google Chrome',
+      }),
+    )
+    coordinator.handleInteraction(
+      appChangeEvent('chrome', {
+        hwnd: '0x6B0A0A',
+        title: 'Seznam - Google Chrome',
+        url: 'https://seznam.cz',
+      }),
+    )
+    const normalChromeWindow = appChangeEvent('chrome', {
+      hwnd: '0x10770',
+      title: 'MemoryLane docs - Google Chrome',
+      url: 'https://trymemorylane.com',
+    })
+    coordinator.handleInteraction(normalChromeWindow)
+
+    expect(flushCount).toBe(1)
+    expect(suppressionTransitions).toEqual([true, false])
+    expect(forwarded).toEqual([normalChromeWindow])
+  })
+
   it('does not suppress anonymous browser windows when private browsing exclusion is disabled', () => {
     const forwarded: InteractionContext[] = []
     const suppressionTransitions: boolean[] = []
@@ -171,6 +214,44 @@ describe('capture blacklist coordinator', () => {
 
     expect(suppressionTransitions).toEqual([])
     expect(forwarded).toEqual([incognitoEdgeWindow])
+  })
+
+  it('clears sticky anonymous hwnd suppression when private browsing exclusion is disabled', () => {
+    const forwarded: InteractionContext[] = []
+    const suppressionTransitions: boolean[] = []
+
+    const coordinator = createCaptureBlacklistCoordinator({
+      initialExcludedApps: [],
+      forwardInteraction: (event) => forwarded.push(event),
+      flushEvents: () => undefined,
+      setScreenshotsSuppressed: (suppressed) => {
+        suppressionTransitions.push(suppressed)
+      },
+    })
+
+    coordinator.handleInteraction(
+      appChangeEvent('chrome', {
+        hwnd: '0x6B0A0A',
+        title: 'New Incognito tab - Google Chrome',
+      }),
+    )
+
+    coordinator.updateExclusions({
+      apps: [],
+      windowTitlePatterns: [],
+      urlPatterns: [],
+      excludePrivateBrowsing: false,
+    })
+
+    const sameWindowAfterDisable = appChangeEvent('chrome', {
+      hwnd: '0x6B0A0A',
+      title: 'Seznam - Google Chrome',
+      url: 'https://seznam.cz',
+    })
+    coordinator.handleInteraction(sameWindowAfterDisable)
+
+    expect(suppressionTransitions).toEqual([true, false])
+    expect(forwarded).toEqual([sameWindowAfterDisable])
   })
 
   it('does not suppress non-browser windows with private-like wording', () => {

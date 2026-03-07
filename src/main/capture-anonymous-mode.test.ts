@@ -11,6 +11,15 @@ describe('capture anonymous mode detection', () => {
     expect(match).toBe('incognito')
   })
 
+  it('matches windows in private title variant with space', () => {
+    const match = getAnonymousModeBrowserMatch({
+      processName: 'msedge.exe',
+      title: 'In Private window - Microsoft Edge',
+    })
+
+    expect(match).toBe('in private')
+  })
+
   it('matches private mode marker from browser url', () => {
     const match = getAnonymousModeBrowserMatch({
       processName: 'Firefox',
@@ -19,6 +28,16 @@ describe('capture anonymous mode detection', () => {
     })
 
     expect(match).toBe('about:privatebrowsing')
+  })
+
+  it('matches private mode marker from edge private url', () => {
+    const match = getAnonymousModeBrowserMatch({
+      processName: 'msedge',
+      title: 'Microsoft Edge',
+      url: 'edge://inprivate',
+    })
+
+    expect(match).toBe('inprivate')
   })
 
   it('ignores non-browser apps', () => {

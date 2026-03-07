@@ -10,8 +10,18 @@ import {
 describe('capture exclusions', () => {
   it('normalizes and deduplicates excluded apps', () => {
     expect(
-      normalizeExcludedApps(['  KeePassXC.exe ', 'keepassxc', 'signal', 'Signal.app', '', '  ']),
-    ).toEqual(['keepassxc', 'signal'])
+      normalizeExcludedApps([
+        '  KeePassXC.exe ',
+        'keepassxc',
+        'signal',
+        'Signal.app',
+        '',
+        '  ',
+        '"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"',
+        'Google Chrome',
+        'Microsoft Edge',
+      ]),
+    ).toEqual(['keepassxc', 'signal', 'chrome', 'msedge'])
   })
 
   it('matches process name', () => {
@@ -22,6 +32,21 @@ describe('capture exclusions', () => {
         excludedApps,
       ),
     ).toBe('keepassxc')
+  })
+
+  it('matches windows process aliases and paths', () => {
+    const excludedApps = new Set(
+      normalizeExcludedApps([
+        'Microsoft Edge',
+        '"C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"',
+      ]),
+    )
+    expect(
+      getExcludedAppMatch({ processName: 'msedge.exe', title: 'Edge Window' }, excludedApps),
+    ).toBe('msedge')
+    expect(getExcludedAppMatch({ processName: 'brave', title: 'Brave Window' }, excludedApps)).toBe(
+      'brave',
+    )
   })
 
   it('matches bundle id segment', () => {

@@ -9,15 +9,37 @@ function normalizeToken(value: string): string {
   const trimmed = value.trim().toLowerCase()
   if (trimmed.length === 0) return ''
 
-  if (trimmed.endsWith('.exe')) {
-    return trimmed.slice(0, -4)
+  const unquoted =
+    trimmed.startsWith('"') && trimmed.endsWith('"') ? trimmed.slice(1, -1).trim() : trimmed
+  const pathNormalized = unquoted.replace(/\\/g, '/')
+  const basename = pathNormalized.includes('/') ? (pathNormalized.split('/').pop() ?? '') : unquoted
+  let token = basename
+
+  if (token.endsWith('.exe')) {
+    token = token.slice(0, -4)
   }
 
-  if (trimmed.endsWith('.app')) {
-    return trimmed.slice(0, -4)
+  if (token.endsWith('.app')) {
+    token = token.slice(0, -4)
   }
 
-  return trimmed
+  const aliasLookup = token.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
+  const alias = APP_TOKEN_ALIASES[aliasLookup]
+  return alias ?? token
+}
+
+const APP_TOKEN_ALIASES: Record<string, string> = {
+  edge: 'msedge',
+  'microsoft edge': 'msedge',
+  chrome: 'chrome',
+  'google chrome': 'chrome',
+  firefox: 'firefox',
+  'mozilla firefox': 'firefox',
+  brave: 'brave',
+  'brave browser': 'brave',
+  code: 'code',
+  vscode: 'code',
+  'visual studio code': 'code',
 }
 
 function normalizePatternToken(value: string): string {
