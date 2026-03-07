@@ -95,10 +95,6 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
     [save],
   )
 
-  const setExcludedApps = useCallback((apps: string[]): void => {
-    setForm((prev) => (prev ? { ...prev, excludedApps: apps } : prev))
-  }, [])
-
   const commitExcludedApps = useCallback(
     (apps: string[]): void => {
       setForm((prev) => (prev ? { ...prev, excludedApps: apps } : prev))
@@ -231,7 +227,6 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
             onSemanticPipelineModeChange={setSemanticPipelineMode}
             onSettingChange={setNumericSetting}
             onSettingCommit={commitNumericSetting}
-            onExcludedAppsChange={setExcludedApps}
             onExcludedAppsCommit={commitExcludedApps}
             onReset={() => void handleReset()}
           />
