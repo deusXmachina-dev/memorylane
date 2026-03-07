@@ -155,6 +155,7 @@ export interface CaptureSettings {
   semanticRequestTimeoutMs: number
   semanticPipelineMode: SemanticPipelineMode
   captureHotkeyAccelerator: string
+  excludePrivateBrowsing: boolean
   excludedApps: string[]
   excludedWindowTitlePatterns: string[]
   excludedUrlPatterns: string[]

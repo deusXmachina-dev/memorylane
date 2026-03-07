@@ -15,6 +15,7 @@ export interface CaptureBlacklistCoordinator {
     apps: string[]
     windowTitlePatterns: string[]
     urlPatterns: string[]
+    excludePrivateBrowsing: boolean
   }): void
 }
 
@@ -22,6 +23,7 @@ export function createCaptureBlacklistCoordinator(params: {
   initialExcludedApps?: string[]
   initialExcludedWindowTitlePatterns?: string[]
   initialExcludedUrlPatterns?: string[]
+  initialExcludePrivateBrowsing?: boolean
   forwardInteraction: (event: InteractionContext) => void
   flushEvents: () => void
   setScreenshotsSuppressed: (suppressed: boolean) => void
@@ -31,6 +33,7 @@ export function createCaptureBlacklistCoordinator(params: {
     params.initialExcludedWindowTitlePatterns,
   )
   let excludedUrlPatterns = normalizeWildcardPatterns(params.initialExcludedUrlPatterns)
+  let excludePrivateBrowsing = params.initialExcludePrivateBrowsing ?? true
   let blockedByExcludedApp = false
   let blockedByExcludedWindowTitle = false
   let blockedByExcludedUrl = false
@@ -93,7 +96,9 @@ export function createCaptureBlacklistCoordinator(params: {
       excludedWindowTitlePatterns,
     )
     const excludedUrlMatch = getExcludedUrlMatch(activeWindow, excludedUrlPatterns)
-    const anonymousModeMatch = getAnonymousModeBrowserMatch(activeWindow)
+    const anonymousModeMatch = excludePrivateBrowsing
+      ? getAnonymousModeBrowserMatch(activeWindow)
+      : null
     setBlocked(
       excludedAppMatch,
       excludedWindowTitleMatch,
@@ -135,6 +140,7 @@ export function createCaptureBlacklistCoordinator(params: {
       excludedApps = new Set(normalizeExcludedApps(exclusions.apps))
       excludedWindowTitlePatterns = normalizeWildcardPatterns(exclusions.windowTitlePatterns)
       excludedUrlPatterns = normalizeWildcardPatterns(exclusions.urlPatterns)
+      excludePrivateBrowsing = exclusions.excludePrivateBrowsing
       reconcileBlockingState('settings_update', lastActiveWindow)
     },
   }

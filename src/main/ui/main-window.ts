@@ -65,6 +65,7 @@ interface MainWindowDependencies {
     apps: string[]
     windowTitlePatterns: string[]
     urlPatterns: string[]
+    excludePrivateBrowsing: boolean
   }) => void
 }
 
@@ -422,6 +423,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
           apps: updated.excludedApps,
           windowTitlePatterns: updated.excludedWindowTitlePatterns,
           urlPatterns: updated.excludedUrlPatterns,
+          excludePrivateBrowsing: updated.excludePrivateBrowsing,
         })
         deps.semanticService.updatePipelinePreference(updated.semanticPipelineMode)
         deps.semanticService.updateRequestTimeoutMs(updated.semanticRequestTimeoutMs)
@@ -463,6 +465,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         apps: updated.excludedApps,
         windowTitlePatterns: updated.excludedWindowTitlePatterns,
         urlPatterns: updated.excludedUrlPatterns,
+        excludePrivateBrowsing: updated.excludePrivateBrowsing,
       })
       deps.semanticService.updatePipelinePreference(updated.semanticPipelineMode)
       deps.semanticService.updateRequestTimeoutMs(updated.semanticRequestTimeoutMs)

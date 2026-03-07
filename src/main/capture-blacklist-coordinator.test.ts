@@ -88,6 +88,7 @@ describe('capture blacklist coordinator', () => {
       apps: ['keepassxc'],
       windowTitlePatterns: [],
       urlPatterns: [],
+      excludePrivateBrowsing: true,
     })
 
     expect(flushCount).toBe(1)
@@ -147,6 +148,29 @@ describe('capture blacklist coordinator', () => {
 
     expect(suppressionTransitions).toEqual([true, false])
     expect(forwarded).toEqual([normalEdgeWindow])
+  })
+
+  it('does not suppress anonymous browser windows when private browsing exclusion is disabled', () => {
+    const forwarded: InteractionContext[] = []
+    const suppressionTransitions: boolean[] = []
+
+    const coordinator = createCaptureBlacklistCoordinator({
+      initialExcludedApps: [],
+      initialExcludePrivateBrowsing: false,
+      forwardInteraction: (event) => forwarded.push(event),
+      flushEvents: () => undefined,
+      setScreenshotsSuppressed: (suppressed) => {
+        suppressionTransitions.push(suppressed)
+      },
+    })
+
+    const incognitoEdgeWindow = appChangeEvent('Microsoft Edge', {
+      title: 'InPrivate - Microsoft Edge',
+    })
+    coordinator.handleInteraction(incognitoEdgeWindow)
+
+    expect(suppressionTransitions).toEqual([])
+    expect(forwarded).toEqual([incognitoEdgeWindow])
   })
 
   it('does not suppress non-browser windows with private-like wording', () => {

@@ -25,6 +25,7 @@ const DEFAULTS: CaptureSettings = {
   semanticRequestTimeoutMs: ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS,
   semanticPipelineMode: 'auto',
   captureHotkeyAccelerator: DEFAULT_CAPTURE_HOTKEY_ACCELERATOR,
+  excludePrivateBrowsing: true,
   excludedApps: [],
   excludedWindowTitlePatterns: [],
   excludedUrlPatterns: [],

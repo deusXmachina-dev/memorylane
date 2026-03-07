@@ -47,6 +47,7 @@ describe('CaptureSettingsManager', () => {
       expect(defaults.semanticRequestTimeoutMs).toBe(ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS)
       expect(defaults.semanticPipelineMode).toBe('auto')
       expect(defaults.captureHotkeyAccelerator).toBe(DEFAULT_CAPTURE_HOTKEY_ACCELERATOR)
+      expect(defaults.excludePrivateBrowsing).toBe(true)
       expect(defaults.excludedApps).toEqual([])
       expect(defaults.excludedWindowTitlePatterns).toEqual([])
       expect(defaults.excludedUrlPatterns).toEqual([])
@@ -117,6 +118,14 @@ describe('CaptureSettingsManager', () => {
 
       expect(manager.get().excludedWindowTitlePatterns).toEqual(['*incognito*'])
       expect(manager.get().excludedUrlPatterns).toEqual(['*://*.github.com/*'])
+    })
+
+    it('persists private browsing exclusion flag', () => {
+      const manager = new CaptureSettingsManager(configPath)
+      manager.save({ excludePrivateBrowsing: false })
+
+      const reloaded = new CaptureSettingsManager(configPath)
+      expect(reloaded.get().excludePrivateBrowsing).toBe(false)
     })
 
     it('unknown keys in saved file are ignored (partial merge uses defaults)', () => {

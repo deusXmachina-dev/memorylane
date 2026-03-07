@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
+import { Button } from '@components/ui/button'
 import { Label } from '@components/ui/label'
 import { SectionToggle } from './SectionToggle'
 
 interface PrivacySettingsSectionProps {
   open: boolean
   onToggle: () => void
+  excludePrivateBrowsing: boolean
   excludedApps: string[]
   excludedWindowTitlePatterns: string[]
   excludedUrlPatterns: string[]
+  onExcludePrivateBrowsingChange: (enabled: boolean) => void
   onExcludedAppsCommit: (apps: string[]) => void
   onExcludedWindowTitlePatternsCommit: (patterns: string[]) => void
   onExcludedUrlPatternsCommit: (patterns: string[]) => void
@@ -32,9 +35,11 @@ function parseInputList(input: string): string[] {
 export function PrivacySettingsSection({
   open,
   onToggle,
+  excludePrivateBrowsing,
   excludedApps,
   excludedWindowTitlePatterns,
   excludedUrlPatterns,
+  onExcludePrivateBrowsingChange,
   onExcludedAppsCommit,
   onExcludedWindowTitlePatternsCommit,
   onExcludedUrlPatternsCommit,
@@ -63,6 +68,31 @@ export function PrivacySettingsSection({
       <SectionToggle label="Privacy" open={open} onToggle={onToggle} />
       {open && (
         <div className="mt-3 space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <Label className="text-xs text-muted-foreground">Exclude Private Browsing</Label>
+              <div className="grid shrink-0 grid-cols-2 gap-2">
+                <Button
+                  variant={excludePrivateBrowsing ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => onExcludePrivateBrowsingChange(true)}
+                >
+                  On
+                </Button>
+                <Button
+                  variant={!excludePrivateBrowsing ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => onExcludePrivateBrowsingChange(false)}
+                >
+                  Off
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Detects Incognito/InPrivate browser windows and pauses capture automatically.
+            </p>
+          </div>
+
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Excluded Apps (one per line)</Label>
             <textarea
@@ -93,7 +123,7 @@ export function PrivacySettingsSection({
               value={excludedWindowTitlePatternsDraft}
               rows={4}
               className="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 h-auto rounded-none border bg-transparent px-2.5 py-2 text-xs transition-colors placeholder:text-muted-foreground w-full min-w-0 outline-none resize-y"
-              placeholder={`*incognito*\n*private browsing*`}
+              placeholder={`*bank statement*\n*lab results*`}
               onChange={(event) => {
                 setExcludedWindowTitlePatternsDraft(event.target.value)
               }}
@@ -103,9 +133,6 @@ export function PrivacySettingsSection({
                 onExcludedWindowTitlePatternsCommit(parsed)
               }}
             />
-            <p className="text-xs text-muted-foreground">
-              Use <code>*</code> for any text and <code>?</code> for one character.
-            </p>
           </div>
 
           <div className="space-y-2">
@@ -116,7 +143,7 @@ export function PrivacySettingsSection({
               value={excludedUrlPatternsDraft}
               rows={4}
               className="dark:bg-input/30 border-input focus-visible:border-ring focus-visible:ring-ring/50 h-auto rounded-none border bg-transparent px-2.5 py-2 text-xs transition-colors placeholder:text-muted-foreground w-full min-w-0 outline-none resize-y"
-              placeholder={`*://mail.google.com/*\n*://*.bank.com/*`}
+              placeholder={`*://*.bank.com/*\n*://mychart.*/*`}
               onChange={(event) => {
                 setExcludedUrlPatternsDraft(event.target.value)
               }}
@@ -126,8 +153,12 @@ export function PrivacySettingsSection({
                 onExcludedUrlPatternsCommit(parsed)
               }}
             />
+          </div>
+
+          <div className="space-y-1">
             <p className="text-xs text-muted-foreground">
-              Patterns are case-insensitive and matched against the full URL.
+              Patterns are case-insensitive. Use <code>*</code> for any text and <code>?</code> for
+              one character.
             </p>
           </div>
         </div>

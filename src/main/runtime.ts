@@ -36,6 +36,7 @@ export interface MainRuntime {
     apps: string[]
     windowTitlePatterns: string[]
     urlPatterns: string[]
+    excludePrivateBrowsing: boolean
   }): void
   dispose(): Promise<void>
 }
@@ -47,6 +48,7 @@ export async function createMainRuntime(params?: {
   excludedApps?: string[]
   excludedWindowTitlePatterns?: string[]
   excludedUrlPatterns?: string[]
+  excludePrivateBrowsing?: boolean
 }): Promise<MainRuntime> {
   const onCaptureStateChanged = params?.onCaptureStateChanged ?? (() => undefined)
 
@@ -135,6 +137,7 @@ export async function createMainRuntime(params?: {
     initialExcludedApps: params?.excludedApps,
     initialExcludedWindowTitlePatterns: params?.excludedWindowTitlePatterns,
     initialExcludedUrlPatterns: params?.excludedUrlPatterns,
+    initialExcludePrivateBrowsing: params?.excludePrivateBrowsing,
     forwardInteraction: (event) => {
       harness.handleEvent(event)
     },

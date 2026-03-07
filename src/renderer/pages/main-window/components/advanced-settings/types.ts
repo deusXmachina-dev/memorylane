@@ -5,6 +5,7 @@ export type NumericCaptureSetting = Exclude<
   | 'autoStartEnabled'
   | 'semanticPipelineMode'
   | 'captureHotkeyAccelerator'
+  | 'excludePrivateBrowsing'
   | 'excludedApps'
   | 'excludedWindowTitlePatterns'
   | 'excludedUrlPatterns'

@@ -105,6 +105,17 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
     [save],
   )
 
+  const commitExcludePrivateBrowsing = useCallback(
+    (enabled: boolean): void => {
+      setForm((prev) => (prev ? { ...prev, excludePrivateBrowsing: enabled } : prev))
+      save(
+        { excludePrivateBrowsing: enabled },
+        enabled ? 'Private browsing exclusion enabled' : 'Private browsing exclusion disabled',
+      )
+    },
+    [save],
+  )
+
   const commitExcludedWindowTitlePatterns = useCallback(
     (patterns: string[]): void => {
       setForm((prev) => (prev ? { ...prev, excludedWindowTitlePatterns: patterns } : prev))
@@ -238,9 +249,11 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
           <PrivacySettingsSection
             open={privacyOpen}
             onToggle={() => setPrivacyOpen((v) => !v)}
+            excludePrivateBrowsing={form.excludePrivateBrowsing}
             excludedApps={form.excludedApps}
             excludedWindowTitlePatterns={form.excludedWindowTitlePatterns}
             excludedUrlPatterns={form.excludedUrlPatterns}
+            onExcludePrivateBrowsingChange={commitExcludePrivateBrowsing}
             onExcludedAppsCommit={commitExcludedApps}
             onExcludedWindowTitlePatternsCommit={commitExcludedWindowTitlePatterns}
             onExcludedUrlPatternsCommit={commitExcludedUrlPatterns}

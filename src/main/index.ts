@@ -122,6 +122,7 @@ app.on('ready', async () => {
     excludedApps: initialCaptureSettings.excludedApps,
     excludedWindowTitlePatterns: initialCaptureSettings.excludedWindowTitlePatterns,
     excludedUrlPatterns: initialCaptureSettings.excludedUrlPatterns,
+    excludePrivateBrowsing: initialCaptureSettings.excludePrivateBrowsing,
   })
 
   slackIntegrationService = new SlackIntegrationService(
