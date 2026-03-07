@@ -129,7 +129,7 @@ export function PrivacySettingsSection({
                 setHasPendingChanges(true)
               }}
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="ml-2 -mt-1 text-[11px] text-muted-foreground">
               Matching is case-insensitive. Use app names like <code>signal</code> or{' '}
               <code>whatsapp</code>.
             </p>
@@ -167,8 +167,8 @@ export function PrivacySettingsSection({
             />
           </div>
 
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">
+          <div className="-mt-2 ml-2 space-y-1">
+            <p className="text-[11px] text-muted-foreground">
               Patterns are case-insensitive. Use <code>*</code> for any text and <code>?</code> for
               one character.
             </p>
