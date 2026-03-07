@@ -97,10 +97,30 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
     [save],
   )
 
-  const commitExcludedApps = useCallback(
-    (apps: string[]): void => {
-      setForm((prev) => (prev ? { ...prev, excludedApps: apps } : prev))
-      save({ excludedApps: apps }, 'Excluded apps updated')
+  const commitExcludedRules = useCallback(
+    (rules: {
+      excludedApps: string[]
+      excludedWindowTitlePatterns: string[]
+      excludedUrlPatterns: string[]
+    }): void => {
+      setForm((prev) =>
+        prev
+          ? {
+              ...prev,
+              excludedApps: rules.excludedApps,
+              excludedWindowTitlePatterns: rules.excludedWindowTitlePatterns,
+              excludedUrlPatterns: rules.excludedUrlPatterns,
+            }
+          : prev,
+      )
+      save(
+        {
+          excludedApps: rules.excludedApps,
+          excludedWindowTitlePatterns: rules.excludedWindowTitlePatterns,
+          excludedUrlPatterns: rules.excludedUrlPatterns,
+        },
+        'Privacy rules updated',
+      )
     },
     [save],
   )
@@ -112,22 +132,6 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
         { excludePrivateBrowsing: enabled },
         enabled ? 'Private browsing exclusion enabled' : 'Private browsing exclusion disabled',
       )
-    },
-    [save],
-  )
-
-  const commitExcludedWindowTitlePatterns = useCallback(
-    (patterns: string[]): void => {
-      setForm((prev) => (prev ? { ...prev, excludedWindowTitlePatterns: patterns } : prev))
-      save({ excludedWindowTitlePatterns: patterns }, 'Excluded window title patterns updated')
-    },
-    [save],
-  )
-
-  const commitExcludedUrlPatterns = useCallback(
-    (patterns: string[]): void => {
-      setForm((prev) => (prev ? { ...prev, excludedUrlPatterns: patterns } : prev))
-      save({ excludedUrlPatterns: patterns }, 'Excluded URL patterns updated')
     },
     [save],
   )
@@ -254,9 +258,7 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
             excludedWindowTitlePatterns={form.excludedWindowTitlePatterns}
             excludedUrlPatterns={form.excludedUrlPatterns}
             onExcludePrivateBrowsingChange={commitExcludePrivateBrowsing}
-            onExcludedAppsCommit={commitExcludedApps}
-            onExcludedWindowTitlePatternsCommit={commitExcludedWindowTitlePatterns}
-            onExcludedUrlPatternsCommit={commitExcludedUrlPatterns}
+            onExcludedRulesCommit={commitExcludedRules}
           />
 
           <div className="border-t border-border" />
