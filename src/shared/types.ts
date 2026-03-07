@@ -155,6 +155,7 @@ export interface CaptureSettings {
   semanticRequestTimeoutMs: number
   semanticPipelineMode: SemanticPipelineMode
   captureHotkeyAccelerator: string
+  excludedApps: string[]
 }
 
 export type SemanticPipelineMode = 'auto' | 'video' | 'image'

@@ -10,6 +10,7 @@ export interface RuntimeCapture {
   stopCapture(): void
   forceClose(): Promise<void>
   getScreenshotsDir(): string
+  setFrameCaptureSuppressed(suppressed: boolean): void
   updateActivityWindowConfig(input: {
     minActivityDurationMs: number
     maxActivityDurationMs: number
@@ -96,6 +97,11 @@ export function createCaptureController(params: {
     },
     getScreenshotsDir(): string {
       return params.outputDir
+    },
+    setFrameCaptureSuppressed(suppressed: boolean): void {
+      runTransition(async () => {
+        await params.harness.setFrameCaptureSuppressed(suppressed)
+      })
     },
     waitForIdle(): Promise<void> {
       return transition

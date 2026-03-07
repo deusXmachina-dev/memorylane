@@ -95,6 +95,18 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
     [save],
   )
 
+  const setExcludedApps = useCallback((apps: string[]): void => {
+    setForm((prev) => (prev ? { ...prev, excludedApps: apps } : prev))
+  }, [])
+
+  const commitExcludedApps = useCallback(
+    (apps: string[]): void => {
+      setForm((prev) => (prev ? { ...prev, excludedApps: apps } : prev))
+      save({ excludedApps: apps }, 'Excluded apps updated')
+    },
+    [save],
+  )
+
   const setCaptureHotkeyAccelerator = useCallback((value: string): void => {
     setForm((prev) => (prev ? { ...prev, captureHotkeyAccelerator: value } : prev))
   }, [])
@@ -219,6 +231,8 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
             onSemanticPipelineModeChange={setSemanticPipelineMode}
             onSettingChange={setNumericSetting}
             onSettingCommit={commitNumericSetting}
+            onExcludedAppsChange={setExcludedApps}
+            onExcludedAppsCommit={commitExcludedApps}
             onReset={() => void handleReset()}
           />
         </>

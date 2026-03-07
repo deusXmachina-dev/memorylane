@@ -101,9 +101,10 @@ app.on('ready', async () => {
   const captureStateManager = new CaptureStateManager()
   const slackSettingsManager = new SlackSettingsManager()
   captureSettingsManager.applyToConstants()
+  const initialCaptureSettings = captureSettingsManager.get()
 
   if (!captureStateManager.isAutoStartInitialized() && canSyncAutoStartSetting()) {
-    syncAutoStartSetting(captureSettingsManager.get().autoStartEnabled)
+    syncAutoStartSetting(initialCaptureSettings.autoStartEnabled)
     captureStateManager.setAutoStartInitialized(true)
   }
 
@@ -116,8 +117,9 @@ app.on('ready', async () => {
       void updateTrayMenu()
       void sendStatusToRenderer()
     },
-    semanticPipelinePreference: captureSettingsManager.get().semanticPipelineMode,
-    semanticRequestTimeoutMs: captureSettingsManager.get().semanticRequestTimeoutMs,
+    semanticPipelinePreference: initialCaptureSettings.semanticPipelineMode,
+    semanticRequestTimeoutMs: initialCaptureSettings.semanticRequestTimeoutMs,
+    excludedApps: initialCaptureSettings.excludedApps,
   })
 
   slackIntegrationService = new SlackIntegrationService(
@@ -184,6 +186,7 @@ app.on('ready', async () => {
     slackIntegrationService,
     getCaptureHotkeyLabel: hotkeyManager.getLabel,
     reconfigureCaptureHotkey,
+    updateExcludedApps: (apps) => runtime?.updateExcludedApps(apps),
   })
 
   await slackIntegrationService.reload()

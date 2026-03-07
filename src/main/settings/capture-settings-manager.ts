@@ -2,6 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import log from '../logger'
 import type { CaptureSettings } from '../../shared/types'
+import { normalizeExcludedApps } from '../capture-exclusions'
 import {
   VISUAL_DETECTOR_CONFIG,
   INTERACTION_MONITOR_CONFIG,
@@ -24,6 +25,7 @@ const DEFAULTS: CaptureSettings = {
   semanticRequestTimeoutMs: ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS,
   semanticPipelineMode: 'auto',
   captureHotkeyAccelerator: DEFAULT_CAPTURE_HOTKEY_ACCELERATOR,
+  excludedApps: [],
 }
 
 export class CaptureSettingsManager {
@@ -51,6 +53,7 @@ export class CaptureSettingsManager {
         return {
           ...DEFAULTS,
           ...data,
+          excludedApps: normalizeExcludedApps(data.excludedApps),
           maxScreenshotsForLlm:
             typeof data.maxScreenshotsForLlm === 'number'
               ? data.maxScreenshotsForLlm
@@ -78,6 +81,7 @@ export class CaptureSettingsManager {
       captureHotkeyAccelerator: normalizeCaptureHotkeyAccelerator(
         partial.captureHotkeyAccelerator ?? this.settings.captureHotkeyAccelerator,
       ),
+      excludedApps: normalizeExcludedApps(partial.excludedApps ?? this.settings.excludedApps),
     }
     try {
       fs.writeFileSync(this.configPath, JSON.stringify(this.settings, null, 2))

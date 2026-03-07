@@ -47,6 +47,7 @@ describe('CaptureSettingsManager', () => {
       expect(defaults.semanticRequestTimeoutMs).toBe(ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS)
       expect(defaults.semanticPipelineMode).toBe('auto')
       expect(defaults.captureHotkeyAccelerator).toBe(DEFAULT_CAPTURE_HOTKEY_ACCELERATOR)
+      expect(defaults.excludedApps).toEqual([])
     })
 
     it('get() returns a copy, not the internal reference', () => {
@@ -94,6 +95,15 @@ describe('CaptureSettingsManager', () => {
       expect(settings.visualThreshold).toBe(3)
       expect(settings.semanticPipelineMode).toBe('image')
       expect(settings.captureHotkeyAccelerator).toBe('CommandOrControl+Alt+P')
+    })
+
+    it('normalizes excluded app names', () => {
+      const manager = new CaptureSettingsManager(configPath)
+      manager.save({
+        excludedApps: ['  KeePassXC.exe  ', 'keepassxc', 'Signal', 'signal.app', ''],
+      })
+
+      expect(manager.get().excludedApps).toEqual(['keepassxc', 'signal'])
     })
 
     it('unknown keys in saved file are ignored (partial merge uses defaults)', () => {

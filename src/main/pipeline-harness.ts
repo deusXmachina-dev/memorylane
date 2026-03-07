@@ -24,6 +24,7 @@ export interface PipelineHarness {
   start(): Promise<void>
   stop(): Promise<void>
   handleEvent(event: InteractionContext): void
+  setFrameCaptureSuppressed(suppressed: boolean): Promise<void>
   updateActivityWindowConfig(input: {
     minActivityDurationMs: number
     maxActivityDurationMs: number
@@ -78,6 +79,8 @@ export function createPipelineHarness(params: {
       : undefined
 
   let cleanupTimer: ReturnType<typeof setInterval> | null = null
+  let running = false
+  let frameCaptureSuppressed = false
 
   return {
     frameStream,
@@ -88,17 +91,28 @@ export function createPipelineHarness(params: {
     activityProducer,
     activityExtractor,
     async start() {
-      await activityProducer.start()
-      if (activityExtractor) {
-        await activityExtractor.start()
-      }
-      await screenCapturer.start()
+      if (running) return
+      running = true
+      try {
+        await activityProducer.start()
+        if (activityExtractor) {
+          await activityExtractor.start()
+        }
+        if (!frameCaptureSuppressed) {
+          await screenCapturer.start()
+        }
 
-      cleanupTimer = setInterval(() => {
-        sweepStaleFiles(params.outputDir)
-      }, SCREENSHOT_CLEANUP_CONFIG.CLEANUP_INTERVAL_MS)
+        cleanupTimer = setInterval(() => {
+          sweepStaleFiles(params.outputDir)
+        }, SCREENSHOT_CLEANUP_CONFIG.CLEANUP_INTERVAL_MS)
+      } catch (error) {
+        running = false
+        throw error
+      }
     },
     async stop() {
+      if (!running) return
+      running = false
       if (cleanupTimer) {
         clearInterval(cleanupTimer)
         cleanupTimer = null
@@ -116,6 +130,23 @@ export function createPipelineHarness(params: {
         screenCapturer.setDisplayId(event.displayId)
       }
       eventCapturer.handleEvent(event)
+    },
+    async setFrameCaptureSuppressed(suppressed: boolean) {
+      if (frameCaptureSuppressed === suppressed) return
+      frameCaptureSuppressed = suppressed
+
+      if (!running) return
+
+      if (suppressed) {
+        if (screenCapturer.capturing) {
+          await screenCapturer.stop()
+        }
+        return
+      }
+
+      if (!screenCapturer.capturing) {
+        await screenCapturer.start()
+      }
     },
     updateActivityWindowConfig(input) {
       activityProducer.updateActivityWindowConfig({

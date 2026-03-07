@@ -61,6 +61,7 @@ interface MainWindowDependencies {
   slackIntegrationService: SlackIntegrationService
   getCaptureHotkeyLabel: () => string
   reconfigureCaptureHotkey: (accelerator: string) => { success: boolean; error?: string }
+  updateExcludedApps: (apps: string[]) => void
 }
 
 let mainWindow: BrowserWindow | null = null
@@ -413,6 +414,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
           minActivityDurationMs: updated.minActivityDurationMs,
           maxActivityDurationMs: updated.maxActivityDurationMs,
         })
+        deps.updateExcludedApps(updated.excludedApps)
         deps.semanticService.updatePipelinePreference(updated.semanticPipelineMode)
         deps.semanticService.updateRequestTimeoutMs(updated.semanticRequestTimeoutMs)
         void updateTrayMenu()
@@ -449,6 +451,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         minActivityDurationMs: updated.minActivityDurationMs,
         maxActivityDurationMs: updated.maxActivityDurationMs,
       })
+      deps.updateExcludedApps(updated.excludedApps)
       deps.semanticService.updatePipelinePreference(updated.semanticPipelineMode)
       deps.semanticService.updateRequestTimeoutMs(updated.semanticRequestTimeoutMs)
       void updateTrayMenu()

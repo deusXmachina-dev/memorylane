@@ -17,6 +17,7 @@ import { SqliteActivitySink } from './sqlite-activity-sink'
 import { FfmpegVideoStitcher } from './video/video-stitcher'
 import { ActivitySemanticService, SemanticFileDebugDumper } from './activity-semantic-service'
 import type { SemanticPipelinePreference } from './activity-semantic-service'
+import { createCaptureBlacklistCoordinator } from './capture-blacklist-coordinator'
 import {
   createCaptureController,
   type RuntimeCapture,
@@ -31,6 +32,7 @@ export interface MainRuntime {
   customEndpointManager: CustomEndpointManager
   semanticService: ActivitySemanticService
   managedKeyService: ManagedKeyService
+  updateExcludedApps(apps: string[]): void
   dispose(): Promise<void>
 }
 
@@ -38,6 +40,7 @@ export async function createMainRuntime(params?: {
   onCaptureStateChanged?: () => void
   semanticPipelinePreference?: SemanticPipelinePreference
   semanticRequestTimeoutMs?: number
+  excludedApps?: string[]
 }): Promise<MainRuntime> {
   const onCaptureStateChanged = params?.onCaptureStateChanged ?? (() => undefined)
 
@@ -122,8 +125,21 @@ export async function createMainRuntime(params?: {
     onStateChanged: () => onCaptureStateChanged(),
   })
 
+  const blacklistCoordinator = createCaptureBlacklistCoordinator({
+    initialExcludedApps: params?.excludedApps,
+    forwardInteraction: (event) => {
+      harness.handleEvent(event)
+    },
+    flushEvents: () => {
+      harness.eventCapturer.flush()
+    },
+    setScreenshotsSuppressed: (suppressed) => {
+      capture.setFrameCaptureSuppressed(suppressed)
+    },
+  })
+
   const interactionHandler = (event: Parameters<typeof harness.handleEvent>[0]): void => {
-    harness.handleEvent(event)
+    blacklistCoordinator.handleInteraction(event)
   }
   interactionMonitor.onInteraction(interactionHandler)
 
@@ -140,6 +156,9 @@ export async function createMainRuntime(params?: {
     customEndpointManager,
     semanticService,
     managedKeyService,
+    updateExcludedApps(apps: string[]): void {
+      blacklistCoordinator.updateExcludedApps(apps)
+    },
     async dispose(): Promise<void> {
       if (disposePromise) return disposePromise
 
