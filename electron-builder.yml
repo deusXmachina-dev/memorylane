@@ -105,3 +105,8 @@ nsis:
   perMachine: true
   allowElevation: true
   allowToChangeInstallationDirectory: true
+
+msi:
+  # MSI is primarily for managed enterprise deployment, so default to
+  # machine-wide installation.
+  perMachine: true
