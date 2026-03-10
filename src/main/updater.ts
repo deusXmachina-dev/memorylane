@@ -7,8 +7,17 @@ let state: UpdateState = 'idle'
 let reminderInterval: ReturnType<typeof setInterval> | null = null
 // Must be kept in module scope so the click handler isn't garbage-collected.
 let currentNotification: Notification | null = null
+const DISABLE_AUTO_UPDATE_ENV_VAR = 'MEMORYLANE_DISABLE_AUTO_UPDATE'
 
 export const getUpdateState = (): UpdateState => state
+
+const isAutoUpdateDisabled = (): boolean => {
+  const rawValue = process.env[DISABLE_AUTO_UPDATE_ENV_VAR]
+  if (!rawValue) return false
+
+  const normalizedValue = rawValue.trim().toLowerCase()
+  return ['1', 'true', 'yes', 'on'].includes(normalizedValue)
+}
 
 export const quitAndInstall = (): void => {
   if (reminderInterval) {
@@ -46,6 +55,15 @@ const showUpdateNotification = (version: string): void => {
 export const initAutoUpdater = (onUpdateStateChange: () => void): void => {
   if (!app.isPackaged) {
     log.info('[Updater] Skipping in dev mode')
+    return
+  }
+
+  if (isAutoUpdateDisabled()) {
+    state = 'idle'
+    log.info(
+      `[Updater] Auto-update disabled via ${DISABLE_AUTO_UPDATE_ENV_VAR}; skipping updater initialization.`,
+    )
+    onUpdateStateChange()
     return
   }
 
