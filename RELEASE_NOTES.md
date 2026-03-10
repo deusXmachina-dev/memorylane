@@ -1,16 +1,21 @@
-# MemoryLane v0.14.2
+# MemoryLane v0.14.3-rc.1
 
-Patch release focused on tray privacy-state reliability and repository maintenance.
+Release candidate focused on managed Windows rollout controls, packaging improvements, and MCP integration updates.
 
 ## What's Changed
 
-- **Tray privacy-state reliability** - Extracted tray privacy latch logic into a dedicated state module so the "recently paused" state now clears reliably after expiry
-- **Tray coverage improvements** - Added focused tests for tray privacy state transitions and latch expiration behavior
-- **Repository cleanup and docs** - Added a CONTRIBUTING guide, linked it from project docs, and removed obsolete notebook tooling
+- **Managed auto-update control** - Added `MEMORYLANE_DISABLE_AUTO_UPDATE` to disable updater initialization in packaged builds
+- **Windows packaging updates** - Added MSI build target and configured NSIS for per-machine elevated installs
+- **CLI MCP server mode** - Added MCP server mode in the CLI so plugin workflows can run without the desktop app
+- **Plugin installation reliability** - Updated plugin MCP config and installation docs to reduce setup friction
+- **Privacy matching behavior** - Capture privacy patterns now match substrings by default, with added test coverage
+- **Startup reliability** - Set Electron `userData` path before app ready in dev mode to avoid cache initialization issues
 
 ## Features
 
-- Tray privacy status now transitions cleanly from paused to recently paused and back to normal without waiting for extra UI events
+- Managed environments can disable in-app auto-updates with `MEMORYLANE_DISABLE_AUTO_UPDATE`
+- Windows builds now ship both `MemoryLane-Setup.exe` (NSIS) and MSI artifacts
+- CLI supports MCP server mode for plugin-first usage
 
 ## Known Issues & Limitations
 
@@ -20,8 +25,8 @@ Patch release focused on tray privacy-state reliability and repository maintenan
 ## Installation
 
 - macOS (Apple Silicon): install from the latest GitHub release or via the project install script
-- Windows: download `MemoryLane-Setup.exe` from the latest GitHub release
+- Windows: download release assets from GitHub (`MemoryLane-Setup.exe` or MSI)
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v0.14.1...v0.14.2
+https://github.com/deusXmachina-dev/memorylane/compare/v0.14.2...v0.14.3-rc.1
