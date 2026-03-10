@@ -1,21 +1,17 @@
-# MemoryLane v0.14.3-rc.1
+# MemoryLane v0.14.3-rc.2
 
-Release candidate focused on managed Windows rollout controls, packaging improvements, and MCP integration updates.
+Release candidate update focused on finalizing Windows MSI packaging defaults and release artifact publishing.
 
 ## What's Changed
 
-- **Managed auto-update control** - Added `MEMORYLANE_DISABLE_AUTO_UPDATE` to disable updater initialization in packaged builds
-- **Windows packaging updates** - Added MSI build target and configured NSIS for per-machine elevated installs
-- **CLI MCP server mode** - Added MCP server mode in the CLI so plugin workflows can run without the desktop app
-- **Plugin installation reliability** - Updated plugin MCP config and installation docs to reduce setup friction
-- **Privacy matching behavior** - Capture privacy patterns now match substrings by default, with added test coverage
-- **Startup reliability** - Set Electron `userData` path before app ready in dev mode to avoid cache initialization issues
+- **Release workflow artifact coverage** - GitHub release pipeline now uploads, verifies, and publishes `MemoryLane-Setup.msi` alongside existing Windows installer assets
+- **MSI packaging defaults** - Added explicit MSI settings for machine-wide, one-click installs
+- **Static MSI naming** - MSI artifact now uses a fixed filename (`MemoryLane-Setup.msi`) to keep build outputs and release checks predictable
 
 ## Features
 
-- Managed environments can disable in-app auto-updates with `MEMORYLANE_DISABLE_AUTO_UPDATE`
-- Windows builds now ship both `MemoryLane-Setup.exe` (NSIS) and MSI artifacts
-- CLI supports MCP server mode for plugin-first usage
+- Windows release assets now include both `MemoryLane-Setup.exe` and `MemoryLane-Setup.msi` with stable naming
+- MSI output is explicitly configured for managed rollout behavior (`perMachine: true`, `oneClick: true`)
 
 ## Known Issues & Limitations
 
@@ -25,8 +21,8 @@ Release candidate focused on managed Windows rollout controls, packaging improve
 ## Installation
 
 - macOS (Apple Silicon): install from the latest GitHub release or via the project install script
-- Windows: download release assets from GitHub (`MemoryLane-Setup.exe` or MSI)
+- Windows: download release assets from GitHub (`MemoryLane-Setup.exe` or `MemoryLane-Setup.msi`)
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v0.14.2...v0.14.3-rc.1
+https://github.com/deusXmachina-dev/memorylane/compare/v0.14.3-rc.1...v0.14.3-rc.2
