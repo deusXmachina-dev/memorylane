@@ -202,7 +202,7 @@ jobs:
           path: |
             dist/MemoryLane-Setup.exe
             dist/MemoryLane-Setup.exe.blockmap
-            dist/*.msi
+            dist/MemoryLane-Setup.msi
             dist/latest.yml
 
   publish-release:
@@ -246,8 +246,8 @@ jobs:
           test -f "$MAC_DIR/latest-mac.yml"
           test -f "$WIN_DIR/MemoryLane-Setup.exe"
           test -f "$WIN_DIR/MemoryLane-Setup.exe.blockmap"
+          test -f "$WIN_DIR/MemoryLane-Setup.msi"
           test -f "$WIN_DIR/latest.yml"
-          ls "$WIN_DIR"/*.msi >/dev/null
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
@@ -266,5 +266,5 @@ jobs:
             release-assets/release-macos-${{ env.RELEASE_TAG }}/latest-mac.yml
             release-assets/release-windows-${{ env.RELEASE_TAG }}/MemoryLane-Setup.exe
             release-assets/release-windows-${{ env.RELEASE_TAG }}/MemoryLane-Setup.exe.blockmap
-            release-assets/release-windows-${{ env.RELEASE_TAG }}/*.msi
+            release-assets/release-windows-${{ env.RELEASE_TAG }}/MemoryLane-Setup.msi
             release-assets/release-windows-${{ env.RELEASE_TAG }}/latest.yml

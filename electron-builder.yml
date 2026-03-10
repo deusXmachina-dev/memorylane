@@ -110,3 +110,5 @@ msi:
   # MSI is primarily for managed enterprise deployment, so default to
   # machine-wide installation.
   perMachine: true
+  oneClick: true
+  artifactName: '${productName}-Setup.${ext}'
