@@ -5,9 +5,9 @@ import { useLlmHealth } from '@/renderer/hooks/use-llm-health'
 import { Logo } from './components/Logo'
 import { PlanPicker } from './components/PlanPicker'
 import { CaptureControlSection } from './components/CaptureControlSection'
-import { StatsDisplay } from './components/StatsDisplay'
-import { IntegrationsSection } from './components/IntegrationsSection'
-import { Button } from '@components/ui/button'
+import { ConnectClaudeSection } from './components/ConnectClaudeSection'
+import { StatusLine } from './components/StatusLine'
+import { PatternsSection } from './components/PatternsSection'
 import { AdvancedSettingsPage } from './AdvancedSettingsPage'
 import type { CustomEndpointStatus, KeyStatus, MainWindowStats } from '@types'
 
@@ -112,36 +112,30 @@ export function MainWindowApp(): React.JSX.Element {
 
   return (
     <div className="min-h-screen antialiased select-none">
-      <div className="p-6 max-w-xl mx-auto space-y-4">
-        <Logo />
+      <div className="p-6 max-w-xl mx-auto space-y-5">
+        <Logo onSettingsClick={() => setPage('settings')} />
 
         {!isConfigured ? (
           <PlanPicker api={api} onKeySet={() => void loadKeyStatus()} />
         ) : (
           <>
-            <CaptureControlSection
-              capturing={capturing}
-              captureHotkeyLabel={captureHotkeyLabel}
-              llmHealth={llmHealth}
-              toggling={toggling}
-              onToggle={() => void handleToggle()}
-            />
+            <ConnectClaudeSection api={api} />
 
-            <StatsDisplay
-              stats={stats}
-              keyStatus={keyStatus}
-              isCustomEndpoint={hasCustomEndpoint}
-            />
+            <div className="space-y-2">
+              <CaptureControlSection
+                capturing={capturing}
+                captureHotkeyLabel={captureHotkeyLabel}
+                toggling={toggling}
+                onToggle={() => void handleToggle()}
+              />
+              <StatusLine llmHealth={llmHealth} activityCount={stats?.activityCount ?? null} />
+            </div>
 
-            <IntegrationsSection api={api} />
+            <hr className="border-border" />
+
+            <PatternsSection />
           </>
         )}
-
-        <div className="pt-1 flex justify-end">
-          <Button variant="ghost" size="sm" onClick={() => setPage('settings')}>
-            Advanced Settings
-          </Button>
-        </div>
       </div>
       <Toaster />
     </div>

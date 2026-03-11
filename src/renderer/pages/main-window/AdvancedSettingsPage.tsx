@@ -14,6 +14,8 @@ import { DataManagementSection } from './components/advanced-settings/DataManage
 import { LlmConfigurationSection } from './components/advanced-settings/LlmConfigurationSection'
 import { PrivacySettingsSection } from './components/advanced-settings/PrivacySettingsSection'
 import { SlackSettingsSection } from './components/advanced-settings/SlackSettingsSection'
+import { IntegrationsSection } from './components/IntegrationsSection'
+import { SectionToggle } from './components/advanced-settings/SectionToggle'
 import type { NumericCaptureSetting } from './components/advanced-settings/types'
 import { detectHotkeyPlatform, toRecordedAccelerator } from './hotkey-utils'
 
@@ -30,6 +32,7 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
   const [captureOpen, setCaptureOpen] = useState(false)
   const [privacyOpen, setPrivacyOpen] = useState(false)
   const [slackOpen, setSlackOpen] = useState(false)
+  const [integrationsOpen, setIntegrationsOpen] = useState(false)
   const [recordingHotkey, setRecordingHotkey] = useState(false)
 
   const load = useCallback(async () => {
@@ -229,6 +232,21 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
         onKeyStatusChanged={() => void refreshKeyStatus()}
         onEndpointStatusChanged={() => void refreshEndpointStatus()}
       />
+
+      <div className="border-t border-border" />
+
+      <section>
+        <SectionToggle
+          label="Integrations"
+          open={integrationsOpen}
+          onToggle={() => setIntegrationsOpen((v) => !v)}
+        />
+        {integrationsOpen && (
+          <div className="mt-3">
+            <IntegrationsSection api={api} />
+          </div>
+        )}
+      </section>
 
       <div className="border-t border-border" />
 

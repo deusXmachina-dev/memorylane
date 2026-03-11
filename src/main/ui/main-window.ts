@@ -113,8 +113,8 @@ export function openMainWindow(): void {
   const appRoot = app.getAppPath()
 
   mainWindow = new BrowserWindow({
-    width: 600,
-    height: 570,
+    width: 800,
+    height: 720,
     resizable: false,
     minimizable: true,
     maximizable: false,
