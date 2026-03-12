@@ -5,7 +5,8 @@
  * Usage:
  *   npm run detect-patterns
  *   npm run detect-patterns -- --model google/gemini-2.5-flash-preview
- *   npm run detect-patterns -- --days 2  (analyze 2 days ago instead of yesterday)
+ *   npm run detect-patterns -- --days 2       (analyze 2 days ago instead of yesterday)
+ *   npm run detect-patterns -- --date 2026-03-07  (analyze a specific calendar day)
  */
 
 import { config as loadEnv } from 'dotenv'
@@ -41,6 +42,20 @@ function parseArgs() {
     } else if (args[i] === '--days' && args[i + 1]) {
       days = parseInt(args[i + 1], 10)
       i++
+    } else if (args[i] === '--date' && args[i + 1]) {
+      const target = new Date(args[i + 1] + 'T00:00:00')
+      if (isNaN(target.getTime())) {
+        console.error(`Invalid date: ${args[i + 1]} (use YYYY-MM-DD)`)
+        process.exit(1)
+      }
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      days = Math.round((today.getTime() - target.getTime()) / (24 * 60 * 60 * 1000))
+      if (days < 0) {
+        console.error(`Date ${args[i + 1]} is in the future`)
+        process.exit(1)
+      }
+      i++
     }
   }
 
@@ -60,10 +75,14 @@ async function main() {
     process.exit(1)
   }
 
+  const targetDay = new Date()
+  targetDay.setDate(targetDay.getDate() - days)
+  const dateLabel = targetDay.toISOString().slice(0, 10)
+
   console.log('=== Pattern Detector ===')
   console.log(`Database: ${dbPath}`)
   console.log(`Model:    ${model}`)
-  console.log(`Lookback: ${days} days`)
+  console.log(`Date:     ${dateLabel} (${days} days ago)`)
   console.log('')
 
   const storageService = new StorageService(dbPath)
@@ -92,10 +111,21 @@ async function main() {
 
     console.log('\n=== RESULTS ===')
     console.log(`Run ID:           ${result.runId}`)
+    console.log(
+      `Candidates:       ${result.candidatesFromScan} scanned → ${result.candidatesVerified} verified, ${result.candidatesRejected} rejected`,
+    )
     console.log(`Total findings:   ${result.totalFindings}`)
     console.log(`New patterns:     ${result.newPatterns}`)
     console.log(`Updated patterns: ${result.updatedPatterns}`)
-    console.log(`Tokens:           ${result.tokenUsage.input} in / ${result.tokenUsage.output} out`)
+    console.log(
+      `Tokens (scan):    ${result.tokenUsage.scan.input} in / ${result.tokenUsage.scan.output} out`,
+    )
+    console.log(
+      `Tokens (verify):  ${result.tokenUsage.verify.input} in / ${result.tokenUsage.verify.output} out`,
+    )
+    console.log(
+      `Tokens (total):   ${result.tokenUsage.total.input} in / ${result.tokenUsage.total.output} out`,
+    )
 
     // Print active patterns
     const all = storageService.patterns.getAllPatterns()

@@ -99,6 +99,25 @@ export class PatternRepository {
     return rows.map((row) => this.rowToPatternWithStats(row))
   }
 
+  getRejectedPatterns(limit = 3): PatternWithStats[] {
+    const rows = this.db
+      .prepare(
+        `SELECT p.*,
+                COUNT(s.id) AS sighting_count,
+                MAX(s.detected_at) AS last_seen_at,
+                (SELECT confidence FROM pattern_sightings WHERE pattern_id = p.id ORDER BY detected_at DESC LIMIT 1) AS last_confidence
+         FROM patterns p
+         LEFT JOIN pattern_sightings s ON s.pattern_id = p.id
+         WHERE p.rejected_at IS NOT NULL
+         GROUP BY p.id
+         ORDER BY sighting_count DESC
+         LIMIT ?`,
+      )
+      .all(limit) as Record<string, unknown>[]
+
+    return rows.map((row) => this.rowToPatternWithStats(row))
+  }
+
   searchPatterns(query: string): PatternWithStats[] {
     const like = `%${query}%`
     const rows = this.db
