@@ -10,7 +10,6 @@ interface MockPattern {
   description: string
   apps: string[]
   timeSaved: string
-  moneySaved: string
   sightingCount: number
 }
 
@@ -21,7 +20,6 @@ const MOCK_PATTERNS: MockPattern[] = [
     description: 'Compile team updates from multiple Slack channels',
     apps: ['Slack', 'Google Sheets'],
     timeSaved: '~2 hrs/week',
-    moneySaved: '$160/month',
     sightingCount: 12,
   },
   {
@@ -30,7 +28,6 @@ const MOCK_PATTERNS: MockPattern[] = [
     description: 'Save and organize receipt attachments from email',
     apps: ['Gmail', 'Google Drive'],
     timeSaved: '~45 min/week',
-    moneySaved: '$80/month',
     sightingCount: 8,
   },
   {
@@ -39,7 +36,6 @@ const MOCK_PATTERNS: MockPattern[] = [
     description: 'Check and summarize open pull requests',
     apps: ['GitHub', 'Slack'],
     timeSaved: '~30 min/week',
-    moneySaved: '$60/month',
     sightingCount: 5,
   },
 ]
@@ -52,9 +48,11 @@ export function PatternsSection(): React.JSX.Element | null {
     toast.success(`Dismissed "${name}"`)
   }, [])
 
-  const handleAutomate = useCallback(() => {
-    toast('Opening Claude...')
-    window.open('https://claude.ai', '_blank')
+  const handleCopyPrompt = useCallback((pattern: MockPattern) => {
+    const prompt = `I have a repetitive task: "${pattern.name}" — ${pattern.description}. It involves these apps: ${pattern.apps.join(', ')}. Help me automate this workflow step by step.`
+    navigator.clipboard.writeText(prompt).then(() => {
+      toast.success('Copied! Paste it into your Claude desktop app')
+    })
   }, [])
 
   const visiblePatterns = MOCK_PATTERNS.filter((p) => !dismissedIds.includes(p.id))
@@ -116,11 +114,10 @@ export function PatternsSection(): React.JSX.Element | null {
           <CardContent className="space-y-4">
             <div className="flex gap-2">
               <Badge variant="default">{pattern.timeSaved}</Badge>
-              <Badge variant="secondary">{pattern.moneySaved}</Badge>
             </div>
             <p className="text-xs text-muted-foreground">{pattern.description}</p>
-            <Button size="sm" className="w-full" onClick={handleAutomate}>
-              Automate with Claude
+            <Button size="sm" className="w-full" onClick={() => handleCopyPrompt(pattern)}>
+              Copy prompt for Claude
             </Button>
           </CardContent>
         </Card>
