@@ -133,7 +133,7 @@ export function MainWindowApp(): React.JSX.Element {
 
             <hr className="border-border" />
 
-            <PatternsSection />
+            <PatternsSection api={api} />
           </>
         )}
       </div>

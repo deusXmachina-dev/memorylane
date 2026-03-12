@@ -401,6 +401,37 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     return deps.managedKeyService.getStatus()
   })
 
+  // Patterns
+  ipcMain.handle('main-window:getPatterns', () => {
+    if (!deps) return []
+    return deps.storage.patterns.getAllPatterns()
+  })
+
+  ipcMain.handle('main-window:rejectPattern', (_event: IpcMainInvokeEvent, id: string) => {
+    if (!deps) return { success: false, error: 'Dependencies not initialized' }
+    try {
+      deps.storage.patterns.rejectPattern(id)
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      return { success: false, error: message }
+    }
+  })
+
+  ipcMain.handle(
+    'main-window:markPatternPromptCopied',
+    (_event: IpcMainInvokeEvent, id: string) => {
+      if (!deps) return { success: false, error: 'Dependencies not initialized' }
+      try {
+        deps.storage.patterns.markPromptCopied(id)
+        return { success: true }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        return { success: false, error: message }
+      }
+    },
+  )
+
   // Stats
   ipcMain.handle('main-window:getStats', () => buildStats())
 

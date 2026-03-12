@@ -51,6 +51,11 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   saveCaptureSettings: (settings: Record<string, unknown>) =>
     ipcRenderer.invoke('main-window:saveCaptureSettings', settings),
   resetCaptureSettings: () => ipcRenderer.invoke('main-window:resetCaptureSettings'),
+  // Patterns
+  getPatterns: () => ipcRenderer.invoke('main-window:getPatterns'),
+  rejectPattern: (id: string) => ipcRenderer.invoke('main-window:rejectPattern', id),
+  markPatternPromptCopied: (id: string) =>
+    ipcRenderer.invoke('main-window:markPatternPromptCopied', id),
   // Stats
   getStats: () => ipcRenderer.invoke('main-window:getStats'),
   chooseDatabaseExportDirectory: (initialPath?: string) =>

@@ -182,6 +182,20 @@ export type SemanticPipelineMode = 'auto' | 'video' | 'image'
 
 export type UpdateState = 'idle' | 'downloading' | 'ready'
 
+export interface PatternInfo {
+  id: string
+  name: string
+  description: string
+  apps: string[]
+  automationIdea: string
+  createdAt: number
+  rejectedAt: number | null
+  promptCopiedAt: number | null
+  sightingCount: number
+  lastSeenAt: number | null
+  lastConfidence: number | null
+}
+
 export interface MainWindowAPI {
   getStatus: () => Promise<MainWindowStatus>
   toggleCapture: () => Promise<MainWindowStatus>
@@ -212,6 +226,10 @@ export interface MainWindowAPI {
   getCaptureSettings: () => Promise<CaptureSettings>
   saveCaptureSettings: (settings: Partial<CaptureSettings>) => Promise<SaveResult>
   resetCaptureSettings: () => Promise<SaveResult>
+  // Patterns
+  getPatterns: () => Promise<PatternInfo[]>
+  rejectPattern: (id: string) => Promise<SaveResult>
+  markPatternPromptCopied: (id: string) => Promise<SaveResult>
   // Stats
   getStats: () => Promise<MainWindowStats>
   chooseDatabaseExportDirectory: (initialPath?: string) => Promise<DirectorySelectionResult>

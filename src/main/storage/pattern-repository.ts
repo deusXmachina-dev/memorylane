@@ -11,6 +11,8 @@ export interface Pattern {
   apps: string[] // JSON array in DB
   automationIdea: string
   createdAt: number
+  rejectedAt: number | null
+  promptCopiedAt: number | null
 }
 
 export interface PatternSighting {
@@ -87,6 +89,7 @@ export class PatternRepository {
                 (SELECT confidence FROM pattern_sightings WHERE pattern_id = p.id ORDER BY detected_at DESC LIMIT 1) AS last_confidence
          FROM patterns p
          LEFT JOIN pattern_sightings s ON s.pattern_id = p.id
+         WHERE p.rejected_at IS NULL
          GROUP BY p.id
          ORDER BY sighting_count DESC`,
       )
@@ -117,6 +120,16 @@ export class PatternRepository {
   patternCount(): number {
     const row = this.db.prepare('SELECT COUNT(*) as count FROM patterns').get() as CountRow
     return row.count
+  }
+
+  // -- Status updates --
+
+  rejectPattern(id: string): void {
+    this.db.prepare(`UPDATE patterns SET rejected_at = ? WHERE id = ?`).run(Date.now(), id)
+  }
+
+  markPromptCopied(id: string): void {
+    this.db.prepare(`UPDATE patterns SET prompt_copied_at = ? WHERE id = ?`).run(Date.now(), id)
   }
 
   // -- Sightings --
@@ -163,6 +176,8 @@ export class PatternRepository {
       apps: JSON.parse((row.apps as string) || '[]') as string[],
       automationIdea: row.automation_idea as string,
       createdAt: row.created_at as number,
+      rejectedAt: (row.rejected_at as number) ?? null,
+      promptCopiedAt: (row.prompt_copied_at as number) ?? null,
       sightingCount: (row.sighting_count as number) || 0,
       lastSeenAt: (row.last_seen_at as number) ?? null,
       lastConfidence: (row.last_confidence as number) ?? null,

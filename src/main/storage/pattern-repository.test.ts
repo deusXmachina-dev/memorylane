@@ -16,6 +16,8 @@ const createPattern = (overrides: Partial<Pattern> & { id: string }): Pattern =>
   apps: overrides.apps ?? ['VS Code'],
   automationIdea: overrides.automationIdea ?? 'Could be automated with a script',
   createdAt: overrides.createdAt ?? 1000,
+  rejectedAt: overrides.rejectedAt ?? null,
+  promptCopiedAt: overrides.promptCopiedAt ?? null,
 })
 
 const createSighting = (
@@ -227,6 +229,65 @@ describe('PatternRepository', () => {
       const sightings = storage.patterns.getSightingsByRunId('run-x')
 
       expect(sightings.map((s) => s.id)).toEqual(['o-2', 'o-3', 'o-1'])
+    })
+  })
+
+  // -----------------------------------------------------------------------
+  // getLastRunTimestamp
+  // -----------------------------------------------------------------------
+
+  // -----------------------------------------------------------------------
+  // rejectPattern
+  // -----------------------------------------------------------------------
+
+  describe('rejectPattern', () => {
+    it('should filter rejected patterns from getAllPatterns', () => {
+      storage.patterns.addPattern(createPattern({ id: 'p-keep', name: 'Keep' }))
+      storage.patterns.addPattern(createPattern({ id: 'p-reject', name: 'Reject' }))
+
+      storage.patterns.rejectPattern('p-reject')
+
+      const all = storage.patterns.getAllPatterns()
+      expect(all.length).toBe(1)
+      expect(all[0].id).toBe('p-keep')
+    })
+
+    it('should still be accessible via getPatternById', () => {
+      storage.patterns.addPattern(createPattern({ id: 'p-rej2' }))
+      storage.patterns.rejectPattern('p-rej2')
+
+      const result = storage.patterns.getPatternById('p-rej2')
+      expect(result).not.toBeNull()
+      expect(result!.rejectedAt).toBeGreaterThan(0)
+    })
+  })
+
+  // -----------------------------------------------------------------------
+  // markPromptCopied
+  // -----------------------------------------------------------------------
+
+  describe('markPromptCopied', () => {
+    it('should set prompt_copied_at timestamp', () => {
+      storage.patterns.addPattern(createPattern({ id: 'p-copy' }))
+
+      storage.patterns.markPromptCopied('p-copy')
+
+      const result = storage.patterns.getPatternById('p-copy')!
+      expect(result.promptCopiedAt).toBeGreaterThan(0)
+    })
+  })
+
+  // -----------------------------------------------------------------------
+  // new columns default to null
+  // -----------------------------------------------------------------------
+
+  describe('new status columns', () => {
+    it('should default rejected_at and prompt_copied_at to null', () => {
+      storage.patterns.addPattern(createPattern({ id: 'p-defaults' }))
+
+      const result = storage.patterns.getPatternById('p-defaults')!
+      expect(result.rejectedAt).toBeNull()
+      expect(result.promptCopiedAt).toBeNull()
     })
   })
 
