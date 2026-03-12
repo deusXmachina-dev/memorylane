@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Label } from '@components/ui/label'
@@ -24,6 +25,8 @@ export function ModelSelector({
   onChange,
   label,
 }: ModelSelectorProps): React.JSX.Element {
+  const [draft, setDraft] = useState<string | null>(null)
+
   if (mode === 'preset') {
     const effectiveValue = value || defaultValue
     return (
@@ -45,15 +48,20 @@ export function ModelSelector({
     )
   }
 
+  const displayed = draft ?? (value || defaultValue)
+
   return (
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       <Input
         type="text"
-        value={value || defaultValue}
-        onChange={(e) => {
-          const v = e.target.value
-          onChange(v === defaultValue ? '' : v)
+        value={displayed}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          if (draft !== null) {
+            onChange(draft === defaultValue ? '' : draft)
+            setDraft(null)
+          }
         }}
         placeholder={defaultValue}
         className="font-mono text-xs"
