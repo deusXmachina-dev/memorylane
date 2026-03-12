@@ -176,6 +176,9 @@ export interface CaptureSettings {
   excludedApps: string[]
   excludedWindowTitlePatterns: string[]
   excludedUrlPatterns: string[]
+  semanticVideoModel: string
+  semanticSnapshotModel: string
+  patternDetectionModel: string
 }
 
 export type SemanticPipelineMode = 'auto' | 'video' | 'image'

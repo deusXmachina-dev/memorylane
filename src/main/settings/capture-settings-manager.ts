@@ -34,6 +34,9 @@ const DEFAULTS: CaptureSettings = {
   excludedApps: [],
   excludedWindowTitlePatterns: [],
   excludedUrlPatterns: [],
+  semanticVideoModel: '',
+  semanticSnapshotModel: '',
+  patternDetectionModel: '',
 }
 
 export class CaptureSettingsManager {
@@ -73,6 +76,12 @@ export class CaptureSettingsManager {
             data.captureHotkeyAccelerator ?? data.pauseHotkeyAccelerator,
           ),
           databaseExportDirectory: normalizeDatabaseExportDirectory(data.databaseExportDirectory),
+          semanticVideoModel:
+            typeof data.semanticVideoModel === 'string' ? data.semanticVideoModel : '',
+          semanticSnapshotModel:
+            typeof data.semanticSnapshotModel === 'string' ? data.semanticSnapshotModel : '',
+          patternDetectionModel:
+            typeof data.patternDetectionModel === 'string' ? data.patternDetectionModel : '',
         }
       }
     } catch (error) {

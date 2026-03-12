@@ -1,28 +1,33 @@
-import * as React from 'react'
 import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Label } from '@components/ui/label'
-import type { MainWindowAPI } from '@types'
+import type { MainWindowAPI, SlackIntegrationStatus } from '@types'
+import { IntegrationsSection } from '../IntegrationsSection'
+import { SlackIntegrationSection } from '../SlackIntegrationSection'
 import { DatabaseExportSection } from '../DatabaseExportSection'
 import { SectionToggle } from './SectionToggle'
 
-interface DataManagementSectionProps {
+interface ConnectionsDataSectionProps {
   api: MainWindowAPI
   open: boolean
   onToggle: () => void
   databaseExportDirectory: string
   onDatabaseExportDirectoryChange: (directoryPath: string) => void
+  slackStatus: SlackIntegrationStatus | null
+  onSlackChanged: () => void
 }
 
-export function DataManagementSection({
+export function ConnectionsDataSection({
   api,
   open,
   onToggle,
   databaseExportDirectory,
   onDatabaseExportDirectoryChange,
-}: DataManagementSectionProps): React.JSX.Element {
+  slackStatus,
+  onSlackChanged,
+}: ConnectionsDataSectionProps): React.JSX.Element {
   const [isChoosingDirectory, setIsChoosingDirectory] = useState(false)
 
   const handleChooseDirectory = useCallback(async () => {
@@ -49,9 +54,15 @@ export function DataManagementSection({
 
   return (
     <section>
-      <SectionToggle label="Data Management" open={open} onToggle={onToggle} />
+      <SectionToggle label="Connections & Data" open={open} onToggle={onToggle} />
       {open && (
-        <div className="mt-3 space-y-4">
+        <div className="mt-3 space-y-5">
+          <IntegrationsSection api={api} />
+
+          {slackStatus && (
+            <SlackIntegrationSection api={api} status={slackStatus} onChanged={onSlackChanged} />
+          )}
+
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
               <Label className="text-xs text-muted-foreground">Folder for periodic export</Label>

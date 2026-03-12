@@ -9,4 +9,7 @@ export type NumericCaptureSetting = Exclude<
   | 'excludedApps'
   | 'excludedWindowTitlePatterns'
   | 'excludedUrlPatterns'
+  | 'semanticVideoModel'
+  | 'semanticSnapshotModel'
+  | 'patternDetectionModel'
 >

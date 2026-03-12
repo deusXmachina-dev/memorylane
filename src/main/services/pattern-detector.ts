@@ -209,11 +209,17 @@ function generatePatternId(name: string): string {
 export class PatternDetector {
   private running = false
   private settleTimer: ReturnType<typeof setTimeout> | null = null
+  private model: string = DEFAULT_DETECTOR_CONFIG.model
 
   constructor(
     private readonly storage: StorageService,
     private readonly apiKeyManager?: ApiKeyManager,
   ) {}
+
+  updateModel(model: string): void {
+    this.model = model && model.trim().length > 0 ? model.trim() : DEFAULT_DETECTOR_CONFIG.model
+    log.info(`[PatternDetector] Model updated to: ${this.model}`)
+  }
 
   /**
    * Try to schedule a detection run. Call this on screen unlock / wake.
@@ -270,7 +276,7 @@ export class PatternDetector {
   private async execute(apiKey: string): Promise<void> {
     this.running = true
     try {
-      const result = await runDetection(apiKey, this.storage)
+      const result = await runDetection(apiKey, this.storage, { model: this.model })
       log.info(
         `[PatternDetector] Run complete: ${result.totalFindings} findings ` +
           `(${result.newPatterns} new, ${result.updatedPatterns} updated), ` +

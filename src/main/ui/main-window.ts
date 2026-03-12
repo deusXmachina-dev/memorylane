@@ -7,6 +7,7 @@
 
 import { app, BrowserWindow, dialog, ipcMain, IpcMainInvokeEvent } from 'electron'
 import path from 'node:path'
+import { DEFAULT_VIDEO_MODELS, DEFAULT_SNAPSHOT_MODELS } from '../semantic/constants'
 import { syncAutoStartSetting } from '../auto-start'
 import log from '../logger'
 import { updateTrayMenu } from './tray'
@@ -38,8 +39,13 @@ interface SemanticService {
   updateEndpoint(config: CustomEndpointConfig | null, openRouterKey?: string | null): void
   updatePipelinePreference(preference: SemanticPipelineMode): void
   updateRequestTimeoutMs(timeoutMs: number): void
+  updateModels(videoModels: string[], snapshotModels: string[]): void
   getLlmHealthStatus(): LlmHealthStatus
   testConnection(): Promise<void>
+}
+
+interface PatternDetectorService {
+  updateModel(model: string): void
 }
 
 interface MainWindowDependencies {
@@ -62,6 +68,7 @@ interface MainWindowDependencies {
   captureSettingsManager: CaptureSettingsManager
   slackSettingsManager: SlackSettingsManager
   slackIntegrationService: SlackIntegrationService
+  patternDetector?: PatternDetectorService
   getCaptureHotkeyLabel: () => string
   reconfigureCaptureHotkey: (accelerator: string) => { success: boolean; error?: string }
   updateExclusions: (exclusions: {
@@ -520,6 +527,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         })
         deps.semanticService.updatePipelinePreference(updated.semanticPipelineMode)
         deps.semanticService.updateRequestTimeoutMs(updated.semanticRequestTimeoutMs)
+        applyModelSettings(deps, updated, previous)
         void updateTrayMenu()
         sendStatusToRenderer()
         void deps.databaseExportSync.onSettingsChanged()
@@ -566,6 +574,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       })
       deps.semanticService.updatePipelinePreference(updated.semanticPipelineMode)
       deps.semanticService.updateRequestTimeoutMs(updated.semanticRequestTimeoutMs)
+      applyModelSettings(deps, updated, previous)
       void updateTrayMenu()
       sendStatusToRenderer()
       void deps.databaseExportSync.onSettingsChanged()
@@ -576,4 +585,28 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: false, error: message }
     }
   })
+}
+
+function buildModelChain(userPick: string, defaults: readonly string[]): string[] {
+  if (!userPick) return [...defaults]
+  return [userPick, ...defaults.filter((m) => m !== userPick)]
+}
+
+function applyModelSettings(
+  d: MainWindowDependencies,
+  updated: CaptureSettings,
+  previous: CaptureSettings,
+): void {
+  if (
+    updated.semanticVideoModel !== previous.semanticVideoModel ||
+    updated.semanticSnapshotModel !== previous.semanticSnapshotModel
+  ) {
+    d.semanticService.updateModels(
+      buildModelChain(updated.semanticVideoModel, DEFAULT_VIDEO_MODELS),
+      buildModelChain(updated.semanticSnapshotModel, DEFAULT_SNAPSHOT_MODELS),
+    )
+  }
+  if (updated.patternDetectionModel !== previous.patternDetectionModel) {
+    d.patternDetector?.updateModel(updated.patternDetectionModel)
+  }
 }

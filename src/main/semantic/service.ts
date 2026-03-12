@@ -33,8 +33,8 @@ import type {
 
 export class ActivitySemanticService implements SemanticServiceContract {
   private client: SemanticChatClient | null = null
-  private readonly videoModels: string[]
-  private readonly snapshotModels: string[]
+  private videoModels: string[]
+  private snapshotModels: string[]
   private readonly maxVideoBytes: number
   private requestTimeoutMs: number
   private pipelinePreference: SemanticPipelinePreference
@@ -224,6 +224,16 @@ export class ActivitySemanticService implements SemanticServiceContract {
 
     this.client = null
     this.resetLlmHealth()
+  }
+
+  updateModels(videoModels: string[], snapshotModels: string[]): void {
+    this.videoModels = videoModels.length > 0 ? [...videoModels] : [...DEFAULT_VIDEO_MODELS]
+    this.snapshotModels =
+      snapshotModels.length > 0 ? [...snapshotModels] : [...DEFAULT_SNAPSHOT_MODELS]
+    log.info(
+      '[ActivitySemanticService] Models updated',
+      JSON.stringify({ videoModels: this.videoModels, snapshotModels: this.snapshotModels }),
+    )
   }
 
   updatePipelinePreference(preference: SemanticPipelinePreference): void {

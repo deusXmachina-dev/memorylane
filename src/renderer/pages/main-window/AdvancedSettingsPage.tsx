@@ -8,14 +8,9 @@ import type {
   SemanticPipelineMode,
   SlackIntegrationStatus,
 } from '@types'
-import { AppStartupSection } from './components/advanced-settings/AppStartupSection'
-import { CaptureSettingsSection } from './components/advanced-settings/CaptureSettingsSection'
-import { DataManagementSection } from './components/advanced-settings/DataManagementSection'
-import { LlmConfigurationSection } from './components/advanced-settings/LlmConfigurationSection'
-import { PrivacySettingsSection } from './components/advanced-settings/PrivacySettingsSection'
-import { SlackSettingsSection } from './components/advanced-settings/SlackSettingsSection'
-import { IntegrationsSection } from './components/IntegrationsSection'
-import { SectionToggle } from './components/advanced-settings/SectionToggle'
+import { AiModelsSection } from './components/advanced-settings/AiModelsSection'
+import { CapturePrivacySection } from './components/advanced-settings/CapturePrivacySection'
+import { ConnectionsDataSection } from './components/advanced-settings/ConnectionsDataSection'
 import type { NumericCaptureSetting } from './components/advanced-settings/types'
 import { detectHotkeyPlatform, toRecordedAccelerator } from './hotkey-utils'
 
@@ -26,13 +21,9 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
   const [endpointStatus, setEndpointStatus] = useState<CustomEndpointStatus | null>(null)
   const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null)
   const [slackStatus, setSlackStatus] = useState<SlackIntegrationStatus | null>(null)
-  const [llmOpen, setLlmOpen] = useState(false)
-  const [dataOpen, setDataOpen] = useState(false)
-  const [startupOpen, setStartupOpen] = useState(false)
-  const [captureOpen, setCaptureOpen] = useState(false)
-  const [privacyOpen, setPrivacyOpen] = useState(false)
-  const [slackOpen, setSlackOpen] = useState(false)
-  const [integrationsOpen, setIntegrationsOpen] = useState(false)
+  const [aiModelsOpen, setAiModelsOpen] = useState(false)
+  const [capturePrivacyOpen, setCapturePrivacyOpen] = useState(false)
+  const [connectionsDataOpen, setConnectionsDataOpen] = useState(false)
   const [recordingHotkey, setRecordingHotkey] = useState(false)
 
   const load = useCallback(async () => {
@@ -96,6 +87,17 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
         { autoStartEnabled: enabled },
         enabled ? 'Launch at login enabled' : 'Launch at login disabled',
       )
+    },
+    [save],
+  )
+
+  const commitModelChange = useCallback(
+    (
+      key: 'semanticVideoModel' | 'semanticSnapshotModel' | 'patternDetectionModel',
+      value: string,
+    ): void => {
+      setForm((prev) => (prev ? { ...prev, [key]: value } : prev))
+      save({ [key]: value }, 'Model updated')
     },
     [save],
   )
@@ -213,102 +215,59 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
     }
   }, [api, load, recordingHotkey, setCaptureHotkeyAccelerator])
 
-  // Keep section UI in dedicated components; this file handles data loading and wiring.
   return (
     <div className="p-6 max-w-xl mx-auto space-y-4 overflow-y-auto max-h-screen">
       <button
         onClick={onBack}
         className="text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
-        ← Back
+        &larr; Back
       </button>
 
-      <LlmConfigurationSection
-        api={api}
-        open={llmOpen}
-        onToggle={() => setLlmOpen((v) => !v)}
-        keyStatus={keyStatus}
-        endpointStatus={endpointStatus}
-        onKeyStatusChanged={() => void refreshKeyStatus()}
-        onEndpointStatusChanged={() => void refreshEndpointStatus()}
-      />
-
-      <div className="border-t border-border" />
-
-      <section>
-        <SectionToggle
-          label="Integrations"
-          open={integrationsOpen}
-          onToggle={() => setIntegrationsOpen((v) => !v)}
-        />
-        {integrationsOpen && (
-          <div className="mt-3">
-            <IntegrationsSection api={api} />
-          </div>
-        )}
-      </section>
-
-      <div className="border-t border-border" />
-
       {form && (
         <>
-          <AppStartupSection
-            open={startupOpen}
-            onToggle={() => setStartupOpen((v) => !v)}
-            autoStartEnabled={form.autoStartEnabled}
-            onAutoStartEnabledChange={setAutoStartEnabled}
-          />
-
-          <div className="border-t border-border" />
-        </>
-      )}
-
-      {form && (
-        <>
-          <DataManagementSection
+          <AiModelsSection
             api={api}
-            open={dataOpen}
-            onToggle={() => setDataOpen((v) => !v)}
-            databaseExportDirectory={form.databaseExportDirectory}
-            onDatabaseExportDirectoryChange={commitDatabaseExportDirectory}
+            open={aiModelsOpen}
+            onToggle={() => setAiModelsOpen((v) => !v)}
+            form={form}
+            keyStatus={keyStatus}
+            endpointStatus={endpointStatus}
+            onKeyStatusChanged={() => void refreshKeyStatus()}
+            onEndpointStatusChanged={() => void refreshEndpointStatus()}
+            onSemanticPipelineModeChange={setSemanticPipelineMode}
+            onSettingChange={setNumericSetting}
+            onSettingCommit={commitNumericSetting}
+            onModelChange={commitModelChange}
           />
 
           <div className="border-t border-border" />
 
-          <SlackSettingsSection
-            api={api}
-            open={slackOpen}
-            onToggle={() => setSlackOpen((value) => !value)}
-            status={slackStatus}
-            onChanged={() => void load()}
-          />
-
-          <div className="border-t border-border" />
-
-          <PrivacySettingsSection
-            open={privacyOpen}
-            onToggle={() => setPrivacyOpen((v) => !v)}
-            excludePrivateBrowsing={form.excludePrivateBrowsing}
-            excludedApps={form.excludedApps}
-            excludedWindowTitlePatterns={form.excludedWindowTitlePatterns}
-            excludedUrlPatterns={form.excludedUrlPatterns}
-            onExcludePrivateBrowsingChange={commitExcludePrivateBrowsing}
-            onExcludedRulesCommit={commitExcludedRules}
-          />
-
-          <div className="border-t border-border" />
-
-          <CaptureSettingsSection
-            open={captureOpen}
-            onToggle={() => setCaptureOpen((v) => !v)}
+          <CapturePrivacySection
+            open={capturePrivacyOpen}
+            onToggle={() => setCapturePrivacyOpen((v) => !v)}
             form={form}
             hotkeyPlatform={hotkeyPlatform}
             recordingHotkey={recordingHotkey}
             onToggleRecordingHotkey={() => setRecordingHotkey((current) => !current)}
-            onSemanticPipelineModeChange={setSemanticPipelineMode}
+            onAutoStartEnabledChange={setAutoStartEnabled}
             onSettingChange={setNumericSetting}
             onSettingCommit={commitNumericSetting}
+            onExcludePrivateBrowsingChange={commitExcludePrivateBrowsing}
+            onExcludedRulesCommit={commitExcludedRules}
             onReset={() => void handleReset()}
+          />
+
+          <div className="border-t border-border" />
+
+          <ConnectionsDataSection
+            api={api}
+            open={connectionsDataOpen}
+            onToggle={() => setConnectionsDataOpen((v) => !v)}
+            databaseExportDirectory={form.databaseExportDirectory}
+            onDatabaseExportDirectoryChange={commitDatabaseExportDirectory}
+            slackStatus={slackStatus}
+            onSlackChanged={() => void load()}
           />
         </>
       )}
