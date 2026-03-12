@@ -2,7 +2,11 @@ import type { InteractionContext } from '../../shared/types'
 import type { Activity } from '../activity-types'
 import type { SemanticMode } from './types'
 
-export function buildSemanticPrompt(activity: Activity, mode: SemanticMode): string {
+export function buildSemanticPrompt(
+  activity: Activity,
+  mode: SemanticMode,
+  userContext?: string,
+): string {
   const durationMs = Math.max(0, activity.endTimestamp - activity.startTimestamp)
   const durationStr = formatDuration(durationMs)
   const sourceNote =
@@ -48,6 +52,9 @@ export function buildSemanticPrompt(activity: Activity, mode: SemanticMode): str
   prompt += `- Duration: ${durationStr}\n`
   prompt += `- Start: ${new Date(activity.startTimestamp).toISOString()}\n`
   prompt += `- End: ${new Date(activity.endTimestamp).toISOString()}\n`
+  if (userContext) {
+    prompt += `- User: ${userContext}\n`
+  }
   prompt += `- ${sourceNote}\n\n`
 
   // Timeline
