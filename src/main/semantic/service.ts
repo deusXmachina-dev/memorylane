@@ -47,7 +47,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
   private customEndpointModel: string | null = null
   private readonly videoUnsupportedCustomModels = new Set<string>()
 
-  private userContext: string | null = null
+  private userContextGetter: (() => string | null) | null = null
   private lastRunDiagnostics: SemanticRunDiagnostics | null = null
   private llmHealth: {
     consecutiveFailures: number
@@ -99,8 +99,8 @@ export class ActivitySemanticService implements SemanticServiceContract {
     return this.isCustomEndpoint
   }
 
-  setUserContext(context: string | null): void {
-    this.userContext = context && context.trim().length > 0 ? context.trim() : null
+  setUserContext(getter: (() => string | null) | null): void {
+    this.userContextGetter = getter
   }
 
   getLlmHealthStatus(): LlmHealthStatus {
@@ -271,7 +271,11 @@ export class ActivitySemanticService implements SemanticServiceContract {
       return ''
     }
 
-    const videoPrompt = buildSemanticPrompt(input.activity, 'video', this.userContext ?? undefined)
+    const videoPrompt = buildSemanticPrompt(
+      input.activity,
+      'video',
+      this.userContextGetter?.() ?? undefined,
+    )
     diagnostics.promptChars = videoPrompt.length
 
     const shouldAttemptVideo = this.pipelinePreference !== 'image'
@@ -382,7 +386,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
     const snapshotPrompt = buildSemanticPrompt(
       input.activity,
       'snapshot',
-      this.userContext ?? undefined,
+      this.userContextGetter?.() ?? undefined,
     )
     const snapshotResult = await trySemanticModelChain({
       client: this.client,
