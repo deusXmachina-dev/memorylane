@@ -86,7 +86,9 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.1.0",
-    "@fontsource-variable/jetbrains-mono": "^5.2.8",
+    "@fontsource-variable/geist-mono": "^5.2.7",
+    "@fontsource-variable/inter": "^5.2.8",
+    "@fontsource-variable/source-serif-4": "^5.2.9",
     "@huggingface/transformers": "^3.8.1",
     "@modelcontextprotocol/sdk": "^1.25.3",
     "@openrouter/sdk": "^0.5.1",

@@ -10,7 +10,7 @@ export function Logo({ onSettingsClick }: LogoProps): React.JSX.Element {
   return (
     <div className="flex items-center justify-between py-2">
       <div className="flex items-center gap-2">
-        <img src={logoImage} alt="MemoryLane" className="w-6 h-6" />
+        <img src={logoImage} alt="MemoryLane" className="w-6 h-6 dark:invert-0 invert" />
         <h1 className="text-sm font-semibold tracking-tight">MemoryLane</h1>
       </div>
       <Button variant="ghost" size="sm" onClick={onSettingsClick}>
