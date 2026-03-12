@@ -1,5 +1,6 @@
 import log from './logger'
 import type { PatternDetector } from './services/pattern-detector'
+import type { UserContextBuilder } from './services/user-context-builder'
 import type { CaptureStateManager } from './settings/capture-state-manager'
 import type { RuntimeCapture } from './capture-controller'
 
@@ -19,6 +20,7 @@ export function createCaptureCoordinator(params: {
   capture: RuntimeCapture
   captureStateManager: CaptureStateManager
   isPaused: () => boolean
+  userContextBuilder: UserContextBuilder | null
   patternDetector: PatternDetector | null
 }): {
   controls: CaptureCoordinatorControls
@@ -61,6 +63,7 @@ export function createCaptureCoordinator(params: {
     params.capture.startCapture()
 
     if (reason === 'resume') {
+      params.userContextBuilder?.scheduleRun()
       params.patternDetector?.scheduleRun()
     }
   }

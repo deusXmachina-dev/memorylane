@@ -25,6 +25,7 @@ import { SlackIntegrationService } from './integrations/slack/service'
 import { SlackSettingsManager } from './integrations/slack/settings-manager'
 import { SlackSemanticLayer } from './integrations/slack/semantic'
 import { PatternDetector } from './services/pattern-detector'
+import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
 import { createMainRuntime, type MainRuntime } from './runtime'
 import { getAppDirectoryName } from './paths'
@@ -63,6 +64,7 @@ app.on('window-all-closed', () => {
 })
 
 let runtime: MainRuntime | null = null
+let userContextBuilder: UserContextBuilder | null = null
 let patternDetector: PatternDetector | null = null
 let slackIntegrationService: SlackIntegrationService | null = null
 let rawDatabaseExportSync: RawDatabaseExportSync | null = null
@@ -152,11 +154,13 @@ app.on('ready', async () => {
     }),
   )
 
+  userContextBuilder = new UserContextBuilder(runtime.storage, runtime.apiKeyManager)
   patternDetector = new PatternDetector(runtime.storage, runtime.apiKeyManager)
   const captureCoordinator = createCaptureCoordinator({
     capture: runtime.capture,
     captureStateManager,
     isPaused: shouldPause,
+    userContextBuilder,
     patternDetector,
   })
 

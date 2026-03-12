@@ -6,10 +6,13 @@ import { getDefaultDbPath } from '../paths'
 import log from '../logger'
 import { ActivityRepository } from './activity-repository'
 import { PatternRepository } from './pattern-repository'
+import { UserContextRepository } from './user-context-repository'
 
 export { ActivityRepository } from './activity-repository'
 export { PatternRepository } from './pattern-repository'
+export { UserContextRepository } from './user-context-repository'
 export type { Pattern, PatternSighting, PatternWithStats } from './pattern-repository'
+export type { UserContext } from './user-context-repository'
 export type { StoredActivity, ActivitySummary, ActivityDetail } from './types'
 
 /**
@@ -59,6 +62,7 @@ export class StorageService {
   private db: Database.Database | null = null
   readonly activities: ActivityRepository
   readonly patterns: PatternRepository
+  readonly userContext: UserContextRepository
 
   constructor(dbPath?: string) {
     this.dbPath = dbPath ?? getDefaultDbPath()
@@ -79,6 +83,7 @@ export class StorageService {
       this.db = db
       this.activities = new ActivityRepository(db)
       this.patterns = new PatternRepository(db)
+      this.userContext = new UserContextRepository(db)
       log.info('SQLite database initialized successfully')
     } catch (error) {
       db.close()

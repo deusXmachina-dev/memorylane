@@ -44,6 +44,7 @@
     "install:local": "node ./scripts/install-local.js",
     "sign:win": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/sign-windows.ps1",
     "detect-patterns": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/detect-patterns.ts",
+    "build-user-context": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/build-user-context.ts",
     "mcpb:pack": "npx @anthropic-ai/mcpb pack mcpb/",
     "cli:build": "cd packages/cli && npm run build",
     "cli:test": "cd packages/cli && npm test",

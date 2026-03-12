@@ -62,6 +62,14 @@ export const SCREEN_CAPTURER_CONFIG = {
   MAX_DIMENSION_PX: 1_920,
 }
 
+// User Context Builder Configuration
+export const USER_CONTEXT_CONFIG = {
+  MODEL: 'google/gemini-3-flash-preview',
+  LOOKBACK_DAYS: 7, // Analyze past week of activities
+  MIN_ACTIVITIES: 50, // Minimum total activities in DB before first run
+  SETTLE_DELAY_MS: 30 * 1000, // 30s after unlock — runs before pattern detection (60s)
+}
+
 // Pattern Detection Configuration
 export const PATTERN_DETECTION_CONFIG = {
   MODEL: 'moonshotai/kimi-k2.5',

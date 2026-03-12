@@ -108,7 +108,13 @@ function serializeExistingPatterns(patterns: PatternWithStats[]): object[] {
 // System prompt
 // ---------------------------------------------------------------------------
 
-function buildSystemPrompt(dateLabel: string, existingPatterns: PatternWithStats[]): string {
+function buildSystemPrompt(
+  dateLabel: string,
+  existingPatterns: PatternWithStats[],
+  userContext?: string,
+): string {
+  const userContextSection = userContext ? `\n## User context\n\n${userContext}\n` : ''
+
   let patternsSection = ''
   if (existingPatterns.length > 0) {
     patternsSection = `
@@ -123,7 +129,7 @@ ${JSON.stringify(serializeExistingPatterns(existingPatterns), null, 2)}
   }
 
   return `You are an automation analyst examining a user's computer activity from ${dateLabel}. Your job is to find work that is repetitive, manual, and could be automated away with a script, API call, or tool.
-
+${userContextSection}
 Below you will receive a complete list of activities for the day. Analyze them to find automatable patterns.
 
 ## What you're looking for
@@ -328,8 +334,14 @@ async function runDetection(
   const existingPatterns = storage.patterns.getAllPatterns()
   progress(`Loaded ${existingPatterns.length} existing patterns for dedup`)
 
+  // 3b. Load user context if available
+  const userCtx = storage.userContext.get()
+  const userContextStr = userCtx
+    ? `${userCtx.shortSummary}\n\n${userCtx.detailedSummary}`
+    : undefined
+
   // 4. Build prompt and make single LLM call
-  const systemPrompt = buildSystemPrompt(label, existingPatterns)
+  const systemPrompt = buildSystemPrompt(label, existingPatterns, userContextStr)
   const userMessage = `Here are all ${activities.length} activities from ${label}:\n\n\`\`\`json\n${JSON.stringify(serialized, null, 2)}\n\`\`\``
 
   const client = new OpenRouter({ apiKey })
