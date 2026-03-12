@@ -54,6 +54,9 @@ Use for "what patterns have you found?", "show my habits", or pattern review pro
 about patterns involving a specific app or workflow.
 - **get_pattern_details** — drill into a specific pattern to see its evidence and \
 sightings. Use after list_patterns or search_patterns.
+- **get_user_context** — retrieve the auto-generated user profile for grounding context. \
+Consider calling it early in a conversation for personalized responses, but don't \
+over-anchor on it.
 
 ## Typical workflows
 

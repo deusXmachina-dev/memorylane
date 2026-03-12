@@ -110,6 +110,16 @@ export function registerTools(server: McpServer, getServices: () => MCPServices 
     (params) => handleGetActivityDetails(getServices(), params),
   )
 
+  server.registerTool(
+    'get_user_context',
+    {
+      description:
+        'Retrieve the auto-generated user profile (persona) built from observed screen activity. Returns a short summary, a detailed summary, and when the profile was last updated. Useful for grounding personalized responses.',
+      inputSchema: {},
+    },
+    () => handleGetUserContext(getServices()),
+  )
+
   // ---------------------------------------------------------------------------
   // Pattern tools
   // ---------------------------------------------------------------------------
@@ -645,6 +655,57 @@ async function handleGetPatternDetails(
         {
           type: 'text' as const,
           text: `Error fetching pattern details: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+      isError: true,
+    }
+  }
+}
+
+async function handleGetUserContext(services: MCPServices | null) {
+  if (!services) {
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: 'Error: Services not initialized. The server cannot query the database.',
+        },
+      ],
+      isError: true,
+    }
+  }
+
+  try {
+    const ctx = services.storage.userContext.get()
+
+    if (!ctx) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: 'No user profile has been generated yet. The profile is built automatically as screen activity is captured over time.',
+          },
+        ],
+      }
+    }
+
+    const updatedAtStr = new Date(ctx.updatedAt).toLocaleString()
+
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `User profile (last updated: ${updatedAtStr}):\n\nShort summary:\n${ctx.shortSummary}\n\nDetailed summary:\n${ctx.detailedSummary}`,
+        },
+      ],
+    }
+  } catch (error) {
+    log.error('Error fetching user context:', error)
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Error fetching user context: ${error instanceof Error ? error.message : String(error)}`,
         },
       ],
       isError: true,
