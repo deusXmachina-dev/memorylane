@@ -535,6 +535,12 @@ async function runDetection(
 
   progress(`Starting run ${runId} (model=${cfg.model}, lookback=${cfg.lookbackDays}d)`)
 
+  // 0. Prune stale sightings/patterns (>30 days old)
+  const pruned = storage.patterns.pruneStale(30)
+  if (pruned.sightings || pruned.patterns) {
+    progress(`Pruned ${pruned.sightings} stale sightings, ${pruned.patterns} orphaned patterns`)
+  }
+
   // 1. Query activities for the target day
   const { start, end, label } = getDayBoundaries(cfg.lookbackDays)
   const activities = storage.activities.getForDay(start, end)

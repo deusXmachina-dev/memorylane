@@ -190,6 +190,30 @@ export class PatternRepository {
     return row.latest ?? null
   }
 
+  // -- Cleanup --
+
+  /**
+   * Delete sightings older than `maxAgeDays`. If a pattern has no remaining
+   * sightings after pruning, delete the pattern too. Returns counts.
+   */
+  pruneStale(maxAgeDays = 30): { sightings: number; patterns: number } {
+    const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000
+
+    const sightings = this.db
+      .prepare('DELETE FROM pattern_sightings WHERE detected_at < ?')
+      .run(cutoff).changes
+
+    const patterns = this.db
+      .prepare(
+        `DELETE FROM patterns WHERE id NOT IN (
+           SELECT DISTINCT pattern_id FROM pattern_sightings
+         )`,
+      )
+      .run().changes
+
+    return { sightings, patterns }
+  }
+
   // -- Private helpers --
 
   private rowToPatternWithStats(row: Record<string, unknown>): PatternWithStats {
