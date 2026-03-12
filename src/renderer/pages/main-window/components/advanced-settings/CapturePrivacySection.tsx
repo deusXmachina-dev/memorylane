@@ -6,6 +6,7 @@ import { Textarea } from '@components/ui/textarea'
 import type { CaptureSettings } from '@types'
 import { formatHotkeyForDisplay, type HotkeyPlatform } from '../../hotkey-utils'
 import { SectionToggle } from './SectionToggle'
+import { SubSectionToggle } from './SubSectionToggle'
 import { SliderRow } from './SliderRow'
 import type { NumericCaptureSetting } from './types'
 import { formatMs } from './utils'
@@ -59,10 +60,7 @@ export function CapturePrivacySection({
   onExcludedRulesCommit,
   onReset,
 }: CapturePrivacySectionProps): React.JSX.Element {
-  const hotkeyPrimaryModifier = hotkeyPlatform === 'mac' ? 'Cmd' : 'Ctrl'
-  const hotkeyAltModifier = hotkeyPlatform === 'mac' ? 'Option' : 'Alt'
-
-  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
 
   const excludedAppsText = form.excludedApps.join('\n')
   const excludedWindowTitlePatternsText = form.excludedWindowTitlePatterns.join('\n')
@@ -129,48 +127,6 @@ export function CapturePrivacySection({
               </Button>
             </div>
           </div>
-
-          {/* Start/Stop hotkey */}
-          <div className="space-y-2">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Label className="text-xs font-medium text-muted-foreground sm:w-24 sm:shrink-0">
-                Start/Stop Shortcut
-              </Label>
-              <div className="flex flex-1 items-center gap-2">
-                <Input
-                  value={formatHotkeyForDisplay(form.captureHotkeyAccelerator, hotkeyPlatform)}
-                  readOnly
-                />
-                <Button
-                  type="button"
-                  variant={recordingHotkey ? 'destructive' : 'outline'}
-                  size="sm"
-                  onClick={onToggleRecordingHotkey}
-                >
-                  {recordingHotkey ? 'Cancel' : 'Record'}
-                </Button>
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {recordingHotkey
-                ? 'Press your key combination now (Esc to cancel).'
-                : `Example: ${hotkeyPrimaryModifier}+Shift+M or ${hotkeyPrimaryModifier}+${hotkeyAltModifier}+P`}
-            </p>
-          </div>
-
-          {/* Visual change sensitivity */}
-          <SliderRow
-            label="Visual change sensitivity"
-            value={form.visualThreshold}
-            min={1}
-            max={20}
-            step={1}
-            format={(v) =>
-              `${v}% — ${v <= 5 ? 'more captures' : v >= 15 ? 'fewer captures' : 'balanced'}`
-            }
-            onChange={(v) => onSettingChange('visualThreshold', v)}
-            onCommit={(v) => onSettingCommit('visualThreshold', v)}
-          />
 
           {/* Exclude private browsing */}
           <div className="flex items-center justify-between gap-3">
@@ -267,18 +223,47 @@ export function CapturePrivacySection({
             </Button>
           </div>
 
-          {/* Advanced sub-section */}
-          <div className="border-t border-border pt-3">
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-              onClick={() => setAdvancedOpen((v) => !v)}
-            >
-              <span className="text-[9px]">{advancedOpen ? '\u25BC' : '\u25B6'}</span>
-              Advanced
-            </button>
-            {advancedOpen && (
-              <div className="mt-3 space-y-4">
+          {/* More sub-section */}
+          <div className="pl-2">
+            <SubSectionToggle
+              label="More"
+              open={moreOpen}
+              onToggle={() => {
+                setMoreOpen((v) => {
+                  if (v && recordingHotkey) onToggleRecordingHotkey()
+                  return !v
+                })
+              }}
+            />
+            {moreOpen && (
+              <div className="mt-3 space-y-5">
+                {/* Visual change sensitivity */}
+                <SliderRow
+                  label="Visual change sensitivity"
+                  value={form.visualThreshold}
+                  min={1}
+                  max={20}
+                  step={1}
+                  format={(v) =>
+                    `${v}% — ${v <= 5 ? 'more captures' : v >= 15 ? 'fewer captures' : 'balanced'}`
+                  }
+                  onChange={(v) => onSettingChange('visualThreshold', v)}
+                  onCommit={(v) => onSettingCommit('visualThreshold', v)}
+                />
+
+                {/* Start/Stop hotkey */}
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs font-medium text-muted-foreground shrink-0 whitespace-nowrap">
+                    Start/Stop Shortcut
+                  </Label>
+                  <Input
+                    value={formatHotkeyForDisplay(form.captureHotkeyAccelerator, hotkeyPlatform)}
+                    readOnly
+                    className="flex-1 cursor-pointer"
+                    onClick={onToggleRecordingHotkey}
+                  />
+                </div>
+
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-muted-foreground">Interaction Timeouts</p>
                   <SliderRow
@@ -346,14 +331,14 @@ export function CapturePrivacySection({
                     onCommit={(v) => onSettingCommit('maxScreenshotsForLlm', v)}
                   />
                 </div>
+
+                <div className="flex justify-end">
+                  <Button variant="ghost" size="sm" onClick={onReset}>
+                    Reset to defaults
+                  </Button>
+                </div>
               </div>
             )}
-          </div>
-
-          <div className="flex justify-end">
-            <Button variant="ghost" size="sm" onClick={onReset}>
-              Reset to defaults
-            </Button>
           </div>
         </div>
       )}

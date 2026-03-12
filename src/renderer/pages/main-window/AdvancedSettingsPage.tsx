@@ -20,7 +20,7 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
   const [form, setForm] = useState<CaptureSettings | null>(null)
   const [endpointStatus, setEndpointStatus] = useState<CustomEndpointStatus | null>(null)
   const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null)
-  const [slackStatus, setSlackStatus] = useState<SlackIntegrationStatus | null>(null)
+  const [, setSlackStatus] = useState<SlackIntegrationStatus | null>(null)
   const [aiModelsOpen, setAiModelsOpen] = useState(false)
   const [capturePrivacyOpen, setCapturePrivacyOpen] = useState(false)
   const [connectionsDataOpen, setConnectionsDataOpen] = useState(false)
@@ -226,23 +226,6 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
 
       {form && (
         <>
-          <AiModelsSection
-            api={api}
-            open={aiModelsOpen}
-            onToggle={() => setAiModelsOpen((v) => !v)}
-            form={form}
-            keyStatus={keyStatus}
-            endpointStatus={endpointStatus}
-            onKeyStatusChanged={() => void refreshKeyStatus()}
-            onEndpointStatusChanged={() => void refreshEndpointStatus()}
-            onSemanticPipelineModeChange={setSemanticPipelineMode}
-            onSettingChange={setNumericSetting}
-            onSettingCommit={commitNumericSetting}
-            onModelChange={commitModelChange}
-          />
-
-          <div className="border-t border-border" />
-
           <CapturePrivacySection
             open={capturePrivacyOpen}
             onToggle={() => setCapturePrivacyOpen((v) => !v)}
@@ -260,14 +243,29 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
 
           <div className="border-t border-border" />
 
+          <AiModelsSection
+            api={api}
+            open={aiModelsOpen}
+            onToggle={() => setAiModelsOpen((v) => !v)}
+            form={form}
+            keyStatus={keyStatus}
+            endpointStatus={endpointStatus}
+            onKeyStatusChanged={() => void refreshKeyStatus()}
+            onEndpointStatusChanged={() => void refreshEndpointStatus()}
+            onSemanticPipelineModeChange={setSemanticPipelineMode}
+            onSettingChange={setNumericSetting}
+            onSettingCommit={commitNumericSetting}
+            onModelChange={commitModelChange}
+          />
+
+          <div className="border-t border-border" />
+
           <ConnectionsDataSection
             api={api}
             open={connectionsDataOpen}
             onToggle={() => setConnectionsDataOpen((v) => !v)}
             databaseExportDirectory={form.databaseExportDirectory}
             onDatabaseExportDirectoryChange={commitDatabaseExportDirectory}
-            slackStatus={slackStatus}
-            onSlackChanged={() => void load()}
           />
         </>
       )}
