@@ -62,10 +62,8 @@ export function createCaptureCoordinator(params: {
     log.info(`[Main] Starting capture from persisted preference (${reason})`)
     params.capture.startCapture()
 
-    if (reason === 'resume') {
-      params.userContextBuilder?.scheduleRun()
-      params.patternDetector?.scheduleRun()
-    }
+    params.userContextBuilder?.scheduleRun()
+    params.patternDetector?.scheduleRun()
   }
 
   return {
