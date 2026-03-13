@@ -22,7 +22,6 @@ import type { StorageService, ActivityDetail } from '../storage'
 import type { Pattern, PatternSighting, PatternWithStats } from '../storage/pattern-repository'
 import type { ApiKeyManager } from '../settings/api-key-manager'
 import { PATTERN_DETECTION_CONFIG } from '../../shared/constants'
-import { EmbeddingService } from '../processor/embedding'
 import log from '../logger'
 
 // ---------------------------------------------------------------------------
@@ -229,7 +228,7 @@ ${JSON.stringify(patternsJson, null, 2)}
 
   return `You are verifying whether a candidate pattern represents real, automatable, repetitive work.
 
-## Candidate
+## Candidate information retrieved from a superficial scan of user activities
 - Name: ${candidate.name}
 - Description: ${candidate.description}
 - Apps: ${candidate.apps.join(', ')}
@@ -242,13 +241,11 @@ ${patternsSection}
 Use your tools to investigate this candidate:
 
 1. **Read the OCR text** for a few of the candidate's most relevant activity IDs (fetch up to 5 at a time) to see what was actually on screen.
-2. **Search for similar activities** across all history to check if this pattern recurs on other days.
-3. **Browse activities by app** if you need more context about what the user does in a specific app.
-4. **Browse the timeline** around the candidate's time window to see surrounding context and estimate how long the task took.
+2. **Browse the timeline** around the candidate's time window to see surrounding context and estimate how long the task took.
 
 Then decide one of three outcomes.
 
-**Important:** Prefer reporting a re-sighting of an existing pattern over creating a new one. If the candidate is even loosely related to a known pattern (same workflow, same goal, overlapping apps), treat it as a sighting. Only create a new pattern when it is clearly distinct from everything in the known list.
+Prefer reporting a re-sighting of an existing pattern over creating a new one. If the candidate is related to a known pattern (same workflow, same goal, overlapping apps), treat it as a sighting. Only create a new pattern when it is distinct from everything in the known list.
 
 For verified patterns (new or sighting), also estimate \`duration_estimate_min\`: how many minutes the user spent on this particular instance of the task. Base this on the activity durations and timestamps you observe in the evidence.
 
@@ -303,11 +300,7 @@ If the evidence is too thin, the pattern is generic, or there's no real automati
 // Phase 2: Verification tools
 // ---------------------------------------------------------------------------
 
-interface EmbeddingProvider {
-  generateEmbedding(text: string): Promise<number[]>
-}
-
-function buildVerificationTools(storage: StorageService, embeddingService: EmbeddingProvider) {
+function buildVerificationTools(storage: StorageService) {
   return [
     tool({
       name: 'get_activity_ocr',
@@ -331,51 +324,6 @@ function buildVerificationTools(storage: StorageService, embeddingService: Embed
           time: new Date(a.startTimestamp).toISOString(),
           summary: a.summary,
           ocr_text: a.ocrText || '(no OCR text captured)',
-        }))
-      },
-    }),
-    tool({
-      name: 'search_similar_activities',
-      description:
-        'Semantic search across ALL history for activities similar to a query. Use to find whether a pattern recurs on other days.',
-      inputSchema: z.object({
-        query: z.string().describe('Natural language description of what to search for'),
-        limit: z.number().int().min(1).max(20).optional().describe('Max results (default 10)'),
-      }),
-      execute: async (params) => {
-        const embedding = await embeddingService.generateEmbedding(params.query)
-        const results = storage.activities.searchVectors(embedding, params.limit ?? 10)
-        return results.map((a) => ({
-          id: a.id,
-          app: a.appName,
-          window_title: a.windowTitle,
-          time: new Date(a.startTimestamp).toISOString(),
-          summary: a.summary,
-        }))
-      },
-    }),
-    tool({
-      name: 'get_activities_by_app',
-      description:
-        'Find activities for a specific app within an optional time range. Use to see what else the user did in a particular app.',
-      inputSchema: z.object({
-        app_name: z.string().describe('Application name (case-insensitive)'),
-        start_time: z.string().optional().describe('ISO 8601 start time filter (optional)'),
-        end_time: z.string().optional().describe('ISO 8601 end time filter (optional)'),
-        limit: z.number().int().min(1).max(50).optional().describe('Max results (default 20)'),
-      }),
-      execute: (params) => {
-        const startTime = params.start_time ? new Date(params.start_time).getTime() : null
-        const endTime = params.end_time ? new Date(params.end_time).getTime() : null
-        const results = storage.activities
-          .getByTimeRange(startTime, endTime, { appName: params.app_name })
-          .slice(0, params.limit ?? 20)
-        return results.map((a) => ({
-          id: a.id,
-          app: a.appName,
-          window_title: a.windowTitle,
-          time: new Date(a.startTimestamp).toISOString(),
-          summary: a.summary,
         }))
       },
     }),
@@ -475,15 +423,11 @@ export class PatternDetector {
   private settleTimer: ReturnType<typeof setTimeout> | null = null
   private model: string = DEFAULT_DETECTOR_CONFIG.model
   private enabled = true
-  private readonly embeddingService: EmbeddingProvider
 
   constructor(
     private readonly storage: StorageService,
     private readonly apiKeyManager?: ApiKeyManager,
-    embeddingService?: EmbeddingProvider,
-  ) {
-    this.embeddingService = embeddingService ?? new EmbeddingService()
-  }
+  ) {}
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled
@@ -539,13 +483,13 @@ export class PatternDetector {
     config: Partial<PatternDetectorConfig> = {},
     onProgress?: ProgressCallback,
   ): Promise<DetectionRunResult> {
-    return runDetection(apiKey, this.storage, this.embeddingService, config, onProgress)
+    return runDetection(apiKey, this.storage, config, onProgress)
   }
 
   private async execute(apiKey: string): Promise<void> {
     this.running = true
     try {
-      const result = await runDetection(apiKey, this.storage, this.embeddingService, {
+      const result = await runDetection(apiKey, this.storage, {
         model: this.model,
       })
       log.info(
@@ -568,7 +512,6 @@ export class PatternDetector {
 async function runDetection(
   apiKey: string,
   storage: StorageService,
-  embeddingService: EmbeddingProvider,
   config: Partial<PatternDetectorConfig> = {},
   onProgress?: ProgressCallback,
 ): Promise<DetectionRunResult> {
@@ -689,7 +632,7 @@ async function runDetection(
   // Sequential so each verifier sees patterns created by previous candidates.
   // =========================================================================
 
-  const tools = buildVerificationTools(storage, embeddingService)
+  const tools = buildVerificationTools(storage)
 
   progress(`[Phase 2] Verifying ${candidates.length} candidates with tool access...`)
 
