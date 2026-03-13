@@ -185,9 +185,15 @@ export class PatternRepository {
 
   getLastRunTimestamp(): number | null {
     const row = this.db
-      .prepare('SELECT MAX(detected_at) AS latest FROM pattern_sightings')
+      .prepare('SELECT MAX(ran_at) AS latest FROM pattern_detection_runs')
       .get() as LastRunRow
     return row.latest ?? null
+  }
+
+  recordRun(runId: string, findingsCount: number): void {
+    this.db
+      .prepare('INSERT INTO pattern_detection_runs (id, ran_at, findings_count) VALUES (?, ?, ?)')
+      .run(runId, Date.now(), findingsCount)
   }
 
   // -- Cleanup --

@@ -548,6 +548,7 @@ async function runDetection(
 
   if (activities.length === 0) {
     progress('No activities for this day, skipping')
+    storage.patterns.recordRun(runId, 0)
     return {
       runId,
       newPatterns: 0,
@@ -611,6 +612,7 @@ async function runDetection(
 
   if (candidates.length === 0) {
     progress('No candidates to verify, done')
+    storage.patterns.recordRun(runId, 0)
     return {
       runId,
       newPatterns: 0,
@@ -832,6 +834,8 @@ async function runDetection(
       },
     },
   }
+
+  storage.patterns.recordRun(runId, result.totalFindings)
 
   progress(
     `Run complete: ${candidates.length} candidates → ${result.totalFindings} verified findings ` +
