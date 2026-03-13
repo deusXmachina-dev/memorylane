@@ -114,7 +114,7 @@ export function registerTools(server: McpServer, getServices: () => MCPServices 
     'get_user_context',
     {
       description:
-        'Retrieve the auto-generated user profile (persona) built from observed screen activity. Returns a short summary, a detailed summary, and when the profile was last updated. Useful for grounding personalized responses.',
+        'Retrieve the auto-generated user profile built from observed screen activity. Returns a short summary, a detailed summary, and when the profile was last updated. Useful for grounding personalized responses.',
       inputSchema: {},
     },
     () => handleGetUserContext(getServices()),
