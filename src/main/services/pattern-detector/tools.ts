@@ -1,16 +1,15 @@
 import { tool } from '@openrouter/sdk'
 import { z } from 'zod'
 import type { StorageService } from '../../storage'
-import { EmbeddingService } from '../../processor/embedding'
+import type { EmbeddingService } from '../../processor/embedding'
 
 export function buildVerificationTools(
   storage: StorageService,
+  embeddingService: EmbeddingService,
   dayStart: number,
   dayEnd: number,
   progress: (msg: string) => void,
 ) {
-  const embeddingService = new EmbeddingService()
-
   return [
     tool({
       name: 'get_activity_ocr',

@@ -3,6 +3,7 @@ import { OpenRouter, stepCountIs } from '@openrouter/sdk'
 import { callModel } from '@openrouter/sdk/funcs/call-model'
 import type { StorageService } from '../../storage'
 import type { Pattern, PatternSighting } from '../../storage/pattern-repository'
+import type { EmbeddingService } from '../../processor/embedding'
 import log from '../../logger'
 import type {
   PatternDetectorConfig,
@@ -26,6 +27,7 @@ const VERIFICATION_MAX_STEPS = 8
 export async function runDetection(
   apiKey: string,
   storage: StorageService,
+  embeddingService: EmbeddingService,
   config: Partial<PatternDetectorConfig> = {},
   onProgress?: ProgressCallback,
 ): Promise<DetectionRunResult> {
@@ -146,7 +148,7 @@ export async function runDetection(
   // Sequential so each verifier sees patterns created by previous candidates.
   // =========================================================================
 
-  const tools = buildVerificationTools(storage, start, end, progress)
+  const tools = buildVerificationTools(storage, embeddingService, start, end, progress)
 
   progress(`[Phase 2] Verifying ${candidates.length} candidates with tool access...`)
 

@@ -19,6 +19,7 @@ import type { StorageService } from '../../storage'
 import type { ApiKeyManager } from '../../settings/api-key-manager'
 import { PATTERN_DETECTION_CONFIG } from '../../../shared/constants'
 import log from '../../logger'
+import { EmbeddingService } from '../../processor/embedding'
 import type { PatternDetectorConfig, DetectionRunResult, ProgressCallback } from './types'
 import { DEFAULT_DETECTOR_CONFIG } from './types'
 import { isSameDay } from './helpers'
@@ -33,6 +34,7 @@ export class PatternDetector {
   private settleTimer: ReturnType<typeof setTimeout> | null = null
   private model: string = DEFAULT_DETECTOR_CONFIG.model
   private enabled = true
+  private readonly embeddingService = new EmbeddingService()
 
   constructor(
     private readonly storage: StorageService,
@@ -93,13 +95,13 @@ export class PatternDetector {
     config: Partial<PatternDetectorConfig> = {},
     onProgress?: ProgressCallback,
   ): Promise<DetectionRunResult> {
-    return runDetection(apiKey, this.storage, config, onProgress)
+    return runDetection(apiKey, this.storage, this.embeddingService, config, onProgress)
   }
 
   private async execute(apiKey: string): Promise<void> {
     this.running = true
     try {
-      const result = await runDetection(apiKey, this.storage, {
+      const result = await runDetection(apiKey, this.storage, this.embeddingService, {
         model: this.model,
       })
       log.info(
