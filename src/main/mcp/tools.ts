@@ -467,7 +467,8 @@ function formatPatternLine(p: PatternWithStats): string {
 function formatSightingLine(s: PatternSighting): string {
   const time = new Date(s.detectedAt).toLocaleString()
   const confidence = `${(s.confidence * 100).toFixed(0)}%`
-  return `- ${s.id} | ${time} | confidence: ${confidence} | run: ${s.runId}\n  Evidence: ${s.evidence}\n  Activity IDs: ${s.activityIds.join(', ')}`
+  const duration = s.durationEstimateMin != null ? ` | ~${s.durationEstimateMin} min` : ''
+  return `- ${s.id} | ${time} | confidence: ${confidence}${duration} | run: ${s.runId}\n  Evidence: ${s.evidence}\n  Activity IDs: ${s.activityIds.join(', ')}`
 }
 
 async function handleListPatterns(services: MCPServices | null) {

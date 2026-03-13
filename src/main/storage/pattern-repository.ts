@@ -24,6 +24,7 @@ export interface PatternSighting {
   evidence: string
   activityIds: string[] // JSON array in DB
   confidence: number
+  durationEstimateMin: number | null
 }
 
 /** Pattern with derived sighting stats (computed via JOIN). */
@@ -161,8 +162,8 @@ export class PatternRepository {
   addSighting(sighting: PatternSighting): void {
     this.db
       .prepare(
-        `INSERT INTO pattern_sightings (id, pattern_id, detected_at, run_id, evidence, activity_ids, confidence)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO pattern_sightings (id, pattern_id, detected_at, run_id, evidence, activity_ids, confidence, duration_estimate_min)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         sighting.id,
@@ -172,6 +173,7 @@ export class PatternRepository {
         sighting.evidence,
         JSON.stringify(sighting.activityIds),
         sighting.confidence,
+        sighting.durationEstimateMin,
       )
   }
 
@@ -258,6 +260,7 @@ export class PatternRepository {
       evidence: row.evidence as string,
       activityIds: JSON.parse((row.activity_ids as string) || '[]') as string[],
       confidence: row.confidence as number,
+      durationEstimateMin: (row.duration_estimate_min as number) ?? null,
     }
   }
 }

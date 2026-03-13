@@ -60,6 +60,7 @@ interface VerifiedFinding {
   description: string
   apps: string[]
   automation_idea: string
+  duration_estimate_min: number | null
   confidence: number
   evidence: string
   existing_pattern_id?: string
@@ -233,7 +234,9 @@ Use your tools to investigate this candidate:
 2. **Search for similar activities** across all history to check if this pattern recurs on other days.
 3. **Browse activities by app** if you need more context about what the user does in a specific app.
 
-Then decide one of three outcomes:
+Then decide one of three outcomes.
+
+For verified patterns (new or sighting), also estimate \`duration_estimate_min\`: how many minutes the user spent on this particular instance of the task. Base this on the activity durations and timestamps you observe in the evidence.
 
 ### 1. Re-sighting of known pattern
 If this candidate matches an existing known pattern, output:
@@ -241,6 +244,7 @@ If this candidate matches an existing known pattern, output:
 {
   "verdict": "sighting",
   "existing_pattern_id": "ID of the matched known pattern",
+  "duration_estimate_min": 5,
   "confidence": 0.0-1.0,
   "evidence": "Why you believe this is the same pattern — specific OCR text, times, cross-day occurrences",
   "activity_ids": ["all supporting activity IDs"]
@@ -256,6 +260,7 @@ If this is a genuine, automatable pattern not in the known list, output:
   "description": "What the user does manually, step by step — informed by OCR and search results",
   "apps": ["App1", "App2"],
   "automation_idea": "How this could be automated (specific: which API, what script, what tool)",
+  "duration_estimate_min": 5,
   "confidence": 0.0-1.0,
   "evidence": "Specific evidence — times, window titles, OCR text snippets, cross-day occurrences",
   "activity_ids": ["all supporting activity IDs"]
@@ -696,6 +701,7 @@ async function runDetection(
             description: candidate.description,
             apps: candidate.apps,
             automation_idea: '',
+            duration_estimate_min: (parsed.duration_estimate_min as number) ?? null,
             confidence: (parsed.confidence as number) ?? candidate.confidence,
             evidence: (parsed.evidence as string) || '',
             existing_pattern_id: parsed.existing_pattern_id as string,
@@ -714,6 +720,7 @@ async function runDetection(
           description: (parsed.description as string) || candidate.description,
           apps: (parsed.apps as string[]) || candidate.apps,
           automation_idea: (parsed.automation_idea as string) || '',
+          duration_estimate_min: (parsed.duration_estimate_min as number) ?? null,
           confidence: (parsed.confidence as number) ?? candidate.confidence,
           evidence: (parsed.evidence as string) || '',
           activity_ids: (parsed.activity_ids as string[]) || candidate.activity_ids,
@@ -780,6 +787,7 @@ async function runDetection(
           evidence: finding.evidence || '',
           activityIds: finding.activity_ids || [],
           confidence: finding.confidence || 0,
+          durationEstimateMin: finding.duration_estimate_min,
         } satisfies PatternSighting)
         updatedPatterns++
         progress(`Re-sighting of existing pattern: ${existing.name}`)
@@ -811,6 +819,7 @@ async function runDetection(
       evidence: finding.evidence || '',
       activityIds: finding.activity_ids || [],
       confidence: finding.confidence || 0,
+      durationEstimateMin: finding.duration_estimate_min,
     } satisfies PatternSighting)
 
     newPatterns++
