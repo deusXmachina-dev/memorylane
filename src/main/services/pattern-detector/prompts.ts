@@ -115,7 +115,8 @@ ${patternsSection}
 Use your tools to investigate this candidate:
 
 1. **Read the OCR text** (\`get_activity_ocr\`) for a few of the candidate's most relevant activity IDs (fetch up to 5 at a time) to see what was actually on screen.
-2. **Search for related activities** (\`search_similar_activities\`) to find activities the initial scan may have missed and to see surrounding context.
+2. **Search for related activities** (\`search_similar_activities\`) to find activities the initial scan may have missed.
+3. **Browse the timeline** (\`browse_timeline\`) around the candidate's time window to see surrounding context and estimate how long the task took.
 
 Then decide one of three outcomes.
 

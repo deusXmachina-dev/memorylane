@@ -63,5 +63,43 @@ export function buildVerificationTools(
         }))
       },
     }),
+    tool({
+      name: 'browse_timeline',
+      description:
+        'Browse the activity timeline around a specific time to see surrounding context. Returns activities within a time window, ordered chronologically.',
+      inputSchema: z.object({
+        center_time: z
+          .string()
+          .describe(
+            "ISO 8601 timestamp to center the window on (e.g. from an activity's time field)",
+          ),
+        window_minutes: z
+          .number()
+          .int()
+          .min(5)
+          .max(120)
+          .optional()
+          .describe('How many minutes before and after center_time to include (default 30)'),
+      }),
+      execute: (params) => {
+        const centerMs = new Date(params.center_time).getTime()
+        const windowMs = (params.window_minutes ?? 30) * 60000
+        const rangeStart = Math.max(dayStart, centerMs - windowMs)
+        const rangeEnd = Math.min(dayEnd, centerMs + windowMs)
+        progress(
+          `  [tool] browse_timeline: ±${params.window_minutes ?? 30}min around ${params.center_time}`,
+        )
+        const activities = storage.activities.getForDay(rangeStart, rangeEnd)
+        return activities.map((a) => ({
+          id: a.id,
+          app: a.appName,
+          window_title: a.windowTitle,
+          time: new Date(a.startTimestamp).toISOString(),
+          end_time: new Date(a.endTimestamp).toISOString(),
+          duration_min: Math.round((a.endTimestamp - a.startTimestamp) / 60000),
+          summary: a.summary,
+        }))
+      },
+    }),
   ] as const
 }
