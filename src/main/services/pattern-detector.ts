@@ -52,6 +52,9 @@ interface Candidate {
   apps: string[]
   activity_ids: string[]
   confidence: number
+  automation_idea?: string
+  evidence?: string
+  existing_pattern_id?: string
 }
 
 interface VerifiedFinding {
@@ -129,9 +132,20 @@ function serializeActivities(activities: ActivityDetail[]): object[] {
 // Phase 1: Scan prompt
 // ---------------------------------------------------------------------------
 
+function serializeExistingPatterns(patterns: PatternWithStats[]) {
+  return patterns.map((p) => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    apps: p.apps,
+    sighting_count: p.sightingCount,
+  }))
+}
+
 function buildScanSystemPrompt(
   dateLabel: string,
   rejectedPatterns: PatternWithStats[],
+  existingPatterns: PatternWithStats[],
   userContext?: string,
 ): string {
   const userContextSection = userContext ? `\n## User context\n\n${userContext}\n` : ''
@@ -150,9 +164,22 @@ The user has explicitly rejected these patterns as not useful. Do not output can
 ${examples}`
   }
 
+  let patternsSection = ''
+  if (existingPatterns.length > 0) {
+    patternsSection = `
+
+## Existing patterns (already detected)
+
+Below are patterns found in previous runs. If you see the same pattern again today, include its \`id\` as \`existing_pattern_id\` in your output instead of creating a duplicate.
+
+\`\`\`json
+${JSON.stringify(serializeExistingPatterns(existingPatterns), null, 2)}
+\`\`\``
+  }
+
   return `You are an automation analyst examining a user's computer activity from ${dateLabel}. Your job is to find work that is repetitive, manual, and could be automated away with a script, API call, or tool.
 ${userContextSection}
-Below you will receive a complete list of activities for the day. Identify **candidate** patterns. Each candidate will be verified in a follow-up step with access to more data, so err on the side of inclusion — "might be a pattern" is fine at this stage.
+Below you will receive a complete list of activities for the day. Analyze them to find automatable patterns.
 
 ## What you're looking for
 
@@ -174,24 +201,27 @@ BAD finds (not useful, skip these):
 ${rejectedSection}
 
 The key question for each finding: "Could a script, cron job, API integration, or macro do this instead of the human?"
+${patternsSection}
 
 ## Output
 
-Output your candidates as a JSON array. Include up to 10 of the most representative activity IDs per candidate.
+Output your findings as a JSON array:
 
 \`\`\`json
 [
   {
     "name": "Short name for the automatable task",
-    "description": "What the user appears to do manually — rough is fine, will be refined",
+    "description": "What the user does manually, step by step",
     "apps": ["App1", "App2"],
-    "activity_ids": ["IDs of activities that demonstrate this pattern"],
-    "confidence": 0.0-1.0
+    "automation_idea": "How this could be automated (specific: which API, what script, what tool)",
+    "confidence": 0.0-1.0,
+    "evidence": "What data you saw that supports this — be specific about times, window titles, summaries",
+    "activity_ids": ["IDs of activities that demonstrate this pattern"]
   }
 ]
 \`\`\`
 
-Be inclusive but not noisy. 3-8 candidates is typical. If there's nothing worth investigating, return an empty array \`[]\`.`
+Be very selective. Only report things where you genuinely see repeated manual work that a computer could do. 2-3 high-quality finds beats 10 vague ones. If there's nothing automatable, return an empty array \`[]\`.`
 }
 
 // ---------------------------------------------------------------------------
@@ -630,7 +660,12 @@ async function runDetection(
   // =========================================================================
 
   const serialized = serializeActivities(activities)
-  const scanPrompt = buildScanSystemPrompt(label, rejectedPatterns, userContextStr)
+  const scanPrompt = buildScanSystemPrompt(
+    label,
+    rejectedPatterns,
+    existingPatterns,
+    userContextStr,
+  )
   const scanUserMessage = `Here are all ${activities.length} activities from ${label}:\n\n\`\`\`json\n${JSON.stringify(serialized, null, 2)}\n\`\`\``
 
   const client = new OpenRouter({ apiKey })
@@ -680,21 +715,25 @@ async function runDetection(
   }
 
   // =========================================================================
-  // Phase 2: Verify — per-candidate deep investigation with tool use
+  // Phase 2: Verify — sequential per-candidate deep investigation with tool use
+  // Sequential so each verifier sees patterns created by previous candidates.
   // =========================================================================
 
   const tools = buildVerificationTools(storage, embeddingService)
 
   progress(`[Phase 2] Verifying ${candidates.length} candidates with tool access...`)
 
-  type VerificationOutcome =
-    | { status: 'verified'; finding: VerifiedFinding; candidateName: string }
-    | { status: 'rejected'; candidateName: string; reason: string }
-    | { status: 'error'; candidateName: string; error: string }
+  let newPatterns = 0
+  let updatedPatterns = 0
+  let candidatesVerified = 0
+  let candidatesRejected = 0
 
-  const verificationPromises = candidates.map(async (candidate): Promise<VerificationOutcome> => {
+  for (const candidate of candidates) {
+    // Re-fetch existing patterns each iteration so the verifier sees newly created ones
+    const currentPatterns = storage.patterns.getAllPatterns()
+
     try {
-      const verifyPrompt = buildVerificationSystemPrompt(candidate, existingPatterns)
+      const verifyPrompt = buildVerificationSystemPrompt(candidate, currentPatterns)
       const candidateInput = `Investigate this candidate pattern:\n\n\`\`\`json\n${JSON.stringify(candidate, null, 2)}\n\`\`\``
 
       const result = callModel(client, {
@@ -716,104 +755,102 @@ async function runDetection(
 
       const parsed = extractJsonObject<Record<string, unknown>>(text)
       if (!parsed) {
-        return {
-          status: 'error',
-          candidateName: candidate.name,
-          error: 'Could not parse verification response',
-        }
+        candidatesRejected++
+        progress(`[Phase 2] Error verifying "${candidate.name}": Could not parse response`)
+        continue
       }
 
       const verdict = parsed.verdict as string
 
       if (verdict === 'reject') {
-        return {
-          status: 'rejected',
-          candidateName: candidate.name,
-          reason: (parsed.reason as string) || 'rejected by verifier',
-        }
+        candidatesRejected++
+        progress(
+          `[Phase 2] Rejected: ${candidate.name} — ${(parsed.reason as string) || 'rejected by verifier'}`,
+        )
+        continue
       }
+
+      // -- Persist immediately so next iteration sees this pattern --
+
+      const sightingId = uuidv4()
 
       if (verdict === 'sighting') {
-        const updates = parsed.updates as Record<string, unknown> | undefined
-        return {
-          status: 'verified',
-          candidateName: candidate.name,
-          finding: {
-            verdict: 'sighting',
-            name: candidate.name,
-            description: candidate.description,
-            apps: candidate.apps,
-            automation_idea: '',
-            duration_estimate_min: (parsed.duration_estimate_min as number) ?? null,
-            confidence: (parsed.confidence as number) ?? candidate.confidence,
+        const existingId = parsed.existing_pattern_id as string
+        const existing = existingId ? storage.patterns.getPatternById(existingId) : null
+
+        if (existing) {
+          storage.patterns.addSighting({
+            id: sightingId,
+            patternId: existingId,
+            detectedAt: now,
+            runId,
             evidence: (parsed.evidence as string) || '',
-            existing_pattern_id: parsed.existing_pattern_id as string,
-            activity_ids: (parsed.activity_ids as string[]) || candidate.activity_ids,
-            updates: updates
-              ? {
-                  name: updates.name as string | undefined,
-                  description: updates.description as string | undefined,
-                  apps: updates.apps as string[] | undefined,
-                  automation_idea: updates.automation_idea as string | undefined,
-                }
-              : undefined,
-          },
+            activityIds: (parsed.activity_ids as string[]) || candidate.activity_ids,
+            confidence: (parsed.confidence as number) ?? candidate.confidence,
+            durationEstimateMin: (parsed.duration_estimate_min as number) ?? null,
+          } satisfies PatternSighting)
+
+          const updates = parsed.updates as Record<string, unknown> | undefined
+          if (updates) {
+            storage.patterns.updatePattern(existingId, {
+              name: updates.name as string | undefined,
+              description: updates.description as string | undefined,
+              apps: updates.apps as string[] | undefined,
+              automationIdea: updates.automation_idea as string | undefined,
+            })
+          }
+
+          updatedPatterns++
+          candidatesVerified++
+          progress(`[Phase 2] Verified (sighting): ${candidate.name}`)
+          continue
         }
       }
 
-      // verdict === 'new' or unrecognized (treat as new)
-      return {
-        status: 'verified',
-        candidateName: candidate.name,
-        finding: {
-          verdict: 'new',
-          name: (parsed.name as string) || candidate.name,
-          description: (parsed.description as string) || candidate.description,
-          apps: (parsed.apps as string[]) || candidate.apps,
-          automation_idea: (parsed.automation_idea as string) || '',
-          duration_estimate_min: (parsed.duration_estimate_min as number) ?? null,
-          confidence: (parsed.confidence as number) ?? candidate.confidence,
-          evidence: (parsed.evidence as string) || '',
-          activity_ids: (parsed.activity_ids as string[]) || candidate.activity_ids,
-        },
+      // verdict === 'new' or sighting with invalid ID → create new pattern
+      const finding = {
+        name: (parsed.name as string) || candidate.name,
+        description: (parsed.description as string) || candidate.description,
+        apps: (parsed.apps as string[]) || candidate.apps,
+        automationIdea: (parsed.automation_idea as string) || '',
+        durationEstimateMin: (parsed.duration_estimate_min as number) ?? null,
+        confidence: (parsed.confidence as number) ?? candidate.confidence,
+        evidence: (parsed.evidence as string) || '',
+        activityIds: (parsed.activity_ids as string[]) || candidate.activity_ids,
       }
-    } catch (error) {
-      return {
-        status: 'error',
-        candidateName: candidate.name,
-        error: error instanceof Error ? error.message : String(error),
-      }
-    }
-  })
 
-  const verificationResults = await Promise.allSettled(verificationPromises)
+      const patternId = generatePatternId(finding.name)
+      storage.patterns.addPattern({
+        id: patternId,
+        name: finding.name,
+        description: finding.description,
+        apps: finding.apps,
+        automationIdea: finding.automationIdea,
+        createdAt: now,
+        rejectedAt: null,
+        promptCopiedAt: null,
+        approvedAt: null,
+      } satisfies Pattern)
 
-  // =========================================================================
-  // Persist verified findings
-  // =========================================================================
+      storage.patterns.addSighting({
+        id: sightingId,
+        patternId,
+        detectedAt: now,
+        runId,
+        evidence: finding.evidence,
+        activityIds: finding.activityIds,
+        confidence: finding.confidence,
+        durationEstimateMin: finding.durationEstimateMin,
+      } satisfies PatternSighting)
 
-  const findings: VerifiedFinding[] = []
-  let candidatesVerified = 0
-  let candidatesRejected = 0
-
-  for (const settled of verificationResults) {
-    if (settled.status === 'rejected') {
-      progress(`[Phase 2] Verification promise failed: ${settled.reason}`)
-      candidatesRejected++
-      continue
-    }
-
-    const vResult = settled.value
-    if (vResult.status === 'verified') {
+      newPatterns++
       candidatesVerified++
-      findings.push(vResult.finding)
-      progress(`[Phase 2] Verified (${vResult.finding.verdict}): ${vResult.candidateName}`)
-    } else if (vResult.status === 'rejected') {
+      progress(`[Phase 2] Verified (new): ${candidate.name}`)
+    } catch (error) {
       candidatesRejected++
-      progress(`[Phase 2] Rejected: ${vResult.candidateName} — ${vResult.reason}`)
-    } else {
-      candidatesRejected++
-      progress(`[Phase 2] Error verifying "${vResult.candidateName}": ${vResult.error}`)
+      progress(
+        `[Phase 2] Error verifying "${candidate.name}": ${error instanceof Error ? error.message : String(error)}`,
+      )
     }
   }
 
@@ -821,75 +858,11 @@ async function runDetection(
     `[Phase 2] ${candidatesVerified} verified, ${candidatesRejected} rejected out of ${candidates.length} candidates`,
   )
 
-  let newPatterns = 0
-  let updatedPatterns = 0
-
-  for (const finding of findings) {
-    const sightingId = uuidv4()
-
-    if (finding.verdict === 'sighting' && finding.existing_pattern_id) {
-      const existing = storage.patterns.getPatternById(finding.existing_pattern_id)
-      if (existing) {
-        storage.patterns.addSighting({
-          id: sightingId,
-          patternId: finding.existing_pattern_id,
-          detectedAt: now,
-          runId,
-          evidence: finding.evidence || '',
-          activityIds: finding.activity_ids || [],
-          confidence: finding.confidence || 0,
-          durationEstimateMin: finding.duration_estimate_min,
-        } satisfies PatternSighting)
-        if (finding.updates) {
-          storage.patterns.updatePattern(finding.existing_pattern_id, {
-            name: finding.updates.name,
-            description: finding.updates.description,
-            apps: finding.updates.apps,
-            automationIdea: finding.updates.automation_idea,
-          })
-        }
-        updatedPatterns++
-        progress(`Re-sighting of existing pattern: ${existing.name}`)
-        continue
-      }
-    }
-
-    // New pattern
-    const patternId = generatePatternId(finding.name)
-    const pattern: Pattern = {
-      id: patternId,
-      name: finding.name,
-      description: finding.description || '',
-      apps: finding.apps || [],
-      automationIdea: finding.automation_idea || '',
-      createdAt: now,
-      rejectedAt: null,
-      promptCopiedAt: null,
-      approvedAt: null,
-    }
-
-    storage.patterns.addPattern(pattern)
-
-    storage.patterns.addSighting({
-      id: sightingId,
-      patternId,
-      detectedAt: now,
-      runId,
-      evidence: finding.evidence || '',
-      activityIds: finding.activity_ids || [],
-      confidence: finding.confidence || 0,
-      durationEstimateMin: finding.duration_estimate_min,
-    } satisfies PatternSighting)
-
-    newPatterns++
-    progress(`New pattern: ${finding.name}`)
-  }
-
   const result: DetectionRunResult = {
     runId,
     newPatterns,
     updatedPatterns,
-    totalFindings: findings.length,
+    totalFindings: candidatesVerified,
     candidatesFromScan: candidates.length,
     candidatesVerified,
     candidatesRejected,
