@@ -22,7 +22,7 @@ import log from '../../logger'
 import { EmbeddingService } from '../../processor/embedding'
 import type { PatternDetectorConfig, DetectionRunResult, ProgressCallback } from './types'
 import { DEFAULT_DETECTOR_CONFIG } from './types'
-import { isSameDay } from './helpers'
+import { isSameDay , formatApiError } from './helpers'
 import { runDetection } from './run-detection'
 
 export type { PatternDetectorConfig, DetectionRunResult, ProgressCallback }
@@ -110,7 +110,7 @@ export class PatternDetector {
           `tokens: ${result.tokenUsage.total.input}in/${result.tokenUsage.total.output}out`,
       )
     } catch (error) {
-      log.error('[PatternDetector] Run failed:', error)
+      log.error('[PatternDetector] Run failed:', formatApiError(error))
     } finally {
       this.running = false
     }

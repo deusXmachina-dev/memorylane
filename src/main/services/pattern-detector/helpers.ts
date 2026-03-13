@@ -89,3 +89,21 @@ export function extractJsonObject<T>(content: string): T | null {
 export function extractFindingsFromResponse(content: string): VerifiedFinding[] {
   return extractJsonArray<VerifiedFinding>(content)
 }
+
+/**
+ * Extract a human-readable message from OpenRouter SDK errors.
+ * ChatError has an `.error` object with `{ code, message, type }`.
+ */
+export function formatApiError(error: unknown): string {
+  if (error && typeof error === 'object' && 'error' in error) {
+    const inner = (error as { error: { code?: unknown; message?: string; type?: string } }).error
+    if (inner?.message) {
+      const parts = [inner.message]
+      if (inner.code) parts.push(`code=${inner.code}`)
+      if (inner.type) parts.push(`type=${inner.type}`)
+      return parts.join(' ')
+    }
+  }
+  if (error instanceof Error) return error.message
+  return String(error)
+}
