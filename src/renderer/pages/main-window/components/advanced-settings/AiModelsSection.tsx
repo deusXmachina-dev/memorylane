@@ -127,7 +127,9 @@ export function AiModelsSection({
           {hasLlmAccess && (
             <div className="pl-2">
               <div className="space-y-2 mb-4">
-                <p className="text-xs font-medium text-muted-foreground">Task Mining</p>
+                <p className="text-xs font-medium text-muted-foreground">
+                  Automation Opportunities
+                </p>
                 <div className="grid grid-cols-2 gap-2">
                   <Button
                     variant={form.patternDetectionEnabled ? 'default' : 'outline'}
@@ -229,7 +231,7 @@ export function AiModelsSection({
                         value={form.patternDetectionModel}
                         defaultValue={DEFAULT_PATTERN_MODEL}
                         onChange={(v) => onModelChange('patternDetectionModel', v)}
-                        label="Task mining model"
+                        label="Automation opportunities model"
                       />
                     </div>
                   )}

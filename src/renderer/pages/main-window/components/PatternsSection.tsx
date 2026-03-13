@@ -103,7 +103,7 @@ export function PatternsSection({ api }: PatternsSectionProps): React.JSX.Elemen
             setDetectionEnabled(true)
             api.saveCaptureSettings({ patternDetectionEnabled: true }).then((result) => {
               if (result.success) {
-                toast.success('Task mining enabled')
+                toast.success('Automation opportunities enabled')
               }
             })
           }}

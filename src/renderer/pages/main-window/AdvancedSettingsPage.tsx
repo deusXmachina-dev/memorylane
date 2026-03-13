@@ -96,7 +96,7 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
       setForm((prev) => (prev ? { ...prev, patternDetectionEnabled: enabled } : prev))
       save(
         { patternDetectionEnabled: enabled },
-        enabled ? 'Task mining enabled' : 'Task mining disabled',
+        enabled ? 'Automation opportunities enabled' : 'Automation opportunities disabled',
       )
     },
     [save],
