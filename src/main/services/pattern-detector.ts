@@ -65,6 +65,12 @@ interface VerifiedFinding {
   evidence: string
   existing_pattern_id?: string
   activity_ids: string[]
+  updates?: {
+    name?: string
+    description?: string
+    apps?: string[]
+    automation_idea?: string
+  }
 }
 
 export interface DetectionRunResult {
@@ -237,10 +243,12 @@ Use your tools to investigate this candidate:
 
 Then decide one of three outcomes.
 
+**Important:** Prefer reporting a re-sighting of an existing pattern over creating a new one. If the candidate is even loosely related to a known pattern (same workflow, same goal, overlapping apps), treat it as a sighting. Only create a new pattern when it is clearly distinct from everything in the known list.
+
 For verified patterns (new or sighting), also estimate \`duration_estimate_min\`: how many minutes the user spent on this particular instance of the task. Base this on the activity durations and timestamps you observe in the evidence.
 
-### 1. Re-sighting of known pattern
-If this candidate matches an existing known pattern, output:
+### 1. Re-sighting of known pattern (preferred)
+If this candidate matches or overlaps with an existing known pattern, output:
 \`\`\`json
 {
   "verdict": "sighting",
@@ -248,12 +256,20 @@ If this candidate matches an existing known pattern, output:
   "duration_estimate_min": 5,
   "confidence": 0.0-1.0,
   "evidence": "Why you believe this is the same pattern — specific OCR text, times, cross-day occurrences",
-  "activity_ids": ["all supporting activity IDs"]
+  "activity_ids": ["all supporting activity IDs"],
+  "updates": {
+    "name": "Updated name if you have a better one (optional)",
+    "description": "Updated description if new evidence refines it (optional)",
+    "apps": ["Updated app list if this sighting adds new apps (optional)"],
+    "automation_idea": "Updated automation idea if you have a better one (optional)"
+  }
 }
 \`\`\`
 
+The \`updates\` object is optional. Include only the fields that should change — omit fields that are fine as-is. Use this to refine pattern details as new evidence comes in.
+
 ### 2. New pattern
-If this is a genuine, automatable pattern not in the known list, output:
+Only if the candidate is clearly distinct from all known patterns:
 \`\`\`json
 {
   "verdict": "new",
@@ -718,6 +734,7 @@ async function runDetection(
       }
 
       if (verdict === 'sighting') {
+        const updates = parsed.updates as Record<string, unknown> | undefined
         return {
           status: 'verified',
           candidateName: candidate.name,
@@ -732,6 +749,14 @@ async function runDetection(
             evidence: (parsed.evidence as string) || '',
             existing_pattern_id: parsed.existing_pattern_id as string,
             activity_ids: (parsed.activity_ids as string[]) || candidate.activity_ids,
+            updates: updates
+              ? {
+                  name: updates.name as string | undefined,
+                  description: updates.description as string | undefined,
+                  apps: updates.apps as string[] | undefined,
+                  automation_idea: updates.automation_idea as string | undefined,
+                }
+              : undefined,
           },
         }
       }
@@ -815,6 +840,14 @@ async function runDetection(
           confidence: finding.confidence || 0,
           durationEstimateMin: finding.duration_estimate_min,
         } satisfies PatternSighting)
+        if (finding.updates) {
+          storage.patterns.updatePattern(finding.existing_pattern_id, {
+            name: finding.updates.name,
+            description: finding.updates.description,
+            apps: finding.updates.apps,
+            automationIdea: finding.updates.automation_idea,
+          })
+        }
         updatedPatterns++
         progress(`Re-sighting of existing pattern: ${existing.name}`)
         continue

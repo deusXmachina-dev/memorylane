@@ -153,6 +153,33 @@ export class PatternRepository {
     this.db.prepare(`UPDATE patterns SET rejected_at = ? WHERE id = ?`).run(Date.now(), id)
   }
 
+  updatePattern(
+    id: string,
+    fields: { name?: string; description?: string; apps?: string[]; automationIdea?: string },
+  ): void {
+    const sets: string[] = []
+    const values: unknown[] = []
+    if (fields.name) {
+      sets.push('name = ?')
+      values.push(fields.name)
+    }
+    if (fields.description) {
+      sets.push('description = ?')
+      values.push(fields.description)
+    }
+    if (fields.apps) {
+      sets.push('apps = ?')
+      values.push(JSON.stringify(fields.apps))
+    }
+    if (fields.automationIdea) {
+      sets.push('automation_idea = ?')
+      values.push(fields.automationIdea)
+    }
+    if (sets.length === 0) return
+    values.push(id)
+    this.db.prepare(`UPDATE patterns SET ${sets.join(', ')} WHERE id = ?`).run(...values)
+  }
+
   markPromptCopied(id: string): void {
     this.db.prepare(`UPDATE patterns SET prompt_copied_at = ? WHERE id = ?`).run(Date.now(), id)
   }
