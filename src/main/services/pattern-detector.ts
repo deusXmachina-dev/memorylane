@@ -40,7 +40,7 @@ export const DEFAULT_DETECTOR_CONFIG: PatternDetectorConfig = {
 }
 
 const PATTERN_NAMESPACE = uuidv5('memorylane:pattern', uuidv5.DNS)
-const VERIFICATION_MAX_STEPS = 5
+const VERIFICATION_MAX_STEPS = 8
 
 // ---------------------------------------------------------------------------
 // Types
@@ -233,6 +233,7 @@ Use your tools to investigate this candidate:
 1. **Read the OCR text** for a few of the candidate's most relevant activity IDs (fetch up to 5 at a time) to see what was actually on screen.
 2. **Search for similar activities** across all history to check if this pattern recurs on other days.
 3. **Browse activities by app** if you need more context about what the user does in a specific app.
+4. **Browse the timeline** around the candidate's time window to see surrounding context and estimate how long the task took.
 
 Then decide one of three outcomes.
 
@@ -353,6 +354,31 @@ function buildVerificationTools(storage: StorageService, embeddingService: Embed
           app: a.appName,
           window_title: a.windowTitle,
           time: new Date(a.startTimestamp).toISOString(),
+          summary: a.summary,
+        }))
+      },
+    }),
+    tool({
+      name: 'browse_timeline',
+      description:
+        'Browse what the user did during a time window. Returns a chronological list of activities with timestamps and durations — useful for understanding context around a candidate and estimating how long a task took.',
+      inputSchema: z.object({
+        start_time: z.string().describe('ISO 8601 start time'),
+        end_time: z.string().describe('ISO 8601 end time'),
+        limit: z.number().int().min(1).max(50).optional().describe('Max results (default 30)'),
+      }),
+      execute: (params) => {
+        const startTime = new Date(params.start_time).getTime()
+        const endTime = new Date(params.end_time).getTime()
+        const results = storage.activities
+          .getByTimeRange(startTime, endTime)
+          .slice(0, params.limit ?? 30)
+        return results.map((a) => ({
+          id: a.id,
+          app: a.appName,
+          window_title: a.windowTitle,
+          time: new Date(a.startTimestamp).toISOString(),
+          duration_min: Math.round((a.endTimestamp - a.startTimestamp) / 60000),
           summary: a.summary,
         }))
       },
