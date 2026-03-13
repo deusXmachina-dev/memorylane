@@ -19,6 +19,7 @@ import { OpenRouter, stepCountIs, tool } from '@openrouter/sdk'
 import { callModel } from '@openrouter/sdk/funcs/call-model'
 import { z } from 'zod'
 import type { StorageService, ActivityDetail } from '../storage'
+import { EmbeddingService } from '../processor/embedding'
 import type { Pattern, PatternSighting, PatternWithStats } from '../storage/pattern-repository'
 import type { ApiKeyManager } from '../settings/api-key-manager'
 import { PATTERN_DETECTION_CONFIG } from '../../shared/constants'
@@ -300,7 +301,14 @@ If the evidence is too thin, the pattern is generic, or there's no real automati
 // Phase 2: Verification tools
 // ---------------------------------------------------------------------------
 
-function buildVerificationTools(storage: StorageService) {
+function buildVerificationTools(
+  storage: StorageService,
+  dayStart: number,
+  dayEnd: number,
+  progress: (msg: string) => void,
+) {
+  const embeddingService = new EmbeddingService()
+
   return [
     tool({
       name: 'get_activity_ocr',
@@ -316,6 +324,7 @@ function buildVerificationTools(storage: StorageService) {
           ),
       }),
       execute: (params) => {
+        progress(`  [tool] get_activity_ocr: ${params.activity_ids.length} IDs`)
         const activities = storage.activities.getByIds(params.activity_ids)
         return activities.map((a) => ({
           id: a.id,
@@ -328,20 +337,21 @@ function buildVerificationTools(storage: StorageService) {
       },
     }),
     tool({
-      name: 'browse_timeline',
+      name: 'search_similar_activities',
       description:
-        'Browse what the user did during a time window. Returns a chronological list of activities with timestamps and durations — useful for understanding context around a candidate and estimating how long a task took.',
+        'Semantic search for activities similar to a query within the current detection day. Use to find related activities the candidate may have missed.',
       inputSchema: z.object({
-        start_time: z.string().describe('ISO 8601 start time'),
-        end_time: z.string().describe('ISO 8601 end time'),
-        limit: z.number().int().min(1).max(50).optional().describe('Max results (default 30)'),
+        query: z.string().describe('Natural language description of what to search for'),
+        limit: z.number().int().min(1).max(20).optional().describe('Max results (default 10)'),
       }),
-      execute: (params) => {
-        const startTime = new Date(params.start_time).getTime()
-        const endTime = new Date(params.end_time).getTime()
-        const results = storage.activities
-          .getByTimeRange(startTime, endTime)
-          .slice(0, params.limit ?? 30)
+      execute: async (params) => {
+        progress(`  [tool] search_similar_activities: "${params.query}"`)
+        const embedding = await embeddingService.generateEmbedding(params.query)
+        const allResults = storage.activities.searchVectors(embedding, (params.limit ?? 10) * 3)
+        // Filter to detection day time range
+        const results = allResults
+          .filter((a) => a.startTimestamp >= dayStart && a.startTimestamp < dayEnd)
+          .slice(0, params.limit ?? 10)
         return results.map((a) => ({
           id: a.id,
           app: a.appName,
@@ -632,7 +642,7 @@ async function runDetection(
   // Sequential so each verifier sees patterns created by previous candidates.
   // =========================================================================
 
-  const tools = buildVerificationTools(storage)
+  const tools = buildVerificationTools(storage, start, end, progress)
 
   progress(`[Phase 2] Verifying ${candidates.length} candidates with tool access...`)
 
@@ -647,7 +657,29 @@ async function runDetection(
 
     try {
       const verifyPrompt = buildVerificationSystemPrompt(candidate, currentPatterns)
-      const candidateInput = `Investigate this candidate pattern:\n\n\`\`\`json\n${JSON.stringify(candidate, null, 2)}\n\`\`\``
+
+      // Enrich candidate with full activity details
+      const candidateActivities = candidate.activity_ids?.length
+        ? storage.activities.getByIds(candidate.activity_ids)
+        : []
+      const enrichedActivities = candidateActivities.map((a) => ({
+        id: a.id,
+        app: a.appName,
+        window_title: a.windowTitle,
+        time: new Date(a.startTimestamp).toISOString(),
+        end_time: new Date(a.endTimestamp).toISOString(),
+        duration_min: Math.round((a.endTimestamp - a.startTimestamp) / 60000),
+        summary: a.summary,
+      }))
+
+      const candidateWithActivities = {
+        ...candidate,
+        activities: enrichedActivities,
+      }
+      // Remove raw activity_ids from the input since we're providing full details
+      delete (candidateWithActivities as Record<string, unknown>).activity_ids
+
+      const candidateInput = `Investigate this candidate pattern:\n\n\`\`\`json\n${JSON.stringify(candidateWithActivities, null, 2)}\n\`\`\``
 
       const result = callModel(client, {
         model: cfg.model,
