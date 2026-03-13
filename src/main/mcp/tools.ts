@@ -617,17 +617,7 @@ async function handleGetPatternDetails(
         .getSightingsByRunId(runId)
         .filter((s) => s.patternId === patternId)
     } else {
-      // No runId filter — get all sightings by fetching all runs
-      // PatternRepository doesn't have getAllSightingsForPattern, so we
-      // use the sighting count from stats. For the detail view we show
-      // up to 20 recent sightings by using the last-run approach.
-      const lastRunTs = storage.patterns.getLastRunTimestamp()
-      if (lastRunTs) {
-        // Gather sightings from recent runs — get last 5 distinct runs worth
-        // We don't have a dedicated method, so use the SQL directly isn't possible.
-        // Instead, we just note the count and show what we can.
-        sightings = []
-      }
+      sightings = storage.patterns.getSightingsForPattern(patternId)
     }
 
     let sightingsSection = ''

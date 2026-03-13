@@ -175,6 +175,16 @@ export class PatternRepository {
       )
   }
 
+  getSightingsForPattern(patternId: string, limit = 20): PatternSighting[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM pattern_sightings WHERE pattern_id = ? ORDER BY detected_at DESC LIMIT ?`,
+      )
+      .all(patternId, limit) as Record<string, unknown>[]
+
+    return rows.map((row) => this.rowToSighting(row))
+  }
+
   getSightingsByRunId(runId: string): PatternSighting[] {
     const rows = this.db
       .prepare(`SELECT * FROM pattern_sightings WHERE run_id = ? ORDER BY detected_at DESC`)
