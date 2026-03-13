@@ -132,20 +132,9 @@ function serializeActivities(activities: ActivityDetail[]): object[] {
 // Phase 1: Scan prompt
 // ---------------------------------------------------------------------------
 
-function serializeExistingPatterns(patterns: PatternWithStats[]) {
-  return patterns.map((p) => ({
-    id: p.id,
-    name: p.name,
-    description: p.description,
-    apps: p.apps,
-    sighting_count: p.sightingCount,
-  }))
-}
-
 function buildScanSystemPrompt(
   dateLabel: string,
   rejectedPatterns: PatternWithStats[],
-  existingPatterns: PatternWithStats[],
   userContext?: string,
 ): string {
   const userContextSection = userContext ? `\n## User context\n\n${userContext}\n` : ''
@@ -162,19 +151,6 @@ function buildScanSystemPrompt(
 The user has explicitly rejected these patterns as not useful. Do not output candidates that match or closely resemble them:
 
 ${examples}`
-  }
-
-  let patternsSection = ''
-  if (existingPatterns.length > 0) {
-    patternsSection = `
-
-## Existing patterns (already detected)
-
-Below are patterns found in previous runs. If you see the same pattern again today, include its \`id\` as \`existing_pattern_id\` in your output instead of creating a duplicate.
-
-\`\`\`json
-${JSON.stringify(serializeExistingPatterns(existingPatterns), null, 2)}
-\`\`\``
   }
 
   return `You are an automation analyst examining a user's computer activity from ${dateLabel}. Your job is to find work that is repetitive, manual, and could be automated away with a script, API call, or tool.
@@ -201,7 +177,6 @@ BAD finds (not useful, skip these):
 ${rejectedSection}
 
 The key question for each finding: "Could a script, cron job, API integration, or macro do this instead of the human?"
-${patternsSection}
 
 ## Output
 
@@ -660,12 +635,7 @@ async function runDetection(
   // =========================================================================
 
   const serialized = serializeActivities(activities)
-  const scanPrompt = buildScanSystemPrompt(
-    label,
-    rejectedPatterns,
-    existingPatterns,
-    userContextStr,
-  )
+  const scanPrompt = buildScanSystemPrompt(label, rejectedPatterns, userContextStr)
   const scanUserMessage = `Here are all ${activities.length} activities from ${label}:\n\n\`\`\`json\n${JSON.stringify(serialized, null, 2)}\n\`\`\``
 
   const client = new OpenRouter({ apiKey })
