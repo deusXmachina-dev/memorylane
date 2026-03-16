@@ -45,6 +45,7 @@
     "sign:win": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/sign-windows.ps1",
     "detect-patterns": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/detect-patterns.ts",
     "detect-patterns:prune": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/prune-patterns.ts",
+    "evaluate-recent-patterns": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/evaluate-recent-patterns.ts",
     "build-user-context": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/build-user-context.ts",
     "mcpb:pack": "npx @anthropic-ai/mcpb pack mcpb/",
     "cli:build": "cd packages/cli && npm run build",
