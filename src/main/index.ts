@@ -123,13 +123,19 @@ app.on('ready', async () => {
   const { setupTray, updateTrayMenu, setPrivacyBlockedState } = await import('./ui/tray')
   const { initMainWindowIPC, openMainWindow, sendStatusToRenderer } =
     await import('./ui/main-window')
+  const { showPrivacyModeNotification } = await import('./ui/privacy-notification')
 
   runtime = await createMainRuntime({
     onCaptureStateChanged: () => {
       void updateTrayMenu()
       void sendStatusToRenderer()
     },
-    onPrivacyBlockingChanged: setPrivacyBlockedState,
+    onPrivacyBlockingChanged: (blocked) => {
+      setPrivacyBlockedState(blocked)
+      if (runtime?.capture.isCapturingNow()) {
+        showPrivacyModeNotification(blocked)
+      }
+    },
     semanticPipelinePreference: initialCaptureSettings.semanticPipelineMode,
     semanticRequestTimeoutMs: initialCaptureSettings.semanticRequestTimeoutMs,
     excludedApps: initialCaptureSettings.excludedApps,

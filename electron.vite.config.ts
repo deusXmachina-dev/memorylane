@@ -51,6 +51,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           'main-window': resolve(__dirname, 'src/renderer/main-window.html'),
+          'privacy-notification': resolve(__dirname, 'src/renderer/privacy-notification.html'),
         },
       },
     },
