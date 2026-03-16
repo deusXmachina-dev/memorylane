@@ -16,7 +16,10 @@ export class PersistedActivityPatternListener {
     await this.handlePersistedActivity(input)
   }
 
-  private readonly patternRepository: Pick<PatternRepository, 'getAllPatterns'>
+  private readonly patternRepository: Pick<
+    PatternRepository,
+    'getAllPatterns' | 'getSightingsForPattern'
+  >
   private readonly matcher: RecentActivityPatternMatcher
   private readonly notificationService: PatternNotificationService
   private readonly recentActivityWindow: RecentActivityWindow
@@ -24,7 +27,7 @@ export class PersistedActivityPatternListener {
   private readonly now: () => number
 
   constructor(params: {
-    patternRepository: Pick<PatternRepository, 'getAllPatterns'>
+    patternRepository: Pick<PatternRepository, 'getAllPatterns' | 'getSightingsForPattern'>
     matcher: RecentActivityPatternMatcher
     notificationService: PatternNotificationService
     recentActivityWindow?: RecentActivityWindow
@@ -46,11 +49,15 @@ export class PersistedActivityPatternListener {
     if (patterns.length === 0) {
       return
     }
+    const sightings = patterns.flatMap((pattern) =>
+      this.patternRepository.getSightingsForPattern(pattern.id, Math.max(pattern.sightingCount, 1)),
+    )
 
     const now = this.now()
     const match = await this.matcher.match({
       recentActivities: this.recentActivityWindow.snapshot(),
       patterns,
+      sightings,
       now,
     })
 

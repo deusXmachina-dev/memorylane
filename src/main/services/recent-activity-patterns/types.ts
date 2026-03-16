@@ -1,4 +1,4 @@
-import type { PatternWithStats } from '../../storage'
+import type { PatternSighting, PatternWithStats } from '../../storage'
 
 export interface RecentPatternActivity {
   id: string
@@ -23,6 +23,7 @@ export interface RecentActivityPatternMatcher {
   match(input: {
     recentActivities: RecentPatternActivity[]
     patterns: PatternWithStats[]
+    sightings: PatternSighting[]
     now: number
   }): Promise<PatternMatch | null>
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ActivityPersistedListenerInput } from '../../activity-extraction-types'
 import type { Activity } from '../../activity-types'
-import type { PatternRepository, PatternWithStats } from '../../storage'
+import type { PatternRepository, PatternSighting, PatternWithStats } from '../../storage'
 import { NullRecentActivityPatternMatcher } from './matcher'
 import { PatternSurfaceCooldown } from './pattern-surface-cooldown'
 import { PersistedActivityPatternListener } from './persisted-activity-pattern-listener'
@@ -67,6 +67,19 @@ function makePattern(id: string, name: string): PatternWithStats {
   }
 }
 
+function makeSighting(id: string, patternId: string, activityIds: string[]): PatternSighting {
+  return {
+    id,
+    patternId,
+    detectedAt: 1_000,
+    runId: 'run-1',
+    evidence: '',
+    activityIds,
+    confidence: 0.9,
+    durationEstimateMin: null,
+  }
+}
+
 describe('PersistedActivityPatternListener', () => {
   it('null matcher returns null', async () => {
     const matcher = new NullRecentActivityPatternMatcher()
@@ -74,6 +87,7 @@ describe('PersistedActivityPatternListener', () => {
       matcher.match({
         recentActivities: [],
         patterns: [],
+        sightings: [],
         now: 1_000,
       }),
     ).resolves.toBeNull()
@@ -81,6 +95,7 @@ describe('PersistedActivityPatternListener', () => {
 
   it('calls matcher with the recent rolling window and current patterns', async () => {
     const patterns = [makePattern('pattern-1', 'Daily review')]
+    const sightings = [makeSighting('sighting-1', 'pattern-1', ['a1'])]
     const matcher: RecentActivityPatternMatcher = {
       match: vi.fn().mockResolvedValue(null),
     }
@@ -90,7 +105,8 @@ describe('PersistedActivityPatternListener', () => {
     const listener = new PersistedActivityPatternListener({
       patternRepository: {
         getAllPatterns: vi.fn(() => patterns),
-      } as Pick<PatternRepository, 'getAllPatterns'>,
+        getSightingsForPattern: vi.fn(() => sightings),
+      } as Pick<PatternRepository, 'getAllPatterns' | 'getSightingsForPattern'>,
       matcher,
       notificationService: notifier,
       recentActivityWindow: new RecentActivityWindow(2),
@@ -108,6 +124,7 @@ describe('PersistedActivityPatternListener', () => {
         expect.objectContaining({ id: 'a3', summary: 'summary:a3' }),
       ],
       patterns,
+      sightings,
       now: 10_000,
     })
     expect(notifier.notify).not.toHaveBeenCalled()
@@ -123,7 +140,8 @@ describe('PersistedActivityPatternListener', () => {
     const listener = new PersistedActivityPatternListener({
       patternRepository: {
         getAllPatterns: vi.fn(() => [makePattern('pattern-1', 'Daily review')]),
-      } as Pick<PatternRepository, 'getAllPatterns'>,
+        getSightingsForPattern: vi.fn(() => [makeSighting('sighting-1', 'pattern-1', ['a1'])]),
+      } as Pick<PatternRepository, 'getAllPatterns' | 'getSightingsForPattern'>,
       matcher,
       notificationService: notifier,
     })
@@ -149,7 +167,8 @@ describe('PersistedActivityPatternListener', () => {
     const listener = new PersistedActivityPatternListener({
       patternRepository: {
         getAllPatterns: vi.fn(() => [makePattern('pattern-1', 'Daily review')]),
-      } as Pick<PatternRepository, 'getAllPatterns'>,
+        getSightingsForPattern: vi.fn(() => [makeSighting('sighting-1', 'pattern-1', ['a1'])]),
+      } as Pick<PatternRepository, 'getAllPatterns' | 'getSightingsForPattern'>,
       matcher,
       notificationService: notifier,
     })
@@ -177,7 +196,8 @@ describe('PersistedActivityPatternListener', () => {
     const listener = new PersistedActivityPatternListener({
       patternRepository: {
         getAllPatterns: vi.fn(() => [makePattern('pattern-1', 'Daily review')]),
-      } as Pick<PatternRepository, 'getAllPatterns'>,
+        getSightingsForPattern: vi.fn(() => [makeSighting('sighting-1', 'pattern-1', ['a1'])]),
+      } as Pick<PatternRepository, 'getAllPatterns' | 'getSightingsForPattern'>,
       matcher,
       notificationService: notifier,
       cooldown: new PatternSurfaceCooldown(4 * 60 * 60 * 1000),
@@ -208,7 +228,8 @@ describe('PersistedActivityPatternListener', () => {
     const listener = new PersistedActivityPatternListener({
       patternRepository: {
         getAllPatterns: vi.fn(() => [makePattern('pattern-1', 'Daily review')]),
-      } as Pick<PatternRepository, 'getAllPatterns'>,
+        getSightingsForPattern: vi.fn(() => [makeSighting('sighting-1', 'pattern-1', ['a1'])]),
+      } as Pick<PatternRepository, 'getAllPatterns' | 'getSightingsForPattern'>,
       matcher,
       notificationService: notifier,
       cooldown: new PatternSurfaceCooldown(4 * 60 * 60 * 1000),
