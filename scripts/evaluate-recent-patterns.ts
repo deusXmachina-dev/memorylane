@@ -4,7 +4,7 @@ import * as fs from 'fs'
 import { StorageService } from '../src/main/storage'
 import { getDefaultDbPath } from '../src/main/paths'
 import {
-  NullRecentActivityPatternMatcher,
+  HeuristicRecentActivityPatternMatcher,
   evaluateRecentActivityPatternMatcher,
 } from '../src/main/services/recent-activity-patterns'
 
@@ -36,7 +36,7 @@ async function main() {
     const evaluation = await evaluateRecentActivityPatternMatcher({
       patternRepository: storage.patterns,
       activityRepository: storage.activities,
-      matcher: new NullRecentActivityPatternMatcher(),
+      matcher: new HeuristicRecentActivityPatternMatcher(storage.activities),
     })
 
     console.log('=== Recent Activity Pattern Evaluation ===')

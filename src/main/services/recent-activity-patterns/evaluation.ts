@@ -251,6 +251,7 @@ function toGroundTruthSighting(
   const orderedActivities = sighting.activityIds
     .map((id) => activitiesById.get(id))
     .filter((activity): activity is StoredActivity => activity !== undefined)
+    .sort((a, b) => a.startTimestamp - b.startTimestamp)
 
   if (orderedActivities.length === 0) {
     return null

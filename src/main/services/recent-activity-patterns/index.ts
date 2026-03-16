@@ -4,6 +4,7 @@ export type {
   RecentActivityPatternMatcher,
   RecentPatternActivity,
 } from './types'
+export { HeuristicRecentActivityPatternMatcher } from './heuristic-matcher'
 export { NullRecentActivityPatternMatcher } from './matcher'
 export { NoopPatternNotificationService } from './notification-service'
 export { RecentActivityWindow } from './recent-activity-window'
