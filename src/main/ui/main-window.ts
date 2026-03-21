@@ -79,6 +79,11 @@ interface MainWindowDependencies {
   databaseExportSync: {
     onSettingsChanged: () => Promise<void>
   }
+  screenRecording: {
+    getStatus: () => Pick<MainWindowStatus, 'screenRecording' | 'recordingsDirectory'>
+    startRecording: () => Promise<void>
+    stopRecording: () => Promise<void>
+  }
 }
 
 let mainWindow: BrowserWindow | null = null
@@ -90,9 +95,13 @@ app.on('before-quit', () => {
 })
 
 function buildStatus(): MainWindowStatus {
+  const screenRecordingStatus = deps?.screenRecording.getStatus()
+
   return {
     capturing: deps?.capture.isCapturingNow() ?? false,
     captureHotkeyLabel: deps?.getCaptureHotkeyLabel() ?? '',
+    screenRecording: screenRecordingStatus?.screenRecording ?? false,
+    recordingsDirectory: screenRecordingStatus?.recordingsDirectory ?? null,
   }
 }
 
@@ -206,10 +215,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
 
   ipcMain.handle('main-window:toggleCapture', () => {
     if (!deps) {
-      return {
-        capturing: false,
-        captureHotkeyLabel: '',
-      }
+      return buildStatus()
     }
 
     if (deps.capture.isCapturingNow()) {
@@ -220,6 +226,24 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
 
     void updateTrayMenu()
 
+    return buildStatus()
+  })
+
+  ipcMain.handle('main-window:startScreenRecording', async () => {
+    if (!deps) {
+      return buildStatus()
+    }
+
+    await deps.screenRecording.startRecording()
+    return buildStatus()
+  })
+
+  ipcMain.handle('main-window:stopScreenRecording', async () => {
+    if (!deps) {
+      return buildStatus()
+    }
+
+    await deps.screenRecording.stopRecording()
     return buildStatus()
   })
 

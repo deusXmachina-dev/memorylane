@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Toaster } from '@components/ui/sonner'
+import { toast } from 'sonner'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { useLlmHealth } from '@/renderer/hooks/use-llm-health'
 import { Logo } from './components/Logo'
 import { PlanPicker } from './components/PlanPicker'
 import { CaptureControlSection } from './components/CaptureControlSection'
+import { ScreenRecordingSection } from './components/ScreenRecordingSection'
 import { ConnectClaudeSection } from './components/ConnectClaudeSection'
 import { StatusLine } from './components/StatusLine'
 import { PatternsSection } from './components/PatternsSection'
 import { AdvancedSettingsPage } from './AdvancedSettingsPage'
-import type { CustomEndpointStatus, KeyStatus, MainWindowStats } from '@types'
+import type { CustomEndpointStatus, KeyStatus, MainWindowStats, MainWindowStatus } from '@types'
 
 export function MainWindowApp(): React.JSX.Element {
   const api = useMainWindowAPI()
@@ -19,8 +21,18 @@ export function MainWindowApp(): React.JSX.Element {
   const [capturing, setCapturing] = useState(false)
   const [captureHotkeyLabel, setCaptureHotkeyLabel] = useState('')
   const [toggling, setToggling] = useState(false)
+  const [screenRecording, setScreenRecording] = useState(false)
+  const [recordingBusy, setRecordingBusy] = useState(false)
+  const [recordingsDirectory, setRecordingsDirectory] = useState<string | null>(null)
   const [stats, setStats] = useState<MainWindowStats | null>(null)
   const [initialLoaded, setInitialLoaded] = useState(false)
+
+  const applyStatus = useCallback((status: MainWindowStatus) => {
+    setCapturing(status.capturing)
+    setCaptureHotkeyLabel(status.captureHotkeyLabel)
+    setScreenRecording(status.screenRecording)
+    setRecordingsDirectory(status.recordingsDirectory)
+  }, [])
 
   const loadKeyStatus = useCallback(async () => {
     try {
@@ -63,16 +75,14 @@ export function MainWindowApp(): React.JSX.Element {
 
   useEffect(() => {
     void api.getStatus().then((status) => {
-      setCapturing(status.capturing)
-      setCaptureHotkeyLabel(status.captureHotkeyLabel)
+      applyStatus(status)
     })
     api.onStatusChanged((status) => {
-      setCapturing(status.capturing)
-      setCaptureHotkeyLabel(status.captureHotkeyLabel)
+      applyStatus(status)
       void loadStats()
     })
     void loadAll().then(() => setInitialLoaded(true))
-  }, [api, loadAll, loadStats])
+  }, [api, applyStatus, loadAll, loadStats])
 
   useEffect(() => {
     api.onSubscriptionUpdate(() => {
@@ -84,24 +94,38 @@ export function MainWindowApp(): React.JSX.Element {
     const handleFocus = (): void => {
       void loadAll()
       void api.getStatus().then((status) => {
-        setCapturing(status.capturing)
-        setCaptureHotkeyLabel(status.captureHotkeyLabel)
+        applyStatus(status)
       })
     }
     window.addEventListener('focus', handleFocus)
     return () => window.removeEventListener('focus', handleFocus)
-  }, [api, loadAll])
+  }, [api, applyStatus, loadAll])
 
   const handleToggle = useCallback(async () => {
     setToggling(true)
     try {
       const status = await api.toggleCapture()
-      setCapturing(status.capturing)
-      setCaptureHotkeyLabel(status.captureHotkeyLabel)
+      applyStatus(status)
     } finally {
       setToggling(false)
     }
-  }, [api])
+  }, [api, applyStatus])
+
+  const handleRecordingToggle = useCallback(async () => {
+    setRecordingBusy(true)
+
+    try {
+      const status = screenRecording
+        ? await api.stopScreenRecording()
+        : await api.startScreenRecording()
+      applyStatus(status)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Screen recording failed'
+      toast.error(message)
+    } finally {
+      setRecordingBusy(false)
+    }
+  }, [api, applyStatus, screenRecording])
 
   if (page === 'settings') {
     return (
@@ -121,6 +145,13 @@ export function MainWindowApp(): React.JSX.Element {
     <div className="min-h-screen antialiased select-none">
       <div className="p-6 max-w-xl mx-auto space-y-5">
         <Logo onSettingsClick={() => setPage('settings')} />
+
+        <ScreenRecordingSection
+          recording={screenRecording}
+          busy={recordingBusy}
+          recordingsDirectory={recordingsDirectory}
+          onToggle={() => void handleRecordingToggle()}
+        />
 
         {!initialLoaded ? null : !isConfigured ? (
           <PlanPicker api={api} onKeySet={() => void loadKeyStatus()} />

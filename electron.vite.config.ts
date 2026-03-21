@@ -51,6 +51,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           'main-window': resolve(__dirname, 'src/renderer/main-window.html'),
+          'screen-recorder': resolve(__dirname, 'src/renderer/screen-recorder.html'),
         },
       },
     },

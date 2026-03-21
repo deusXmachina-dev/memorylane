@@ -150,6 +150,8 @@ export interface SettingsAPI {
 export interface MainWindowStatus {
   capturing: boolean
   captureHotkeyLabel: string
+  screenRecording: boolean
+  recordingsDirectory: string | null
 }
 
 export interface MainWindowStats {
@@ -207,6 +209,8 @@ export interface PatternInfo {
 export interface MainWindowAPI {
   getStatus: () => Promise<MainWindowStatus>
   toggleCapture: () => Promise<MainWindowStatus>
+  startScreenRecording: () => Promise<MainWindowStatus>
+  stopScreenRecording: () => Promise<MainWindowStatus>
   onStatusChanged: (callback: (status: MainWindowStatus) => void) => void
   // Settings methods (merged from settingsAPI)
   getKeyStatus: () => Promise<KeyStatus>
@@ -251,4 +255,25 @@ export interface MainWindowAPI {
   getUpdateState: () => Promise<UpdateState>
   onUpdateStateChanged: (callback: (state: UpdateState) => void) => void
   installUpdate: () => Promise<void>
+}
+
+export interface ScreenRecorderStartOptions {
+  includeMicrophone: boolean
+}
+
+export interface ScreenRecorderStartedPayload {
+  mimeType: string
+}
+
+export interface ScreenRecorderFinishedPayload {
+  mimeType: string
+}
+
+export interface ScreenRecorderAPI {
+  onStartRequested: (callback: (options: ScreenRecorderStartOptions) => void) => void
+  onStopRequested: (callback: () => void) => void
+  reportStarted: (payload: ScreenRecorderStartedPayload) => Promise<void>
+  writeChunk: (chunk: Uint8Array) => Promise<void>
+  reportFinished: (payload: ScreenRecorderFinishedPayload) => Promise<void>
+  reportError: (message: string) => Promise<void>
 }

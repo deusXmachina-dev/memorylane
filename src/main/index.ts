@@ -29,6 +29,7 @@ import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
 import { createMainRuntime, type MainRuntime } from './runtime'
 import { getAppDirectoryName } from './paths'
+import { ScreenRecordingService } from './video/screen-recording'
 
 // Keep single-instance behavior in packaged app, but allow dev to run
 // alongside production for local debugging.
@@ -68,12 +69,14 @@ let userContextBuilder: UserContextBuilder | null = null
 let patternDetector: PatternDetector | null = null
 let slackIntegrationService: SlackIntegrationService | null = null
 let rawDatabaseExportSync: RawDatabaseExportSync | null = null
+let screenRecordingService: ScreenRecordingService | null = null
 
 app.on('before-quit', () => {
   void Promise.all([
     runtime?.dispose(),
     slackIntegrationService?.stop(),
     rawDatabaseExportSync?.stop(),
+    screenRecordingService?.dispose(),
   ])
 })
 
@@ -123,6 +126,12 @@ app.on('ready', async () => {
   const { setupTray, updateTrayMenu, setPrivacyBlockedState } = await import('./ui/tray')
   const { initMainWindowIPC, openMainWindow, sendStatusToRenderer } =
     await import('./ui/main-window')
+
+  screenRecordingService = new ScreenRecordingService({
+    onStatusChanged: () => {
+      void sendStatusToRenderer()
+    },
+  })
 
   runtime = await createMainRuntime({
     onCaptureStateChanged: () => {
@@ -216,6 +225,7 @@ app.on('ready', async () => {
     reconfigureCaptureHotkey,
     updateExclusions: (exclusions) => runtime?.updateExclusions(exclusions),
     databaseExportSync: rawDatabaseExportSync,
+    screenRecording: screenRecordingService,
   })
 
   await slackIntegrationService.reload()

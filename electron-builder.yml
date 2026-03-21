@@ -53,6 +53,7 @@ mac:
   category: public.app-category.productivity
   extendInfo:
     LSUIElement: true
+    NSMicrophoneUsageDescription: MemoryLane records your microphone audio while saving screen recordings.
   identity: 'Filip Kubis (ZN3J54N7AP)'
   hardenedRuntime: true
   gatekeeperAssess: false

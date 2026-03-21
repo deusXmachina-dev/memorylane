@@ -2,6 +2,7 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
 import { contextBridge, ipcRenderer } from 'electron'
+import { SCREEN_RECORDING_CHANNELS } from '../shared/screen-recording'
 
 console.log('[Preload] Script loading...')
 
@@ -10,6 +11,8 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   // Capture control
   getStatus: () => ipcRenderer.invoke('main-window:getStatus'),
   toggleCapture: () => ipcRenderer.invoke('main-window:toggleCapture'),
+  startScreenRecording: () => ipcRenderer.invoke('main-window:startScreenRecording'),
+  stopScreenRecording: () => ipcRenderer.invoke('main-window:stopScreenRecording'),
   onStatusChanged: (callback: (status: unknown) => void) => {
     ipcRenderer.on('main-window:statusChanged', (_event, status) => callback(status))
   },
@@ -66,6 +69,22 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
     ipcRenderer.invoke('main-window:chooseDatabaseExportDirectory', initialPath),
   // Database export
   exportDatabaseZip: () => ipcRenderer.invoke('main-window:exportDatabaseZip'),
+})
+
+contextBridge.exposeInMainWorld('screenRecorderAPI', {
+  onStartRequested: (callback: (options: unknown) => void) => {
+    ipcRenderer.on(SCREEN_RECORDING_CHANNELS.start, (_event, options) => callback(options))
+  },
+  onStopRequested: (callback: () => void) => {
+    ipcRenderer.on(SCREEN_RECORDING_CHANNELS.stop, () => callback())
+  },
+  reportStarted: (payload: unknown) =>
+    ipcRenderer.invoke(SCREEN_RECORDING_CHANNELS.started, payload),
+  writeChunk: (chunk: Uint8Array) =>
+    ipcRenderer.invoke(SCREEN_RECORDING_CHANNELS.writeChunk, chunk),
+  reportFinished: (payload: unknown) =>
+    ipcRenderer.invoke(SCREEN_RECORDING_CHANNELS.finished, payload),
+  reportError: (message: string) => ipcRenderer.invoke(SCREEN_RECORDING_CHANNELS.error, message),
 })
 
 console.log('[Preload] mainWindowAPI exposed to renderer')
