@@ -1,6 +1,7 @@
 import { app, Notification } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import log from './logger'
+import { confirmWindowsUpdateInstall } from './windows-update-install'
 
 export type UpdateState = 'idle' | 'downloading' | 'ready'
 let state: UpdateState = 'idle'
@@ -19,11 +20,16 @@ const isAutoUpdateDisabled = (): boolean => {
   return ['1', 'true', 'yes', 'on'].includes(normalizedValue)
 }
 
-export const quitAndInstall = (): void => {
+export const quitAndInstall = async (): Promise<void> => {
   if (reminderInterval) {
     clearInterval(reminderInterval)
     reminderInterval = null
   }
+
+  if (!(await confirmWindowsUpdateInstall(process.execPath))) {
+    return
+  }
+
   log.info('[Updater] Requesting quit-and-install')
   // isForceRunAfter=true is required for tray apps that have no main window,
   // otherwise the quit sequence can stall.
@@ -48,7 +54,7 @@ const showUpdateNotification = (version: string): void => {
     body: `Version ${version} is ready. Click to restart and update.`,
     silent: true,
   })
-  currentNotification.on('click', () => quitAndInstall())
+  currentNotification.on('click', () => void quitAndInstall())
   currentNotification.show()
 }
 

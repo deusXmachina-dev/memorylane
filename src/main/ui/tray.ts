@@ -113,7 +113,7 @@ export const updateTrayMenu = async (): Promise<void> => {
   const contextMenu = Menu.buildFromTemplate([
     ...(updateState === 'ready'
       ? [
-          { label: 'Install Update Now (Restart)', click: () => quitAndInstall() },
+          { label: 'Install Update Now (Restart)', click: () => void quitAndInstall() },
           { type: 'separator' as const },
         ]
       : updateState === 'downloading'
