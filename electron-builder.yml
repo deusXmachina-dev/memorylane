@@ -83,9 +83,6 @@ win:
     - target: nsis
       arch:
         - x64
-    - target: msi
-      arch:
-        - x64
 
 linux:
   target:
@@ -105,10 +102,3 @@ nsis:
   perMachine: true
   allowElevation: true
   allowToChangeInstallationDirectory: true
-
-msi:
-  # MSI is primarily for managed enterprise deployment, so default to
-  # machine-wide installation.
-  perMachine: true
-  oneClick: true
-  artifactName: '${productName}-Setup.${ext}'

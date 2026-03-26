@@ -13,10 +13,12 @@ export interface KeyStatus {
 
 export class ApiKeyManager {
   private configPath: string
+  private seedMarkerPath: string
   private cachedKey: string | null = null
 
   constructor() {
     this.configPath = path.join(app.getPath('userData'), 'secure-config.json')
+    this.seedMarkerPath = path.join(app.getPath('userData'), 'api-key-seeded.json')
   }
 
   /**
@@ -35,6 +37,30 @@ export class ApiKeyManager {
     this.cachedKey = key
 
     log.info(`[ApiKeyManager] API key saved securely (source: ${source})`)
+  }
+
+  /**
+   * Persist a bundled default key once on the first run of this installation.
+   * Later user changes are left untouched, including explicit deletion.
+   */
+  public seedDefaultApiKeyOnFirstRun(key: string): void {
+    const normalizedKey = key.trim()
+    if (normalizedKey.length === 0) {
+      return
+    }
+
+    if (fs.existsSync(this.seedMarkerPath)) {
+      return
+    }
+
+    if (this.hasStoredApiKey()) {
+      this.writeSeedMarker()
+      return
+    }
+
+    this.saveApiKey(normalizedKey)
+    this.writeSeedMarker()
+    log.info('[ApiKeyManager] Seeded bundled API key on first run')
   }
 
   /**
@@ -160,5 +186,9 @@ export class ApiKeyManager {
       return '****'
     }
     return `${key.substring(0, 7)}...${key.substring(key.length - 4)}`
+  }
+
+  private writeSeedMarker(): void {
+    fs.writeFileSync(this.seedMarkerPath, JSON.stringify({ seededAt: new Date().toISOString() }))
   }
 }

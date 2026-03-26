@@ -5,6 +5,7 @@ import log from './logger'
 import { ApiKeyManager } from './settings/api-key-manager'
 import { CustomEndpointManager } from './settings/custom-endpoint-manager'
 import { DeviceIdentity } from './settings/device-identity'
+import { FIRST_RUN_DEFAULT_OPENROUTER_API_KEY } from './default-openrouter-key'
 import { ManagedKeyService } from './services/managed-key-service'
 import { StorageService } from './storage'
 import { applyMigrations } from './storage/migrator'
@@ -57,6 +58,7 @@ export async function createMainRuntime(params?: {
   const interactionMonitor = await import('./recorder/interaction-monitor')
 
   const apiKeyManager = new ApiKeyManager()
+  apiKeyManager.seedDefaultApiKeyOnFirstRun(FIRST_RUN_DEFAULT_OPENROUTER_API_KEY)
   const customEndpointManager = new CustomEndpointManager()
   const dev = !app.isPackaged
   const userDataPath = app.getPath('userData')
