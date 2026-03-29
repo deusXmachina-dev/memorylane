@@ -157,6 +157,7 @@ export interface MainWindowStats {
   dbSize: number
   dateRange: { oldest: number | null; newest: number | null }
   apiUsage: { requestCount: number; totalCost: number } | null
+  totalRepetitiveHoursPerWeek: number | null
 }
 
 export interface CaptureSettings {
@@ -202,6 +203,7 @@ export interface PatternInfo {
   sightingCount: number
   lastSeenAt: number | null
   lastConfidence: number | null
+  estimatedHoursPerWeek: number | null
 }
 
 export interface MainWindowAPI {
@@ -242,6 +244,9 @@ export interface MainWindowAPI {
   completePattern: (id: string) => Promise<SaveResult>
   uncompletePattern: (id: string) => Promise<SaveResult>
   markPatternPromptCopied: (id: string) => Promise<SaveResult>
+  // Theme
+  getTheme: () => Promise<'dark' | 'light'>
+  onThemeChanged: (callback: (theme: 'dark' | 'light') => void) => void
   // Stats
   getStats: () => Promise<MainWindowStats>
   chooseDatabaseExportDirectory: (initialPath?: string) => Promise<DirectorySelectionResult>

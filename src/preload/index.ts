@@ -60,6 +60,11 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   uncompletePattern: (id: string) => ipcRenderer.invoke('main-window:uncompletePattern', id),
   markPatternPromptCopied: (id: string) =>
     ipcRenderer.invoke('main-window:markPatternPromptCopied', id),
+  // Theme
+  getTheme: () => ipcRenderer.invoke('main-window:getTheme') as Promise<'dark' | 'light'>,
+  onThemeChanged: (callback: (theme: 'dark' | 'light') => void) => {
+    ipcRenderer.on('main-window:themeChanged', (_event, theme) => callback(theme))
+  },
   // Stats
   getStats: () => ipcRenderer.invoke('main-window:getStats'),
   chooseDatabaseExportDirectory: (initialPath?: string) =>

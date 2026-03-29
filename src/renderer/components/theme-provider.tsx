@@ -1,66 +1,36 @@
 import * as React from 'react'
-import { ThemeProvider as NextThemesProvider, useTheme } from 'next-themes'
+import type { MainWindowAPI } from '@types'
 
-function ThemeProvider({ children, ...props }: React.ComponentProps<typeof NextThemesProvider>) {
-  return (
-    <NextThemesProvider
-      attribute="class"
-      defaultTheme="system"
-      enableSystem
-      disableTransitionOnChange
-      {...props}
-    >
-      <ThemeHotkey />
-      {children}
-    </NextThemesProvider>
-  )
+type Theme = 'dark' | 'light'
+
+const ThemeContext = React.createContext<{ theme: Theme }>({ theme: 'light' })
+
+function useTheme() {
+  return React.useContext(ThemeContext)
 }
 
-function isTypingTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) {
-    return false
-  }
-
-  return (
-    target.isContentEditable ||
-    target.tagName === 'INPUT' ||
-    target.tagName === 'TEXTAREA' ||
-    target.tagName === 'SELECT'
-  )
+function getAPI(): MainWindowAPI {
+  const api = (window as unknown as { mainWindowAPI?: MainWindowAPI }).mainWindowAPI
+  if (!api) throw new Error('mainWindowAPI not available')
+  return api
 }
 
-function ThemeHotkey() {
-  const { resolvedTheme, setTheme } = useTheme()
+function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setTheme] = React.useState<Theme>('light')
 
   React.useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.defaultPrevented || event.repeat) {
-        return
-      }
+    const api = getAPI()
+    api.getTheme().then(setTheme)
+    api.onThemeChanged(setTheme)
+  }, [])
 
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) {
-        return
-      }
+  React.useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+  }, [theme])
 
-      if (event.key.toLowerCase() !== 'd') {
-        return
-      }
+  const value = React.useMemo(() => ({ theme }), [theme])
 
-      if (isTypingTarget(event.target)) {
-        return
-      }
-
-      setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')
-    }
-
-    window.addEventListener('keydown', onKeyDown)
-
-    return () => {
-      window.removeEventListener('keydown', onKeyDown)
-    }
-  }, [resolvedTheme, setTheme])
-
-  return null
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
 }
 
-export { ThemeProvider }
+export { ThemeProvider, useTheme }

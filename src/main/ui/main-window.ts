@@ -5,7 +5,7 @@
  * Singleton window that hides on close instead of destroying.
  */
 
-import { app, BrowserWindow, dialog, ipcMain, IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, IpcMainInvokeEvent, nativeTheme } from 'electron'
 import path from 'node:path'
 import { DEFAULT_VIDEO_MODELS, DEFAULT_SNAPSHOT_MODELS } from '../semantic/constants'
 import { syncAutoStartSetting } from '../auto-start'
@@ -166,6 +166,7 @@ async function buildStats(): Promise<MainWindowStats> {
       dbSize: 0,
       dateRange: { oldest: null, newest: null },
       apiUsage: null,
+      totalRepetitiveHoursPerWeek: null,
     }
   }
 
@@ -189,7 +190,22 @@ async function buildStats(): Promise<MainWindowStats> {
     totalCost: stats.totalCost,
   }
 
-  return { activityCount, dbSize, dateRange, apiUsage }
+  let totalRepetitiveHoursPerWeek: number | null = null
+  try {
+    const patterns = deps.storage.patterns.getAllPatterns()
+    const activeWithDuration = patterns.filter(
+      (p) => p.completedAt === null && p.estimatedHoursPerWeek !== null,
+    )
+    if (activeWithDuration.length > 0) {
+      totalRepetitiveHoursPerWeek =
+        Math.round(activeWithDuration.reduce((sum, p) => sum + p.estimatedHoursPerWeek!, 0) * 10) /
+        10
+    }
+  } catch (error) {
+    log.error('[MainWindow] Error computing pattern duration stats:', error)
+  }
+
+  return { activityCount, dbSize, dateRange, apiUsage, totalRepetitiveHoursPerWeek }
 }
 
 /**
@@ -199,6 +215,20 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   deps = dependencies
 
   log.info('[MainWindow] Initializing IPC handlers...')
+
+  // Theme
+  ipcMain.handle('main-window:getTheme', () => {
+    return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+  })
+
+  nativeTheme.on('updated', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(
+        'main-window:themeChanged',
+        nativeTheme.shouldUseDarkColors ? 'dark' : 'light',
+      )
+    }
+  })
 
   ipcMain.handle('main-window:getStatus', () => {
     return buildStatus()
