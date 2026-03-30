@@ -26,7 +26,7 @@ export function PatternsSection({
   onPatternsChange,
 }: PatternsSectionProps): React.JSX.Element | null {
   const [allPatterns, setAllPatterns] = useState<PatternInfo[]>(patterns)
-  const [minSightings, setMinSightings] = useState(3)
+  const [minSightings, setMinSightings] = useState(1)
   const [detectionEnabled, setDetectionEnabled] = useState<boolean | null>(null)
 
   useEffect(() => {

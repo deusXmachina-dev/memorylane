@@ -17,7 +17,6 @@ const PROVIDERS: {
   register: (api: MainWindowAPI) => Promise<boolean>
 }[] = [
   { name: 'claudeDesktop', label: 'Claude Cowork', register: (api) => api.addToClaude() },
-  { name: 'cursor', label: 'Cursor', register: (api) => api.addToCursor() },
   { name: 'claudeCode', label: 'Claude Code', register: (api) => api.addToClaudeCode() },
 ]
 
