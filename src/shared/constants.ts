@@ -88,3 +88,13 @@ export const MANAGED_KEY_CONFIG = {
   POLL_TIMEOUT_MS: 600_000, // 10 minutes
   KEY_REFRESH_INTERVAL_MS: 24 * 60 * 60 * 1000, // 24 hours
 }
+
+export const ENTERPRISE_LICENSE_CONFIG = {
+  BACKEND_URL:
+    process.env.NODE_ENV === 'development'
+      ? 'http://localhost:8000/'
+      : 'https://api-enterprise.trymemorylane.com/',
+  POLL_INTERVAL_MS: 2_000,
+  ACTIVATION_TIMEOUT_MS: 20_000,
+  STATUS_REFRESH_INTERVAL_MS: 5 * 60 * 1000, // 5 minutes
+}

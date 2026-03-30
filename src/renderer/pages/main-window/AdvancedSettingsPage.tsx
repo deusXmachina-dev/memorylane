@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
+import type { AppEditionConfig } from '@/shared/edition'
 import type {
   CaptureSettings,
   CustomEndpointStatus,
@@ -17,6 +18,7 @@ import { detectHotkeyPlatform, toRecordedAccelerator } from './hotkey-utils'
 export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.JSX.Element {
   const api = useMainWindowAPI()
   const hotkeyPlatform = useMemo(() => detectHotkeyPlatform(), [])
+  const [editionConfig, setEditionConfig] = useState<AppEditionConfig | null>(null)
   const [form, setForm] = useState<CaptureSettings | null>(null)
   const [endpointStatus, setEndpointStatus] = useState<CustomEndpointStatus | null>(null)
   const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null)
@@ -27,15 +29,17 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
   const [recordingHotkey, setRecordingHotkey] = useState(false)
 
   const load = useCallback(async () => {
-    const [s, ep, ks, slack] = await Promise.all([
+    const [config, captureSettings, endpoint, key, slack] = await Promise.all([
+      api.getEditionConfig(),
       api.getCaptureSettings(),
       api.getCustomEndpoint(),
       api.getKeyStatus(),
       api.getSlackSettings(),
     ])
-    setForm(s)
-    setEndpointStatus(ep)
-    setKeyStatus(ks)
+    setEditionConfig(config)
+    setForm(captureSettings)
+    setEndpointStatus(endpoint)
+    setKeyStatus(key)
     setSlackStatus(slack)
   }, [api])
 
@@ -254,23 +258,27 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
 
           <div className="border-t border-border" />
 
-          <AiModelsSection
-            api={api}
-            open={aiModelsOpen}
-            onToggle={() => setAiModelsOpen((v) => !v)}
-            form={form}
-            keyStatus={keyStatus}
-            endpointStatus={endpointStatus}
-            onKeyStatusChanged={() => void refreshKeyStatus()}
-            onEndpointStatusChanged={() => void refreshEndpointStatus()}
-            onSemanticPipelineModeChange={setSemanticPipelineMode}
-            onSettingChange={setNumericSetting}
-            onSettingCommit={commitNumericSetting}
-            onModelChange={commitModelChange}
-            onPatternDetectionEnabledChange={setPatternDetectionEnabled}
-          />
+          {editionConfig?.edition !== 'enterprise' && (
+            <>
+              <AiModelsSection
+                api={api}
+                open={aiModelsOpen}
+                onToggle={() => setAiModelsOpen((v) => !v)}
+                form={form}
+                keyStatus={keyStatus}
+                endpointStatus={endpointStatus}
+                onKeyStatusChanged={() => void refreshKeyStatus()}
+                onEndpointStatusChanged={() => void refreshEndpointStatus()}
+                onSemanticPipelineModeChange={setSemanticPipelineMode}
+                onSettingChange={setNumericSetting}
+                onSettingCommit={commitNumericSetting}
+                onModelChange={commitModelChange}
+                onPatternDetectionEnabledChange={setPatternDetectionEnabled}
+              />
 
-          <div className="border-t border-border" />
+              <div className="border-t border-border" />
+            </>
+          )}
 
           <ConnectionsDataSection
             api={api}

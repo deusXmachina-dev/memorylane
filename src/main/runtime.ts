@@ -5,7 +5,8 @@ import log from './logger'
 import { ApiKeyManager } from './settings/api-key-manager'
 import { CustomEndpointManager } from './settings/custom-endpoint-manager'
 import { DeviceIdentity } from './settings/device-identity'
-import { ManagedKeyService } from './services/managed-key-service'
+import { createAccessProvider, type AccessProvider } from './access'
+import type { AppEdition } from '../shared/edition'
 import { StorageService } from './storage'
 import { applyMigrations } from './storage/migrator'
 import { EmbeddingService } from './processor/embedding'
@@ -31,7 +32,7 @@ export interface MainRuntime {
   apiKeyManager: ApiKeyManager
   customEndpointManager: CustomEndpointManager
   semanticService: ActivitySemanticService
-  managedKeyService: ManagedKeyService
+  accessProvider: AccessProvider
   updateExclusions(exclusions: {
     apps: string[]
     windowTitlePatterns: string[]
@@ -41,7 +42,7 @@ export interface MainRuntime {
   dispose(): Promise<void>
 }
 
-export async function createMainRuntime(params?: {
+export async function createMainRuntime(params: {
   onCaptureStateChanged?: () => void
   onPrivacyBlockingChanged?: (blocked: boolean) => void
   semanticPipelinePreference?: SemanticPipelinePreference
@@ -51,8 +52,9 @@ export async function createMainRuntime(params?: {
   excludedUrlPatterns?: string[]
   excludePrivateBrowsing?: boolean
   deviceIdentity?: DeviceIdentity
+  edition: AppEdition
 }): Promise<MainRuntime> {
-  const onCaptureStateChanged = params?.onCaptureStateChanged ?? (() => undefined)
+  const onCaptureStateChanged = params.onCaptureStateChanged ?? (() => undefined)
 
   const interactionMonitor = await import('./recorder/interaction-monitor')
 
@@ -79,8 +81,8 @@ export async function createMainRuntime(params?: {
   const semanticService = new ActivitySemanticService(apiKeyManager.getApiKey() || undefined, {
     usageTracker,
     debugDumper,
-    pipelinePreference: params?.semanticPipelinePreference,
-    requestTimeoutMs: params?.semanticRequestTimeoutMs,
+    pipelinePreference: params.semanticPipelinePreference,
+    requestTimeoutMs: params.semanticRequestTimeoutMs,
     endpointConfig: savedEndpoint
       ? {
           serverURL: savedEndpoint.serverURL,
@@ -138,11 +140,11 @@ export async function createMainRuntime(params?: {
   })
 
   const blacklistCoordinator = createCaptureBlacklistCoordinator({
-    initialExcludedApps: params?.excludedApps,
-    initialExcludedWindowTitlePatterns: params?.excludedWindowTitlePatterns,
-    initialExcludedUrlPatterns: params?.excludedUrlPatterns,
-    initialExcludePrivateBrowsing: params?.excludePrivateBrowsing,
-    onPrivacyBlockingChanged: params?.onPrivacyBlockingChanged,
+    initialExcludedApps: params.excludedApps,
+    initialExcludedWindowTitlePatterns: params.excludedWindowTitlePatterns,
+    initialExcludedUrlPatterns: params.excludedUrlPatterns,
+    initialExcludePrivateBrowsing: params.excludePrivateBrowsing,
+    onPrivacyBlockingChanged: params.onPrivacyBlockingChanged,
     forwardInteraction: (event) => {
       harness.handleEvent(event)
     },
@@ -159,8 +161,8 @@ export async function createMainRuntime(params?: {
   }
   interactionMonitor.onInteraction(interactionHandler)
 
-  const deviceIdentity = params?.deviceIdentity ?? new DeviceIdentity()
-  const managedKeyService = new ManagedKeyService(deviceIdentity)
+  const deviceIdentity = params.deviceIdentity ?? new DeviceIdentity()
+  const accessProvider = createAccessProvider(params.edition, deviceIdentity)
 
   let disposePromise: Promise<void> | null = null
 
@@ -171,7 +173,7 @@ export async function createMainRuntime(params?: {
     apiKeyManager,
     customEndpointManager,
     semanticService,
-    managedKeyService,
+    accessProvider,
     updateExclusions(exclusions): void {
       blacklistCoordinator.updateExclusions(exclusions)
     },

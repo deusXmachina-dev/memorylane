@@ -3,17 +3,21 @@ import { Toaster } from '@components/ui/sonner'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { useLlmHealth } from '@/renderer/hooks/use-llm-health'
 import { Logo } from './components/Logo'
+import { EnterpriseActivationCard } from './components/EnterpriseActivationCard'
 import { PlanPicker } from './components/PlanPicker'
 import { CaptureControlSection } from './components/CaptureControlSection'
 import { ConnectClaudeSection } from './components/ConnectClaudeSection'
 import { StatusLine } from './components/StatusLine'
 import { PatternsSection } from './components/PatternsSection'
 import { AdvancedSettingsPage } from './AdvancedSettingsPage'
-import type { CustomEndpointStatus, KeyStatus, MainWindowStats } from '@types'
+import type { AppEditionConfig } from '@/shared/edition'
+import type { AccessState, CustomEndpointStatus, KeyStatus, MainWindowStats } from '@types'
 
 export function MainWindowApp(): React.JSX.Element {
   const api = useMainWindowAPI()
   const [page, setPage] = useState<'home' | 'settings'>('home')
+  const [editionConfig, setEditionConfig] = useState<AppEditionConfig | null>(null)
+  const [accessState, setAccessState] = useState<AccessState | null>(null)
   const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null)
   const [endpointStatus, setEndpointStatus] = useState<CustomEndpointStatus | null>(null)
   const [capturing, setCapturing] = useState(false)
@@ -21,6 +25,24 @@ export function MainWindowApp(): React.JSX.Element {
   const [toggling, setToggling] = useState(false)
   const [stats, setStats] = useState<MainWindowStats | null>(null)
   const [initialLoaded, setInitialLoaded] = useState(false)
+
+  const loadEditionConfig = useCallback(async () => {
+    try {
+      const config = await api.getEditionConfig()
+      setEditionConfig(config)
+    } catch {
+      // Silently handle error
+    }
+  }, [api])
+
+  const loadAccessState = useCallback(async () => {
+    try {
+      const state = await api.refreshAccessState()
+      setAccessState(state)
+    } catch {
+      // Silently handle error
+    }
+  }, [api])
 
   const loadKeyStatus = useCallback(async () => {
     try {
@@ -50,12 +72,17 @@ export function MainWindowApp(): React.JSX.Element {
   }, [api])
 
   const loadAll = useCallback(async () => {
+    await loadEditionConfig()
+    await loadAccessState()
     await Promise.all([loadKeyStatus(), loadEndpointStatus(), loadStats()])
-  }, [loadEndpointStatus, loadKeyStatus, loadStats])
+  }, [loadAccessState, loadEditionConfig, loadEndpointStatus, loadKeyStatus, loadStats])
 
+  const isEnterprise = editionConfig?.edition === 'enterprise'
   const hasKey = keyStatus?.hasKey ?? false
   const hasCustomEndpoint = endpointStatus?.enabled ?? false
-  const isConfigured = hasKey || hasCustomEndpoint
+  const isConfigured = isEnterprise
+    ? accessState?.isEnterpriseActivated === true && hasKey
+    : hasKey || hasCustomEndpoint
   const { llmHealth } = useLlmHealth({
     api,
     enabled: page === 'home' && isConfigured,
@@ -76,6 +103,13 @@ export function MainWindowApp(): React.JSX.Element {
 
   useEffect(() => {
     api.onSubscriptionUpdate(() => {
+      void loadKeyStatus()
+    })
+  }, [api, loadKeyStatus])
+
+  useEffect(() => {
+    api.onAccessStateChanged((state) => {
+      setAccessState(state)
       void loadKeyStatus()
     })
   }, [api, loadKeyStatus])
@@ -123,7 +157,11 @@ export function MainWindowApp(): React.JSX.Element {
         <Logo onSettingsClick={() => setPage('settings')} />
 
         {!initialLoaded ? null : !isConfigured ? (
-          <PlanPicker api={api} onKeySet={() => void loadKeyStatus()} />
+          isEnterprise ? (
+            <EnterpriseActivationCard api={api} accessState={accessState} />
+          ) : (
+            <PlanPicker api={api} onKeySet={() => void loadKeyStatus()} />
+          )
         ) : (
           <>
             <ConnectClaudeSection api={api} />

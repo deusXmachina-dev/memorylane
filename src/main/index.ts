@@ -72,7 +72,7 @@ let slackIntegrationService: SlackIntegrationService | null = null
 let rawDatabaseExportSync: RawDatabaseExportSync | null = null
 
 app.on('before-quit', () => {
-  runtime?.managedKeyService.stopPeriodicRefresh()
+  runtime?.accessProvider.stopPeriodicRefresh()
   void Promise.all([
     runtime?.dispose(),
     slackIntegrationService?.stop(),
@@ -130,6 +130,7 @@ app.on('ready', async () => {
     await import('./ui/main-window')
 
   runtime = await createMainRuntime({
+    edition: editionConfig.edition,
     onCaptureStateChanged: () => {
       void updateTrayMenu()
       void sendStatusToRenderer()
@@ -213,7 +214,7 @@ app.on('ready', async () => {
     apiKeyManager: runtime.apiKeyManager,
     customEndpointManager: runtime.customEndpointManager,
     semanticService: runtime.semanticService,
-    managedKeyService: runtime.managedKeyService,
+    accessProvider: runtime.accessProvider,
     captureSettingsManager,
     slackSettingsManager,
     slackIntegrationService,
@@ -226,7 +227,7 @@ app.on('ready', async () => {
 
   await slackIntegrationService.reload()
 
-  runtime.managedKeyService.startPeriodicRefresh()
+  runtime.accessProvider.startPeriodicRefresh()
 
   captureCoordinator.resumeCaptureIfDesired('startup')
 

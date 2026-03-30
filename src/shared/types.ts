@@ -115,9 +115,25 @@ export type SubscriptionPlan = 'explorer'
 
 export type SubscriptionStatus = 'idle' | 'awaiting_checkout' | 'polling' | 'error'
 
+export type EnterpriseActivationStatus =
+  | 'idle'
+  | 'inactive'
+  | 'activating'
+  | 'waiting_for_key'
+  | 'activated'
+  | 'error'
+
 export interface SubscriptionUpdate {
   status: SubscriptionStatus
   error?: string | undefined
+}
+
+export interface AccessState {
+  edition: AppEditionConfig['edition']
+  isEnterpriseActivated: boolean
+  customerSubscriptionStatus: SubscriptionStatus | null
+  enterpriseActivationStatus: EnterpriseActivationStatus | null
+  error: string | null
 }
 
 export interface SaveResult {
@@ -210,6 +226,10 @@ export interface PatternInfo {
 
 export interface MainWindowAPI {
   getEditionConfig: () => Promise<AppEditionConfig>
+  getAccessState: () => Promise<AccessState>
+  refreshAccessState: () => Promise<AccessState>
+  onAccessStateChanged: (callback: (state: AccessState) => void) => void
+  activateEnterpriseLicense: (activationKey: string) => Promise<SaveResult>
   getStatus: () => Promise<MainWindowStatus>
   toggleCapture: () => Promise<MainWindowStatus>
   onStatusChanged: (callback: (status: MainWindowStatus) => void) => void
