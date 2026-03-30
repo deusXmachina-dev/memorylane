@@ -5,7 +5,6 @@
  * as an MCP server, so users can enable the integration with one click.
  */
 
-import { app } from 'electron'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as os from 'node:os'
@@ -66,25 +65,15 @@ function isRegistered(config: CursorMCPConfig): boolean {
 }
 
 /**
- * Build the MCP server entry.
- *
- * Runs the bundled mcp-entry.js under ELECTRON_RUN_AS_NODE=1 so macOS doesn't
- * see it as a second app instance — this allows the MCP server and tray app to coexist.
+ * Build the MCP server entry pointing to the CLI package.
  */
 function buildMCPEntry(): MCPServerEntry {
   return {
-    command: app.getPath('exe'),
-    args: [path.join(app.getAppPath(), 'out', 'main', 'mcp-entry.js')],
-    env: {
-      ELECTRON_RUN_AS_NODE: '1',
-    },
+    command: 'npx',
+    args: ['-y', '-p', '@deusxmachina-dev/memorylane-cli', 'memorylane-mcp'],
   }
 }
 
-/**
- * Register MemoryLane as an MCP server in Cursor's global MCP config.
- * Returns true on success, false on failure.
- */
 /**
  * Check whether MemoryLane is currently registered in Cursor's MCP config on disk.
  */

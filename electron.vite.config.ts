@@ -16,7 +16,6 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
-          'mcp-entry': resolve(__dirname, 'src/main/mcp-entry.ts'),
         },
         external: [
           'uiohook-napi',
