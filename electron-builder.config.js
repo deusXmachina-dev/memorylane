@@ -107,19 +107,6 @@ module.exports = {
       },
     ],
   },
-  linux: {
-    target: [
-      {
-        target: 'deb',
-        arch: ['x64'],
-      },
-      {
-        target: 'rpm',
-        arch: ['x64'],
-      },
-    ],
-    category: 'Utility',
-  },
   nsis: {
     artifactName: '${productName}-Setup.${ext}',
     oneClick: false,
