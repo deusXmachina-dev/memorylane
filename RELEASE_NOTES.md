@@ -1,10 +1,12 @@
-# MemoryLane v0.17.4
+# MemoryLane v0.17.5-rc.1
 
-Patch release: updated Explorer plan price to $50/mo.
+Prerelease for edition-aware packaging and enterprise release validation.
 
 ## What's Changed
 
-- Updated Explorer plan price from $30/mo to $50/mo
+- Added edition-aware build and startup configuration
+- Added enterprise activation flow and enterprise release artifacts
+- Split customer and enterprise packaging targets for Windows releases
 
 ## Known Issues & Limitations
 
@@ -13,9 +15,9 @@ Patch release: updated Explorer plan price to $50/mo.
 
 ## Installation
 
-- macOS (Apple Silicon): install from the latest GitHub release or via the project install script
-- Windows: download the latest GitHub release and use either `MemoryLane-Setup.exe` or `MemoryLane-Setup.msi`
+- macOS (Apple Silicon): install from the latest GitHub prerelease or via the project install script
+- Windows: download the latest GitHub prerelease and use either `MemoryLane-Setup.exe` or `MemoryLane-Setup.msi`
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v0.17.3...v0.17.4
+https://github.com/deusXmachina-dev/memorylane/compare/v0.17.4...v0.17.5-rc.1
