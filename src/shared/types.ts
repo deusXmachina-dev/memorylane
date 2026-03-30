@@ -1,3 +1,5 @@
+import type { AppEditionConfig } from './edition'
+
 export interface InteractionContext {
   type: 'click' | 'keyboard' | 'scroll' | 'app_change'
   timestamp: number
@@ -207,6 +209,7 @@ export interface PatternInfo {
 }
 
 export interface MainWindowAPI {
+  getEditionConfig: () => Promise<AppEditionConfig>
   getStatus: () => Promise<MainWindowStatus>
   toggleCapture: () => Promise<MainWindowStatus>
   onStatusChanged: (callback: (status: MainWindowStatus) => void) => void

@@ -30,6 +30,7 @@ import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
 import { createMainRuntime, type MainRuntime } from './runtime'
 import { getAppDirectoryName } from './paths'
+import { loadAppEditionConfig } from './edition'
 
 // Keep single-instance behavior in packaged app, but allow dev to run
 // alongside production for local debugging.
@@ -92,6 +93,7 @@ app.on('second-instance', () => {
 app.on('ready', async () => {
   migrateOldMcpEntries()
   const startHidden = shouldStartHiddenOnLaunch()
+  const editionConfig = loadAppEditionConfig()
 
   try {
     const { ensurePermissions } = await import('./ui/permissions')
@@ -204,6 +206,7 @@ app.on('ready', async () => {
   })
 
   initMainWindowIPC({
+    editionConfig,
     capture: captureCoordinator.controls,
     storage: runtime.storage,
     usageTracker: runtime.usageTracker,
@@ -255,5 +258,6 @@ app.on('ready', async () => {
     },
   })
 
+  log.info(`[Startup] Running ${editionConfig.edition} edition`)
   log.info('MemoryLane started. Frame output dir:', runtime.capture.getScreenshotsDir())
 })

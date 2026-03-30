@@ -9,6 +9,7 @@ import { app, BrowserWindow, dialog, ipcMain, IpcMainInvokeEvent, nativeTheme } 
 import path from 'node:path'
 import { DEFAULT_VIDEO_MODELS, DEFAULT_SNAPSHOT_MODELS } from '../semantic/constants'
 import { syncAutoStartSetting } from '../auto-start'
+import { DEFAULT_EDITION, type AppEditionConfig } from '../../shared/edition'
 import log from '../logger'
 import { updateTrayMenu } from './tray'
 import { exportDatabaseZip } from './database-export'
@@ -48,6 +49,7 @@ interface PatternDetectorService {
 }
 
 interface MainWindowDependencies {
+  editionConfig: AppEditionConfig
   capture: {
     isCapturingNow: () => boolean
     requestStartCapture: () => void
@@ -215,6 +217,11 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   deps = dependencies
 
   log.info('[MainWindow] Initializing IPC handlers...')
+
+  ipcMain.handle(
+    'main-window:getEditionConfig',
+    () => deps?.editionConfig ?? { edition: DEFAULT_EDITION },
+  )
 
   // Theme
   ipcMain.handle('main-window:getTheme', () => {

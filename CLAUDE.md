@@ -112,10 +112,21 @@ The project uses electron-vite for development and electron-builder for packagin
   - Handles native module externalization
   - Source maps enabled for debugging
 
-- **electron-builder.yml**: Packaging configuration
+- **electron-builder.config.js**: Packaging configuration
   - Defines targets for macOS and Windows
   - Configures ASAR unpacking for native modules
   - Handles asset copying to resources
+
+### Editions
+
+The app currently supports two editions:
+
+- `customer`
+- `enterprise`
+
+Build selection is done with the `EDITION` environment variable in packaging scripts. The edition-specific build commands set it explicitly and `electron-builder.config.js` uses it to choose packaging metadata and bundle the matching `config/editions/<edition>.json` file.
+
+At runtime, the app loads the edition config once during startup in `src/main/edition.ts`, validates it, and exposes the resolved config object to the rest of the app. In development, `EDITION` selects which config file to load; in packaged builds, the bundled `resources/config/edition.json` file is loaded.
 
 ### Native Modules
 
