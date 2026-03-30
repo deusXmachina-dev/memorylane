@@ -74,7 +74,7 @@ export const USER_CONTEXT_CONFIG = {
 export const PATTERN_DETECTION_CONFIG = {
   MODEL: 'google/gemini-3-flash-preview',
   LOOKBACK_DAYS: 1, // Days back from today to analyze (1 = yesterday)
-  MIN_ACTIVITIES: 50, // Minimum total activities in DB before first run
+  MIN_ACTIVITIES: 200, // Minimum total activities in DB before first run
   SETTLE_DELAY_MS: 60 * 1000, // 1 min after unlock before running
 }
 

@@ -256,4 +256,5 @@ export interface MainWindowAPI {
   getUpdateState: () => Promise<UpdateState>
   onUpdateStateChanged: (callback: (state: UpdateState) => void) => void
   installUpdate: () => Promise<void>
+  openExternal: (url: string) => Promise<void>
 }

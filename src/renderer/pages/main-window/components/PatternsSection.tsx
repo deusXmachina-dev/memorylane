@@ -226,23 +226,6 @@ export function PatternsSection({
                   </svg>
                   {pattern.sightingCount}
                 </span>
-                {pattern.estimatedHoursPerWeek !== null && (
-                  <span className="inline-flex items-center gap-0.5 text-xs font-normal text-muted-foreground">
-                    <svg
-                      className="w-3 h-3"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <circle cx="12" cy="12" r="10" />
-                      <path strokeLinecap="round" d="M12 6v6l4 2" />
-                    </svg>
-                    {pattern.estimatedHoursPerWeek < 1
-                      ? `~${Math.round(pattern.estimatedHoursPerWeek * 60)} min/wk`
-                      : `~${pattern.estimatedHoursPerWeek} hr/wk`}
-                  </span>
-                )}
               </div>
             </CardTitle>
             <CardAction>
@@ -325,23 +308,6 @@ export function PatternsSection({
                         </svg>
                         {pattern.sightingCount}
                       </span>
-                      {pattern.estimatedHoursPerWeek !== null && (
-                        <span className="inline-flex items-center gap-0.5 text-xs font-normal text-muted-foreground">
-                          <svg
-                            className="w-3 h-3"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={2}
-                          >
-                            <circle cx="12" cy="12" r="10" />
-                            <path strokeLinecap="round" d="M12 6v6l4 2" />
-                          </svg>
-                          {pattern.estimatedHoursPerWeek < 1
-                            ? `~${Math.round(pattern.estimatedHoursPerWeek * 60)} min/wk`
-                            : `~${pattern.estimatedHoursPerWeek} hr/wk`}
-                        </span>
-                      )}
                     </div>
                   </CardTitle>
                   <CardAction>

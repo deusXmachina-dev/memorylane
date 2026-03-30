@@ -115,6 +115,10 @@ export function ConnectStep({
         })}
       </div>
 
+      <p className="text-xs text-muted-foreground">
+        You may need to restart Claude Code / Cowork after connecting for the MCP to appear.
+      </p>
+
       <Button size="lg" className="w-full" disabled={!anyConnected} onClick={onContinue}>
         Continue
       </Button>

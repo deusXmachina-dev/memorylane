@@ -5,7 +5,15 @@
  * Singleton window that hides on close instead of destroying.
  */
 
-import { app, BrowserWindow, dialog, ipcMain, IpcMainInvokeEvent, nativeTheme } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  IpcMainInvokeEvent,
+  nativeTheme,
+  shell,
+} from 'electron'
 import path from 'node:path'
 import { DEFAULT_VIDEO_MODELS, DEFAULT_SNAPSHOT_MODELS } from '../semantic/constants'
 import { syncAutoStartSetting } from '../auto-start'
@@ -536,6 +544,12 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       }
     },
   )
+
+  // Shell — only allow https URLs to prevent arbitrary protocol execution
+  ipcMain.handle('main-window:openExternal', (_event: IpcMainInvokeEvent, url: string) => {
+    if (typeof url !== 'string' || !url.startsWith('https://')) return
+    return shell.openExternal(url)
+  })
 
   // Database export
   ipcMain.handle('main-window:exportDatabaseZip', async () => {

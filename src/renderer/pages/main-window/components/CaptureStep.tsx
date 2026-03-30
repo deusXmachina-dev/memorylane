@@ -1,7 +1,9 @@
 import { CaptureControlSection } from './CaptureControlSection'
 import { PATTERN_DETECTION_CONFIG } from '@constants'
+import type { MainWindowAPI } from '@types'
 
 interface CaptureStepProps {
+  api: MainWindowAPI
   capturing: boolean
   captureHotkeyLabel: string
   toggling: boolean
@@ -10,6 +12,7 @@ interface CaptureStepProps {
 }
 
 export function CaptureStep({
+  api,
   capturing,
   captureHotkeyLabel,
   toggling,
@@ -31,19 +34,17 @@ export function CaptureStep({
             ? 'Keep MemoryLane running. First patterns appear in about a day.'
             : 'MemoryLane captures your screen activity to find repetitive patterns. First results appear in about a day.'}
         </p>
-        {capturing && activityCount !== null && activityCount > 0 && (
-          <div className="space-y-1 pt-1">
-            <div className="h-2 w-full rounded-full bg-muted">
-              <div
-                className="h-2 rounded-full bg-primary transition-all duration-500"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {progressPercent}% &middot; {safeCount} / ~{minActivities} activities
-            </p>
+        <div className="space-y-1 pt-1">
+          <div className="h-2 w-full rounded-full bg-muted">
+            <div
+              className="h-2 rounded-full bg-primary transition-all duration-500"
+              style={{ width: `${progressPercent}%` }}
+            />
           </div>
-        )}
+          <p className="text-xs text-muted-foreground">
+            {progressPercent}% &middot; {safeCount} / ~{minActivities} activities
+          </p>
+        </div>
       </div>
 
       <CaptureControlSection
@@ -52,6 +53,26 @@ export function CaptureStep({
         toggling={toggling}
         onToggle={onToggle}
       />
+
+      {capturing && (
+        <div className="rounded-lg bg-secondary/50 p-3 space-y-1">
+          <p className="text-xs font-medium">You&apos;re all set - come back tomorrow!</p>
+          <p className="text-xs text-muted-foreground">
+            Meanwhile, install our{' '}
+            <a
+              href="https://trymemorylane.com/guide"
+              className="underline hover:text-foreground"
+              onClick={(e) => {
+                e.preventDefault()
+                api.openExternal('https://trymemorylane.com/guide')
+              }}
+            >
+              Claude Cowork plugin
+            </a>{' '}
+            for the best experience.
+          </p>
+        </div>
+      )}
     </div>
   )
 }

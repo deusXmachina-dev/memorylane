@@ -71,6 +71,8 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
     ipcRenderer.invoke('main-window:chooseDatabaseExportDirectory', initialPath),
   // Database export
   exportDatabaseZip: () => ipcRenderer.invoke('main-window:exportDatabaseZip'),
+  // Shell
+  openExternal: (url: string) => ipcRenderer.invoke('main-window:openExternal', url),
 })
 
 console.log('[Preload] mainWindowAPI exposed to renderer')

@@ -9,7 +9,6 @@ import { ConnectStep } from './components/ConnectStep'
 import { CaptureStep } from './components/CaptureStep'
 import { StatusLine } from './components/StatusLine'
 import { PatternsSection } from './components/PatternsSection'
-import { HeadlineMetric } from './components/HeadlineMetric'
 import { AdvancedSettingsPage } from './AdvancedSettingsPage'
 import type {
   CustomEndpointStatus,
@@ -177,6 +176,7 @@ export function MainWindowApp(): React.JSX.Element {
           />
         ) : step === 'capture' ? (
           <CaptureStep
+            api={api}
             capturing={capturing}
             captureHotkeyLabel={captureHotkeyLabel}
             toggling={toggling}
@@ -185,8 +185,6 @@ export function MainWindowApp(): React.JSX.Element {
           />
         ) : (
           <>
-            <HeadlineMetric totalHoursPerWeek={stats?.totalRepetitiveHoursPerWeek ?? null} />
-
             <StatusLine
               capturing={capturing}
               llmHealth={llmHealth}
