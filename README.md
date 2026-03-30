@@ -33,3 +33,8 @@ Install the CLI from npm: [`@deusxmachina-dev/memorylane-cli`](https://www.npmjs
 Questions, feedback, and feature ideas are welcome in our Discord server.
 
 [Join the MemoryLane Discord](https://discord.gg/AHmURhKXdP)
+
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/deusxmachina-dev-memorylane).
+
