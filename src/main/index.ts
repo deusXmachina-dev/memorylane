@@ -201,10 +201,14 @@ app.on('ready', async () => {
     storage: runtime.storage,
   })
 
-  const { initAutoUpdater } = await import('./updater')
-  initAutoUpdater(() => {
-    void updateTrayMenu()
-  })
+  if (editionConfig.edition === 'customer') {
+    const { initAutoUpdater } = await import('./updater')
+    initAutoUpdater(() => {
+      void updateTrayMenu()
+    })
+  } else {
+    log.info('[Updater] Skipping auto-updater for enterprise edition')
+  }
 
   initMainWindowIPC({
     editionConfig,

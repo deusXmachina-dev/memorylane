@@ -4,14 +4,53 @@ const isEnterprise = edition === 'enterprise'
 const productName = isEnterprise ? 'MemoryLane Enterprise' : 'MemoryLane'
 const packageName = isEnterprise ? 'memorylane-enterprise' : 'memorylane'
 const appId = isEnterprise ? 'com.memorylane.enterprise' : 'com.memorylane.app'
-const publishRepo = isEnterprise ? 'memorylane-enterprise' : 'memorylane'
+
+const macConfig = isEnterprise
+  ? undefined
+  : {
+      notarize: false,
+      category: 'public.app-category.productivity',
+      extendInfo: {
+        LSUIElement: true,
+      },
+      identity: 'Filip Kubis (ZN3J54N7AP)',
+      hardenedRuntime: true,
+      gatekeeperAssess: false,
+      entitlements: 'build/entitlements.mac.plist',
+      entitlementsInherit: 'build/entitlements.mac.inherit.plist',
+      artifactName: '${productName}-${arch}-mac.${ext}',
+      target: [
+        {
+          target: 'zip',
+          arch: ['arm64'],
+        },
+        {
+          target: 'dmg',
+          arch: ['arm64'],
+        },
+      ],
+    }
+
+const winTargets = isEnterprise
+  ? [
+      {
+        target: 'msi',
+        arch: ['x64'],
+      },
+    ]
+  : [
+      {
+        target: 'nsis',
+        arch: ['x64'],
+      },
+    ]
 
 /** @type {import('electron-builder').Configuration} */
 module.exports = {
   publish: {
     provider: 'github',
     owner: 'deusXmachina-dev',
-    repo: publishRepo,
+    repo: 'memorylane',
   },
   appId,
   productName,
@@ -63,29 +102,7 @@ module.exports = {
     '**/*.node',
   ],
   afterSign: 'build/notarize.js',
-  mac: {
-    notarize: false,
-    category: 'public.app-category.productivity',
-    extendInfo: {
-      LSUIElement: true,
-    },
-    identity: 'Filip Kubis (ZN3J54N7AP)',
-    hardenedRuntime: true,
-    gatekeeperAssess: false,
-    entitlements: 'build/entitlements.mac.plist',
-    entitlementsInherit: 'build/entitlements.mac.inherit.plist',
-    artifactName: '${productName}-${arch}-mac.${ext}',
-    target: [
-      {
-        target: 'zip',
-        arch: ['arm64'],
-      },
-      {
-        target: 'dmg',
-        arch: ['arm64'],
-      },
-    ],
-  },
+  ...(macConfig ? { mac: macConfig } : {}),
   win: {
     extraResources: [
       {
@@ -100,12 +117,7 @@ module.exports = {
       certificateProfileName: 'memorylane-codesign',
       codeSigningAccountName: 'azure-signing-dxm',
     },
-    target: [
-      {
-        target: 'nsis',
-        arch: ['x64'],
-      },
-    ],
+    target: winTargets,
   },
   nsis: {
     artifactName: '${productName}-Setup.${ext}',
@@ -113,5 +125,10 @@ module.exports = {
     perMachine: true,
     allowElevation: true,
     allowToChangeInstallationDirectory: true,
+  },
+  msi: {
+    perMachine: true,
+    oneClick: true,
+    artifactName: '${productName}-Setup.${ext}',
   },
 }
