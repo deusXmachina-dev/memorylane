@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
-import { Check } from 'lucide-react'
 import { SiClaude } from '@icons-pack/react-simple-icons'
 import { Card, CardHeader, CardTitle, CardDescription, CardAction } from '@components/ui/card'
+import { Button } from '@components/ui/button'
 import type { MainWindowAPI, McpRegistrationStatus } from '@types'
 
 const PROVIDERS: {
@@ -32,14 +32,17 @@ interface ConnectStepProps {
   api: MainWindowAPI
   mcpStatus: McpRegistrationStatus | null
   onStatusChange: () => void
+  onContinue: () => void
 }
 
 export function ConnectStep({
   api,
   mcpStatus,
   onStatusChange,
+  onContinue,
 }: ConnectStepProps): React.JSX.Element {
   const [adding, setAdding] = useState<string | null>(null)
+  const anyConnected = mcpStatus !== null && Object.values(mcpStatus).some(Boolean)
 
   const handleAdd = useCallback(
     async (provider: (typeof PROVIDERS)[number]) => {
@@ -80,10 +83,10 @@ export function ConnectStep({
               size="sm"
               className={`cursor-pointer transition-colors ${
                 connected
-                  ? 'ring-primary/40 bg-primary/5'
+                  ? 'ring-foreground/20 bg-primary/5'
                   : adding !== null
                     ? 'opacity-60'
-                    : 'hover:ring-primary/40 hover:bg-accent'
+                    : 'hover:ring-foreground/20 hover:bg-accent'
               }`}
               onClick={() => {
                 if (!connected && adding === null) void handleAdd(provider)
@@ -99,11 +102,11 @@ export function ConnectStep({
                     <CardDescription className="text-xs">{provider.description}</CardDescription>
                   </div>
                 </div>
-                <CardAction>
+                <CardAction className="self-center">
                   {adding === provider.name ? (
                     <span className="text-xs text-muted-foreground">Connecting...</span>
                   ) : connected ? (
-                    <Check className="h-4 w-4 text-primary" />
+                    <span className="text-xs text-muted-foreground">Connected</span>
                   ) : null}
                 </CardAction>
               </CardHeader>
@@ -111,6 +114,10 @@ export function ConnectStep({
           )
         })}
       </div>
+
+      <Button size="lg" className="w-full" disabled={!anyConnected} onClick={onContinue}>
+        Continue
+      </Button>
     </div>
   )
 }

@@ -1,32 +1,17 @@
 import type { LlmHealthStatus } from '@types'
 
 interface StatusLineProps {
+  capturing: boolean
   llmHealth: LlmHealthStatus | null
   activityCount: number | null
 }
 
-function describeLlmHealth(llmHealth: LlmHealthStatus | null): {
-  dotClassName: string
-  text: string
-} | null {
+function describeLlmHealth(llmHealth: LlmHealthStatus | null): string | null {
   if (!llmHealth) return null
-
-  if (llmHealth.state === 'active') {
-    return { dotClassName: 'bg-emerald-500', text: 'LLM active' }
-  }
-
   if (llmHealth.state === 'failing') {
     const requestsLabel = llmHealth.consecutiveFailures === 1 ? 'request' : 'requests'
-    return {
-      dotClassName: 'bg-destructive',
-      text: `LLM issue: last ${llmHealth.consecutiveFailures} ${requestsLabel} failed`,
-    }
+    return `LLM issue: last ${llmHealth.consecutiveFailures} ${requestsLabel} failed`
   }
-
-  if (llmHealth.state === 'unknown') {
-    return { dotClassName: 'bg-muted-foreground/50', text: 'LLM ready, waiting for activity' }
-  }
-
   return null
 }
 
@@ -37,20 +22,30 @@ function formatCount(n: number): string {
   return n.toLocaleString()
 }
 
-export function StatusLine({ llmHealth, activityCount }: StatusLineProps): React.JSX.Element {
-  const health = describeLlmHealth(llmHealth)
-
-  if (!health && activityCount === null) {
-    return <div className="text-xs text-muted-foreground">Loading...</div>
-  }
+export function StatusLine({
+  capturing,
+  llmHealth,
+  activityCount,
+}: StatusLineProps): React.JSX.Element {
+  const healthWarning = describeLlmHealth(llmHealth)
 
   return (
-    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-      {health && (
-        <span className={`ml-2 mr-0.5 h-2 w-2 shrink-0 rounded-full ${health.dotClassName}`} />
+    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <span
+        className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+          capturing ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/40'
+        }`}
+      />
+      {capturing ? (
+        <span>
+          Analyzing{activityCount !== null ? ` · ${formatCount(activityCount)} activities` : ''}
+        </span>
+      ) : (
+        <span>
+          {activityCount !== null ? `${formatCount(activityCount)} activities · ` : ''}Paused
+        </span>
       )}
-
-      {activityCount !== null && <span>{formatCount(activityCount)} activities</span>}
+      {healthWarning && <span className="text-destructive ml-1">· {healthWarning}</span>}
     </div>
   )
 }

@@ -31,6 +31,7 @@ export function MainWindowApp(): React.JSX.Element {
   const [mcpStatus, setMcpStatus] = useState<McpRegistrationStatus | null>(null)
   const [patterns, setPatterns] = useState<PatternInfo[] | null>(null)
   const [initialLoaded, setInitialLoaded] = useState(false)
+  const [connectStepDone, setConnectStepDone] = useState(false)
 
   const loadKeyStatus = useCallback(async () => {
     try {
@@ -95,7 +96,8 @@ export function MainWindowApp(): React.JSX.Element {
 
   const anyMcpConnected = mcpStatus !== null && Object.values(mcpStatus).some(Boolean)
   const hasPatterns = patterns !== null && patterns.length > 0
-  const step = !anyMcpConnected ? 'connect' : !hasPatterns ? 'capture' : 'dashboard'
+  const step =
+    !anyMcpConnected || !connectStepDone ? 'connect' : !hasPatterns ? 'capture' : 'dashboard'
 
   useEffect(() => {
     void api.getStatus().then((status) => {
@@ -108,7 +110,12 @@ export function MainWindowApp(): React.JSX.Element {
       void loadStats()
       void loadPatterns()
     })
-    void loadAll().then(() => setInitialLoaded(true))
+    void loadAll().then(() => {
+      setInitialLoaded(true)
+      void api.getMcpStatus().then((s) => {
+        if (s !== null && Object.values(s).some(Boolean)) setConnectStepDone(true)
+      })
+    })
   }, [api, loadAll, loadStats, loadPatterns])
 
   useEffect(() => {
@@ -166,6 +173,7 @@ export function MainWindowApp(): React.JSX.Element {
             api={api}
             mcpStatus={mcpStatus}
             onStatusChange={() => void loadMcpStatus()}
+            onContinue={() => setConnectStepDone(true)}
           />
         ) : step === 'capture' ? (
           <CaptureStep
@@ -179,21 +187,24 @@ export function MainWindowApp(): React.JSX.Element {
           <>
             <HeadlineMetric totalHoursPerWeek={stats?.totalRepetitiveHoursPerWeek ?? null} />
 
+            <StatusLine
+              capturing={capturing}
+              llmHealth={llmHealth}
+              activityCount={stats?.activityCount ?? null}
+            />
+
+            <CaptureControlSection
+              capturing={capturing}
+              captureHotkeyLabel={captureHotkeyLabel}
+              toggling={toggling}
+              onToggle={() => void handleToggle()}
+            />
+
             <PatternsSection
               api={api}
               patterns={patterns!}
               onPatternsChange={() => void loadPatterns()}
             />
-
-            <div className="space-y-2">
-              <CaptureControlSection
-                capturing={capturing}
-                captureHotkeyLabel={captureHotkeyLabel}
-                toggling={toggling}
-                onToggle={() => void handleToggle()}
-              />
-              <StatusLine llmHealth={llmHealth} activityCount={stats?.activityCount ?? null} />
-            </div>
           </>
         )}
       </div>
