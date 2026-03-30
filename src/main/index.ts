@@ -2,7 +2,7 @@
  * MemoryLane - Main Process Entry Point
  *
  * Tray app running the timeline-first pipeline.
- * The MCP server runs separately via mcp-entry.ts under ELECTRON_RUN_AS_NODE=1.
+ * The MCP server is provided by the CLI package (@deusxmachina-dev/memorylane-cli).
  */
 
 import { app, globalShortcut } from 'electron'
@@ -21,6 +21,7 @@ import { startPowerMonitoring, shouldPause } from './power-monitor'
 import { CaptureStateManager } from './settings/capture-state-manager'
 import { CaptureSettingsManager } from './settings/capture-settings-manager'
 import { DeviceIdentity } from './settings/device-identity'
+import { migrateOldMcpEntries } from './integrations'
 import { SlackIntegrationService } from './integrations/slack/service'
 import { SlackSettingsManager } from './integrations/slack/settings-manager'
 import { SlackSemanticLayer } from './integrations/slack/semantic'
@@ -89,6 +90,7 @@ app.on('second-instance', () => {
 })
 
 app.on('ready', async () => {
+  migrateOldMcpEntries()
   const startHidden = shouldStartHiddenOnLaunch()
 
   try {

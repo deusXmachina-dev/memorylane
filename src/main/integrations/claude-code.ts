@@ -76,12 +76,34 @@ function buildMCPEntry(): MCPServerEntry {
   }
 }
 
+function isOldElectronEntry(entry: MCPServerEntry): boolean {
+  return entry.env?.ELECTRON_RUN_AS_NODE === '1'
+}
+
 /**
  * Check whether MemoryLane is currently registered in Claude Code's settings on disk.
  */
 export function isMcpAddedToClaudeCode(): boolean {
   const settings = readSettings(getClaudeCodeSettingsPath())
   return isRegistered(settings)
+}
+
+/**
+ * If the old Electron-based MCP entry exists, replace it with the CLI entry.
+ */
+export function migrateClaudeCode(): void {
+  const settingsPath = getClaudeCodeSettingsPath()
+  try {
+    const settings = readSettings(settingsPath)
+    const existing = settings.mcpServers?.[MCP_SERVER_KEY]
+    if (!existing || !isOldElectronEntry(existing)) return
+
+    settings.mcpServers![MCP_SERVER_KEY] = buildMCPEntry()
+    writeSettings(settingsPath, settings)
+    log.info('[Claude Code Integration] Migrated from Electron MCP to CLI')
+  } catch {
+    // best-effort
+  }
 }
 
 export async function registerWithClaudeCode(): Promise<boolean> {

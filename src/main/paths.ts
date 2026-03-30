@@ -27,7 +27,8 @@ export function getDefaultDbPath(): string {
 export function isDevRuntime(): boolean {
   if (process.env.NODE_ENV === 'production') return false
   if (process.versions.electron) return !isPackagedElectronExecutable(process.execPath)
-  return true
+  // Non-Electron (CLI): only dev if explicitly set
+  return process.env.NODE_ENV === 'development'
 }
 
 export function getAppDirectoryName(dev: boolean): string {

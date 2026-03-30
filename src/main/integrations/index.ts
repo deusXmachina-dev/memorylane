@@ -1,7 +1,11 @@
 import type { McpIntegration } from './types'
-import { registerWithClaudeDesktop, isMcpAddedToClaudeDesktop } from './claude-desktop'
-import { registerWithCursor, isMcpAddedToCursor } from './cursor'
-import { registerWithClaudeCode, isMcpAddedToClaudeCode } from './claude-code'
+import {
+  registerWithClaudeDesktop,
+  isMcpAddedToClaudeDesktop,
+  migrateClaudeDesktop,
+} from './claude-desktop'
+import { registerWithCursor, isMcpAddedToCursor, migrateCursor } from './cursor'
+import { registerWithClaudeCode, isMcpAddedToClaudeCode, migrateClaudeCode } from './claude-code'
 
 export type { McpIntegration } from './types'
 
@@ -25,3 +29,13 @@ export const integrations: McpIntegration[] = [
     isMcpAdded: isMcpAddedToClaudeCode,
   },
 ]
+
+/**
+ * Migrate old Electron-based MCP entries to CLI-based entries.
+ * Called on app startup — best-effort, no errors thrown.
+ */
+export function migrateOldMcpEntries(): void {
+  migrateClaudeDesktop()
+  migrateClaudeCode()
+  migrateCursor()
+}
