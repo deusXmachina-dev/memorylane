@@ -16,37 +16,32 @@ const SIGHTING_FILTERS = [
 
 interface PatternsSectionProps {
   api: MainWindowAPI
-  capturing: boolean
-  activityCount: number | null
+  patterns: PatternInfo[]
+  onPatternsChange: () => void
 }
 
 export function PatternsSection({
   api,
-  capturing,
-  activityCount,
+  patterns,
+  onPatternsChange,
 }: PatternsSectionProps): React.JSX.Element | null {
-  const [allPatterns, setAllPatterns] = useState<PatternInfo[] | null>(null)
+  const [allPatterns, setAllPatterns] = useState<PatternInfo[]>(patterns)
   const [minSightings, setMinSightings] = useState(3)
   const [detectionEnabled, setDetectionEnabled] = useState<boolean | null>(null)
 
   useEffect(() => {
-    const load = (): void => {
-      api
-        .getPatterns()
-        .then(setAllPatterns)
-        .catch(() => setAllPatterns([]))
-      api
-        .getCaptureSettings()
-        .then((s) => setDetectionEnabled(s.patternDetectionEnabled))
-        .catch(() => setDetectionEnabled(true))
-    }
-    load()
-    window.addEventListener('focus', load)
-    return () => window.removeEventListener('focus', load)
+    setAllPatterns(patterns)
+  }, [patterns])
+
+  useEffect(() => {
+    api
+      .getCaptureSettings()
+      .then((s) => setDetectionEnabled(s.patternDetectionEnabled))
+      .catch(() => setDetectionEnabled(true))
   }, [api])
 
   const { activePatterns, completedPatterns } = useMemo(() => {
-    const filtered = allPatterns?.filter((p) => p.sightingCount >= minSightings) ?? []
+    const filtered = allPatterns.filter((p) => p.sightingCount >= minSightings)
     const active = filtered
       .filter((p) => !p.completedAt)
       .sort((a, b) => b.sightingCount - a.sightingCount)
@@ -59,49 +54,51 @@ export function PatternsSection({
   const handleApprove = useCallback(
     (id: string) => {
       setAllPatterns((prev) =>
-        prev ? prev.map((p) => (p.id === id ? { ...p, approvedAt: Date.now() } : p)) : prev,
+        prev.map((p) => (p.id === id ? { ...p, approvedAt: Date.now() } : p)),
       )
       toast.success('Thanks for the feedback!')
       api.approvePattern(id).catch(() => {
         // approval persisted best-effort
       })
+      onPatternsChange()
     },
-    [api],
+    [api, onPatternsChange],
   )
 
   const handleDismiss = useCallback(
     (id: string, name: string) => {
-      setAllPatterns((prev) => (prev ? prev.filter((p) => p.id !== id) : prev))
+      setAllPatterns((prev) => prev.filter((p) => p.id !== id))
       toast.success(`Not useful — "${name}" hidden`)
       api.rejectPattern(id).catch(() => {
         // rejection persisted best-effort
       })
+      onPatternsChange()
     },
-    [api],
+    [api, onPatternsChange],
   )
 
   const handleComplete = useCallback(
     (id: string) => {
       setAllPatterns((prev) =>
-        prev ? prev.map((p) => (p.id === id ? { ...p, completedAt: Date.now() } : p)) : prev,
+        prev.map((p) => (p.id === id ? { ...p, completedAt: Date.now() } : p)),
       )
       api.completePattern(id).catch(() => {
         // completion persisted best-effort
       })
+      onPatternsChange()
     },
-    [api],
+    [api, onPatternsChange],
   )
 
   const handleUncomplete = useCallback(
     (id: string) => {
-      setAllPatterns((prev) =>
-        prev ? prev.map((p) => (p.id === id ? { ...p, completedAt: null } : p)) : prev,
-      )
+      setAllPatterns((prev) => prev.map((p) => (p.id === id ? { ...p, completedAt: null } : p)))
       api.uncompletePattern(id).catch(() => {
         // uncomplete persisted best-effort
       })
+      onPatternsChange()
     },
-    [api],
+    [api, onPatternsChange],
   )
 
   const [showCompleted, setShowCompleted] = useState(false)
@@ -147,8 +144,6 @@ export function PatternsSection({
     [api],
   )
 
-  if (allPatterns === null) return null
-
   if (detectionEnabled === false) {
     return (
       <div className="space-y-3">
@@ -174,28 +169,6 @@ export function PatternsSection({
     )
   }
 
-  if (allPatterns.length === 0) {
-    return (
-      <div className="space-y-3">
-        <h2 className="text-sm font-medium">Automation Opportunities</h2>
-        {capturing ? (
-          <>
-            <p className="text-xs text-muted-foreground">
-              Keep MemoryLane running. First patterns appear in about a day.
-            </p>
-            {activityCount !== null && (
-              <p className="text-xs text-muted-foreground">{activityCount} activities recorded</p>
-            )}
-          </>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            Start capturing to begin. MemoryLane will find repetitive patterns in about a day.
-          </p>
-        )}
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -204,7 +177,7 @@ export function PatternsSection({
       </div>
 
       <PatternFeedbackNudge
-        patterns={allPatterns ?? []}
+        patterns={allPatterns}
         onApprove={handleApprove}
         onDismiss={handleDismiss}
       />

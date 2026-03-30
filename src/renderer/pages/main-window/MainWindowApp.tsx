@@ -5,12 +5,19 @@ import { useLlmHealth } from '@/renderer/hooks/use-llm-health'
 import { Logo } from './components/Logo'
 import { PlanPicker } from './components/PlanPicker'
 import { CaptureControlSection } from './components/CaptureControlSection'
-import { ConnectClaudeSection } from './components/ConnectClaudeSection'
+import { ConnectStep } from './components/ConnectStep'
+import { CaptureStep } from './components/CaptureStep'
 import { StatusLine } from './components/StatusLine'
 import { PatternsSection } from './components/PatternsSection'
 import { HeadlineMetric } from './components/HeadlineMetric'
 import { AdvancedSettingsPage } from './AdvancedSettingsPage'
-import type { CustomEndpointStatus, KeyStatus, MainWindowStats } from '@types'
+import type {
+  CustomEndpointStatus,
+  KeyStatus,
+  MainWindowStats,
+  McpRegistrationStatus,
+  PatternInfo,
+} from '@types'
 
 export function MainWindowApp(): React.JSX.Element {
   const api = useMainWindowAPI()
@@ -21,6 +28,8 @@ export function MainWindowApp(): React.JSX.Element {
   const [captureHotkeyLabel, setCaptureHotkeyLabel] = useState('')
   const [toggling, setToggling] = useState(false)
   const [stats, setStats] = useState<MainWindowStats | null>(null)
+  const [mcpStatus, setMcpStatus] = useState<McpRegistrationStatus | null>(null)
+  const [patterns, setPatterns] = useState<PatternInfo[] | null>(null)
   const [initialLoaded, setInitialLoaded] = useState(false)
 
   const loadKeyStatus = useCallback(async () => {
@@ -50,9 +59,31 @@ export function MainWindowApp(): React.JSX.Element {
     }
   }, [api])
 
+  const loadMcpStatus = useCallback(async () => {
+    try {
+      setMcpStatus(await api.getMcpStatus())
+    } catch {
+      // Silently handle error
+    }
+  }, [api])
+
+  const loadPatterns = useCallback(async () => {
+    try {
+      setPatterns(await api.getPatterns())
+    } catch {
+      setPatterns([])
+    }
+  }, [api])
+
   const loadAll = useCallback(async () => {
-    await Promise.all([loadKeyStatus(), loadEndpointStatus(), loadStats()])
-  }, [loadEndpointStatus, loadKeyStatus, loadStats])
+    await Promise.all([
+      loadKeyStatus(),
+      loadEndpointStatus(),
+      loadStats(),
+      loadMcpStatus(),
+      loadPatterns(),
+    ])
+  }, [loadEndpointStatus, loadKeyStatus, loadStats, loadMcpStatus, loadPatterns])
 
   const hasKey = keyStatus?.hasKey ?? false
   const hasCustomEndpoint = endpointStatus?.enabled ?? false
@@ -61,6 +92,10 @@ export function MainWindowApp(): React.JSX.Element {
     api,
     enabled: page === 'home' && isConfigured,
   })
+
+  const anyMcpConnected = mcpStatus !== null && Object.values(mcpStatus).some(Boolean)
+  const hasPatterns = patterns !== null && patterns.length > 0
+  const step = !anyMcpConnected ? 'connect' : !hasPatterns ? 'capture' : 'dashboard'
 
   useEffect(() => {
     void api.getStatus().then((status) => {
@@ -71,9 +106,10 @@ export function MainWindowApp(): React.JSX.Element {
       setCapturing(status.capturing)
       setCaptureHotkeyLabel(status.captureHotkeyLabel)
       void loadStats()
+      void loadPatterns()
     })
     void loadAll().then(() => setInitialLoaded(true))
-  }, [api, loadAll, loadStats])
+  }, [api, loadAll, loadStats, loadPatterns])
 
   useEffect(() => {
     api.onSubscriptionUpdate(() => {
@@ -125,9 +161,29 @@ export function MainWindowApp(): React.JSX.Element {
 
         {!initialLoaded ? null : !isConfigured ? (
           <PlanPicker api={api} onKeySet={() => void loadKeyStatus()} />
+        ) : step === 'connect' ? (
+          <ConnectStep
+            api={api}
+            mcpStatus={mcpStatus}
+            onStatusChange={() => void loadMcpStatus()}
+          />
+        ) : step === 'capture' ? (
+          <CaptureStep
+            capturing={capturing}
+            captureHotkeyLabel={captureHotkeyLabel}
+            toggling={toggling}
+            onToggle={() => void handleToggle()}
+            activityCount={stats?.activityCount ?? null}
+          />
         ) : (
           <>
-            <ConnectClaudeSection api={api} />
+            <HeadlineMetric totalHoursPerWeek={stats?.totalRepetitiveHoursPerWeek ?? null} />
+
+            <PatternsSection
+              api={api}
+              patterns={patterns!}
+              onPatternsChange={() => void loadPatterns()}
+            />
 
             <div className="space-y-2">
               <CaptureControlSection
@@ -138,16 +194,6 @@ export function MainWindowApp(): React.JSX.Element {
               />
               <StatusLine llmHealth={llmHealth} activityCount={stats?.activityCount ?? null} />
             </div>
-
-            <hr className="border-border" />
-
-            <HeadlineMetric totalHoursPerWeek={stats?.totalRepetitiveHoursPerWeek ?? null} />
-
-            <PatternsSection
-              api={api}
-              capturing={capturing}
-              activityCount={stats?.activityCount ?? null}
-            />
           </>
         )}
       </div>
