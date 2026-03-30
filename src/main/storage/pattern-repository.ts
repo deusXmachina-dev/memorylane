@@ -33,6 +33,7 @@ export interface PatternWithStats extends Pattern {
   sightingCount: number
   lastSeenAt: number | null
   lastConfidence: number | null
+  estimatedHoursPerWeek: number | null
 }
 
 // ---------------------------------------------------------------------------
@@ -72,6 +73,8 @@ export class PatternRepository {
         `SELECT p.*,
                 COUNT(s.id) AS sighting_count,
                 MAX(s.detected_at) AS last_seen_at,
+                MIN(s.detected_at) AS first_seen_at,
+                AVG(s.duration_estimate_min) AS avg_duration_min,
                 (SELECT confidence FROM pattern_sightings WHERE pattern_id = p.id ORDER BY detected_at DESC LIMIT 1) AS last_confidence
          FROM patterns p
          LEFT JOIN pattern_sightings s ON s.pattern_id = p.id
@@ -89,6 +92,8 @@ export class PatternRepository {
         `SELECT p.*,
                 COUNT(s.id) AS sighting_count,
                 MAX(s.detected_at) AS last_seen_at,
+                MIN(s.detected_at) AS first_seen_at,
+                AVG(s.duration_estimate_min) AS avg_duration_min,
                 (SELECT confidence FROM pattern_sightings WHERE pattern_id = p.id ORDER BY detected_at DESC LIMIT 1) AS last_confidence
          FROM patterns p
          LEFT JOIN pattern_sightings s ON s.pattern_id = p.id
@@ -107,6 +112,8 @@ export class PatternRepository {
         `SELECT p.*,
                 COUNT(s.id) AS sighting_count,
                 MAX(s.detected_at) AS last_seen_at,
+                MIN(s.detected_at) AS first_seen_at,
+                AVG(s.duration_estimate_min) AS avg_duration_min,
                 (SELECT confidence FROM pattern_sightings WHERE pattern_id = p.id ORDER BY detected_at DESC LIMIT 1) AS last_confidence
          FROM patterns p
          LEFT JOIN pattern_sightings s ON s.pattern_id = p.id
@@ -127,6 +134,8 @@ export class PatternRepository {
         `SELECT p.*,
                 COUNT(s.id) AS sighting_count,
                 MAX(s.detected_at) AS last_seen_at,
+                MIN(s.detected_at) AS first_seen_at,
+                AVG(s.duration_estimate_min) AS avg_duration_min,
                 (SELECT confidence FROM pattern_sightings WHERE pattern_id = p.id ORDER BY detected_at DESC LIMIT 1) AS last_confidence
          FROM patterns p
          LEFT JOIN pattern_sightings s ON s.pattern_id = p.id
@@ -274,6 +283,25 @@ export class PatternRepository {
   // -- Private helpers --
 
   private rowToPatternWithStats(row: Record<string, unknown>): PatternWithStats {
+    const sightingCount = (row.sighting_count as number) || 0
+    const avgDurationMin = (row.avg_duration_min as number) ?? null
+    const firstSeenAt = (row.first_seen_at as number) ?? null
+    const lastSeenAt = (row.last_seen_at as number) ?? null
+
+    let estimatedHoursPerWeek: number | null = null
+    if (
+      avgDurationMin !== null &&
+      sightingCount >= 2 &&
+      firstSeenAt !== null &&
+      lastSeenAt !== null
+    ) {
+      const spanDays = (lastSeenAt - firstSeenAt) / 86_400_000
+      if (spanDays >= 1) {
+        const frequencyPerWeek = (sightingCount / spanDays) * 7
+        estimatedHoursPerWeek = Math.round(((frequencyPerWeek * avgDurationMin) / 60) * 10) / 10
+      }
+    }
+
     return {
       id: row.id as string,
       name: row.name as string,
@@ -285,9 +313,10 @@ export class PatternRepository {
       promptCopiedAt: (row.prompt_copied_at as number) ?? null,
       approvedAt: (row.approved_at as number) ?? null,
       completedAt: (row.completed_at as number) ?? null,
-      sightingCount: (row.sighting_count as number) || 0,
-      lastSeenAt: (row.last_seen_at as number) ?? null,
+      sightingCount,
+      lastSeenAt,
       lastConfidence: (row.last_confidence as number) ?? null,
+      estimatedHoursPerWeek,
     }
   }
 

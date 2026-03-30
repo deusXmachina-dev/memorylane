@@ -16,9 +16,15 @@ const SIGHTING_FILTERS = [
 
 interface PatternsSectionProps {
   api: MainWindowAPI
+  capturing: boolean
+  activityCount: number | null
 }
 
-export function PatternsSection({ api }: PatternsSectionProps): React.JSX.Element | null {
+export function PatternsSection({
+  api,
+  capturing,
+  activityCount,
+}: PatternsSectionProps): React.JSX.Element | null {
   const [allPatterns, setAllPatterns] = useState<PatternInfo[] | null>(null)
   const [minSightings, setMinSightings] = useState(3)
   const [detectionEnabled, setDetectionEnabled] = useState<boolean | null>(null)
@@ -168,7 +174,27 @@ export function PatternsSection({ api }: PatternsSectionProps): React.JSX.Elemen
     )
   }
 
-  if (allPatterns.length === 0) return null
+  if (allPatterns.length === 0) {
+    return (
+      <div className="space-y-3">
+        <h2 className="text-sm font-medium">Automation Opportunities</h2>
+        {capturing ? (
+          <>
+            <p className="text-xs text-muted-foreground">
+              Keep MemoryLane running. First patterns appear in about a day.
+            </p>
+            {activityCount !== null && (
+              <p className="text-xs text-muted-foreground">{activityCount} activities recorded</p>
+            )}
+          </>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Start capturing to begin. MemoryLane will find repetitive patterns in about a day.
+          </p>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-3">
@@ -227,6 +253,23 @@ export function PatternsSection({ api }: PatternsSectionProps): React.JSX.Elemen
                   </svg>
                   {pattern.sightingCount}
                 </span>
+                {pattern.estimatedHoursPerWeek !== null && (
+                  <span className="inline-flex items-center gap-0.5 text-xs font-normal text-muted-foreground">
+                    <svg
+                      className="w-3 h-3"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <path strokeLinecap="round" d="M12 6v6l4 2" />
+                    </svg>
+                    {pattern.estimatedHoursPerWeek < 1
+                      ? `~${Math.round(pattern.estimatedHoursPerWeek * 60)} min/wk`
+                      : `~${pattern.estimatedHoursPerWeek} hr/wk`}
+                  </span>
+                )}
               </div>
             </CardTitle>
             <CardAction>
@@ -309,6 +352,23 @@ export function PatternsSection({ api }: PatternsSectionProps): React.JSX.Elemen
                         </svg>
                         {pattern.sightingCount}
                       </span>
+                      {pattern.estimatedHoursPerWeek !== null && (
+                        <span className="inline-flex items-center gap-0.5 text-xs font-normal text-muted-foreground">
+                          <svg
+                            className="w-3 h-3"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <circle cx="12" cy="12" r="10" />
+                            <path strokeLinecap="round" d="M12 6v6l4 2" />
+                          </svg>
+                          {pattern.estimatedHoursPerWeek < 1
+                            ? `~${Math.round(pattern.estimatedHoursPerWeek * 60)} min/wk`
+                            : `~${pattern.estimatedHoursPerWeek} hr/wk`}
+                        </span>
+                      )}
                     </div>
                   </CardTitle>
                   <CardAction>

@@ -8,6 +8,7 @@ import { CaptureControlSection } from './components/CaptureControlSection'
 import { ConnectClaudeSection } from './components/ConnectClaudeSection'
 import { StatusLine } from './components/StatusLine'
 import { PatternsSection } from './components/PatternsSection'
+import { HeadlineMetric } from './components/HeadlineMetric'
 import { AdvancedSettingsPage } from './AdvancedSettingsPage'
 import type { CustomEndpointStatus, KeyStatus, MainWindowStats } from '@types'
 
@@ -140,7 +141,13 @@ export function MainWindowApp(): React.JSX.Element {
 
             <hr className="border-border" />
 
-            <PatternsSection api={api} />
+            <HeadlineMetric totalHoursPerWeek={stats?.totalRepetitiveHoursPerWeek ?? null} />
+
+            <PatternsSection
+              api={api}
+              capturing={capturing}
+              activityCount={stats?.activityCount ?? null}
+            />
           </>
         )}
       </div>

@@ -31,6 +31,7 @@ const createSighting = (
   evidence: overrides.evidence ?? 'Saw it happen',
   activityIds: overrides.activityIds ?? ['act-1', 'act-2'],
   confidence: overrides.confidence ?? 0.85,
+  durationEstimateMin: overrides.durationEstimateMin ?? null,
 })
 
 // ---------------------------------------------------------------------------
@@ -145,6 +146,55 @@ describe('PatternRepository', () => {
       expect(all[0].sightingCount).toBe(3)
       expect(all[1].id).toBe('p-few')
       expect(all[1].sightingCount).toBe(1)
+    })
+
+    it('should compute estimatedHoursPerWeek from sighting durations and span', () => {
+      const DAY = 86_400_000
+      storage.patterns.addPattern(createPattern({ id: 'p-dur' }))
+
+      // 8 sightings over 7 days (span = 7 * DAY from first to last), each lasting 30 min
+      // freq = 8/7 * 7 = 8/week, hours = 8 * 30 / 60 = 4.0
+      for (let i = 0; i < 8; i++) {
+        storage.patterns.addSighting(
+          createSighting({
+            id: `s-dur-${i}`,
+            patternId: 'p-dur',
+            detectedAt: 1000 + i * DAY,
+            durationEstimateMin: 30,
+          }),
+        )
+      }
+
+      const p = storage.patterns.getAllPatterns().find((p) => p.id === 'p-dur')!
+      expect(p.estimatedHoursPerWeek).toBe(4)
+    })
+
+    it('should return null estimatedHoursPerWeek when no duration data', () => {
+      storage.patterns.addPattern(createPattern({ id: 'p-no-dur' }))
+      storage.patterns.addSighting(
+        createSighting({ id: 's-nd-1', patternId: 'p-no-dur', detectedAt: 1000 }),
+      )
+      storage.patterns.addSighting(
+        createSighting({ id: 's-nd-2', patternId: 'p-no-dur', detectedAt: 90_000_000 }),
+      )
+
+      const p = storage.patterns.getAllPatterns().find((p) => p.id === 'p-no-dur')!
+      expect(p.estimatedHoursPerWeek).toBeNull()
+    })
+
+    it('should return null estimatedHoursPerWeek with fewer than 2 sightings', () => {
+      storage.patterns.addPattern(createPattern({ id: 'p-single' }))
+      storage.patterns.addSighting(
+        createSighting({
+          id: 's-single',
+          patternId: 'p-single',
+          detectedAt: 1000,
+          durationEstimateMin: 30,
+        }),
+      )
+
+      const p = storage.patterns.getAllPatterns().find((p) => p.id === 'p-single')!
+      expect(p.estimatedHoursPerWeek).toBeNull()
     })
   })
 

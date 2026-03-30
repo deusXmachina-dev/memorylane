@@ -17,6 +17,7 @@ function createPattern(overrides: Partial<PatternInfo> = {}): PatternInfo {
     sightingCount: overrides.sightingCount ?? 1,
     lastSeenAt: overrides.lastSeenAt ?? null,
     lastConfidence: overrides.lastConfidence ?? null,
+    estimatedHoursPerWeek: overrides.estimatedHoursPerWeek ?? null,
   }
 }
 
