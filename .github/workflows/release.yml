@@ -100,8 +100,8 @@ jobs:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
 
-  build-mac:
-    name: Build macOS
+  build-mac-customer:
+    name: Build macOS Customer
     runs-on: macos-15
     needs: validate-release
     permissions:
@@ -142,27 +142,27 @@ jobs:
 
           echo "CSC_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
-      - name: Build signed macOS artifacts
+      - name: Build signed macOS customer artifacts
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-        run: npm run make:mac
+        run: npm run make:customer:mac
 
-      - name: Upload macOS release files
+      - name: Upload macOS customer release files
         uses: actions/upload-artifact@v6
         with:
-          name: release-macos-${{ env.RELEASE_TAG }}
+          name: release-macos-customer-${{ env.RELEASE_TAG }}
           retention-days: 3
           if-no-files-found: error
           path: |
-            dist/MemoryLane-arm64-mac.dmg
-            dist/MemoryLane-arm64-mac.dmg.blockmap
-            dist/MemoryLane-arm64-mac.zip
-            dist/MemoryLane-arm64-mac.zip.blockmap
-            dist/latest-mac.yml
+            dist/customer/MemoryLane-arm64-mac.dmg
+            dist/customer/MemoryLane-arm64-mac.dmg.blockmap
+            dist/customer/MemoryLane-arm64-mac.zip
+            dist/customer/MemoryLane-arm64-mac.zip.blockmap
+            dist/customer/latest-mac.yml
 
-  build-win:
-    name: Build Windows
+  build-win-customer:
+    name: Build Windows Customer
     runs-on: windows-2025
     needs: validate-release
     permissions:
@@ -186,32 +186,73 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build signed Windows artifacts
+      - name: Build signed Windows customer artifacts
         env:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-        run: npm run make:win
+        run: npm run make:customer:win
 
-      - name: Upload Windows release files
+      - name: Upload Windows customer release files
         uses: actions/upload-artifact@v6
         with:
-          name: release-windows-${{ env.RELEASE_TAG }}
+          name: release-windows-customer-${{ env.RELEASE_TAG }}
           retention-days: 3
           if-no-files-found: error
           path: |
-            dist/MemoryLane-Setup.exe
-            dist/MemoryLane-Setup.exe.blockmap
-            dist/MemoryLane-Setup.msi
-            dist/latest.yml
+            dist/customer/MemoryLane-Setup.exe
+            dist/customer/MemoryLane-Setup.exe.blockmap
+            dist/customer/latest.yml
+
+  build-win-enterprise:
+    name: Build Windows Enterprise
+    runs-on: windows-2025
+    needs: validate-release
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build signed Windows enterprise artifacts
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: npm run make:enterprise:win
+
+      - name: Upload Windows enterprise release files
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-windows-enterprise-${{ env.RELEASE_TAG }}
+          retention-days: 3
+          if-no-files-found: error
+          path: |
+            dist/enterprise/MemoryLane Enterprise-Setup.msi
 
   publish-release:
     name: Publish GitHub release
     runs-on: ubuntu-24.04
     needs:
       - validate-release
-      - build-mac
-      - build-win
+      - build-mac-customer
+      - build-win-customer
+      - build-win-enterprise
 
     steps:
       - name: Checkout tagged ref
@@ -219,35 +260,42 @@ jobs:
         with:
           ref: ${{ env.RELEASE_TAG }}
 
-      - name: Download macOS artifact
+      - name: Download macOS customer artifact
         uses: actions/download-artifact@v8
         with:
-          name: release-macos-${{ env.RELEASE_TAG }}
-          path: release-assets/release-macos-${{ env.RELEASE_TAG }}
+          name: release-macos-customer-${{ env.RELEASE_TAG }}
+          path: release-assets/release-macos-customer-${{ env.RELEASE_TAG }}
 
-      - name: Download Windows artifact
+      - name: Download Windows customer artifact
         uses: actions/download-artifact@v8
         with:
-          name: release-windows-${{ env.RELEASE_TAG }}
-          path: release-assets/release-windows-${{ env.RELEASE_TAG }}
+          name: release-windows-customer-${{ env.RELEASE_TAG }}
+          path: release-assets/release-windows-customer-${{ env.RELEASE_TAG }}
+
+      - name: Download Windows enterprise artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: release-windows-enterprise-${{ env.RELEASE_TAG }}
+          path: release-assets/release-windows-enterprise-${{ env.RELEASE_TAG }}
 
       - name: Show release files
         run: find release-assets -type f | sort
 
       - name: Verify release files
         run: |
-          MAC_DIR="release-assets/release-macos-${RELEASE_TAG}"
-          WIN_DIR="release-assets/release-windows-${RELEASE_TAG}"
+          MAC_DIR="release-assets/release-macos-customer-${RELEASE_TAG}"
+          WIN_CUSTOMER_DIR="release-assets/release-windows-customer-${RELEASE_TAG}"
+          WIN_ENTERPRISE_DIR="release-assets/release-windows-enterprise-${RELEASE_TAG}"
 
           test -f "$MAC_DIR/MemoryLane-arm64-mac.dmg"
           test -f "$MAC_DIR/MemoryLane-arm64-mac.dmg.blockmap"
           test -f "$MAC_DIR/MemoryLane-arm64-mac.zip"
           test -f "$MAC_DIR/MemoryLane-arm64-mac.zip.blockmap"
           test -f "$MAC_DIR/latest-mac.yml"
-          test -f "$WIN_DIR/MemoryLane-Setup.exe"
-          test -f "$WIN_DIR/MemoryLane-Setup.exe.blockmap"
-          test -f "$WIN_DIR/MemoryLane-Setup.msi"
-          test -f "$WIN_DIR/latest.yml"
+          test -f "$WIN_CUSTOMER_DIR/MemoryLane-Setup.exe"
+          test -f "$WIN_CUSTOMER_DIR/MemoryLane-Setup.exe.blockmap"
+          test -f "$WIN_CUSTOMER_DIR/latest.yml"
+          test -f "$WIN_ENTERPRISE_DIR/MemoryLane Enterprise-Setup.msi"
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
@@ -259,15 +307,15 @@ jobs:
           body_path: RELEASE_NOTES.md
           fail_on_unmatched_files: true
           files: |
-            release-assets/release-macos-${{ env.RELEASE_TAG }}/MemoryLane-arm64-mac.dmg
-            release-assets/release-macos-${{ env.RELEASE_TAG }}/MemoryLane-arm64-mac.dmg.blockmap
-            release-assets/release-macos-${{ env.RELEASE_TAG }}/MemoryLane-arm64-mac.zip
-            release-assets/release-macos-${{ env.RELEASE_TAG }}/MemoryLane-arm64-mac.zip.blockmap
-            release-assets/release-macos-${{ env.RELEASE_TAG }}/latest-mac.yml
-            release-assets/release-windows-${{ env.RELEASE_TAG }}/MemoryLane-Setup.exe
-            release-assets/release-windows-${{ env.RELEASE_TAG }}/MemoryLane-Setup.exe.blockmap
-            release-assets/release-windows-${{ env.RELEASE_TAG }}/MemoryLane-Setup.msi
-            release-assets/release-windows-${{ env.RELEASE_TAG }}/latest.yml
+            release-assets/release-macos-customer-${{ env.RELEASE_TAG }}/MemoryLane-arm64-mac.dmg
+            release-assets/release-macos-customer-${{ env.RELEASE_TAG }}/MemoryLane-arm64-mac.dmg.blockmap
+            release-assets/release-macos-customer-${{ env.RELEASE_TAG }}/MemoryLane-arm64-mac.zip
+            release-assets/release-macos-customer-${{ env.RELEASE_TAG }}/MemoryLane-arm64-mac.zip.blockmap
+            release-assets/release-macos-customer-${{ env.RELEASE_TAG }}/latest-mac.yml
+            release-assets/release-windows-customer-${{ env.RELEASE_TAG }}/MemoryLane-Setup.exe
+            release-assets/release-windows-customer-${{ env.RELEASE_TAG }}/MemoryLane-Setup.exe.blockmap
+            release-assets/release-windows-customer-${{ env.RELEASE_TAG }}/latest.yml
+            release-assets/release-windows-enterprise-${{ env.RELEASE_TAG }}/MemoryLane Enterprise-Setup.msi
 
   notify-discord:
     name: Notify Discord

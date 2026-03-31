@@ -30,6 +30,7 @@ import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
 import { createMainRuntime, type MainRuntime } from './runtime'
 import { getAppDirectoryName } from './paths'
+import { loadAppEditionConfig } from './edition'
 
 // Keep single-instance behavior in packaged app, but allow dev to run
 // alongside production for local debugging.
@@ -71,7 +72,7 @@ let slackIntegrationService: SlackIntegrationService | null = null
 let rawDatabaseExportSync: RawDatabaseExportSync | null = null
 
 app.on('before-quit', () => {
-  runtime?.managedKeyService.stopPeriodicRefresh()
+  runtime?.accessProvider.stopPeriodicRefresh()
   void Promise.all([
     runtime?.dispose(),
     slackIntegrationService?.stop(),
@@ -92,6 +93,7 @@ app.on('second-instance', () => {
 app.on('ready', async () => {
   migrateOldMcpEntries()
   const startHidden = shouldStartHiddenOnLaunch()
+  const editionConfig = loadAppEditionConfig()
 
   try {
     const { ensurePermissions } = await import('./ui/permissions')
@@ -128,6 +130,7 @@ app.on('ready', async () => {
     await import('./ui/main-window')
 
   runtime = await createMainRuntime({
+    edition: editionConfig.edition,
     onCaptureStateChanged: () => {
       void updateTrayMenu()
       void sendStatusToRenderer()
@@ -198,19 +201,24 @@ app.on('ready', async () => {
     storage: runtime.storage,
   })
 
-  const { initAutoUpdater } = await import('./updater')
-  initAutoUpdater(() => {
-    void updateTrayMenu()
-  })
+  if (editionConfig.edition === 'customer') {
+    const { initAutoUpdater } = await import('./updater')
+    initAutoUpdater(() => {
+      void updateTrayMenu()
+    })
+  } else {
+    log.info('[Updater] Skipping auto-updater for enterprise edition')
+  }
 
   initMainWindowIPC({
+    editionConfig,
     capture: captureCoordinator.controls,
     storage: runtime.storage,
     usageTracker: runtime.usageTracker,
     apiKeyManager: runtime.apiKeyManager,
     customEndpointManager: runtime.customEndpointManager,
     semanticService: runtime.semanticService,
-    managedKeyService: runtime.managedKeyService,
+    accessProvider: runtime.accessProvider,
     captureSettingsManager,
     slackSettingsManager,
     slackIntegrationService,
@@ -223,7 +231,7 @@ app.on('ready', async () => {
 
   await slackIntegrationService.reload()
 
-  runtime.managedKeyService.startPeriodicRefresh()
+  runtime.accessProvider.startPeriodicRefresh()
 
   captureCoordinator.resumeCaptureIfDesired('startup')
 
@@ -255,5 +263,6 @@ app.on('ready', async () => {
     },
   })
 
+  log.info(`[Startup] Running ${editionConfig.edition} edition`)
   log.info('MemoryLane started. Frame output dir:', runtime.capture.getScreenshotsDir())
 })

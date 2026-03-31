@@ -7,6 +7,14 @@ console.log('[Preload] Script loading...')
 
 // Expose main window API to renderer (consolidated API)
 contextBridge.exposeInMainWorld('mainWindowAPI', {
+  getEditionConfig: () => ipcRenderer.invoke('main-window:getEditionConfig'),
+  getAccessState: () => ipcRenderer.invoke('main-window:getAccessState'),
+  refreshAccessState: () => ipcRenderer.invoke('main-window:refreshAccessState'),
+  onAccessStateChanged: (callback: (state: unknown) => void) => {
+    ipcRenderer.on('main-window:accessStateChanged', (_event, state) => callback(state))
+  },
+  activateEnterpriseLicense: (activationKey: string) =>
+    ipcRenderer.invoke('main-window:activateEnterpriseLicense', activationKey),
   // Capture control
   getStatus: () => ipcRenderer.invoke('main-window:getStatus'),
   toggleCapture: () => ipcRenderer.invoke('main-window:toggleCapture'),

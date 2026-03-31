@@ -17,6 +17,7 @@ import {
 import path from 'node:path'
 import { DEFAULT_VIDEO_MODELS, DEFAULT_SNAPSHOT_MODELS } from '../semantic/constants'
 import { syncAutoStartSetting } from '../auto-start'
+import { DEFAULT_EDITION, type AppEditionConfig } from '../../shared/edition'
 import log from '../logger'
 import { updateTrayMenu } from './tray'
 import { exportDatabaseZip } from './database-export'
@@ -25,8 +26,9 @@ import { SlackSettingsManager } from '../integrations/slack/settings-manager'
 import { SlackIntegrationService } from '../integrations/slack/service'
 import type { ApiKeyManager } from '../settings/api-key-manager'
 import type { CustomEndpointManager } from '../settings/custom-endpoint-manager'
-import type { ManagedKeyService } from '../services/managed-key-service'
+import type { AccessProvider } from '../access'
 import type {
+  AccessState,
   CustomEndpointConfig,
   LlmHealthStatus,
   MainWindowStatus,
@@ -56,6 +58,7 @@ interface PatternDetectorService {
 }
 
 interface MainWindowDependencies {
+  editionConfig: AppEditionConfig
   capture: {
     isCapturingNow: () => boolean
     requestStartCapture: () => void
@@ -71,7 +74,7 @@ interface MainWindowDependencies {
   apiKeyManager: ApiKeyManager
   customEndpointManager: CustomEndpointManager
   semanticService: SemanticService
-  managedKeyService: ManagedKeyService
+  accessProvider: AccessProvider
   captureSettingsManager: CaptureSettingsManager
   slackSettingsManager: SlackSettingsManager
   slackIntegrationService: SlackIntegrationService
@@ -223,6 +226,50 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   deps = dependencies
 
   log.info('[MainWindow] Initializing IPC handlers...')
+
+  ipcMain.handle(
+    'main-window:getEditionConfig',
+    () => deps?.editionConfig ?? { edition: DEFAULT_EDITION },
+  )
+  ipcMain.handle('main-window:getAccessState', () => {
+    if (!deps) {
+      return {
+        edition: DEFAULT_EDITION,
+        isEnterpriseActivated: false,
+        customerSubscriptionStatus: 'idle',
+        enterpriseActivationStatus: null,
+        error: null,
+      } satisfies AccessState
+    }
+    return deps.accessProvider.getAccessState()
+  })
+  ipcMain.handle('main-window:refreshAccessState', async () => {
+    if (!deps) {
+      return {
+        edition: DEFAULT_EDITION,
+        isEnterpriseActivated: false,
+        customerSubscriptionStatus: 'idle',
+        enterpriseActivationStatus: null,
+        error: null,
+      } satisfies AccessState
+    }
+
+    await deps.accessProvider.refreshAccessState()
+    return deps.accessProvider.getAccessState()
+  })
+  ipcMain.handle('main-window:activateEnterpriseLicense', async (_event, activationKey: string) => {
+    if (!deps) {
+      return { success: false, error: 'Dependencies not initialized' }
+    }
+
+    try {
+      await deps.accessProvider.activateEnterpriseLicense(activationKey)
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Activation failed'
+      return { success: false, error: message }
+    }
+  })
 
   // Theme
   ipcMain.handle('main-window:getTheme', () => {
@@ -420,7 +467,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   })
 
   // Subscription / managed key
-  deps.managedKeyService.setUpdateCallback((status, payload) => {
+  deps.accessProvider.setUpdateCallback((state, payload) => {
     if (payload?.key && deps) {
       deps.apiKeyManager.saveApiKey(payload.key, 'managed')
       deps.semanticService.updateApiKey(payload.key)
@@ -431,26 +478,27 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       deps.semanticService.updateApiKey(null)
     }
     if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('main-window:accessStateChanged', state)
       mainWindow.webContents.send('main-window:subscriptionUpdate', {
-        status,
-        error: payload?.error,
+        status: state.customerSubscriptionStatus ?? 'idle',
+        error: state.error ?? payload?.error,
       })
     }
   })
 
   ipcMain.handle('main-window:startCheckout', async (_event, plan: SubscriptionPlan) => {
     if (!deps) return
-    await deps.managedKeyService.startCheckout(plan)
+    await deps.accessProvider.startCheckout(plan)
   })
 
   ipcMain.handle('main-window:openSubscriptionPortal', async () => {
     if (!deps) return
-    await deps.managedKeyService.openSubscriptionPortal()
+    await deps.accessProvider.openSubscriptionPortal()
   })
 
   ipcMain.handle('main-window:getSubscriptionStatus', () => {
     if (!deps) return 'idle'
-    return deps.managedKeyService.getStatus()
+    return deps.accessProvider.getAccessState().customerSubscriptionStatus ?? 'idle'
   })
 
   // Patterns

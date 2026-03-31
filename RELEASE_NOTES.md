@@ -1,10 +1,13 @@
-# MemoryLane v0.17.4
+# MemoryLane v0.18.0
 
-Patch release: updated Explorer plan price to $50/mo.
+Minor release: enterprise edition support, MCP CLI cleanup, and plugin workflow updates.
 
 ## What's Changed
 
-- Updated Explorer plan price from $30/mo to $50/mo
+- Added edition-aware customer and enterprise build flow with activation support
+- Moved MCP into the standalone CLI package and added public HTTP mode with ngrok/token auth
+- Converted plugin commands into skills and added a safer deploy-plugin release workflow
+- Fixed plugin marketplace validation by normalizing the plugin name
 
 ## Known Issues & Limitations
 
@@ -18,4 +21,4 @@ Patch release: updated Explorer plan price to $50/mo.
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v0.17.3...v0.17.4
+https://github.com/deusXmachina-dev/memorylane/compare/v0.17.4...v0.18.0
