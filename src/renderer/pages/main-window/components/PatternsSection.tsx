@@ -25,13 +25,8 @@ export function PatternsSection({
   patterns,
   onPatternsChange,
 }: PatternsSectionProps): React.JSX.Element | null {
-  const [allPatterns, setAllPatterns] = useState<PatternInfo[]>(patterns)
   const [minSightings, setMinSightings] = useState(1)
   const [detectionEnabled, setDetectionEnabled] = useState<boolean | null>(null)
-
-  useEffect(() => {
-    setAllPatterns(patterns)
-  }, [patterns])
 
   useEffect(() => {
     api
@@ -41,7 +36,7 @@ export function PatternsSection({
   }, [api])
 
   const { activePatterns, completedPatterns } = useMemo(() => {
-    const filtered = allPatterns.filter((p) => p.sightingCount >= minSightings)
+    const filtered = patterns.filter((p) => p.sightingCount >= minSightings)
     const active = filtered
       .filter((p) => !p.completedAt)
       .sort((a, b) => b.sightingCount - a.sightingCount)
@@ -49,13 +44,10 @@ export function PatternsSection({
       .filter((p) => p.completedAt)
       .sort((a, b) => b.sightingCount - a.sightingCount)
     return { activePatterns: active, completedPatterns: completed }
-  }, [allPatterns, minSightings])
+  }, [patterns, minSightings])
 
   const handleApprove = useCallback(
     (id: string) => {
-      setAllPatterns((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, approvedAt: Date.now() } : p)),
-      )
       toast.success('Thanks for the feedback!')
       api.approvePattern(id).catch(() => {
         // approval persisted best-effort
@@ -67,7 +59,6 @@ export function PatternsSection({
 
   const handleDismiss = useCallback(
     (id: string, name: string) => {
-      setAllPatterns((prev) => prev.filter((p) => p.id !== id))
       toast.success(`Not useful — "${name}" hidden`)
       api.rejectPattern(id).catch(() => {
         // rejection persisted best-effort
@@ -79,9 +70,6 @@ export function PatternsSection({
 
   const handleComplete = useCallback(
     (id: string) => {
-      setAllPatterns((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, completedAt: Date.now() } : p)),
-      )
       api.completePattern(id).catch(() => {
         // completion persisted best-effort
       })
@@ -92,7 +80,6 @@ export function PatternsSection({
 
   const handleUncomplete = useCallback(
     (id: string) => {
-      setAllPatterns((prev) => prev.map((p) => (p.id === id ? { ...p, completedAt: null } : p)))
       api.uncompletePattern(id).catch(() => {
         // uncomplete persisted best-effort
       })
@@ -177,7 +164,7 @@ export function PatternsSection({
       </div>
 
       <PatternFeedbackNudge
-        patterns={allPatterns}
+        patterns={patterns}
         onApprove={handleApprove}
         onDismiss={handleDismiss}
       />

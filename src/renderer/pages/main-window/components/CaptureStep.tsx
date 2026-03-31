@@ -60,11 +60,11 @@ export function CaptureStep({
           <p className="text-xs text-muted-foreground">
             Meanwhile, install our{' '}
             <a
-              href="https://trymemorylane.com/guide"
+              href="https://trymemorylane.com/guide#add-skills"
               className="underline hover:text-foreground"
               onClick={(e) => {
                 e.preventDefault()
-                api.openExternal('https://trymemorylane.com/guide')
+                api.openExternal('https://trymemorylane.com/guide#add-skills')
               }}
             >
               Claude Cowork plugin
