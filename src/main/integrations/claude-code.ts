@@ -9,6 +9,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as os from 'node:os'
 import log from '../logger'
+import { detectStaleSignal, isCurrentCliEntry } from './migration-utils'
 
 interface ClaudeCodeSettings {
   mcpServers?: Record<string, MCPServerEntry>
@@ -76,10 +77,6 @@ function buildMCPEntry(): MCPServerEntry {
   }
 }
 
-function isOldElectronEntry(entry: MCPServerEntry): boolean {
-  return entry.env?.ELECTRON_RUN_AS_NODE === '1'
-}
-
 /**
  * Check whether MemoryLane is currently registered in Claude Code's settings on disk.
  */
@@ -89,20 +86,39 @@ export function isMcpAddedToClaudeCode(): boolean {
 }
 
 /**
- * If the old Electron-based MCP entry exists, replace it with the CLI entry.
+ * If a stale (pre-v0.18) MemoryLane MCP entry exists, replace it with the CLI entry.
+ * Best-effort: never throws — see migrateClaudeDesktop for rationale.
  */
 export function migrateClaudeCode(): void {
   const settingsPath = getClaudeCodeSettingsPath()
   try {
+    if (!fs.existsSync(settingsPath)) {
+      log.debug(`[Claude Code Integration] No settings at ${settingsPath}, skipping migration`)
+      return
+    }
     const settings = readSettings(settingsPath)
     const existing = settings.mcpServers?.[MCP_SERVER_KEY]
-    if (!existing || !isOldElectronEntry(existing)) return
+    if (!existing) {
+      log.debug('[Claude Code Integration] No memorylane entry present, nothing to migrate')
+      return
+    }
+    if (isCurrentCliEntry(existing)) {
+      log.debug('[Claude Code Integration] memorylane entry already current, nothing to migrate')
+      return
+    }
+    const signal = detectStaleSignal(existing)
+    if (!signal) {
+      log.info(
+        '[Claude Code Integration] memorylane entry present but does not match a known stale shape, leaving it alone',
+      )
+      return
+    }
 
     settings.mcpServers![MCP_SERVER_KEY] = buildMCPEntry()
     writeSettings(settingsPath, settings)
-    log.info('[Claude Code Integration] Migrated from Electron MCP to CLI')
-  } catch {
-    // best-effort
+    log.info(`[Claude Code Integration] Migrated from Electron MCP to CLI (signal: ${signal})`)
+  } catch (error) {
+    log.warn('[Claude Code Integration] Migration failed:', error)
   }
 }
 
