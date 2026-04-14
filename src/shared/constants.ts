@@ -90,10 +90,14 @@ export const MANAGED_KEY_CONFIG = {
 }
 
 export const ENTERPRISE_BACKEND_CONFIG = {
-  BACKEND_URL:
-    process.env.NODE_ENV === 'development'
-      ? 'http://localhost:8000/'
-      : 'https://api-enterprise.trymemorylane.com/',
+  get BACKEND_URL(): string {
+    return (
+      process.env.MEMORYLANE_BACKEND_URL ??
+      (process.env.NODE_ENV === 'development'
+        ? 'http://localhost:8000/api'
+        : 'https://api-enterprise.trymemorylane.com/api')
+    )
+  },
   POLL_INTERVAL_MS: 2_000,
   ACTIVATION_TIMEOUT_MS: 20_000,
   STATUS_REFRESH_INTERVAL_MS: 5 * 60 * 1000, // 5 minutes

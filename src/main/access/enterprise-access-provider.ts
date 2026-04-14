@@ -8,6 +8,11 @@ import {
 } from './enterprise-access-machine'
 import { createInitialAccessState } from './types'
 
+function enterpriseUrl(path: string): URL {
+  const base = ENTERPRISE_BACKEND_CONFIG.BACKEND_URL.replace(/\/?$/, '/')
+  return new URL(path, base)
+}
+
 export class EnterpriseAccessProvider extends BaseAccessProvider {
   private readonly deviceIdentity: DeviceIdentity
   private pollTimer: ReturnType<typeof setInterval> | null = null
@@ -78,19 +83,16 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       transitionEnterpriseAccess(this.accessState, { type: 'activation_started' }),
     )
 
-    const response = await fetch(
-      new URL('/license/activate', ENTERPRISE_BACKEND_CONFIG.BACKEND_URL),
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          device_id: deviceId,
-          activation_key: trimmedKey,
-        }),
+    const response = await fetch(enterpriseUrl('license/activate'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-    )
+      body: JSON.stringify({
+        device_id: deviceId,
+        activation_key: trimmedKey,
+      }),
+    })
 
     if (!response.ok) {
       const errorMessage = await this.readErrorMessage(response, 'Activation failed')
@@ -187,7 +189,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
   }
 
   private async fetchEnterpriseStatus(deviceId: string): Promise<boolean> {
-    const url = new URL('/license/status', ENTERPRISE_BACKEND_CONFIG.BACKEND_URL)
+    const url = enterpriseUrl('license/status')
     url.searchParams.set('device_id', deviceId)
 
     const response = await fetch(url.toString())
@@ -204,7 +206,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
   }
 
   private async fetchEnterpriseKey(deviceId: string): Promise<string | null> {
-    const url = new URL('/license/key', ENTERPRISE_BACKEND_CONFIG.BACKEND_URL)
+    const url = enterpriseUrl('license/key')
     url.searchParams.set('device_id', deviceId)
 
     const response = await fetch(url.toString())
