@@ -2,6 +2,10 @@ import * as fs from 'fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DatabaseUploadSync } from './database-upload-sync'
 
+vi.mock('./strip-database-for-upload', () => ({
+  stripDatabaseForUpload: vi.fn(),
+}))
+
 function mockFetchResponse(status: number, body: object | string) {
   return vi.fn(async () => ({
     ok: status >= 200 && status < 300,

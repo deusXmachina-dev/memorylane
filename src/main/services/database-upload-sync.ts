@@ -2,6 +2,7 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import log from '../logger'
+import { stripDatabaseForUpload } from './strip-database-for-upload'
 
 const DEFAULT_UPLOAD_INTERVAL_MS = 24 * 60 * 60 * 1000
 
@@ -103,6 +104,7 @@ export class DatabaseUploadSync {
 
     try {
       await this.storage.backupToFile(tempPath)
+      stripDatabaseForUpload(tempPath)
 
       const fileBuffer = fs.readFileSync(tempPath)
       const formData = new FormData()
