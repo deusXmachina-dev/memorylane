@@ -80,7 +80,7 @@ describe('app-watcher backend selection', () => {
     startAppWatcher(vi.fn())
     stopAppWatcher()
 
-    expect(warn).toHaveBeenCalledWith('[AppWatcher] No backend available for platform "freebsd"')
+    expect(warn).toHaveBeenCalledWith('[AppWatcher] No backend available for platform "linux"')
     expect(isAppWatcherRunning()).toBe(false)
   })
 })
