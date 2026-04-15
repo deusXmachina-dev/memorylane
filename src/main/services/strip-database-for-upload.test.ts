@@ -173,7 +173,7 @@ describe('stripDatabaseForUpload', () => {
       db.close()
     })
 
-    it('preserves FTS table, triggers, and pattern_detection_runs', async () => {
+    it('preserves FTS table and triggers but drops pattern_detection_runs', async () => {
       await setupAndBackup()
       stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'detailed' })
 
@@ -188,8 +188,12 @@ describe('stripDatabaseForUpload', () => {
       const triggerNames = triggers.map((t) => t.name)
       expect(triggerNames).toContain('activities_ai')
 
-      const runs = db.prepare('SELECT id FROM pattern_detection_runs').all()
-      expect(runs).toHaveLength(1)
+      const runs = db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name = 'pattern_detection_runs'",
+        )
+        .all()
+      expect(runs).toHaveLength(0)
 
       db.close()
     })

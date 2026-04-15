@@ -102,8 +102,8 @@ export function ConnectionsDataSection({
                         </Button>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Summary shares app names and timestamps. Detailed also includes window
-                        titles, AI summaries, and OCR text.
+                        Summary strips OCR text and full-text search index. Both modes strip
+                        personal context and pattern detection runs.
                       </p>
                     </div>
 
