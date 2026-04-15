@@ -18,6 +18,8 @@ interface ConnectionsDataSectionProps {
   onToggle: () => void
   databaseExportDirectory: string
   onDatabaseExportDirectoryChange: (directoryPath: string) => void
+  uploadDetailLevel: 'summary' | 'detailed'
+  onUploadDetailLevelChange: (level: 'summary' | 'detailed') => void
 }
 
 export function ConnectionsDataSection({
@@ -27,6 +29,8 @@ export function ConnectionsDataSection({
   onToggle,
   databaseExportDirectory,
   onDatabaseExportDirectoryChange,
+  uploadDetailLevel,
+  onUploadDetailLevelChange,
 }: ConnectionsDataSectionProps): React.JSX.Element {
   const [isChoosingDirectory, setIsChoosingDirectory] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
@@ -53,6 +57,8 @@ export function ConnectionsDataSection({
     }
   }, [api, databaseExportDirectory, onDatabaseExportDirectoryChange])
 
+  const isEnterprise = editionConfig?.edition === 'enterprise'
+
   return (
     <section>
       <SectionToggle label="Connections & Data" open={open} onToggle={onToggle} />
@@ -64,7 +70,6 @@ export function ConnectionsDataSection({
             <Label className="text-xs text-muted-foreground">Manual Export</Label>
             <div className="flex gap-2">
               <DatabaseExportSection api={api} />
-              {editionConfig?.edition === 'enterprise' && <DatabaseSyncSection api={api} />}
             </div>
           </div>
 
@@ -76,6 +81,38 @@ export function ConnectionsDataSection({
             />
             {moreOpen && (
               <div className="mt-3 space-y-5">
+                {isEnterprise && (
+                  <>
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground">Share with remote</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          variant={uploadDetailLevel === 'summary' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => onUploadDetailLevelChange('summary')}
+                        >
+                          Summary
+                        </Button>
+                        <Button
+                          variant={uploadDetailLevel === 'detailed' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => onUploadDetailLevelChange('detailed')}
+                        >
+                          Detailed
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Summary shares app names and timestamps. Detailed also includes window
+                        titles, AI summaries, and OCR text.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <DatabaseSyncSection api={api} />
+                    </div>
+                  </>
+                )}
+
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-3">
                     <Label className="text-xs text-muted-foreground">

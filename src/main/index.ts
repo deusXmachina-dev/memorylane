@@ -156,6 +156,7 @@ app.on('ready', async () => {
       storage: runtime.storage,
       getDeviceId: () => deviceIdentity.getDeviceId(),
       isActivated: () => runtime?.accessProvider.getAccessState().isEnterpriseActivated ?? false,
+      getStripOptions: () => ({ detailLevel: captureSettingsManager.get().uploadDetailLevel }),
       backendUrl: ENTERPRISE_BACKEND_CONFIG.BACKEND_URL,
     })
     databaseUploadSync.start()

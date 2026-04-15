@@ -151,6 +151,17 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
     setForm((prev) => (prev ? { ...prev, captureHotkeyAccelerator: value } : prev))
   }, [])
 
+  const setUploadDetailLevel = useCallback(
+    (level: 'summary' | 'detailed'): void => {
+      setForm((prev) => (prev ? { ...prev, uploadDetailLevel: level } : prev))
+      save(
+        { uploadDetailLevel: level },
+        level === 'detailed' ? 'Sharing detailed activities' : 'Sharing summary only',
+      )
+    },
+    [save],
+  )
+
   const commitDatabaseExportDirectory = useCallback(
     (databaseExportDirectory: string): void => {
       setForm((prev) => (prev ? { ...prev, databaseExportDirectory } : prev))
@@ -278,6 +289,8 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
             onToggle={() => setConnectionsDataOpen((v) => !v)}
             databaseExportDirectory={form.databaseExportDirectory}
             onDatabaseExportDirectoryChange={commitDatabaseExportDirectory}
+            uploadDetailLevel={form.uploadDetailLevel}
+            onUploadDetailLevelChange={setUploadDetailLevel}
           />
         </>
       )}

@@ -178,6 +178,7 @@ export interface CaptureSettings {
   semanticSnapshotModel: string
   patternDetectionModel: string
   patternDetectionEnabled: boolean
+  uploadDetailLevel: 'summary' | 'detailed'
 }
 
 export type McpRegistrationStatus = Record<string, boolean>

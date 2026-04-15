@@ -38,6 +38,7 @@ const DEFAULTS: CaptureSettings = {
   semanticSnapshotModel: '',
   patternDetectionModel: '',
   patternDetectionEnabled: true,
+  uploadDetailLevel: 'summary',
 }
 
 export class CaptureSettingsManager {

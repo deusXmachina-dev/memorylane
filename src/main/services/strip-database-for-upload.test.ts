@@ -41,7 +41,7 @@ describe('stripDatabaseForUpload', () => {
 
   it('drops FTS virtual table', async () => {
     await setupAndBackup()
-    stripDatabaseForUpload(COPY_DB_PATH)
+    stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'summary' })
 
     const db = new Database(COPY_DB_PATH)
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE name = 'activities_fts'").all()
@@ -51,7 +51,7 @@ describe('stripDatabaseForUpload', () => {
 
   it('preserves vec virtual table', async () => {
     await setupAndBackup()
-    stripDatabaseForUpload(COPY_DB_PATH)
+    stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'summary' })
 
     const db = new Database(COPY_DB_PATH)
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE name = 'activities_vec'").all()
@@ -61,7 +61,7 @@ describe('stripDatabaseForUpload', () => {
 
   it('drops user_context and pattern_detection_runs tables', async () => {
     await setupAndBackup()
-    stripDatabaseForUpload(COPY_DB_PATH)
+    stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'summary' })
 
     const db = new Database(COPY_DB_PATH)
     const tables = db
@@ -75,7 +75,7 @@ describe('stripDatabaseForUpload', () => {
 
   it('drops FTS triggers', async () => {
     await setupAndBackup()
-    stripDatabaseForUpload(COPY_DB_PATH)
+    stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'summary' })
 
     const db = new Database(COPY_DB_PATH)
     const triggers = db.prepare("SELECT name FROM sqlite_master WHERE type='trigger'").all() as {
@@ -89,7 +89,7 @@ describe('stripDatabaseForUpload', () => {
 
   it('strips ocr_text but preserves vector column', async () => {
     await setupAndBackup()
-    stripDatabaseForUpload(COPY_DB_PATH)
+    stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'summary' })
 
     const db = new Database(COPY_DB_PATH)
     const columns = db.prepare('PRAGMA table_info(activities)').all() as { name: string }[]
@@ -102,7 +102,7 @@ describe('stripDatabaseForUpload', () => {
 
   it('preserves activities data (kept columns)', async () => {
     await setupAndBackup()
-    stripDatabaseForUpload(COPY_DB_PATH)
+    stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'summary' })
 
     const db = new Database(COPY_DB_PATH)
     const row = db
@@ -121,7 +121,7 @@ describe('stripDatabaseForUpload', () => {
 
   it('preserves patterns and pattern_sightings', async () => {
     await setupAndBackup()
-    stripDatabaseForUpload(COPY_DB_PATH)
+    stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'summary' })
 
     const db = new Database(COPY_DB_PATH)
     const patterns = db.prepare('SELECT id FROM patterns').all()
@@ -134,7 +134,7 @@ describe('stripDatabaseForUpload', () => {
 
   it('preserves schema_migrations', async () => {
     await setupAndBackup()
-    stripDatabaseForUpload(COPY_DB_PATH)
+    stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'summary' })
 
     const db = new Database(COPY_DB_PATH)
     const migrations = db.prepare('SELECT name FROM schema_migrations').all()
@@ -145,7 +145,53 @@ describe('stripDatabaseForUpload', () => {
 
   it('is idempotent (running twice does not throw)', async () => {
     await setupAndBackup()
-    stripDatabaseForUpload(COPY_DB_PATH)
-    expect(() => stripDatabaseForUpload(COPY_DB_PATH)).not.toThrow()
+    stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'summary' })
+    expect(() => stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'summary' })).not.toThrow()
+  })
+
+  describe('detailed mode', () => {
+    it('drops user_context but preserves ocr_text', async () => {
+      await setupAndBackup()
+      stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'detailed' })
+
+      const db = new Database(COPY_DB_PATH)
+
+      const userContext = db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = 'user_context'")
+        .all()
+      expect(userContext).toHaveLength(0)
+
+      const columns = db.prepare('PRAGMA table_info(activities)').all() as { name: string }[]
+      const columnNames = columns.map((c) => c.name)
+      expect(columnNames).toContain('ocr_text')
+
+      const row = db.prepare('SELECT ocr_text FROM activities WHERE id = ?').get('act-1') as {
+        ocr_text: string
+      }
+      expect(row.ocr_text).toBe('secret ocr')
+
+      db.close()
+    })
+
+    it('preserves FTS table, triggers, and pattern_detection_runs', async () => {
+      await setupAndBackup()
+      stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'detailed' })
+
+      const db = new Database(COPY_DB_PATH)
+
+      const fts = db.prepare("SELECT name FROM sqlite_master WHERE name = 'activities_fts'").all()
+      expect(fts).toHaveLength(1)
+
+      const triggers = db.prepare("SELECT name FROM sqlite_master WHERE type='trigger'").all() as {
+        name: string
+      }[]
+      const triggerNames = triggers.map((t) => t.name)
+      expect(triggerNames).toContain('activities_ai')
+
+      const runs = db.prepare('SELECT id FROM pattern_detection_runs').all()
+      expect(runs).toHaveLength(1)
+
+      db.close()
+    })
   })
 })

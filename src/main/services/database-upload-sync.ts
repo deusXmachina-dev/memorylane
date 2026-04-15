@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import log from '../logger'
-import { stripDatabaseForUpload } from './strip-database-for-upload'
+import { stripDatabaseForUpload, type StripOptions } from './strip-database-for-upload'
 
 const DEFAULT_UPLOAD_INTERVAL_MS = 24 * 60 * 60 * 1000
 
@@ -14,6 +14,7 @@ export interface DatabaseUploadSyncParams {
   storage: DatabaseUploadStorage
   getDeviceId: () => string
   isActivated: () => boolean
+  getStripOptions: () => StripOptions
   backendUrl: string
   intervalMs?: number
 }
@@ -22,6 +23,7 @@ export class DatabaseUploadSync {
   private readonly storage: DatabaseUploadStorage
   private readonly getDeviceId: () => string
   private readonly isActivated: () => boolean
+  private readonly getStripOptions: () => StripOptions
   private readonly backendUrl: string
   private readonly intervalMs: number
   private timer: ReturnType<typeof setInterval> | null = null
@@ -33,6 +35,7 @@ export class DatabaseUploadSync {
     this.storage = params.storage
     this.getDeviceId = params.getDeviceId
     this.isActivated = params.isActivated
+    this.getStripOptions = params.getStripOptions
     this.backendUrl = params.backendUrl
     this.intervalMs = params.intervalMs ?? DEFAULT_UPLOAD_INTERVAL_MS
   }
@@ -104,7 +107,7 @@ export class DatabaseUploadSync {
 
     try {
       await this.storage.backupToFile(tempPath)
-      stripDatabaseForUpload(tempPath)
+      stripDatabaseForUpload(tempPath, this.getStripOptions())
 
       const fileBuffer = fs.readFileSync(tempPath)
       const formData = new FormData()

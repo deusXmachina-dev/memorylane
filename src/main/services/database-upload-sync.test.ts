@@ -39,6 +39,7 @@ describe('DatabaseUploadSync', () => {
       storage: { backupToFile },
       getDeviceId: () => 'device-hex-id',
       isActivated: () => true,
+      getStripOptions: () => ({ detailLevel: 'summary' as const }),
       backendUrl: 'http://localhost:8000/',
     })
 
@@ -68,6 +69,7 @@ describe('DatabaseUploadSync', () => {
       storage: { backupToFile },
       getDeviceId: () => 'device-hex-id',
       isActivated: () => false,
+      getStripOptions: () => ({ detailLevel: 'summary' as const }),
       backendUrl: 'http://localhost:8000/',
     })
 
@@ -92,6 +94,7 @@ describe('DatabaseUploadSync', () => {
       storage: { backupToFile },
       getDeviceId: () => 'device-hex-id',
       isActivated: () => true,
+      getStripOptions: () => ({ detailLevel: 'summary' as const }),
       backendUrl: 'http://localhost:8000/',
     })
 
@@ -115,6 +118,7 @@ describe('DatabaseUploadSync', () => {
       storage: { backupToFile },
       getDeviceId: () => 'device-hex-id',
       isActivated: () => true,
+      getStripOptions: () => ({ detailLevel: 'summary' as const }),
       backendUrl: 'http://localhost:8000/',
     })
 
