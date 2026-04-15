@@ -197,5 +197,11 @@ describe('stripDatabaseForUpload', () => {
 
       db.close()
     })
+
+    it('is idempotent (running twice does not throw)', async () => {
+      await setupAndBackup()
+      stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'detailed' })
+      expect(() => stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'detailed' })).not.toThrow()
+    })
   })
 })
