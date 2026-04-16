@@ -14,6 +14,7 @@ export interface DatabaseUploadSyncParams {
   storage: DatabaseUploadStorage
   getDeviceId: () => string
   isActivated: () => boolean
+  isSyncEnabled: () => boolean
   getStripOptions: () => StripOptions
   backendUrl: string
   intervalMs?: number
@@ -23,6 +24,7 @@ export class DatabaseUploadSync {
   private readonly storage: DatabaseUploadStorage
   private readonly getDeviceId: () => string
   private readonly isActivated: () => boolean
+  private readonly isSyncEnabled: () => boolean
   private readonly getStripOptions: () => StripOptions
   private readonly backendUrl: string
   private readonly intervalMs: number
@@ -35,6 +37,7 @@ export class DatabaseUploadSync {
     this.storage = params.storage
     this.getDeviceId = params.getDeviceId
     this.isActivated = params.isActivated
+    this.isSyncEnabled = params.isSyncEnabled
     this.getStripOptions = params.getStripOptions
     this.backendUrl = params.backendUrl
     this.intervalMs = params.intervalMs ?? DEFAULT_UPLOAD_INTERVAL_MS
@@ -54,6 +57,9 @@ export class DatabaseUploadSync {
   }
 
   public async triggerUpload(): Promise<{ success: boolean; error?: string }> {
+    if (!this.isSyncEnabled()) {
+      return { success: false, error: 'Sharing disabled' }
+    }
     try {
       await this.queueUpload('manual')
       return { success: true }
@@ -98,6 +104,11 @@ export class DatabaseUploadSync {
   }
 
   private async uploadOnce(reason: string): Promise<void> {
+    if (!this.isSyncEnabled()) {
+      log.debug('[DatabaseUploadSync] Skipping upload — sharing disabled')
+      return
+    }
+
     if (!this.isActivated()) {
       log.debug('[DatabaseUploadSync] Skipping upload — device not activated')
       return

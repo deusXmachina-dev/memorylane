@@ -18,8 +18,8 @@ interface ConnectionsDataSectionProps {
   onToggle: () => void
   databaseExportDirectory: string
   onDatabaseExportDirectoryChange: (directoryPath: string) => void
-  uploadDetailLevel: 'summary' | 'detailed'
-  onUploadDetailLevelChange: (level: 'summary' | 'detailed') => void
+  uploadDetailLevel: 'off' | 'summary' | 'detailed'
+  onUploadDetailLevelChange: (level: 'off' | 'summary' | 'detailed') => void
 }
 
 export function ConnectionsDataSection({
@@ -85,7 +85,14 @@ export function ConnectionsDataSection({
                   <>
                     <div className="space-y-2">
                       <p className="text-xs font-medium text-muted-foreground">Share with remote</p>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
+                        <Button
+                          variant={uploadDetailLevel === 'off' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => onUploadDetailLevelChange('off')}
+                        >
+                          Off
+                        </Button>
                         <Button
                           variant={uploadDetailLevel === 'summary' ? 'default' : 'outline'}
                           size="sm"
@@ -102,14 +109,17 @@ export function ConnectionsDataSection({
                         </Button>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Summary strips OCR text and full-text search index. Both modes strip
-                        personal context and pattern detection runs.
+                        Off disables sharing. Summary strips OCR text and full-text search index.
+                        Both Summary and Detailed strip personal context; pattern detection runs
+                        locally either way.
                       </p>
                     </div>
 
-                    <div className="space-y-2">
-                      <DatabaseSyncSection api={api} />
-                    </div>
+                    {uploadDetailLevel !== 'off' && (
+                      <div className="space-y-2">
+                        <DatabaseSyncSection api={api} />
+                      </div>
+                    )}
                   </>
                 )}
 

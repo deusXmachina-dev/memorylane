@@ -52,6 +52,7 @@ describe('CaptureSettingsManager', () => {
       expect(defaults.excludedApps).toEqual([])
       expect(defaults.excludedWindowTitlePatterns).toEqual([])
       expect(defaults.excludedUrlPatterns).toEqual([])
+      expect(defaults.uploadDetailLevel).toBe('off')
     })
 
     it('get() returns a copy, not the internal reference', () => {
@@ -135,6 +136,29 @@ describe('CaptureSettingsManager', () => {
 
       const reloaded = new CaptureSettingsManager(configPath)
       expect(reloaded.get().excludePrivateBrowsing).toBe(false)
+    })
+
+    it('persists uploadDetailLevel across reloads', () => {
+      for (const level of ['off', 'summary', 'detailed'] as const) {
+        const manager = new CaptureSettingsManager(configPath)
+        manager.save({ uploadDetailLevel: level })
+        const reloaded = new CaptureSettingsManager(configPath)
+        expect(reloaded.get().uploadDetailLevel).toBe(level)
+      }
+    })
+
+    it('preserves pre-existing summary/detailed values on load (backward compat)', () => {
+      for (const level of ['summary', 'detailed'] as const) {
+        fs.writeFileSync(configPath, JSON.stringify({ uploadDetailLevel: level }))
+        const manager = new CaptureSettingsManager(configPath)
+        expect(manager.get().uploadDetailLevel).toBe(level)
+      }
+    })
+
+    it("fresh install (no config file) defaults uploadDetailLevel to 'off'", () => {
+      expect(fs.existsSync(configPath)).toBe(false)
+      const manager = new CaptureSettingsManager(configPath)
+      expect(manager.get().uploadDetailLevel).toBe('off')
     })
 
     it('normalizes blank database export directories to disabled', () => {

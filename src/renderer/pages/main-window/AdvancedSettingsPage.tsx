@@ -152,12 +152,14 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
   }, [])
 
   const setUploadDetailLevel = useCallback(
-    (level: 'summary' | 'detailed'): void => {
+    (level: 'off' | 'summary' | 'detailed'): void => {
       setForm((prev) => (prev ? { ...prev, uploadDetailLevel: level } : prev))
-      save(
-        { uploadDetailLevel: level },
-        level === 'detailed' ? 'Sharing detailed activities' : 'Sharing summary only',
-      )
+      const toastByLevel = {
+        off: 'Sharing disabled',
+        summary: 'Sharing summary only',
+        detailed: 'Sharing detailed activities',
+      } as const
+      save({ uploadDetailLevel: level }, toastByLevel[level])
     },
     [save],
   )
