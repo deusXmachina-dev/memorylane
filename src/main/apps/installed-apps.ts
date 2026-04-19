@@ -9,6 +9,9 @@ import type { InstalledApp } from '../../shared/types'
 
 const execFileAsync = promisify(execFile)
 
+const LNK_RESOLVER_TIMEOUT_MS = 15_000
+const LNK_RESOLVER_BUFFER_BYTES = 2 * 1024 * 1024
+
 let cachedApps: InstalledApp[] | null = null
 let cacheLoadPromise: Promise<InstalledApp[]> | null = null
 let cachedAt = 0
@@ -154,23 +157,48 @@ function decodeXmlEntities(value: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Windows: enumerate .lnk shortcut filenames under Start Menu. The filename is
-// the human-readable display name (e.g. "Google Chrome.lnk"). We don't resolve
-// the .lnk binary — normalizeToken on the display name already yields the same
-// token the capture-exclusion matcher uses.
+// Windows: enumerate .lnk shortcuts under Start Menu, then resolve each one's
+// target via WScript.Shell. Only shortcuts pointing to an .exe become apps —
+// this drops .chm manuals, .url docs, and .msc snap-ins that the app-watcher
+// would never match at runtime (it reports process exe stems, not Start Menu
+// display names).
 // ---------------------------------------------------------------------------
+
+interface WindowsShortcut {
+  path: string
+  displayName: string
+}
 
 async function loadWindowsApps(): Promise<InstalledApp[]> {
   const roots = collectWindowsStartMenuRoots()
-  const all: InstalledApp[] = []
+  const shortcuts: WindowsShortcut[] = []
   for (const root of roots) {
     try {
-      await collectWindowsShortcuts(root, all, 0)
+      await collectWindowsShortcuts(root, shortcuts, 0)
     } catch {
       // Missing / inaccessible — skip.
     }
   }
-  return dedupeAndSort(all.filter((app) => !isWindowsNoise(app.displayName)))
+
+  if (shortcuts.length === 0) return []
+
+  const filtered = shortcuts.filter((s) => !isWindowsNoise(s.displayName))
+  const targets = await resolveWindowsShortcutTargets(filtered.map((s) => s.path))
+  const apps: InstalledApp[] = []
+  for (const shortcut of filtered) {
+    const target = targets.get(normalizePathKey(shortcut.path))
+    if (!target) continue
+    if (!target.toLowerCase().endsWith('.exe')) continue
+    const stem = path.basename(target, path.extname(target))
+    const matchToken = normalizeToken(stem)
+    if (!matchToken) continue
+    apps.push({ displayName: shortcut.displayName, matchToken })
+  }
+  return dedupeAndSort(apps)
+}
+
+function normalizePathKey(p: string): string {
+  return p.replace(/\\/g, '/').toLowerCase()
 }
 
 function collectWindowsStartMenuRoots(): string[] {
@@ -188,7 +216,7 @@ function collectWindowsStartMenuRoots(): string[] {
 
 async function collectWindowsShortcuts(
   dir: string,
-  out: InstalledApp[],
+  out: WindowsShortcut[],
   depth: number,
 ): Promise<void> {
   if (depth > 3) return
@@ -205,9 +233,7 @@ async function collectWindowsShortcuts(
     }
     if (!entry.name.toLowerCase().endsWith('.lnk')) continue
     const displayName = entry.name.slice(0, -4)
-    const matchToken = normalizeToken(displayName)
-    if (!matchToken) continue
-    out.push({ displayName, matchToken })
+    out.push({ path: path.join(dir, entry.name), displayName })
   }
 }
 
@@ -216,4 +242,69 @@ const WINDOWS_NOISE_PATTERNS = ['uninstall', 'readme', 'release notes', 'documen
 function isWindowsNoise(displayName: string): boolean {
   const lowered = displayName.toLowerCase()
   return WINDOWS_NOISE_PATTERNS.some((p) => lowered.includes(p))
+}
+
+function buildShortcutResolverScript(lnkPaths: readonly string[]): string {
+  const literals = lnkPaths.map((p) => `'${p.replace(/'/g, "''")}'`).join(',')
+  return [
+    "$ErrorActionPreference = 'SilentlyContinue'",
+    "$ProgressPreference = 'SilentlyContinue'",
+    '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
+    '$shell = New-Object -ComObject WScript.Shell',
+    `$paths = @(${literals})`,
+    'foreach ($p in $paths) {',
+    '  try {',
+    '    $target = $shell.CreateShortcut($p).TargetPath',
+    '    if ($target) {',
+    '      $safePath = [string]$p -replace "`t", " "',
+    '      $safeTarget = [string]$target -replace "`t", " "',
+    '      [Console]::Out.WriteLine("$safePath`t$safeTarget")',
+    '    }',
+    '  } catch {}',
+    '}',
+  ].join('\n')
+}
+
+async function resolveWindowsShortcutTargets(
+  lnkPaths: readonly string[],
+): Promise<Map<string, string>> {
+  if (lnkPaths.length === 0) return new Map()
+  const script = buildShortcutResolverScript(lnkPaths)
+  const encoded = Buffer.from(script, 'utf16le').toString('base64')
+
+  let stdout: string
+  try {
+    stdout = await new Promise<string>((resolve, reject) => {
+      execFile(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
+        {
+          encoding: 'utf-8',
+          timeout: LNK_RESOLVER_TIMEOUT_MS,
+          maxBuffer: LNK_RESOLVER_BUFFER_BYTES,
+          windowsHide: true,
+        },
+        (err, out) => {
+          if (err) reject(err)
+          else resolve(typeof out === 'string' ? out : out.toString('utf-8'))
+        },
+      )
+    })
+  } catch (error) {
+    log.warn(`Failed to resolve Windows shortcut targets: ${error}`)
+    return new Map()
+  }
+
+  const map = new Map<string, string>()
+  for (const line of stdout.split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (trimmed.length === 0) continue
+    const tabIndex = trimmed.indexOf('\t')
+    if (tabIndex < 0) continue
+    const lnkPath = trimmed.slice(0, tabIndex)
+    const target = trimmed.slice(tabIndex + 1)
+    if (!lnkPath || !target) continue
+    map.set(normalizePathKey(lnkPath), target)
+  }
+  return map
 }
