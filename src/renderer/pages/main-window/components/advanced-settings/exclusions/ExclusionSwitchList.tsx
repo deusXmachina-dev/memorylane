@@ -34,6 +34,7 @@ interface RecentlyAddedBlockProps {
   items: ExclusionRowItem[]
   excludedTokens: Set<string>
   onToggle: (matchToken: string, checked: boolean) => void
+  onAddAll?: () => void
   onDismiss?: () => void
   icon?: LucideIcon
 }
@@ -42,23 +43,37 @@ export function RecentlyAddedBlock({
   items,
   excludedTokens,
   onToggle,
+  onAddAll,
   onDismiss,
   icon,
 }: RecentlyAddedBlockProps): React.JSX.Element | null {
   if (items.length === 0) return null
+  const allAlreadyExcluded = items.every((item) => excludedTokens.has(item.matchToken))
   return (
     <div className="space-y-1 rounded-lg border border-primary/40 bg-primary/5 p-2">
       <div className="flex items-center justify-between px-1">
-        <p className="text-[11px] font-medium text-foreground">Just added ({items.length})</p>
-        {onDismiss && (
-          <button
-            type="button"
-            onClick={onDismiss}
-            className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-          >
-            Dismiss
-          </button>
-        )}
+        <p className="text-[11px] font-medium text-foreground">Found ({items.length})</p>
+        <div className="flex items-center gap-3">
+          {onAddAll && (
+            <button
+              type="button"
+              onClick={onAddAll}
+              disabled={allAlreadyExcluded}
+              className="text-[11px] font-medium text-primary underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
+            >
+              Add all
+            </button>
+          )}
+          {onDismiss && (
+            <button
+              type="button"
+              onClick={onDismiss}
+              className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              Dismiss
+            </button>
+          )}
+        </div>
       </div>
       <ul className="divide-y divide-border/60">
         {items.map((item) => (

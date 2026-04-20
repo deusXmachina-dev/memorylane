@@ -125,7 +125,7 @@ export function AiModelsSection({
           )}
 
           {hasLlmAccess && (
-            <div className="pl-2">
+            <div>
               <div className="space-y-2 mb-4">
                 <p className="text-xs font-medium text-muted-foreground">
                   Automation Opportunities

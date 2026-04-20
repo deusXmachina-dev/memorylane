@@ -41,17 +41,15 @@ describe('observation-controller', () => {
     vi.restoreAllMocks()
   })
 
-  it('suppresses capture on start, restores on stop, and applies collected apps/urls', async () => {
+  it('suppresses capture on start, restores on stop, and exposes collected apps/urls in lastRun', async () => {
     const { createObservationController } = await import('./observation-controller')
 
     const setFrameCaptureSuppressed = vi.fn()
     const onUpdate = vi.fn()
-    const onSettingsPatch = vi.fn()
 
     const ctrl = createObservationController({
       captureControl: { setFrameCaptureSuppressed },
       onUpdate,
-      onSettingsPatch,
     })
 
     ctrl.start(60_000)
@@ -65,11 +63,6 @@ describe('observation-controller', () => {
     ctrl.stop('user')
 
     expect(setFrameCaptureSuppressed).toHaveBeenNthCalledWith(2, false)
-    expect(onSettingsPatch).toHaveBeenCalledTimes(1)
-    const patch = onSettingsPatch.mock.calls[0][0]
-    expect(patch.apps).toContain('slackmacgap')
-    expect(patch.apps).toContain('whatsapp')
-    expect(patch.urls).toEqual(['bank.example.com'])
 
     const state = ctrl.getState()
     expect(state.phase).toBe('idle')
@@ -82,12 +75,9 @@ describe('observation-controller', () => {
   it('filters browser-internal hosts (e.g. chrome://newtab/) from collected urls', async () => {
     const { createObservationController } = await import('./observation-controller')
 
-    const onSettingsPatch = vi.fn()
-
     const ctrl = createObservationController({
       captureControl: { setFrameCaptureSuppressed: vi.fn() },
       onUpdate: vi.fn(),
-      onSettingsPatch,
     })
 
     ctrl.start(60_000)
@@ -103,12 +93,9 @@ describe('observation-controller', () => {
   it('skips browser apps but still collects their URLs', async () => {
     const { createObservationController } = await import('./observation-controller')
 
-    const onSettingsPatch = vi.fn()
-
     const ctrl = createObservationController({
       captureControl: { setFrameCaptureSuppressed: vi.fn() },
       onUpdate: vi.fn(),
-      onSettingsPatch,
     })
 
     ctrl.start(60_000)
@@ -116,22 +103,20 @@ describe('observation-controller', () => {
     emit(makeEvent({ bundleId: 'com.tinyspeck.slackmacgap' }))
     ctrl.stop('user')
 
-    const patch = onSettingsPatch.mock.calls[0][0]
-    expect(patch.apps).not.toContain('chrome')
-    expect(patch.apps).toContain('slackmacgap')
-    expect(patch.urls).toEqual(['docs.google.com'])
+    const state = ctrl.getState()
+    expect(state.lastRun?.apps).not.toContain('chrome')
+    expect(state.lastRun?.apps).toContain('slackmacgap')
+    expect(state.lastRun?.urls).toEqual(['docs.google.com'])
   })
 
   it('auto-stops when the timer fires', async () => {
     const { createObservationController } = await import('./observation-controller')
 
     const setFrameCaptureSuppressed = vi.fn()
-    const onSettingsPatch = vi.fn()
 
     const ctrl = createObservationController({
       captureControl: { setFrameCaptureSuppressed },
       onUpdate: vi.fn(),
-      onSettingsPatch,
     })
 
     ctrl.start(10_000)
@@ -141,19 +126,17 @@ describe('observation-controller', () => {
 
     expect(ctrl.getState().phase).toBe('idle')
     expect(setFrameCaptureSuppressed).toHaveBeenLastCalledWith(false)
-    expect(onSettingsPatch).toHaveBeenCalledTimes(1)
+    expect(ctrl.getState().lastRun).toBeDefined()
   })
 
   it('is idempotent: double start / double stop are no-ops', async () => {
     const { createObservationController } = await import('./observation-controller')
 
     const setFrameCaptureSuppressed = vi.fn()
-    const onSettingsPatch = vi.fn()
 
     const ctrl = createObservationController({
       captureControl: { setFrameCaptureSuppressed },
       onUpdate: vi.fn(),
-      onSettingsPatch,
     })
 
     ctrl.start(30_000)
@@ -161,20 +144,18 @@ describe('observation-controller', () => {
     expect(setFrameCaptureSuppressed).toHaveBeenCalledTimes(1)
 
     ctrl.stop('user')
+    const firstLastRunAt = ctrl.getState().lastRun?.at
     ctrl.stop('user') // ignored
-    expect(onSettingsPatch).toHaveBeenCalledTimes(1)
     expect(setFrameCaptureSuppressed).toHaveBeenCalledTimes(2)
+    expect(ctrl.getState().lastRun?.at).toBe(firstLastRunAt)
   })
 
   it('skips events originating from MemoryLane itself', async () => {
     const { createObservationController } = await import('./observation-controller')
 
-    const onSettingsPatch = vi.fn()
-
     const ctrl = createObservationController({
       captureControl: { setFrameCaptureSuppressed: vi.fn() },
       onUpdate: vi.fn(),
-      onSettingsPatch,
     })
 
     ctrl.start(60_000)
@@ -182,9 +163,9 @@ describe('observation-controller', () => {
     emit(makeEvent({ app: 'MemoryLane' }))
     ctrl.stop('user')
 
-    const patch = onSettingsPatch.mock.calls[0][0]
-    expect(patch.apps).toEqual([])
-    expect(patch.urls).toEqual([])
+    const state = ctrl.getState()
+    expect(state.lastRun?.apps).toEqual([])
+    expect(state.lastRun?.urls).toEqual([])
   })
 
   it('clamps absurd durations', async () => {
@@ -194,7 +175,6 @@ describe('observation-controller', () => {
     const ctrl = createObservationController({
       captureControl: { setFrameCaptureSuppressed: vi.fn() },
       onUpdate: vi.fn(),
-      onSettingsPatch: vi.fn(),
     })
 
     const now = Date.now()
@@ -216,7 +196,6 @@ describe('observation-controller', () => {
     const ctrl = createObservationController({
       captureControl: { setFrameCaptureSuppressed: vi.fn() },
       onUpdate,
-      onSettingsPatch: vi.fn(),
     })
 
     ctrl.start(120_000)

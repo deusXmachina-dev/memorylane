@@ -6,7 +6,6 @@ import { AppExclusionList } from './AppExclusionList'
 import { WebsiteExclusionList } from './WebsiteExclusionList'
 import { ObserveButton } from './ObserveButton'
 import { ObservationRunningBanner } from './ObservationRunningBanner'
-import { ObservationFinishedBanner } from './ObservationFinishedBanner'
 
 const DEFAULT_DURATION_MS = 120_000
 
@@ -27,7 +26,8 @@ export function ExclusionsManager({
 }: ExclusionsManagerProps): React.JSX.Element {
   const api = useMainWindowAPI()
   const [observation, setObservation] = useState<ObservationState | null>(null)
-  const [dismissedAt, setDismissedAt] = useState(0)
+  const [dismissedAppsAt, setDismissedAppsAt] = useState(0)
+  const [dismissedUrlsAt, setDismissedUrlsAt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -43,7 +43,9 @@ export function ExclusionsManager({
   }, [api])
 
   const lastRun = observation?.lastRun
-  const showLastRun = lastRun !== undefined && lastRun.at > dismissedAt
+  const showAppsRecent = lastRun !== undefined && lastRun.at > dismissedAppsAt
+  const showUrlsRecent = lastRun !== undefined && lastRun.at > dismissedUrlsAt
+  const showAnyRecent = showAppsRecent || showUrlsRecent
 
   // Notify the page once per run so settings reload.
   const notifiedAtRef = useRef(0)
@@ -54,8 +56,8 @@ export function ExclusionsManager({
     onObserved()
   }, [lastRun, onObserved])
 
-  const recentlyAddedApps = showLastRun ? (lastRun?.apps ?? []) : []
-  const recentlyAddedUrls = showLastRun ? (lastRun?.urls ?? []) : []
+  const recentlyAddedApps = showAppsRecent ? (lastRun?.apps ?? []) : []
+  const recentlyAddedUrls = showUrlsRecent ? (lastRun?.urls ?? []) : []
 
   const handleStart = useCallback((): void => {
     void api.startObservation(DEFAULT_DURATION_MS).then((next) => setObservation(next))
@@ -65,21 +67,22 @@ export function ExclusionsManager({
     void api.stopObservation().then((next) => setObservation(next))
   }, [api])
 
-  const dismissRecent = useCallback((): void => {
-    setDismissedAt(Date.now())
+  const dismissAppsRecent = useCallback((): void => {
+    setDismissedAppsAt(Date.now())
+  }, [])
+
+  const dismissUrlsRecent = useCallback((): void => {
+    setDismissedUrlsAt(Date.now())
   }, [])
 
   const banner = useMemo(() => {
     if (observation?.phase === 'running') {
       return <ObservationRunningBanner state={observation} />
     }
-    if (showLastRun && lastRun) {
-      return <ObservationFinishedBanner lastRun={lastRun} />
-    }
     return null
-  }, [observation, showLastRun, lastRun])
+  }, [observation])
 
-  const showTip = observation?.phase !== 'running' && !showLastRun
+  const showTip = observation?.phase !== 'running' && !showAnyRecent
 
   return (
     <div>
@@ -99,8 +102,8 @@ export function ExclusionsManager({
         {showTip && (
           <p className="mt-2 text-[11px] text-muted-foreground">
             Tip: hit <span className="font-medium">Auto-fill from activity</span> and use the apps
-            and sites you want blocked, and we&apos;ll add them to the list for you (no screenshots
-            taken).
+            and sites you want blocked. We&apos;ll list them here so you can pick what to block (no
+            screenshots taken).
           </p>
         )}
         {banner}
@@ -109,7 +112,7 @@ export function ExclusionsManager({
             excludedApps={excludedApps}
             onChange={onAppsChange}
             recentlyAdded={recentlyAddedApps}
-            onDismissRecent={dismissRecent}
+            onDismissRecent={dismissAppsRecent}
           />
         </TabsPanel>
         <TabsPanel value="websites" className="pt-2" keepMounted>
@@ -117,7 +120,7 @@ export function ExclusionsManager({
             excludedUrlPatterns={excludedUrlPatterns}
             onChange={onUrlsChange}
             recentlyAdded={recentlyAddedUrls}
-            onDismissRecent={dismissRecent}
+            onDismissRecent={dismissUrlsRecent}
           />
         </TabsPanel>
       </Tabs>

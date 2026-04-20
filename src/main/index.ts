@@ -222,45 +222,6 @@ app.on('ready', async () => {
   const observation = createObservationController({
     captureControl: runtime.capture,
     onUpdate: (state) => sendObservationUpdate(state),
-    onSettingsPatch: ({ apps, urls }) => {
-      if (apps.length === 0 && urls.length === 0) return
-      const current = captureSettingsManager.get()
-      const seenApps = new Set(current.excludedApps.map((v) => v.toLowerCase()))
-      const mergedApps = [...current.excludedApps]
-      for (const token of apps) {
-        if (!seenApps.has(token)) {
-          mergedApps.push(token)
-          seenApps.add(token)
-        }
-      }
-      const seenUrls = new Set(current.excludedUrlPatterns.map((v) => v.toLowerCase()))
-      const mergedUrls = [...current.excludedUrlPatterns]
-      for (const url of urls) {
-        if (!seenUrls.has(url)) {
-          mergedUrls.push(url)
-          seenUrls.add(url)
-        }
-      }
-
-      const changed =
-        mergedApps.length !== current.excludedApps.length ||
-        mergedUrls.length !== current.excludedUrlPatterns.length
-      if (!changed) return
-
-      captureSettingsManager.save({
-        excludedApps: mergedApps,
-        excludedUrlPatterns: mergedUrls,
-      })
-      captureSettingsManager.applyToConstants()
-      const updated = captureSettingsManager.get()
-      runtime?.updateExclusions({
-        apps: updated.excludedApps,
-        windowTitlePatterns: updated.excludedWindowTitlePatterns,
-        urlPatterns: updated.excludedUrlPatterns,
-        excludePrivateBrowsing: updated.excludePrivateBrowsing,
-      })
-      void rawDatabaseExportSync?.onSettingsChanged()
-    },
   })
 
   initMainWindowIPC({

@@ -87,6 +87,21 @@ export function ExclusionPicker({
     onChange(next)
   }
 
+  const addAllRecent = (): void => {
+    if (recentItems.length === 0) return
+    const next = [...excluded]
+    const seen = new Set(excluded.map((e) => e.toLowerCase()))
+    for (const item of recentItems) {
+      const normalized = item.matchToken.toLowerCase()
+      if (!seen.has(normalized)) {
+        next.push(normalized)
+        seen.add(normalized)
+      }
+    }
+    onChange(next)
+    onDismissRecent?.()
+  }
+
   const removeLegacy = (entry: string): void => {
     onChange(excluded.filter((e) => e.toLowerCase() !== entry.toLowerCase()))
   }
@@ -103,6 +118,7 @@ export function ExclusionPicker({
         items={recentItems}
         excludedTokens={excludedTokens}
         onToggle={toggle}
+        onAddAll={addAllRecent}
         onDismiss={onDismissRecent}
         icon={icon}
       />
