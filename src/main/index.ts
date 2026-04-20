@@ -33,6 +33,7 @@ import { RawDatabaseExportSync } from './services/raw-database-export-sync'
 import { DatabaseUploadSync } from './services/database-upload-sync'
 import { createMainRuntime, type MainRuntime } from './runtime'
 import { createObservationController } from './observation-controller'
+import { forceStopAppWatcherBackend } from './recorder/app-watcher'
 import { getAppDirectoryName } from './paths'
 import { loadAppEditionConfig } from './edition'
 import { ENTERPRISE_BACKEND_CONFIG } from '../shared/constants'
@@ -76,9 +77,28 @@ let patternDetector: PatternDetector | null = null
 let rawDatabaseExportSync: RawDatabaseExportSync | null = null
 let databaseUploadSync: DatabaseUploadSync | null = null
 
-app.on('before-quit', () => {
+let shutdownCompleted = false
+app.on('before-quit', (event) => {
+  if (shutdownCompleted) return
+  event.preventDefault()
+
+  // Kill the native app-watcher helper synchronously before we proceed.
+  // On Windows, MSI upgrade uses RestartManager to close the main Electron
+  // process, but the Rust helper exe is not registered with RestartManager
+  // and would keep holding resources\rust\app-watcher-windows.exe, forcing
+  // MSI to defer replacement to a reboot (return code 3010) and leaving a
+  // partially-installed app that fails with a V8 snapshot FATAL on launch.
+  forceStopAppWatcherBackend()
+
   runtime?.accessProvider.stopPeriodicRefresh()
-  void Promise.all([runtime?.dispose(), rawDatabaseExportSync?.stop(), databaseUploadSync?.stop()])
+  void Promise.allSettled([
+    runtime?.dispose(),
+    rawDatabaseExportSync?.stop(),
+    databaseUploadSync?.stop(),
+  ]).finally(() => {
+    shutdownCompleted = true
+    app.quit()
+  })
 })
 
 app.on('will-quit', () => {

@@ -95,3 +95,13 @@ export function isAppWatcherRunning(): boolean {
   const backend = PLATFORM_APP_WATCHER_BACKENDS[process.platform]
   return backend?.isRunning() ?? false
 }
+
+// Forcibly stops the native backend process regardless of listener count.
+// Used during app shutdown so the native helper can't outlive the main process
+// (see before-quit handler in main/index.ts).
+export function forceStopAppWatcherBackend(): void {
+  if (!backendStarted) return
+  const backend = PLATFORM_APP_WATCHER_BACKENDS[process.platform]
+  backend?.stop()
+  backendStarted = false
+}
