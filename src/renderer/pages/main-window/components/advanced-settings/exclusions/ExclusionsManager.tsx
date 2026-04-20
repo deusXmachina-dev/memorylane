@@ -43,9 +43,9 @@ export function ExclusionsManager({
   }, [api])
 
   const lastRun = observation?.lastRun
-  const showAppsRecent = lastRun !== undefined && lastRun.at > dismissedAppsAt
-  const showUrlsRecent = lastRun !== undefined && lastRun.at > dismissedUrlsAt
-  const showAnyRecent = showAppsRecent || showUrlsRecent
+  const showFoundApps = lastRun !== undefined && lastRun.at > dismissedAppsAt
+  const showFoundUrls = lastRun !== undefined && lastRun.at > dismissedUrlsAt
+  const showAnyFound = showFoundApps || showFoundUrls
 
   // Notify the page once per run so settings reload.
   const notifiedAtRef = useRef(0)
@@ -56,8 +56,8 @@ export function ExclusionsManager({
     onObserved()
   }, [lastRun, onObserved])
 
-  const recentlyAddedApps = showAppsRecent ? (lastRun?.apps ?? []) : []
-  const recentlyAddedUrls = showUrlsRecent ? (lastRun?.urls ?? []) : []
+  const foundApps = showFoundApps ? (lastRun?.apps ?? []) : []
+  const foundUrls = showFoundUrls ? (lastRun?.urls ?? []) : []
 
   const handleStart = useCallback((): void => {
     void api.startObservation(DEFAULT_DURATION_MS).then((next) => setObservation(next))
@@ -67,11 +67,11 @@ export function ExclusionsManager({
     void api.stopObservation().then((next) => setObservation(next))
   }, [api])
 
-  const dismissAppsRecent = useCallback((): void => {
+  const dismissFoundApps = useCallback((): void => {
     setDismissedAppsAt(Date.now())
   }, [])
 
-  const dismissUrlsRecent = useCallback((): void => {
+  const dismissFoundUrls = useCallback((): void => {
     setDismissedUrlsAt(Date.now())
   }, [])
 
@@ -82,7 +82,7 @@ export function ExclusionsManager({
     return null
   }, [observation])
 
-  const showTip = observation?.phase !== 'running' && !showAnyRecent
+  const showTip = observation?.phase !== 'running' && !showAnyFound
 
   return (
     <div>
@@ -111,16 +111,16 @@ export function ExclusionsManager({
           <AppExclusionList
             excludedApps={excludedApps}
             onChange={onAppsChange}
-            recentlyAdded={recentlyAddedApps}
-            onDismissRecent={dismissAppsRecent}
+            found={foundApps}
+            onDismissFound={dismissFoundApps}
           />
         </TabsPanel>
         <TabsPanel value="websites" className="pt-2" keepMounted>
           <WebsiteExclusionList
             excludedUrlPatterns={excludedUrlPatterns}
             onChange={onUrlsChange}
-            recentlyAdded={recentlyAddedUrls}
-            onDismissRecent={dismissUrlsRecent}
+            found={foundUrls}
+            onDismissFound={dismissFoundUrls}
           />
         </TabsPanel>
       </Tabs>

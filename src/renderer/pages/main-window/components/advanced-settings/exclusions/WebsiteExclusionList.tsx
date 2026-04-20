@@ -7,8 +7,8 @@ import { ExclusionPicker, type ExclusionPickerItem } from './ExclusionPicker'
 interface WebsiteExclusionListProps {
   excludedUrlPatterns: string[]
   onChange: (next: string[]) => void
-  recentlyAdded?: string[]
-  onDismissRecent?: () => void
+  found?: string[]
+  onDismissFound?: () => void
 }
 
 function isWildcardPattern(value: string): boolean {
@@ -18,8 +18,8 @@ function isWildcardPattern(value: string): boolean {
 export function WebsiteExclusionList({
   excludedUrlPatterns,
   onChange,
-  recentlyAdded,
-  onDismissRecent,
+  found,
+  onDismissFound,
 }: WebsiteExclusionListProps): React.JSX.Element {
   const api = useMainWindowAPI()
   const [domains, setDomains] = useState<SeenDomain[] | null>(null)
@@ -71,8 +71,8 @@ export function WebsiteExclusionList({
       excluded={excludedUrlPatterns}
       onChange={onChange}
       items={items}
-      recentlyAdded={recentlyAdded}
-      onDismissRecent={onDismissRecent}
+      found={found}
+      onDismissFound={onDismissFound}
       legacyEntries={legacyEntries}
       legacyTitle="Custom patterns"
       emptyViewMode="excluded-only"

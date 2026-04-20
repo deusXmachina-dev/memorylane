@@ -6,15 +6,15 @@ import { ExclusionPicker, type ExclusionPickerItem } from './ExclusionPicker'
 interface AppExclusionListProps {
   excludedApps: string[]
   onChange: (next: string[]) => void
-  recentlyAdded?: string[]
-  onDismissRecent?: () => void
+  found?: string[]
+  onDismissFound?: () => void
 }
 
 export function AppExclusionList({
   excludedApps,
   onChange,
-  recentlyAdded,
-  onDismissRecent,
+  found,
+  onDismissFound,
 }: AppExclusionListProps): React.JSX.Element {
   const api = useMainWindowAPI()
   const [apps, setApps] = useState<InstalledApp[] | null>(null)
@@ -60,8 +60,8 @@ export function AppExclusionList({
       excluded={excludedApps}
       onChange={onChange}
       items={items}
-      recentlyAdded={recentlyAdded}
-      onDismissRecent={onDismissRecent}
+      found={found}
+      onDismissFound={onDismissFound}
       legacyEntries={[]}
       legacyTitle=""
       emptyViewMode="excluded-only"

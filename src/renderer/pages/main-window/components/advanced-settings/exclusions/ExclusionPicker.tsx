@@ -5,8 +5,8 @@ import { Input } from '@components/ui/input'
 import { ScrollArea } from '@components/ui/scroll-area'
 import {
   ExclusionRow,
+  FoundBlock,
   LegacyEntriesBlock,
-  RecentlyAddedBlock,
   type ExclusionRowItem,
 } from './ExclusionSwitchList'
 
@@ -16,8 +16,8 @@ interface ExclusionPickerProps {
   excluded: string[]
   onChange: (next: string[]) => void
   items: ExclusionPickerItem[] | null
-  recentlyAdded?: string[]
-  onDismissRecent?: () => void
+  found?: string[]
+  onDismissFound?: () => void
   legacyEntries: string[]
   legacyTitle: string
   emptyViewMode: 'all' | 'excluded-only'
@@ -31,8 +31,8 @@ export function ExclusionPicker({
   excluded,
   onChange,
   items,
-  recentlyAdded,
-  onDismissRecent,
+  found,
+  onDismissFound,
   legacyEntries,
   legacyTitle,
   emptyViewMode,
@@ -52,14 +52,14 @@ export function ExclusionPicker({
     return map
   }, [items])
 
-  const recentItems = useMemo<ExclusionPickerItem[]>(() => {
-    if (!recentlyAdded?.length) return []
-    return recentlyAdded.map((token) => {
+  const foundItems = useMemo<ExclusionPickerItem[]>(() => {
+    if (!found?.length) return []
+    return found.map((token) => {
       const normalized = token.toLowerCase()
       const known = itemsByToken.get(normalized)
       return { key: normalized, matchToken: normalized, label: known?.label ?? token }
     })
-  }, [recentlyAdded, itemsByToken])
+  }, [found, itemsByToken])
 
   const visibleItems = useMemo<ExclusionPickerItem[]>(() => {
     if (!items) return []
@@ -87,19 +87,18 @@ export function ExclusionPicker({
     onChange(next)
   }
 
-  const addAllRecent = (): void => {
-    if (recentItems.length === 0) return
+  const addAllFound = (): void => {
+    if (foundItems.length === 0) return
     const next = [...excluded]
     const seen = new Set(excluded.map((e) => e.toLowerCase()))
-    for (const item of recentItems) {
-      const normalized = item.matchToken.toLowerCase()
-      if (!seen.has(normalized)) {
-        next.push(normalized)
-        seen.add(normalized)
+    for (const item of foundItems) {
+      if (!seen.has(item.matchToken)) {
+        next.push(item.matchToken)
+        seen.add(item.matchToken)
       }
     }
     onChange(next)
-    onDismissRecent?.()
+    onDismissFound?.()
   }
 
   const removeLegacy = (entry: string): void => {
@@ -114,12 +113,12 @@ export function ExclusionPicker({
 
   return (
     <div className="flex flex-col gap-2">
-      <RecentlyAddedBlock
-        items={recentItems}
+      <FoundBlock
+        items={foundItems}
         excludedTokens={excludedTokens}
         onToggle={toggle}
-        onAddAll={addAllRecent}
-        onDismiss={onDismissRecent}
+        onAddAll={addAllFound}
+        onDismiss={onDismissFound}
         icon={icon}
       />
 
@@ -129,7 +128,7 @@ export function ExclusionPicker({
           value={query}
           onChange={(e) => {
             setQuery(e.target.value)
-            if (e.target.value.length > 0 && onDismissRecent) onDismissRecent()
+            if (e.target.value.length > 0 && onDismissFound) onDismissFound()
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && canAddCustom && visibleItems.length === 0) {

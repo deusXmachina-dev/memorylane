@@ -30,7 +30,7 @@ export function ExclusionRow({
   )
 }
 
-interface RecentlyAddedBlockProps {
+interface FoundBlockProps {
   items: ExclusionRowItem[]
   excludedTokens: Set<string>
   onToggle: (matchToken: string, checked: boolean) => void
@@ -39,14 +39,14 @@ interface RecentlyAddedBlockProps {
   icon?: LucideIcon
 }
 
-export function RecentlyAddedBlock({
+export function FoundBlock({
   items,
   excludedTokens,
   onToggle,
   onAddAll,
   onDismiss,
   icon,
-}: RecentlyAddedBlockProps): React.JSX.Element | null {
+}: FoundBlockProps): React.JSX.Element | null {
   if (items.length === 0) return null
   const allAlreadyExcluded = items.every((item) => excludedTokens.has(item.matchToken))
   return (
