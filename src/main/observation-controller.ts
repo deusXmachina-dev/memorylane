@@ -20,6 +20,7 @@ export interface ObservationController {
   start(durationMs: number): ObservationState
   stop(reason: 'user' | 'timer'): ObservationState
   getState(): ObservationState
+  dispose(): void
 }
 
 interface ControllerParams {
@@ -203,9 +204,27 @@ export function createObservationController(params: ControllerParams): Observati
     return getState()
   }
 
+  const dispose = (): void => {
+    if (endTimer) {
+      clearTimeout(endTimer)
+      endTimer = null
+    }
+    if (unsubscribe) {
+      try {
+        unsubscribe()
+      } catch (error) {
+        log.error('[Observation] app-watcher unsubscribe threw during dispose:', error)
+      }
+      unsubscribe = null
+    }
+    phase = 'idle'
+    endsAt = null
+  }
+
   return {
     start,
     stop,
     getState,
+    dispose,
   }
 }

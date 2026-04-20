@@ -32,8 +32,7 @@ import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
 import { DatabaseUploadSync } from './services/database-upload-sync'
 import { createMainRuntime, type MainRuntime } from './runtime'
-import { createObservationController } from './observation-controller'
-import { forceStopAppWatcherBackend } from './recorder/app-watcher'
+import { createObservationController, type ObservationController } from './observation-controller'
 import { getAppDirectoryName } from './paths'
 import { loadAppEditionConfig } from './edition'
 import { ENTERPRISE_BACKEND_CONFIG } from '../shared/constants'
@@ -76,21 +75,23 @@ let userContextBuilder: UserContextBuilder | null = null
 let patternDetector: PatternDetector | null = null
 let rawDatabaseExportSync: RawDatabaseExportSync | null = null
 let databaseUploadSync: DatabaseUploadSync | null = null
+let observation: ObservationController | null = null
 
+// Blocks `app.quit()` until all subscribers to native helpers have released
+// them. Critical on Windows MSI upgrades: Electron's process is closed by
+// RestartManager, but Rust helpers (app-watcher-windows.exe) aren't registered
+// with it. If Electron exits before the observation controller and runtime
+// release their app-watcher subscriptions, the helper outlives the main
+// process, keeps an open handle on resources\rust\app-watcher-windows.exe,
+// and MSI has to defer replacement to a reboot (return code 3010).
 let shutdownCompleted = false
 app.on('before-quit', (event) => {
   if (shutdownCompleted) return
   event.preventDefault()
 
-  // Kill the native app-watcher helper synchronously before we proceed.
-  // On Windows, MSI upgrade uses RestartManager to close the main Electron
-  // process, but the Rust helper exe is not registered with RestartManager
-  // and would keep holding resources\rust\app-watcher-windows.exe, forcing
-  // MSI to defer replacement to a reboot (return code 3010) and leaving a
-  // partially-installed app that fails with a V8 snapshot FATAL on launch.
-  forceStopAppWatcherBackend()
-
   runtime?.accessProvider.stopPeriodicRefresh()
+  observation?.dispose()
+
   void Promise.allSettled([
     runtime?.dispose(),
     rawDatabaseExportSync?.stop(),
@@ -239,7 +240,7 @@ app.on('ready', async () => {
 
   const { sendObservationUpdate } = await import('./ui/main-window')
 
-  const observation = createObservationController({
+  observation = createObservationController({
     captureControl: runtime.capture,
     onUpdate: (state) => sendObservationUpdate(state),
     onSettingsPatch: ({ apps, urls }) => {
