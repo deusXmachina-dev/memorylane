@@ -15,15 +15,10 @@ export interface AppMcpEntry {
 
 /**
  * Returns the path to the built mcp-entry.js script for the current runtime.
- * In production this lives inside the asar; when unpacked is required (for
- * native .node addons) electron resolves those lazily, so the .js file itself
- * can stay packed.
+ * `app.getAppPath()` already resolves to the asar root in packaged builds and
+ * to the project root in dev, so the same relative layout works for both.
  */
 export function getMcpEntryScriptPath(): string {
-  if (app.isPackaged) {
-    return path.join(app.getAppPath(), 'out', 'main', 'mcp-entry.js')
-  }
-  // Dev: `electron-vite` outputs to the project root /out directory.
   return path.join(app.getAppPath(), 'out', 'main', 'mcp-entry.js')
 }
 

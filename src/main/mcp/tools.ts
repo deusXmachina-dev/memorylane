@@ -201,8 +201,30 @@ export function registerTools(
         }
       }
 
+      // Reinitialize first so we don't persist a path we can't actually open.
+      // On failure, fall back to the default DB so the server stays usable and
+      // the next startup doesn't re-read a poisoned cli.json.
+      try {
+        await reinitialize(newDbPath)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        try {
+          await reinitialize(getDefaultDbPath())
+        } catch {
+          // ignore — surface the original failure
+        }
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Error: failed to open database at ${newDbPath}: ${message}`,
+            },
+          ],
+          isError: true,
+        }
+      }
+
       setDbPath(newDbPath)
-      await reinitialize(newDbPath)
 
       return {
         content: [

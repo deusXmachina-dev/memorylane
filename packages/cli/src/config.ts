@@ -1,1 +1,7 @@
-export { setDbPath, getConfigDbPath, getConfigFilePath, resolveDbPath } from '@main/mcp/config'
+export {
+  setDbPath,
+  clearDbPath,
+  getConfigDbPath,
+  getConfigFilePath,
+  resolveDbPath,
+} from '@main/mcp/config'
