@@ -33,6 +33,7 @@ import type {
   MainWindowStatus,
   MainWindowStats,
   CaptureSettings,
+  McpRegistrationStatus,
   ObservationState,
   SemanticPipelineMode,
   SubscriptionPlan,
@@ -364,9 +365,9 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   ipcMain.handle('main-window:addToCursor', () => byName.cursor.register())
   ipcMain.handle('main-window:addToClaudeCode', () => byName.claudeCode.register())
   ipcMain.handle('main-window:getMcpStatus', () => {
-    const status: Record<string, boolean> = {}
+    const status: McpRegistrationStatus = {}
     for (const integration of integrations) {
-      status[integration.name] = integration.isMcpAdded()
+      status[integration.name] = integration.getStatus()
     }
     return status
   })

@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Check, Plug } from 'lucide-react'
+import { Check, Plug, RefreshCw } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import { Label } from '@components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@components/ui/card'
@@ -37,13 +37,15 @@ export function IntegrationsSection({ api }: IntegrationsSectionProps): React.JS
   }, [loadStatus])
 
   const handleAdd = useCallback(
-    async (provider: (typeof PROVIDERS)[number]) => {
+    async (provider: (typeof PROVIDERS)[number], isReconnect: boolean) => {
       setAdding(provider.name)
       try {
         const ok = await provider.register(api)
         await loadStatus()
         if (ok) {
-          toast.success(`Connected to ${provider.label}`)
+          toast.success(
+            isReconnect ? `Reconnected to ${provider.label}` : `Connected to ${provider.label}`,
+          )
         } else {
           toast.error(`Failed to connect to ${provider.label}`)
         }
@@ -66,22 +68,33 @@ export function IntegrationsSection({ api }: IntegrationsSectionProps): React.JS
       </CardHeader>
       <CardContent className="flex gap-2">
         {PROVIDERS.map((provider) => {
-          const connected = status?.[provider.name]
+          const entryStatus = status?.[provider.name] ?? 'not-registered'
+          const isStale = entryStatus === 'stale'
+          const isCurrent = entryStatus === 'current'
+          const isBusy = adding === provider.name
           return (
             <div key={provider.name} className="flex-1 flex flex-col items-center gap-1">
               <Label className="text-xs text-muted-foreground">{provider.label}</Label>
               <Button
-                variant="outline"
+                variant={isStale ? 'secondary' : 'outline'}
                 size="sm"
                 className="w-full"
-                disabled={connected || adding !== null}
-                onClick={() => void handleAdd(provider)}
+                disabled={isCurrent || adding !== null}
+                onClick={() => void handleAdd(provider, isStale)}
               >
-                {adding === provider.name ? (
-                  'Connecting...'
-                ) : connected ? (
+                {isBusy ? (
+                  isStale ? (
+                    'Reconnecting...'
+                  ) : (
+                    'Connecting...'
+                  )
+                ) : isCurrent ? (
                   <>
                     <Check className="h-3.5 w-3.5" /> Connected
+                  </>
+                ) : isStale ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5" /> Reconnect
                   </>
                 ) : (
                   <>
@@ -89,6 +102,11 @@ export function IntegrationsSection({ api }: IntegrationsSectionProps): React.JS
                   </>
                 )}
               </Button>
+              {isStale && (
+                <p className="text-[10px] text-muted-foreground text-center leading-tight">
+                  App path changed — reconnect to restore access.
+                </p>
+              )}
             </div>
           )
         })}

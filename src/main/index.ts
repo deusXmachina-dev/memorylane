@@ -26,7 +26,6 @@ import { startPowerMonitoring, shouldPause } from './power-monitor'
 import { CaptureStateManager } from './settings/capture-state-manager'
 import { CaptureSettingsManager } from './settings/capture-settings-manager'
 import { DeviceIdentity } from './settings/device-identity'
-import { migrateOldMcpEntries } from './integrations'
 import { PatternDetector } from './services/pattern-detector'
 import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
@@ -113,7 +112,6 @@ app.on('second-instance', () => {
 })
 
 app.on('ready', async () => {
-  migrateOldMcpEntries()
   const startHidden = shouldStartHiddenOnLaunch()
   const editionConfig = loadAppEditionConfig()
 

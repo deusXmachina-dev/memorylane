@@ -17,6 +17,7 @@ import {
   isCurrentAppEntry,
 } from './migration-utils'
 import { app } from 'electron'
+import type { McpEntryStatus } from '../../shared/types'
 
 interface ClaudeCodeSettings {
   mcpServers?: Record<string, MCPServerEntry>
@@ -84,51 +85,21 @@ function buildMCPEntry(preservedDbPath?: string): MCPServerEntry {
 }
 
 /**
- * Check whether MemoryLane is currently registered in Claude Code's settings on disk.
+ * Report whether MemoryLane is registered in Claude Code's settings, and
+ * whether the entry matches the current app. See getClaudeDesktopStatus for
+ * the three-state semantics and the conservative stance on foreign entries.
  */
-export function isMcpAddedToClaudeCode(): boolean {
+export function getClaudeCodeStatus(): McpEntryStatus {
   const settings = readSettings(getClaudeCodeSettingsPath())
-  return isRegistered(settings)
-}
+  const existing = settings.mcpServers?.[MCP_SERVER_KEY]
+  if (!existing) return 'not-registered'
 
-/**
- * Migrate legacy MCP entries (npx CLI, or outdated app-as-node) to the current app entry.
- * Best-effort: never throws — see migrateClaudeDesktop for rationale.
- */
-export function migrateClaudeCode(): void {
-  const settingsPath = getClaudeCodeSettingsPath()
-  try {
-    if (!fs.existsSync(settingsPath)) {
-      log.debug(`[Claude Code Integration] No settings at ${settingsPath}, skipping migration`)
-      return
-    }
-    const settings = readSettings(settingsPath)
-    const existing = settings.mcpServers?.[MCP_SERVER_KEY]
-    if (!existing) {
-      log.debug('[Claude Code Integration] No memorylane entry present, nothing to migrate')
-      return
-    }
-    const currentExe = app.getPath('exe')
-    const currentScript = getMcpEntryScriptPath()
-    if (isCurrentAppEntry(existing, currentExe, currentScript)) {
-      log.debug('[Claude Code Integration] memorylane entry already current, nothing to migrate')
-      return
-    }
-    const signal = detectLegacyNpxSignal(existing) ?? detectLegacyAppSignal(existing)
-    if (!signal) {
-      log.info(
-        '[Claude Code Integration] memorylane entry present but does not match a known stale shape, leaving it alone',
-      )
-      return
-    }
+  const currentExe = app.getPath('exe')
+  const currentScript = getMcpEntryScriptPath()
+  if (isCurrentAppEntry(existing, currentExe, currentScript)) return 'current'
 
-    const preservedDbPath = extractDbPathArg(existing.args)
-    settings.mcpServers![MCP_SERVER_KEY] = buildMCPEntry(preservedDbPath)
-    writeSettings(settingsPath, settings)
-    log.info(`[Claude Code Integration] Migrated to app entry (signal: ${signal})`)
-  } catch (error) {
-    log.warn('[Claude Code Integration] Migration failed:', error)
-  }
+  const signal = detectLegacyNpxSignal(existing) ?? detectLegacyAppSignal(existing)
+  return signal !== null ? 'stale' : 'current'
 }
 
 export async function registerWithClaudeCode(): Promise<boolean> {

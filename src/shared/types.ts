@@ -206,7 +206,8 @@ export interface SeenDomain {
   lastSeenAt: number
 }
 
-export type McpRegistrationStatus = Record<string, boolean>
+export type McpEntryStatus = 'not-registered' | 'current' | 'stale'
+export type McpRegistrationStatus = Record<string, McpEntryStatus>
 
 export type SemanticPipelineMode = 'auto' | 'video' | 'image'
 

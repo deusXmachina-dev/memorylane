@@ -5,16 +5,16 @@
  * Timeline of entry shapes:
  *   v0 (pre-v0.18) — Electron app-as-node: command=MemoryLane binary,
  *                    args=[.../mcp-entry.js], env={ELECTRON_RUN_AS_NODE: '1'}.
- *                    Removed in v0.18 (commit b502cb4).
  *   v1 (v0.18+)    — CLI via npx: command='npx',
  *                    args=['-y', '-p', '@deusxmachina-dev/memorylane-cli', 'memorylane-mcp'].
  *   v2 (current)   — Electron app-as-node again, now with multi-DB support
  *                    and shared server code. Same shape as v0 but the .app
- *                    path may differ (user moved it, upgraded, switched
- *                    edition), so we still re-detect and rewrite.
+ *                    path may vary (user moved it, upgraded, switched edition).
  *
- * Migration on app launch: rewrite v0 and v1 entries to v2. Preserve any
- * user-added `--db-path <value>` args so manual per-DB routing survives.
+ * The per-integration `getXStatus` helpers use these fingerprints to surface a
+ * 'stale' state in the Integrations UI so the user can reconnect explicitly —
+ * no config file is rewritten until they do. `extractDbPathArg` is what lets
+ * a user-added `--db-path <value>` survive the reconnect.
  */
 
 export interface McpEntryShape {

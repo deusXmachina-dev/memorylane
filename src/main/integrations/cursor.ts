@@ -17,6 +17,7 @@ import {
   isCurrentAppEntry,
 } from './migration-utils'
 import { app } from 'electron'
+import type { McpEntryStatus } from '../../shared/types'
 
 interface CursorMCPConfig {
   mcpServers?: Record<string, MCPServerEntry>
@@ -83,51 +84,21 @@ function buildMCPEntry(preservedDbPath?: string): MCPServerEntry {
 }
 
 /**
- * Check whether MemoryLane is currently registered in Cursor's MCP config on disk.
+ * Report whether MemoryLane is registered in Cursor's MCP config, and whether
+ * the entry matches the current app. See getClaudeDesktopStatus for the
+ * three-state semantics and the conservative stance on foreign entries.
  */
-export function isMcpAddedToCursor(): boolean {
+export function getCursorStatus(): McpEntryStatus {
   const config = readCursorConfig(getCursorConfigPath())
-  return isRegistered(config)
-}
+  const existing = config.mcpServers?.[MCP_SERVER_KEY]
+  if (!existing) return 'not-registered'
 
-/**
- * Migrate legacy MCP entries (npx CLI, or outdated app-as-node) to the current app entry.
- * Best-effort: never throws — see migrateClaudeDesktop for rationale.
- */
-export function migrateCursor(): void {
-  const configPath = getCursorConfigPath()
-  try {
-    if (!fs.existsSync(configPath)) {
-      log.debug(`[Cursor Integration] No config at ${configPath}, skipping migration`)
-      return
-    }
-    const config = readCursorConfig(configPath)
-    const existing = config.mcpServers?.[MCP_SERVER_KEY]
-    if (!existing) {
-      log.debug('[Cursor Integration] No memorylane entry present, nothing to migrate')
-      return
-    }
-    const currentExe = app.getPath('exe')
-    const currentScript = getMcpEntryScriptPath()
-    if (isCurrentAppEntry(existing, currentExe, currentScript)) {
-      log.debug('[Cursor Integration] memorylane entry already current, nothing to migrate')
-      return
-    }
-    const signal = detectLegacyNpxSignal(existing) ?? detectLegacyAppSignal(existing)
-    if (!signal) {
-      log.info(
-        '[Cursor Integration] memorylane entry present but does not match a known stale shape, leaving it alone',
-      )
-      return
-    }
+  const currentExe = app.getPath('exe')
+  const currentScript = getMcpEntryScriptPath()
+  if (isCurrentAppEntry(existing, currentExe, currentScript)) return 'current'
 
-    const preservedDbPath = extractDbPathArg(existing.args)
-    config.mcpServers![MCP_SERVER_KEY] = buildMCPEntry(preservedDbPath)
-    writeCursorConfig(configPath, config)
-    log.info(`[Cursor Integration] Migrated to app entry (signal: ${signal})`)
-  } catch (error) {
-    log.warn('[Cursor Integration] Migration failed:', error)
-  }
+  const signal = detectLegacyNpxSignal(existing) ?? detectLegacyAppSignal(existing)
+  return signal !== null ? 'stale' : 'current'
 }
 
 export async function registerWithCursor(): Promise<boolean> {
