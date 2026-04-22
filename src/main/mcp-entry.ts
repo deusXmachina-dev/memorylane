@@ -1,7 +1,15 @@
 /**
- * Standalone MCP server entry point for the CLI package.
+ * Electron MCP entry point.
  *
- * Uses stdio transport for use with Claude Desktop, Cursor, and other MCP clients.
+ * Invoked by integration clients (Claude Desktop, Claude Code, Cursor) via:
+ *   command: /Applications/MemoryLane.app/Contents/MacOS/MemoryLane
+ *   args:    [<path to this file>]
+ *   env:     { ELECTRON_RUN_AS_NODE: "1" }
+ *
+ * Under ELECTRON_RUN_AS_NODE=1 Electron behaves as vanilla Node, so this
+ * script runs without the main app ever starting. Mirrors the CLI's
+ * `packages/cli/src/mcp.ts` — the `set_db_path` tool is inherited from the
+ * shared server registration in `src/main/mcp/tools.ts`.
  */
 
 // ---------------------------------------------------------------------------
@@ -30,35 +38,30 @@ const mcpStdout = new Writable({
 process.stdout.write = process.stderr.write.bind(process.stderr) as typeof process.stdout.write
 
 // ---------------------------------------------------------------------------
-// Imports
+// Silence the shared logger so nothing leaks onto the (now-redirected) stdout.
 // ---------------------------------------------------------------------------
-import { setLogger } from '@main/logger'
+import { setLogger } from './logger'
 
 const noop = (): void => {}
 setLogger({ debug: noop, info: noop })
 
-import { MemoryLaneMCPServer } from '@main/mcp/server'
-import { getDefaultDbPath } from '@main/paths'
-import { resolveDbPath } from './config'
-import { isNativeBindingError, formatNativeBindingHint } from './native-error'
+// ---------------------------------------------------------------------------
+// Imports
+// ---------------------------------------------------------------------------
+import { MemoryLaneMCPServer } from './mcp/server'
+import { getDefaultDbPath } from './paths'
+import { resolveDbPath } from './mcp/config'
 
 // ---------------------------------------------------------------------------
 // Stdio mode
 // ---------------------------------------------------------------------------
-async function mainStdio(): Promise<void> {
+async function main(): Promise<void> {
   const { dbPath } = resolveDbPath(__dbPathArg, getDefaultDbPath)
   const server = new MemoryLaneMCPServer()
   await server.start(dbPath, mcpStdout)
 }
 
-// ---------------------------------------------------------------------------
-// Entry point
-// ---------------------------------------------------------------------------
-mainStdio().catch((error) => {
-  if (isNativeBindingError(error)) {
-    process.stderr.write(formatNativeBindingHint(error))
-    process.exit(1)
-  }
+main().catch((error) => {
   console.error('Fatal error:', error)
   process.exit(1)
 })

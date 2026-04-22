@@ -9,7 +9,14 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as os from 'node:os'
 import log from '../logger'
-import { detectStaleSignal, isCurrentCliEntry } from './migration-utils'
+import { buildAppMcpEntry, getMcpEntryScriptPath } from './app-mcp-entry'
+import {
+  detectLegacyAppSignal,
+  detectLegacyNpxSignal,
+  extractDbPathArg,
+  isCurrentAppEntry,
+} from './migration-utils'
+import { app } from 'electron'
 
 interface CursorMCPConfig {
   mcpServers?: Record<string, MCPServerEntry>
@@ -66,13 +73,13 @@ function isRegistered(config: CursorMCPConfig): boolean {
 }
 
 /**
- * Build the MCP server entry pointing to the CLI package.
+ * Build the MCP server entry pointing at the current Electron app,
+ * preserving any user-added `--db-path` from a prior entry.
  */
-function buildMCPEntry(): MCPServerEntry {
-  return {
-    command: 'npx',
-    args: ['-y', '-p', '@deusxmachina-dev/memorylane-cli', 'memorylane-mcp'],
-  }
+function buildMCPEntry(preservedDbPath?: string): MCPServerEntry {
+  const base = buildAppMcpEntry()
+  const args = preservedDbPath ? [...base.args, '--db-path', preservedDbPath] : base.args
+  return { command: base.command, args, env: base.env }
 }
 
 /**
@@ -84,7 +91,7 @@ export function isMcpAddedToCursor(): boolean {
 }
 
 /**
- * If a stale (pre-v0.18) MemoryLane MCP entry exists, replace it with the CLI entry.
+ * Migrate legacy MCP entries (npx CLI, or outdated app-as-node) to the current app entry.
  * Best-effort: never throws — see migrateClaudeDesktop for rationale.
  */
 export function migrateCursor(): void {
@@ -100,11 +107,13 @@ export function migrateCursor(): void {
       log.debug('[Cursor Integration] No memorylane entry present, nothing to migrate')
       return
     }
-    if (isCurrentCliEntry(existing)) {
+    const currentExe = app.getPath('exe')
+    const currentScript = getMcpEntryScriptPath()
+    if (isCurrentAppEntry(existing, currentExe, currentScript)) {
       log.debug('[Cursor Integration] memorylane entry already current, nothing to migrate')
       return
     }
-    const signal = detectStaleSignal(existing)
+    const signal = detectLegacyNpxSignal(existing) ?? detectLegacyAppSignal(existing)
     if (!signal) {
       log.info(
         '[Cursor Integration] memorylane entry present but does not match a known stale shape, leaving it alone',
@@ -112,9 +121,10 @@ export function migrateCursor(): void {
       return
     }
 
-    config.mcpServers![MCP_SERVER_KEY] = buildMCPEntry()
+    const preservedDbPath = extractDbPathArg(existing.args)
+    config.mcpServers![MCP_SERVER_KEY] = buildMCPEntry(preservedDbPath)
     writeCursorConfig(configPath, config)
-    log.info(`[Cursor Integration] Migrated from Electron MCP to CLI (signal: ${signal})`)
+    log.info(`[Cursor Integration] Migrated to app entry (signal: ${signal})`)
   } catch (error) {
     log.warn('[Cursor Integration] Migration failed:', error)
   }
@@ -128,11 +138,14 @@ export async function registerWithCursor(): Promise<boolean> {
     const config = readCursorConfig(configPath)
 
     const alreadyRegistered = isRegistered(config)
+    const preservedDbPath = alreadyRegistered
+      ? extractDbPathArg(config.mcpServers?.[MCP_SERVER_KEY]?.args)
+      : undefined
 
     if (config.mcpServers === undefined) {
       config.mcpServers = {}
     }
-    config.mcpServers[MCP_SERVER_KEY] = buildMCPEntry()
+    config.mcpServers[MCP_SERVER_KEY] = buildMCPEntry(preservedDbPath)
 
     writeCursorConfig(configPath, config)
 

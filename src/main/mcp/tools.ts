@@ -1,6 +1,7 @@
 // eslint-disable-next-line import/no-unresolved
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
+import * as fs from 'fs'
 import { parseTimeString } from './parse-time'
 import {
   formatTimelineEntry,
@@ -8,6 +9,8 @@ import {
   activityToTimelineEntry,
   TimelineEntry,
 } from './formatting'
+import { setDbPath, clearDbPath } from './config'
+import { getDefaultDbPath } from '../paths'
 import type { StorageService, PatternWithStats, PatternSighting } from '../storage'
 import type { EmbeddingService } from '../processor/embedding'
 import log from '../logger'
@@ -22,8 +25,14 @@ export interface MCPServices {
  *
  * @param server - The MCP server instance to register tools on.
  * @param getServices - Lazy accessor for services (may be null before initialization).
+ * @param reinitialize - Callback to switch the server's DB connection to a new path.
+ *                       Used by the `set_db_path` tool.
  */
-export function registerTools(server: McpServer, getServices: () => MCPServices | null): void {
+export function registerTools(
+  server: McpServer,
+  getServices: () => MCPServices | null,
+  reinitialize: (dbPath: string) => Promise<void>,
+): void {
   server.registerTool(
     'search_context',
     {
@@ -170,6 +179,63 @@ export function registerTools(server: McpServer, getServices: () => MCPServices 
       },
     },
     (params) => handleGetPatternDetails(getServices(), params),
+  )
+
+  server.registerTool(
+    'set_db_path',
+    {
+      title: 'Set Database Path',
+      description:
+        'Set the database path for the MCP server. Persists the path to config and reinitializes the connection. Does not affect the MemoryLane recorder, which always writes to the default DB. Use reset_db_path to revert to the default.',
+      inputSchema: {
+        dbPath: z.string().describe('Absolute path to the MemoryLane .db file'),
+      },
+    },
+    async ({ dbPath: newDbPath }) => {
+      if (!fs.existsSync(newDbPath)) {
+        return {
+          content: [
+            { type: 'text' as const, text: `Error: database file not found at: ${newDbPath}` },
+          ],
+          isError: true,
+        }
+      }
+
+      setDbPath(newDbPath)
+      await reinitialize(newDbPath)
+
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Database path updated to: ${newDbPath}`,
+          },
+        ],
+      }
+    },
+  )
+
+  server.registerTool(
+    'reset_db_path',
+    {
+      title: 'Reset Database Path',
+      description:
+        'Clear any custom DB path and revert the MCP server to the default database (the one the MemoryLane recorder writes to). Use after set_db_path when you are done inspecting a different DB.',
+      inputSchema: {},
+    },
+    async () => {
+      clearDbPath()
+      const defaultPath = getDefaultDbPath()
+      await reinitialize(defaultPath)
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Database path reset to default: ${defaultPath}`,
+          },
+        ],
+      }
+    },
   )
 }
 

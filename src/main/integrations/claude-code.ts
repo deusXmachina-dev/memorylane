@@ -9,7 +9,14 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as os from 'node:os'
 import log from '../logger'
-import { detectStaleSignal, isCurrentCliEntry } from './migration-utils'
+import { buildAppMcpEntry, getMcpEntryScriptPath } from './app-mcp-entry'
+import {
+  detectLegacyAppSignal,
+  detectLegacyNpxSignal,
+  extractDbPathArg,
+  isCurrentAppEntry,
+} from './migration-utils'
+import { app } from 'electron'
 
 interface ClaudeCodeSettings {
   mcpServers?: Record<string, MCPServerEntry>
@@ -67,14 +74,13 @@ function isRegistered(settings: ClaudeCodeSettings): boolean {
 }
 
 /**
- * Build the MCP server entry pointing to the CLI package.
+ * Build the MCP server entry pointing at the current Electron app,
+ * preserving any user-added `--db-path` from a prior entry.
  */
-function buildMCPEntry(): MCPServerEntry {
-  return {
-    type: 'stdio',
-    command: 'npx',
-    args: ['-y', '-p', '@deusxmachina-dev/memorylane-cli', 'memorylane-mcp'],
-  }
+function buildMCPEntry(preservedDbPath?: string): MCPServerEntry {
+  const base = buildAppMcpEntry()
+  const args = preservedDbPath ? [...base.args, '--db-path', preservedDbPath] : base.args
+  return { type: 'stdio', command: base.command, args, env: base.env }
 }
 
 /**
@@ -86,7 +92,7 @@ export function isMcpAddedToClaudeCode(): boolean {
 }
 
 /**
- * If a stale (pre-v0.18) MemoryLane MCP entry exists, replace it with the CLI entry.
+ * Migrate legacy MCP entries (npx CLI, or outdated app-as-node) to the current app entry.
  * Best-effort: never throws — see migrateClaudeDesktop for rationale.
  */
 export function migrateClaudeCode(): void {
@@ -102,11 +108,13 @@ export function migrateClaudeCode(): void {
       log.debug('[Claude Code Integration] No memorylane entry present, nothing to migrate')
       return
     }
-    if (isCurrentCliEntry(existing)) {
+    const currentExe = app.getPath('exe')
+    const currentScript = getMcpEntryScriptPath()
+    if (isCurrentAppEntry(existing, currentExe, currentScript)) {
       log.debug('[Claude Code Integration] memorylane entry already current, nothing to migrate')
       return
     }
-    const signal = detectStaleSignal(existing)
+    const signal = detectLegacyNpxSignal(existing) ?? detectLegacyAppSignal(existing)
     if (!signal) {
       log.info(
         '[Claude Code Integration] memorylane entry present but does not match a known stale shape, leaving it alone',
@@ -114,9 +122,10 @@ export function migrateClaudeCode(): void {
       return
     }
 
-    settings.mcpServers![MCP_SERVER_KEY] = buildMCPEntry()
+    const preservedDbPath = extractDbPathArg(existing.args)
+    settings.mcpServers![MCP_SERVER_KEY] = buildMCPEntry(preservedDbPath)
     writeSettings(settingsPath, settings)
-    log.info(`[Claude Code Integration] Migrated from Electron MCP to CLI (signal: ${signal})`)
+    log.info(`[Claude Code Integration] Migrated to app entry (signal: ${signal})`)
   } catch (error) {
     log.warn('[Claude Code Integration] Migration failed:', error)
   }
@@ -130,11 +139,14 @@ export async function registerWithClaudeCode(): Promise<boolean> {
     const settings = readSettings(settingsPath)
 
     const alreadyRegistered = isRegistered(settings)
+    const preservedDbPath = alreadyRegistered
+      ? extractDbPathArg(settings.mcpServers?.[MCP_SERVER_KEY]?.args)
+      : undefined
 
     if (settings.mcpServers === undefined) {
       settings.mcpServers = {}
     }
-    settings.mcpServers[MCP_SERVER_KEY] = buildMCPEntry()
+    settings.mcpServers[MCP_SERVER_KEY] = buildMCPEntry(preservedDbPath)
 
     writeSettings(settingsPath, settings)
 

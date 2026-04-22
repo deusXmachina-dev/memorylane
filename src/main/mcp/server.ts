@@ -94,7 +94,11 @@ export class MemoryLaneMCPServer {
       },
     )
 
-    registerTools(this.server, () => this.services)
+    registerTools(
+      this.server,
+      () => this.services,
+      (dbPath) => this.reinitializeWithDb(dbPath),
+    )
     /* registerPrompts(this.server) */ // this is not handled by claude plugin
   }
 
