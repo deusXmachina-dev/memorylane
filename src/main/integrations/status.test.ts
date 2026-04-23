@@ -10,6 +10,14 @@ const MOCK_EXE = '/Applications/MemoryLane.app/Contents/MacOS/MemoryLane'
 const MOCK_APP_PATH = '/Applications/MemoryLane.app/Contents/Resources/app.asar'
 const MOCK_SCRIPT = path.join(MOCK_APP_PATH, 'out', 'main', 'mcp-entry.js')
 
+// Lock Windows env vars under TMP_HOME so we don't read from or write to the
+// real user profile, and so MSIX discovery only sees the Claude_* dirs the
+// tests set up themselves.
+const STUB_APPDATA = path.join(TMP_HOME, 'AppData', 'Roaming')
+const STUB_LOCALAPPDATA = path.join(TMP_HOME, 'AppData', 'Local')
+vi.stubEnv('APPDATA', STUB_APPDATA)
+vi.stubEnv('LOCALAPPDATA', STUB_LOCALAPPDATA)
+
 vi.mock('electron', () => ({
   app: {
     getPath: vi.fn((key: string) => (key === 'exe' ? MOCK_EXE : TMP_HOME)),
@@ -23,11 +31,12 @@ vi.mock('node:os', async () => {
   return { ...actual, homedir: vi.fn(() => TMP_HOME) }
 })
 
-import { getClaudeDesktopStatus } from './claude-desktop'
+import { getClaudeDesktopStatus, registerWithClaudeDesktop } from './claude-desktop'
 import { getClaudeCodeStatus } from './claude-code'
 import { getCursorStatus } from './cursor'
 
 afterAll(() => {
+  vi.unstubAllEnvs()
   fs.rmSync(TMP_HOME, { recursive: true, force: true })
 })
 
@@ -42,18 +51,35 @@ function claudeDesktopConfigPath(): string {
         'claude_desktop_config.json',
       )
     case 'win32':
-      return path.join(
-        process.env.APPDATA || path.join(TMP_HOME, 'AppData', 'Roaming'),
-        'Claude',
-        'claude_desktop_config.json',
-      )
+      return path.join(STUB_APPDATA, 'Claude', 'claude_desktop_config.json')
     default:
       return path.join(TMP_HOME, '.config', 'Claude', 'claude_desktop_config.json')
   }
 }
 
+function msixPackagesDir(): string {
+  return path.join(STUB_LOCALAPPDATA, 'Packages')
+}
+
+function msixConfigPath(pkg = 'Claude_pzs8sxrjxfjjc'): string {
+  return path.join(
+    msixPackagesDir(),
+    pkg,
+    'LocalCache',
+    'Roaming',
+    'Claude',
+    'claude_desktop_config.json',
+  )
+}
+
 function writeClaudeDesktopConfig(entry: unknown): void {
   const configPath = claudeDesktopConfigPath()
+  fs.mkdirSync(path.dirname(configPath), { recursive: true })
+  fs.writeFileSync(configPath, JSON.stringify({ mcpServers: { memorylane: entry } }, null, 2))
+}
+
+function writeMsixConfig(entry: unknown, pkg?: string): void {
+  const configPath = msixConfigPath(pkg)
   fs.mkdirSync(path.dirname(configPath), { recursive: true })
   fs.writeFileSync(configPath, JSON.stringify({ mcpServers: { memorylane: entry } }, null, 2))
 }
@@ -72,6 +98,7 @@ function writeCursorConfig(entry: unknown): void {
 
 function clearClaudeDesktopConfig(): void {
   fs.rmSync(claudeDesktopConfigPath(), { force: true })
+  fs.rmSync(msixPackagesDir(), { recursive: true, force: true })
 }
 
 const CURRENT_ENTRY = {
@@ -140,6 +167,121 @@ describe('getClaudeDesktopStatus', () => {
   it('current (not stale) when foreign entry has no legacy fingerprint', () => {
     writeClaudeDesktopConfig(FOREIGN_ENTRY)
     expect(getClaudeDesktopStatus()).toBe('current')
+  })
+})
+
+// Windows MSIX-specific cases: fresh MSIX installs of Claude Desktop read
+// their config from %LOCALAPPDATA%\Packages\Claude_*\... instead of
+// %APPDATA%\Claude\..., so we must discover and dual-write those paths.
+describe.runIf(process.platform === 'win32')('getClaudeDesktopStatus — Windows MSIX', () => {
+  beforeEach(() => clearClaudeDesktopConfig())
+
+  it('not-registered when neither classic nor MSIX config exists', () => {
+    expect(getClaudeDesktopStatus()).toBe('not-registered')
+  })
+
+  it('not-registered when Packages dir is absent (no MSIX install)', () => {
+    expect(fs.existsSync(msixPackagesDir())).toBe(false)
+    expect(getClaudeDesktopStatus()).toBe('not-registered')
+  })
+
+  it('current when only the MSIX path has a current entry', () => {
+    writeMsixConfig(CURRENT_ENTRY)
+    expect(getClaudeDesktopStatus()).toBe('current')
+  })
+
+  it('stale when only the MSIX path has a legacy entry', () => {
+    writeMsixConfig(STALE_NPX_ENTRY)
+    expect(getClaudeDesktopStatus()).toBe('stale')
+  })
+
+  it('current when classic is stale but MSIX is current (any-current wins)', () => {
+    writeClaudeDesktopConfig(STALE_NPX_ENTRY)
+    writeMsixConfig(CURRENT_ENTRY)
+    expect(getClaudeDesktopStatus()).toBe('current')
+  })
+
+  it('current when classic is current and MSIX is stale', () => {
+    writeClaudeDesktopConfig(CURRENT_ENTRY)
+    writeMsixConfig(STALE_MOVED_APP_ENTRY)
+    expect(getClaudeDesktopStatus()).toBe('current')
+  })
+
+  it('discovers a non-default Claude_* package name', () => {
+    // Simulate Anthropic re-signing the MSIX with a different publisher hash.
+    writeMsixConfig(CURRENT_ENTRY, 'Claude_abcdefghijklm')
+    expect(getClaudeDesktopStatus()).toBe('current')
+  })
+})
+
+describe.runIf(process.platform === 'win32')('registerWithClaudeDesktop — Windows MSIX', () => {
+  beforeEach(() => clearClaudeDesktopConfig())
+
+  it('writes to both classic and MSIX paths when an MSIX package is present', async () => {
+    // Make an MSIX package dir exist so discovery finds it, but without a config.
+    fs.mkdirSync(path.dirname(msixConfigPath()), { recursive: true })
+
+    const result = await registerWithClaudeDesktop()
+    expect(result).toBe(true)
+
+    const classic = JSON.parse(fs.readFileSync(claudeDesktopConfigPath(), 'utf-8'))
+    expect(classic.mcpServers?.memorylane).toEqual(CURRENT_ENTRY)
+    const msix = JSON.parse(fs.readFileSync(msixConfigPath(), 'utf-8'))
+    expect(msix.mcpServers?.memorylane).toEqual(CURRENT_ENTRY)
+  })
+
+  it('writes only to the classic path when no MSIX package is present', async () => {
+    expect(fs.existsSync(msixPackagesDir())).toBe(false)
+
+    const result = await registerWithClaudeDesktop()
+    expect(result).toBe(true)
+
+    const classic = JSON.parse(fs.readFileSync(claudeDesktopConfigPath(), 'utf-8'))
+    expect(classic.mcpServers?.memorylane).toEqual(CURRENT_ENTRY)
+    expect(fs.existsSync(msixConfigPath())).toBe(false)
+  })
+
+  it("preserves a user's --db-path even when it lives only in the MSIX config", async () => {
+    writeMsixConfig({
+      ...CURRENT_ENTRY,
+      args: [...CURRENT_ENTRY.args, '--db-path', 'C:\\data\\team.db'],
+    })
+
+    const result = await registerWithClaudeDesktop()
+    expect(result).toBe(true)
+
+    const classic = JSON.parse(fs.readFileSync(claudeDesktopConfigPath(), 'utf-8'))
+    expect(classic.mcpServers?.memorylane?.args).toEqual([
+      ...CURRENT_ENTRY.args,
+      '--db-path',
+      'C:\\data\\team.db',
+    ])
+    const msix = JSON.parse(fs.readFileSync(msixConfigPath(), 'utf-8'))
+    expect(msix.mcpServers?.memorylane?.args).toEqual([
+      ...CURRENT_ENTRY.args,
+      '--db-path',
+      'C:\\data\\team.db',
+    ])
+  })
+
+  it('preserves unrelated top-level keys in the MSIX config', async () => {
+    // Replicates the real file we saw on the user's box, which carries a
+    // `preferences` block alongside mcpServers.
+    const configPath = msixConfigPath()
+    fs.mkdirSync(path.dirname(configPath), { recursive: true })
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        preferences: { coworkWebSearchEnabled: true },
+      }),
+    )
+
+    const result = await registerWithClaudeDesktop()
+    expect(result).toBe(true)
+
+    const msix = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+    expect(msix.preferences).toEqual({ coworkWebSearchEnabled: true })
+    expect(msix.mcpServers?.memorylane).toEqual(CURRENT_ENTRY)
   })
 })
 

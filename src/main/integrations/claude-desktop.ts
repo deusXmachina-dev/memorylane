@@ -3,6 +3,14 @@
  *
  * Reads and updates Claude Desktop's config to register MemoryLane
  * as an MCP server, so users can enable the integration with one click.
+ *
+ * Windows note: fresh MSIX-packaged Claude Desktop installs read their
+ * config from a per-package virtualized sandbox under
+ * `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\` instead of
+ * the documented `%APPDATA%\Claude\`. We therefore discover every
+ * `Claude_*` package present and dual-write, so the integration works on
+ * both classic and MSIX installs. Upstream bug:
+ * https://github.com/anthropics/claude-code/issues/26073
  */
 
 import * as fs from 'node:fs'
@@ -34,26 +42,52 @@ interface MCPServerEntry {
 const MCP_SERVER_KEY = 'memorylane'
 
 /**
- * Returns the platform-specific path to Claude Desktop's config file.
+ * Returns every platform-specific path where Claude Desktop may read its
+ * config file. On Windows this is the classic `%APPDATA%\Claude\...`
+ * location plus every discovered MSIX package sandbox under
+ * `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\...`. See the
+ * module-level comment for the rationale.
  */
-function getClaudeConfigPath(): string {
+function getClaudeConfigPaths(): string[] {
   switch (process.platform) {
     case 'darwin':
-      return path.join(
-        os.homedir(),
-        'Library',
-        'Application Support',
-        'Claude',
-        'claude_desktop_config.json',
-      )
-    case 'win32':
-      return path.join(
-        process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
-        'Claude',
-        'claude_desktop_config.json',
-      )
+      return [
+        path.join(
+          os.homedir(),
+          'Library',
+          'Application Support',
+          'Claude',
+          'claude_desktop_config.json',
+        ),
+      ]
+    case 'win32': {
+      const paths: string[] = []
+      const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming')
+      paths.push(path.join(appData, 'Claude', 'claude_desktop_config.json'))
+
+      const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local')
+      const packagesDir = path.join(localAppData, 'Packages')
+      try {
+        for (const entry of fs.readdirSync(packagesDir)) {
+          if (!entry.startsWith('Claude_')) continue
+          paths.push(
+            path.join(
+              packagesDir,
+              entry,
+              'LocalCache',
+              'Roaming',
+              'Claude',
+              'claude_desktop_config.json',
+            ),
+          )
+        }
+      } catch {
+        // Packages dir missing or unreadable — only the classic path applies.
+      }
+      return paths
+    }
     default:
-      return path.join(os.homedir(), '.config', 'Claude', 'claude_desktop_config.json')
+      return [path.join(os.homedir(), '.config', 'Claude', 'claude_desktop_config.json')]
   }
 }
 
@@ -101,6 +135,22 @@ function buildMCPEntry(preservedDbPath?: string): MCPServerEntry {
 }
 
 /**
+ * Classify a single config file's memorylane entry, if any.
+ */
+function classifyConfigPath(
+  configPath: string,
+  currentExe: string,
+  currentScript: string,
+): McpEntryStatus {
+  const config = readClaudeConfig(configPath)
+  const existing = config.mcpServers?.[MCP_SERVER_KEY]
+  if (!existing) return 'not-registered'
+  if (isCurrentAppEntry(existing, currentExe, currentScript)) return 'current'
+  const signal = detectLegacyNpxSignal(existing) ?? detectLegacyAppSignal(existing)
+  return signal !== null ? 'stale' : 'current'
+}
+
+/**
  * Report whether MemoryLane is registered in Claude Desktop's config, and
  * whether the entry matches the current app. Surfaces three states so the UI
  * can prompt the user to reconnect instead of rewriting silently.
@@ -108,43 +158,58 @@ function buildMCPEntry(preservedDbPath?: string): MCPServerEntry {
  * Returns 'stale' only when the entry matches a legacy shape we're confident
  * we own (v0 Electron-as-node, v1 npx CLI, moved .app). A foreign entry under
  * the memorylane key reports 'current' — same conservative posture as before.
+ *
+ * On Windows we check every known config location (see `getClaudeConfigPaths`)
+ * and reduce: any 'current' wins, else any 'stale' wins, else 'not-registered'.
  */
 export function getClaudeDesktopStatus(): McpEntryStatus {
-  const config = readClaudeConfig(getClaudeConfigPath())
-  const existing = config.mcpServers?.[MCP_SERVER_KEY]
-  if (!existing) return 'not-registered'
-
   const currentExe = app.getPath('exe')
   const currentScript = getMcpEntryScriptPath()
-  if (isCurrentAppEntry(existing, currentExe, currentScript)) return 'current'
 
-  const signal = detectLegacyNpxSignal(existing) ?? detectLegacyAppSignal(existing)
-  return signal !== null ? 'stale' : 'current'
+  let sawStale = false
+  for (const configPath of getClaudeConfigPaths()) {
+    const status = classifyConfigPath(configPath, currentExe, currentScript)
+    if (status === 'current') return 'current'
+    if (status === 'stale') sawStale = true
+  }
+  return sawStale ? 'stale' : 'not-registered'
 }
 
 export async function registerWithClaudeDesktop(): Promise<boolean> {
-  const configPath = getClaudeConfigPath()
-  log.info(`[Claude Integration] Config path: ${configPath}`)
+  const configPaths = getClaudeConfigPaths()
+  log.info(`[Claude Integration] Config paths: ${configPaths.join(', ')}`)
 
-  try {
-    const config = readClaudeConfig(configPath)
+  // First pass: read each config so we can preserve any user-added --db-path
+  // regardless of which variant it currently lives in.
+  const existingConfigs = configPaths.map((p) => ({ path: p, config: readClaudeConfig(p) }))
+  let preservedDbPath: string | undefined
+  for (const { config } of existingConfigs) {
+    const dbPath = extractDbPathArg(config.mcpServers?.[MCP_SERVER_KEY]?.args)
+    if (dbPath) {
+      preservedDbPath = dbPath
+      break
+    }
+  }
 
+  const entry = buildMCPEntry(preservedDbPath)
+  let anyWriteSucceeded = false
+  for (const { path: configPath, config } of existingConfigs) {
     const alreadyRegistered = isRegistered(config)
-    const preservedDbPath = alreadyRegistered
-      ? extractDbPathArg(config.mcpServers?.[MCP_SERVER_KEY]?.args)
-      : undefined
-
     if (config.mcpServers === undefined) {
       config.mcpServers = {}
     }
-    config.mcpServers[MCP_SERVER_KEY] = buildMCPEntry(preservedDbPath)
-
-    writeClaudeConfig(configPath, config)
-
-    log.info(`[Claude Integration] ${alreadyRegistered ? 'Updated' : 'Registered'} successfully`)
-    return true
-  } catch (error) {
-    log.error('[Claude Integration] Registration failed:', error)
-    return false
+    config.mcpServers[MCP_SERVER_KEY] = entry
+    try {
+      writeClaudeConfig(configPath, config)
+      anyWriteSucceeded = true
+      log.info(`[Claude Integration] ${alreadyRegistered ? 'Updated' : 'Registered'} ${configPath}`)
+    } catch (error) {
+      log.error(`[Claude Integration] Write failed for ${configPath}:`, error)
+    }
   }
+
+  if (!anyWriteSucceeded) {
+    log.error('[Claude Integration] Registration failed: no config paths were writable')
+  }
+  return anyWriteSucceeded
 }
