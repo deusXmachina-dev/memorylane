@@ -155,24 +155,34 @@ function classifyConfigPath(
  * whether the entry matches the current app. Surfaces three states so the UI
  * can prompt the user to reconnect instead of rewriting silently.
  *
- * Returns 'stale' only when the entry matches a legacy shape we're confident
- * we own (v0 Electron-as-node, v1 npx CLI, moved .app). A foreign entry under
- * the memorylane key reports 'current' — same conservative posture as before.
+ * Per-path classification:
+ *   'current'        — entry matches the running app, or a foreign entry sits
+ *                      at the memorylane key (conservative: don't stomp).
+ *   'stale'          — entry matches a legacy shape we own (v0 Electron-as-
+ *                      node, v1 npx CLI, moved .app).
+ *   'not-registered' — no memorylane entry at this path.
  *
- * On Windows we check every known config location (see `getClaudeConfigPaths`)
- * and reduce: any 'current' wins, else any 'stale' wins, else 'not-registered'.
+ * Reduction across all discovered paths:
+ *   all 'current'        → 'current'
+ *   all 'not-registered' → 'not-registered'
+ *   otherwise            → 'stale' (prompts reconnect)
+ *
+ * The "otherwise" case covers Windows users who registered under an older
+ * MemoryLane that only wrote to `%APPDATA%\Claude\`: their classic path is
+ * current but the MSIX sandbox is still missing the entry. Reporting 'stale'
+ * makes the Integrations UI surface a Reconnect button so they can propagate
+ * to every destination in one click.
  */
 export function getClaudeDesktopStatus(): McpEntryStatus {
   const currentExe = app.getPath('exe')
   const currentScript = getMcpEntryScriptPath()
 
-  let sawStale = false
-  for (const configPath of getClaudeConfigPaths()) {
-    const status = classifyConfigPath(configPath, currentExe, currentScript)
-    if (status === 'current') return 'current'
-    if (status === 'stale') sawStale = true
-  }
-  return sawStale ? 'stale' : 'not-registered'
+  const statuses = getClaudeConfigPaths().map((p) =>
+    classifyConfigPath(p, currentExe, currentScript),
+  )
+  if (statuses.every((s) => s === 'current')) return 'current'
+  if (statuses.every((s) => s === 'not-registered')) return 'not-registered'
+  return 'stale'
 }
 
 export async function registerWithClaudeDesktop(): Promise<boolean> {

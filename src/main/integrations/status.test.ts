@@ -185,9 +185,16 @@ describe.runIf(process.platform === 'win32')('getClaudeDesktopStatus — Windows
     expect(getClaudeDesktopStatus()).toBe('not-registered')
   })
 
-  it('current when only the MSIX path has a current entry', () => {
+  it('stale when only the MSIX path is current (classic missing) — prompts reconnect to backfill classic', () => {
     writeMsixConfig(CURRENT_ENTRY)
-    expect(getClaudeDesktopStatus()).toBe('current')
+    expect(getClaudeDesktopStatus()).toBe('stale')
+  })
+
+  it('stale when only the classic path is current (MSIX package exists but has no config)', () => {
+    writeClaudeDesktopConfig(CURRENT_ENTRY)
+    // Materialize an empty MSIX package dir so discovery yields the path.
+    fs.mkdirSync(path.dirname(msixConfigPath()), { recursive: true })
+    expect(getClaudeDesktopStatus()).toBe('stale')
   })
 
   it('stale when only the MSIX path has a legacy entry', () => {
@@ -195,20 +202,29 @@ describe.runIf(process.platform === 'win32')('getClaudeDesktopStatus — Windows
     expect(getClaudeDesktopStatus()).toBe('stale')
   })
 
-  it('current when classic is stale but MSIX is current (any-current wins)', () => {
+  it('stale when classic is stale and MSIX is current', () => {
     writeClaudeDesktopConfig(STALE_NPX_ENTRY)
+    writeMsixConfig(CURRENT_ENTRY)
+    expect(getClaudeDesktopStatus()).toBe('stale')
+  })
+
+  it('stale when classic is current and MSIX is stale', () => {
+    writeClaudeDesktopConfig(CURRENT_ENTRY)
+    writeMsixConfig(STALE_MOVED_APP_ENTRY)
+    expect(getClaudeDesktopStatus()).toBe('stale')
+  })
+
+  it('current when both classic and MSIX paths have current entries', () => {
+    writeClaudeDesktopConfig(CURRENT_ENTRY)
     writeMsixConfig(CURRENT_ENTRY)
     expect(getClaudeDesktopStatus()).toBe('current')
   })
 
-  it('current when classic is current and MSIX is stale', () => {
-    writeClaudeDesktopConfig(CURRENT_ENTRY)
-    writeMsixConfig(STALE_MOVED_APP_ENTRY)
-    expect(getClaudeDesktopStatus()).toBe('current')
-  })
-
   it('discovers a non-default Claude_* package name', () => {
-    // Simulate Anthropic re-signing the MSIX with a different publisher hash.
+    // Simulate Anthropic re-signing the MSIX with a different publisher hash:
+    // fill classic + alternate-named MSIX with current entries so 'current'
+    // only reports if discovery actually found the alternate path.
+    writeClaudeDesktopConfig(CURRENT_ENTRY)
     writeMsixConfig(CURRENT_ENTRY, 'Claude_abcdefghijklm')
     expect(getClaudeDesktopStatus()).toBe('current')
   })
