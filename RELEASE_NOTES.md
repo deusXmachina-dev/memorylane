@@ -1,10 +1,12 @@
-# MemoryLane v0.23.6
+# MemoryLane v0.23.7
 
-Claude Desktop integration fix for Windows MSIX installs.
+Edition-aware default DB path for the MCP server.
 
 ## What's Changed
 
-- **Claude Desktop integration on Windows MSIX**: fresh MSIX-packaged Claude Desktop reads its config from a virtualized sandbox under `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\` instead of `%APPDATA%\Claude\`. MemoryLane now discovers every `Claude_*` package and dual-writes, so the tray "Connect to Claude Desktop" button actually shows up in Claude's server list. Users upgraded from an earlier MemoryLane will see a "Reconnect" prompt that backfills the MSIX path.
+- **Enterprise MCP uses the enterprise DB by default**: on the enterprise build, `productName = "MemoryLane Enterprise"` shifts Electron's userData directory, but the MCP server's default DB path was hardcoded to the customer location. Enterprise users therefore saw an empty DB through MCP with no obvious workaround. The default path is now edition-aware across macOS, Windows, and Linux (dev and packaged).
+- **New `get_db_path` MCP tool**: returns `{ path, source, edition, defaultForEdition }` so Claude can verify which DB is being read and decide whether to call `set_db_path` / `reset_db_path`.
+- **Tray tooltip shows the app version**: hovering the tray icon now includes `v<version>`, and the tray menu has a disabled version entry.
 
 ## Known Issues & Limitations
 
@@ -20,4 +22,4 @@ Claude Desktop integration fix for Windows MSIX installs.
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v0.23.5...v0.23.6
+https://github.com/deusXmachina-dev/memorylane/compare/v0.23.6...v0.23.7
