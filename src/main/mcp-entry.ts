@@ -14,6 +14,7 @@
 
 import { Writable } from 'node:stream'
 import { setLogger } from './logger'
+import { loadAppEditionConfig } from './edition'
 import { MemoryLaneMCPServer } from './mcp/server'
 import { getDefaultDbPath } from './paths'
 import { resolveDbPath } from './mcp/config'
@@ -49,9 +50,10 @@ const noop = (): void => {}
 setLogger({ debug: noop, info: noop })
 
 async function main(): Promise<void> {
-  const { dbPath } = resolveDbPath(dbPathArg, getDefaultDbPath)
+  const { edition } = loadAppEditionConfig()
+  const { dbPath, source } = resolveDbPath(dbPathArg, () => getDefaultDbPath(edition))
   const server = new MemoryLaneMCPServer()
-  await server.start(dbPath, mcpStdout)
+  await server.start(dbPath, mcpStdout, { edition, source })
 }
 
 main().catch((error) => {

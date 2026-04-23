@@ -13,8 +13,10 @@ import { Writable } from 'node:stream'
 import * as fs from 'fs'
 import { StorageService } from '../storage'
 import { getDefaultDbPath } from '../paths'
+import type { AppEdition } from '../../shared/edition'
 import log from '../logger'
-import { registerTools, type MCPServices } from './tools'
+import { registerTools, type EditionContext, type MCPServices } from './tools'
+import type { DbPathSource } from './config'
 /* import { registerPrompts } from './prompts' */
 
 const SERVER_NAME = 'memorylane'
@@ -74,9 +76,19 @@ over-anchor on it.
 - If summary and OCR seem to disagree, trust summary for "what happened" and treat OCR as raw evidence only.
 - Activity IDs are opaque UUIDs — never fabricate them; always use IDs from tool results.`
 
+export interface StartContext {
+  edition: AppEdition
+  source: DbPathSource
+}
+
 export class MemoryLaneMCPServer {
   private server: McpServer
   private services: MCPServices | null = null
+  private editionContext: EditionContext = {
+    edition: 'customer',
+    source: 'default',
+    currentDbPath: '',
+  }
 
   constructor(services?: MCPServices) {
     this.services = services || null
@@ -97,7 +109,8 @@ export class MemoryLaneMCPServer {
     registerTools(
       this.server,
       () => this.services,
-      (dbPath) => this.reinitializeWithDb(dbPath),
+      (dbPath, source) => this.reinitializeWithDb(dbPath, source),
+      () => this.editionContext,
     )
     /* registerPrompts(this.server) */ // this is not handled by claude plugin
   }
@@ -113,8 +126,7 @@ export class MemoryLaneMCPServer {
   private async initializeServices(dbPath?: string): Promise<void> {
     if (this.services) return
 
-    // Use provided path or fall back to default
-    const resolvedPath = dbPath || getDefaultDbPath()
+    const resolvedPath = dbPath || getDefaultDbPath(this.editionContext.edition)
 
     if (!fs.existsSync(resolvedPath)) {
       // Just a warning, not an error - database might be created on first write
@@ -130,6 +142,7 @@ export class MemoryLaneMCPServer {
     await embeddingService.init()
 
     this.services = { storage, embeddingService }
+    this.editionContext = { ...this.editionContext, currentDbPath: resolvedPath }
     log.error('Services initialized successfully')
   }
 
@@ -142,8 +155,15 @@ export class MemoryLaneMCPServer {
    *                 instead of process.stdout, allowing the caller to redirect
    *                 process.stdout to stderr so no other module can pollute
    *                 the MCP channel.
+   * @param context - Optional edition + resolution-source context, so tools like
+   *                  get_db_path can report which edition's default is active
+   *                  and where the current path came from.
    */
-  public async start(dbPath?: string, stdout?: Writable): Promise<void> {
+  public async start(dbPath?: string, stdout?: Writable, context?: StartContext): Promise<void> {
+    if (context) {
+      this.editionContext = { ...this.editionContext, ...context }
+    }
+
     await this.initializeServices(dbPath)
 
     const transport = new StdioServerTransport(process.stdin, stdout ?? process.stdout)
@@ -156,7 +176,7 @@ export class MemoryLaneMCPServer {
    * Reinitializes services with a new database path.
    * Closes the existing storage connection and creates fresh services.
    */
-  public async reinitializeWithDb(dbPath: string): Promise<void> {
+  public async reinitializeWithDb(dbPath: string, source?: DbPathSource): Promise<void> {
     if (this.services) {
       try {
         this.services.storage.close()
@@ -165,6 +185,9 @@ export class MemoryLaneMCPServer {
       }
     }
     this.services = null
+    if (source) {
+      this.editionContext = { ...this.editionContext, source }
+    }
     await this.initializeServices(dbPath)
   }
 

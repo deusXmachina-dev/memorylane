@@ -55,6 +55,12 @@ export function getConfigFilePath(): string {
 }
 
 /**
+ * Where a resolved DB path came from. Reported by `get_db_path` so callers
+ * can tell whether the server is on a user-chosen DB or the edition default.
+ */
+export type DbPathSource = 'flag' | 'env' | 'config' | 'default'
+
+/**
  * Resolves the DB path with this priority:
  * 1. Explicit flag (--db-path)
  * 2. MEMORYLANE_DB_PATH env var
@@ -66,7 +72,7 @@ export function getConfigFilePath(): string {
 export function resolveDbPath(
   flagValue: string | undefined,
   getDefault: () => string,
-): { dbPath: string; source: string } {
+): { dbPath: string; source: DbPathSource } {
   if (flagValue) {
     return { dbPath: flagValue, source: 'flag' }
   }

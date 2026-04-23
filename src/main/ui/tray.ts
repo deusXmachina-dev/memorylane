@@ -99,12 +99,13 @@ export const updateTrayMenu = async (): Promise<void> => {
 
   const isCapturing = deps.capture.isCapturingNow()
   const { isPrivacyBlocked, blockedRecently } = trayPrivacyState.getStatus(isCapturing)
+  const versionSuffix = ` (v${app.getVersion()})`
   tray.setToolTip(
     isPrivacyBlocked
-      ? 'MemoryLane - Capture Paused (Privacy Rule)'
+      ? `MemoryLane - Capture Paused (Privacy Rule)${versionSuffix}`
       : blockedRecently
-        ? 'MemoryLane - Capture Recently Paused (Privacy Rule)'
-        : 'MemoryLane - Screen Capture',
+        ? `MemoryLane - Capture Recently Paused (Privacy Rule)${versionSuffix}`
+        : `MemoryLane - Screen Capture${versionSuffix}`,
   )
 
   const usageStatsSubmenu = await buildUsageStatsSubmenu()
@@ -153,6 +154,7 @@ export const updateTrayMenu = async (): Promise<void> => {
       label: 'Usage Stats',
       submenu: usageStatsSubmenu,
     },
+    { label: `MemoryLane v${app.getVersion()}`, enabled: false },
     {
       label: 'Open MemoryLane',
       click: () => {

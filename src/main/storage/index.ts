@@ -65,6 +65,10 @@ export class StorageService {
   readonly userContext: UserContextRepository
 
   constructor(dbPath?: string) {
+    // The fallback is edition-agnostic (customer default). The Electron main
+    // process always passes an explicit `dbPath` via runtime.ts, which derives
+    // from `app.getPath('userData')` and is therefore edition-correct. Only
+    // scripts/tests hit this branch, and they don't need enterprise routing.
     this.dbPath = dbPath ?? getDefaultDbPath()
 
     const dir = path.dirname(this.dbPath)

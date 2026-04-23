@@ -9,8 +9,9 @@ import {
   activityToTimelineEntry,
   TimelineEntry,
 } from './formatting'
-import { setDbPath, clearDbPath } from './config'
+import { setDbPath, clearDbPath, type DbPathSource } from './config'
 import { getDefaultDbPath } from '../paths'
+import type { AppEdition } from '../../shared/edition'
 import type { StorageService, PatternWithStats, PatternSighting } from '../storage'
 import type { EmbeddingService } from '../processor/embedding'
 import log from '../logger'
@@ -20,18 +21,28 @@ export interface MCPServices {
   embeddingService: EmbeddingService
 }
 
+export interface EditionContext {
+  edition: AppEdition
+  source: DbPathSource
+  currentDbPath: string
+}
+
 /**
  * Registers all MCP tools on the given server.
  *
  * @param server - The MCP server instance to register tools on.
  * @param getServices - Lazy accessor for services (may be null before initialization).
  * @param reinitialize - Callback to switch the server's DB connection to a new path.
- *                       Used by the `set_db_path` tool.
+ *                       Used by the `set_db_path` / `reset_db_path` tools.
+ * @param getEditionContext - Accessor for the active edition + where the
+ *                            current DB path came from, so `get_db_path` can
+ *                            report it.
  */
 export function registerTools(
   server: McpServer,
   getServices: () => MCPServices | null,
-  reinitialize: (dbPath: string) => Promise<void>,
+  reinitialize: (dbPath: string, source?: DbPathSource) => Promise<void>,
+  getEditionContext: () => EditionContext,
 ): void {
   server.registerTool(
     'search_context',
@@ -205,11 +216,11 @@ export function registerTools(
       // On failure, fall back to the default DB so the server stays usable and
       // the next startup doesn't re-read a poisoned cli.json.
       try {
-        await reinitialize(newDbPath)
+        await reinitialize(newDbPath, 'config')
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         try {
-          await reinitialize(getDefaultDbPath())
+          await reinitialize(getDefaultDbPath(getEditionContext().edition), 'default')
         } catch {
           // ignore — surface the original failure
         }
@@ -247,8 +258,8 @@ export function registerTools(
     },
     async () => {
       clearDbPath()
-      const defaultPath = getDefaultDbPath()
-      await reinitialize(defaultPath)
+      const defaultPath = getDefaultDbPath(getEditionContext().edition)
+      await reinitialize(defaultPath, 'default')
       return {
         content: [
           {
@@ -256,6 +267,29 @@ export function registerTools(
             text: `Database path reset to default: ${defaultPath}`,
           },
         ],
+      }
+    },
+  )
+
+  server.registerTool(
+    'get_db_path',
+    {
+      title: 'Get Database Path',
+      description:
+        'Return the database path the MCP server is currently using, where it came from (flag/env/config/default), the active edition, and the default path for that edition. Use to verify you are reading the right DB before querying, or to decide whether to call set_db_path / reset_db_path.',
+      inputSchema: {},
+    },
+    async () => {
+      const ctx = getEditionContext()
+      const defaultForEdition = getDefaultDbPath(ctx.edition)
+      const payload = {
+        path: ctx.currentDbPath || defaultForEdition,
+        source: ctx.source,
+        edition: ctx.edition,
+        defaultForEdition,
+      }
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
       }
     },
   )
