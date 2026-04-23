@@ -1,12 +1,10 @@
-# MemoryLane v0.23.5
+# MemoryLane v0.23.6
 
-App is now the MCP entrypoint, with multi-DB support.
+Claude Desktop integration fix for Windows MSIX installs.
 
 ## What's Changed
 
-- **No more Node prerequisite for integrations**: one-click setup for Claude Desktop, Claude Code, and Cursor now runs the MemoryLane app directly under `ELECTRON_RUN_AS_NODE=1` instead of shelling out to `npx`. Integrations keep working on machines without Node installed.
-- **Reconnect flow for stale entries**: if the app was moved or upgraded, the Integrations panel surfaces a "Reconnect" button instead of silently rewriting config. User-added `--db-path` args are preserved when reconnecting.
-- **Multi-DB via `set_db_path` / `reset_db_path`**: the MCP server can now be pointed at a different MemoryLane database at runtime. The recorder always writes to the default DB — `set_db_path` only affects what the MCP server reads.
+- **Claude Desktop integration on Windows MSIX**: fresh MSIX-packaged Claude Desktop reads its config from a virtualized sandbox under `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\` instead of `%APPDATA%\Claude\`. MemoryLane now discovers every `Claude_*` package and dual-writes, so the tray "Connect to Claude Desktop" button actually shows up in Claude's server list. Users upgraded from an earlier MemoryLane will see a "Reconnect" prompt that backfills the MSIX path.
 
 ## Known Issues & Limitations
 
@@ -22,4 +20,4 @@ App is now the MCP entrypoint, with multi-DB support.
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v0.23.4...v0.23.5
+https://github.com/deusXmachina-dev/memorylane/compare/v0.23.5...v0.23.6
