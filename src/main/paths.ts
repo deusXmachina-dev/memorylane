@@ -67,6 +67,11 @@ export function buildAppDataPath(
   return pathApi.join(homeDir, '.config', appDirectory)
 }
 
+// Intentionally edition-agnostic: embedding model weights are identical across
+// editions, so both customer and enterprise installs share the same cache dir
+// (`MemoryLane/models`). This avoids duplicate ~100 MB downloads when a machine
+// runs both builds. If an edition-specific model is ever bundled, thread an
+// AppEdition param here and through EmbeddingService.
 export function getModelCacheDir(): string {
   return path.join(getAppDataPath(), 'models')
 }

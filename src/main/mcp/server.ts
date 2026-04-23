@@ -16,6 +16,7 @@ import { getDefaultDbPath } from '../paths'
 import type { AppEdition } from '../../shared/edition'
 import log from '../logger'
 import { registerTools, type EditionContext, type MCPServices } from './tools'
+import type { DbPathSource } from './config'
 /* import { registerPrompts } from './prompts' */
 
 const SERVER_NAME = 'memorylane'
@@ -77,7 +78,7 @@ over-anchor on it.
 
 export interface StartContext {
   edition: AppEdition
-  source: string
+  source: DbPathSource
 }
 
 export class MemoryLaneMCPServer {
@@ -175,7 +176,7 @@ export class MemoryLaneMCPServer {
    * Reinitializes services with a new database path.
    * Closes the existing storage connection and creates fresh services.
    */
-  public async reinitializeWithDb(dbPath: string, source?: string): Promise<void> {
+  public async reinitializeWithDb(dbPath: string, source?: DbPathSource): Promise<void> {
     if (this.services) {
       try {
         this.services.storage.close()

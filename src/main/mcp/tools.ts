@@ -9,7 +9,7 @@ import {
   activityToTimelineEntry,
   TimelineEntry,
 } from './formatting'
-import { setDbPath, clearDbPath } from './config'
+import { setDbPath, clearDbPath, type DbPathSource } from './config'
 import { getDefaultDbPath } from '../paths'
 import type { AppEdition } from '../../shared/edition'
 import type { StorageService, PatternWithStats, PatternSighting } from '../storage'
@@ -23,7 +23,7 @@ export interface MCPServices {
 
 export interface EditionContext {
   edition: AppEdition
-  source: string
+  source: DbPathSource
   currentDbPath: string
 }
 
@@ -41,7 +41,7 @@ export interface EditionContext {
 export function registerTools(
   server: McpServer,
   getServices: () => MCPServices | null,
-  reinitialize: (dbPath: string, source?: string) => Promise<void>,
+  reinitialize: (dbPath: string, source?: DbPathSource) => Promise<void>,
   getEditionContext: () => EditionContext,
 ): void {
   server.registerTool(
@@ -281,11 +281,12 @@ export function registerTools(
     },
     async () => {
       const ctx = getEditionContext()
+      const defaultForEdition = getDefaultDbPath(ctx.edition)
       const payload = {
-        path: ctx.currentDbPath,
+        path: ctx.currentDbPath || defaultForEdition,
         source: ctx.source,
         edition: ctx.edition,
-        defaultForEdition: getDefaultDbPath(ctx.edition),
+        defaultForEdition,
       }
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
