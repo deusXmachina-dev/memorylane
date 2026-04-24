@@ -1,12 +1,11 @@
 {
   "files": [],
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@components/*": ["src/renderer/components/*"],
-      "@constants": ["src/shared/constants"],
-      "@types": ["src/shared/types"]
+      "@/*": ["./src/*"],
+      "@components/*": ["./src/renderer/components/*"],
+      "@constants": ["./src/shared/constants"],
+      "@types": ["./src/shared/types"]
     }
   },
   "references": [{ "path": "./tsconfig.node.json" }, { "path": "./tsconfig.web.json" }]
