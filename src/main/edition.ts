@@ -1,4 +1,3 @@
-import { app } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import {
@@ -7,6 +6,7 @@ import {
   type AppEdition,
   type AppEditionConfig,
 } from '../shared/edition'
+import { getElectronAppOrNull, isPackagedElectronExecutable } from './paths'
 import log from './logger'
 
 type RawEditionConfig = Partial<AppEditionConfig>
@@ -18,7 +18,9 @@ interface LoadedEditionConfig {
 }
 
 function getDevEditionConfigPath(edition: AppEdition): string {
-  return path.join(app.getAppPath(), 'config', 'editions', `${edition}.json`)
+  const electronApp = getElectronAppOrNull()
+  const appPath = electronApp?.getAppPath?.() ?? process.cwd()
+  return path.join(appPath, 'config', 'editions', `${edition}.json`)
 }
 
 function getPackagedEditionConfigPath(): string {
@@ -51,7 +53,10 @@ function loadAndValidateEditionConfig(
 }
 
 function resolveEditionConfig(): LoadedEditionConfig {
-  if (!app.isPackaged) {
+  const electronApp = getElectronAppOrNull()
+  const isPackaged = electronApp?.isPackaged ?? isPackagedElectronExecutable(process.execPath)
+
+  if (!isPackaged) {
     const requestedEdition = parseEdition(process.env.EDITION)
     return {
       config: loadAndValidateEditionConfig(
