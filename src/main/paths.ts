@@ -76,26 +76,39 @@ export function getModelCacheDir(): string {
   return path.join(getAppDataPath(), 'models')
 }
 
-export function getBundledModelPath(): string | null {
-  if (!process.versions.electron) return null
-
-  let isPackaged: boolean | null = null
+/**
+ * Returns Electron's `app` object if available, otherwise null.
+ *
+ * Lazy `require('electron')` inside try/catch so this is safe to call from
+ * code paths that may run under `ELECTRON_RUN_AS_NODE=1` (e.g. the MCP entry),
+ * where the `electron` module is unresolvable. A top-level
+ * `import { app } from 'electron'` would crash the MCP process at module init,
+ * before `main()` runs — see `mcp-entry-isolation.test.ts`.
+ */
+export function getElectronAppOrNull(): {
+  isPackaged?: boolean
+  getAppPath?: () => string
+} | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const electron = require('electron')
     if (typeof electron === 'object' && electron !== null && 'app' in electron) {
-      const app = (electron as { app?: { isPackaged?: boolean } }).app
-      if (typeof app?.isPackaged === 'boolean') {
-        isPackaged = app.isPackaged
-      }
+      return (electron as { app: { isPackaged?: boolean; getAppPath?: () => string } }).app
     }
   } catch {
-    // Running under ELECTRON_RUN_AS_NODE can make require('electron') unavailable
+    // ELECTRON_RUN_AS_NODE — electron module unavailable
   }
+  return null
+}
 
-  if (isPackaged === null) {
-    isPackaged = isPackagedElectronExecutable(process.execPath)
-  }
+export function getBundledModelPath(): string | null {
+  if (!process.versions.electron) return null
+
+  const app = getElectronAppOrNull()
+  const isPackaged =
+    typeof app?.isPackaged === 'boolean'
+      ? app.isPackaged
+      : isPackagedElectronExecutable(process.execPath)
   if (!isPackaged) return null
 
   const bundled = path.join(process.resourcesPath, 'models')

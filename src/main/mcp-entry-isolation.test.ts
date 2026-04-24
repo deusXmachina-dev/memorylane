@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import * as ts from 'typescript'
 
 /**
  * Guard: the MCP entry point runs under ELECTRON_RUN_AS_NODE=1, so the
@@ -10,47 +11,58 @@ import * as path from 'node:path'
  * would crash the MCP process before `main()` runs.
  *
  * Electron APIs may still be consulted lazily via `require('electron')`
- * inside a try/catch — see `getElectronApp()` in `src/main/edition.ts` and
- * `getBundledModelPath()` in `src/main/paths.ts`.
+ * inside a try/catch — see `getElectronAppOrNull()` in `src/main/paths.ts`.
  *
  * This test reproduces the class of regression from the bug where
  * `edition.ts` had `import { app } from 'electron'`, which Rollup placed in
  * a shared chunk that the MCP entry transitively required.
+ *
+ * Implementation notes:
+ * - Uses the TypeScript compiler API (not a regex) so multi-line imports,
+ *   inline `{ type X }` bindings, and comments are all handled correctly.
+ * - Only follows relative import specifiers. `src/main` uses relative
+ *   imports throughout; path aliases (`@/…`, `@components/…`) are not
+ *   traversed. This is an audit, not a proof: if `src/main` ever adopts
+ *   aliased imports, extend `extractRelativeImportSpecifiers` to resolve
+ *   them via the `tsconfig.node.json` `paths` map.
  */
 
 const PROJECT_ROOT = findProjectRoot(__dirname)
 const MAIN_DIR = path.join(PROJECT_ROOT, 'src', 'main')
 const MCP_ENTRY = path.join(MAIN_DIR, 'mcp-entry.ts')
 
-// Matches ES imports like `import ... from 'electron'` and side-effect
-// `import 'electron'`, but NOT `import type ... from 'electron'` — type
-// imports are stripped by the TS compiler and emit no runtime require.
-const FORBIDDEN_IMPORT_RE = /^\s*import\s+(?!type\b)(?:[^'"]*\s+from\s+)?['"]electron['"]\s*;?\s*$/
-
 describe('MCP entry electron isolation', () => {
-  it('FORBIDDEN_IMPORT_RE matches the patterns it is meant to catch', () => {
-    // Self-check: if this regex regresses, the main test below would
+  it('fileImportsElectronAtRuntime classifies all relevant import forms', () => {
+    // Self-check: if this helper regresses, the main test below would
     // silently pass even when offenders exist. Pin the behaviour.
-    const shouldMatch = [
-      `import { app } from 'electron'`,
-      `import { app, BrowserWindow } from "electron"`,
-      `import * as electron from 'electron'`,
-      `import electron from 'electron'`,
-      `import 'electron'`,
-      `  import { app } from 'electron';`,
+    const shouldFlag: Array<[string, string]> = [
+      ['named value import', `import { app } from 'electron'`],
+      ['multiple named value imports', `import { app, BrowserWindow } from "electron"`],
+      ['namespace import', `import * as electron from 'electron'`],
+      ['default import', `import electron from 'electron'`],
+      ['side-effect import', `import 'electron'`],
+      [
+        'multi-line named import',
+        `import {
+           app,
+           BrowserWindow,
+         } from 'electron'`,
+      ],
+      ['mixed type + value named import', `import { app, type App } from 'electron'`],
     ]
-    const shouldNotMatch = [
-      `import type { App } from 'electron'`,
-      `import type { App, BrowserWindow } from 'electron'`,
-      `import { something } from './electron-helpers'`,
-      `// import { app } from 'electron' — historical note`,
-      `const electron = require('electron')`,
+    const shouldNotFlag: Array<[string, string]> = [
+      ['type-only import', `import type { App } from 'electron'`],
+      ['type-only multi-named', `import type { App, BrowserWindow } from 'electron'`],
+      ['all-inline-type named import', `import { type App, type BrowserWindow } from 'electron'`],
+      ['similarly-named relative import', `import { something } from './electron-helpers'`],
+      ['commented-out import', `// import { app } from 'electron' — historical note`],
+      ['lazy require in expression', `const electron = require('electron')`],
     ]
-    for (const line of shouldMatch) {
-      expect(FORBIDDEN_IMPORT_RE.test(line), `should match: ${line}`).toBe(true)
+    for (const [label, source] of shouldFlag) {
+      expect(fileImportsElectronAtRuntime(source), `should flag: ${label}`).toBe(true)
     }
-    for (const line of shouldNotMatch) {
-      expect(FORBIDDEN_IMPORT_RE.test(line), `should not match: ${line}`).toBe(false)
+    for (const [label, source] of shouldNotFlag) {
+      expect(fileImportsElectronAtRuntime(source), `should not flag: ${label}`).toBe(false)
     }
   })
 
@@ -63,15 +75,20 @@ describe('MCP entry electron isolation', () => {
       visited.add(file)
 
       const source = fs.readFileSync(file, 'utf-8')
-      const lines = source.split('\n')
+      const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true)
 
-      lines.forEach((text, idx) => {
-        if (FORBIDDEN_IMPORT_RE.test(text)) {
-          offenders.push({ file, line: idx + 1, text: text.trim() })
-        }
-      })
+      for (const stmt of sf.statements) {
+        if (!ts.isImportDeclaration(stmt)) continue
+        if (!importsElectronAtRuntime(stmt)) continue
+        const { line } = sf.getLineAndCharacterOfPosition(stmt.getStart(sf))
+        offenders.push({
+          file,
+          line: line + 1,
+          text: stmt.getText(sf).replace(/\s+/g, ' ').trim(),
+        })
+      }
 
-      for (const spec of extractRelativeImportSpecifiers(source)) {
+      for (const spec of extractRelativeImportSpecifiers(sf)) {
         const resolved = resolveRelativeImport(file, spec)
         if (resolved) visit(resolved)
       }
@@ -93,16 +110,50 @@ describe('MCP entry electron isolation', () => {
   })
 })
 
-function extractRelativeImportSpecifiers(source: string): string[] {
-  // Match `import ... from './foo'` / `import ... from '../foo'` and
-  // side-effect `import './foo'`. Non-relative specifiers (npm packages,
-  // path aliases) are ignored — we only follow relative imports within
-  // src/main, which is where the regression surface lives.
+/**
+ * Returns true iff the source contains a top-level ES import from `'electron'`
+ * that will emit a runtime `require('electron')`. Type-only imports (either at
+ * the declaration level — `import type …` — or entirely via inline
+ * `{ type X }` specifiers) are stripped by the TS compiler and are safe.
+ */
+function fileImportsElectronAtRuntime(source: string): boolean {
+  const sf = ts.createSourceFile('probe.ts', source, ts.ScriptTarget.Latest, true)
+  return sf.statements.some(
+    (stmt) => ts.isImportDeclaration(stmt) && importsElectronAtRuntime(stmt),
+  )
+}
+
+function importsElectronAtRuntime(stmt: ts.ImportDeclaration): boolean {
+  const spec = stmt.moduleSpecifier
+  if (!ts.isStringLiteral(spec) || spec.text !== 'electron') return false
+
+  const clause = stmt.importClause
+  // Side-effect import: `import 'electron'` — always runtime.
+  if (!clause) return true
+  // `import type { … } from 'electron'`
+  if (clause.isTypeOnly) return false
+
+  const hasDefault = !!clause.name
+  const bindings = clause.namedBindings
+  if (bindings && ts.isNamespaceImport(bindings)) return true
+  if (bindings && ts.isNamedImports(bindings)) {
+    const hasRuntimeNamed = bindings.elements.some((el) => !el.isTypeOnly)
+    if (hasRuntimeNamed) return true
+    // All named bindings are inline-type-only.
+    return hasDefault
+  }
+  return hasDefault
+}
+
+function extractRelativeImportSpecifiers(sf: ts.SourceFile): string[] {
   const specifiers: string[] = []
-  const importRe = /import\s+(?:[^'"]*?\s+from\s+)?['"](\.\.?\/[^'"]+)['"]/g
-  let match: RegExpExecArray | null
-  while ((match = importRe.exec(source)) !== null) {
-    specifiers.push(match[1])
+  for (const stmt of sf.statements) {
+    if (!ts.isImportDeclaration(stmt)) continue
+    const spec = stmt.moduleSpecifier
+    if (!ts.isStringLiteral(spec)) continue
+    if (spec.text.startsWith('./') || spec.text.startsWith('../')) {
+      specifiers.push(spec.text)
+    }
   }
   return specifiers
 }
