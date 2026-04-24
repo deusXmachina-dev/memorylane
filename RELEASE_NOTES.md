@@ -1,12 +1,10 @@
-# MemoryLane v0.23.7
+# MemoryLane v0.23.8
 
-Edition-aware default DB path for the MCP server.
+Fix the MCP server crashing on start when launched by Claude Desktop.
 
 ## What's Changed
 
-- **Enterprise MCP uses the enterprise DB by default**: on the enterprise build, `productName = "MemoryLane Enterprise"` shifts Electron's userData directory, but the MCP server's default DB path was hardcoded to the customer location. Enterprise users therefore saw an empty DB through MCP with no obvious workaround. The default path is now edition-aware across macOS, Windows, and Linux (dev and packaged).
-- **New `get_db_path` MCP tool**: returns `{ path, source, edition, defaultForEdition }` so Claude can verify which DB is being read and decide whether to call `set_db_path` / `reset_db_path`.
-- **Tray tooltip shows the app version**: hovering the tray icon now includes `v<version>`, and the tray menu has a disabled version entry.
+- **MCP server no longer crashes with `Cannot find module 'electron'`**: a top-level `import { app } from 'electron'` in `edition.ts` was code-split into a shared chunk that the MCP entry transitively required. Under `ELECTRON_RUN_AS_NODE=1` the `electron` module is unresolvable, so the process died before `main()` ran. Electron APIs are now read through a lazy, shared `getElectronAppOrNull()` helper, and a compiler-API-based guard test fails if any file in the MCP import graph reintroduces a top-level `electron` import.
 
 ## Known Issues & Limitations
 
@@ -22,4 +20,4 @@ Edition-aware default DB path for the MCP server.
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v0.23.6...v0.23.7
+https://github.com/deusXmachina-dev/memorylane/compare/v0.23.7...v0.23.8
