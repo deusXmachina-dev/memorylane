@@ -1,4 +1,3 @@
-import { app } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import {
@@ -7,6 +6,7 @@ import {
   type AppEdition,
   type AppEditionConfig,
 } from '../shared/edition'
+import { isPackagedElectronExecutable } from './paths'
 import log from './logger'
 
 type RawEditionConfig = Partial<AppEditionConfig>
@@ -17,8 +17,26 @@ interface LoadedEditionConfig {
   source: 'dev' | 'packaged'
 }
 
+// Electron's `app` is only available when running as a real Electron app.
+// Under ELECTRON_RUN_AS_NODE=1 (MCP entry) require('electron') throws, so
+// we read it lazily and fall back to pure-Node detection.
+function getElectronApp(): { isPackaged?: boolean; getAppPath?: () => string } | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const electron = require('electron')
+    if (typeof electron === 'object' && electron !== null && 'app' in electron) {
+      return (electron as { app: { isPackaged?: boolean; getAppPath?: () => string } }).app
+    }
+  } catch {
+    // ELECTRON_RUN_AS_NODE — electron module unavailable
+  }
+  return null
+}
+
 function getDevEditionConfigPath(edition: AppEdition): string {
-  return path.join(app.getAppPath(), 'config', 'editions', `${edition}.json`)
+  const electronApp = getElectronApp()
+  const appPath = electronApp?.getAppPath?.() ?? process.cwd()
+  return path.join(appPath, 'config', 'editions', `${edition}.json`)
 }
 
 function getPackagedEditionConfigPath(): string {
@@ -51,7 +69,10 @@ function loadAndValidateEditionConfig(
 }
 
 function resolveEditionConfig(): LoadedEditionConfig {
-  if (!app.isPackaged) {
+  const electronApp = getElectronApp()
+  const isPackaged = electronApp?.isPackaged ?? isPackagedElectronExecutable(process.execPath)
+
+  if (!isPackaged) {
     const requestedEdition = parseEdition(process.env.EDITION)
     return {
       config: loadAndValidateEditionConfig(
