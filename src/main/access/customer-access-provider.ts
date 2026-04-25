@@ -1,6 +1,6 @@
 import { shell } from 'electron'
 import { MANAGED_KEY_CONFIG } from '../../shared/constants'
-import type { SubscriptionPlan } from '../../shared/types'
+import type { ConsentOutcome, PendingConsent, SubscriptionPlan } from '../../shared/types'
 import log from '../logger'
 import type { DeviceIdentity } from '../settings/device-identity'
 import { BaseAccessProvider } from './base-access-provider'
@@ -75,6 +75,15 @@ export class CustomerAccessProvider extends BaseAccessProvider {
   public async activateEnterpriseLicense(_activationKey: string): Promise<void> {
     void _activationKey
     throw new Error('Enterprise activation is only available in the enterprise edition')
+  }
+
+  public async getPendingConsent(): Promise<PendingConsent | null> {
+    return null
+  }
+
+  public async submitConsentDecision(_outcome: ConsentOutcome): Promise<void> {
+    void _outcome
+    throw new Error('Consent decisions are only available in the enterprise edition')
   }
 
   public startPeriodicRefresh(): void {

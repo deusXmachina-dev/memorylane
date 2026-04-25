@@ -1,4 +1,9 @@
-import type { AccessState, SubscriptionPlan } from '../../shared/types'
+import type {
+  AccessState,
+  ConsentOutcome,
+  PendingConsent,
+  SubscriptionPlan,
+} from '../../shared/types'
 import type { AccessProvider, AccessStateCallback, AccessUpdatePayload } from './types'
 
 export abstract class BaseAccessProvider implements AccessProvider {
@@ -23,6 +28,8 @@ export abstract class BaseAccessProvider implements AccessProvider {
   public abstract startCheckout(plan?: SubscriptionPlan): Promise<void>
   public abstract openSubscriptionPortal(): Promise<void>
   public abstract activateEnterpriseLicense(activationKey: string): Promise<void>
+  public abstract getPendingConsent(): Promise<PendingConsent | null>
+  public abstract submitConsentDecision(outcome: ConsentOutcome): Promise<void>
 
   protected setState(next: Partial<AccessState>, payload?: AccessUpdatePayload): void {
     this.accessState = {

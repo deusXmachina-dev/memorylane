@@ -3,6 +3,8 @@ import type { AccessState } from '../../shared/types'
 export type EnterpriseAccessEvent =
   | { type: 'activation_started' }
   | { type: 'activation_inactive' }
+  | { type: 'consent_required' }
+  | { type: 'consent_decision_accepted' }
   | { type: 'activation_confirmed_without_key' }
   | { type: 'activation_completed'; key: string }
   | { type: 'activation_failed'; error: string }
@@ -39,6 +41,24 @@ export function transitionEnterpriseAccess(
         },
         payload: {
           invalidate: true,
+        },
+      }
+    case 'consent_required':
+      return {
+        state: {
+          ...state,
+          isEnterpriseActivated: false,
+          enterpriseActivationStatus: 'awaiting_consent',
+          error: null,
+        },
+      }
+    case 'consent_decision_accepted':
+      return {
+        state: {
+          ...state,
+          isEnterpriseActivated: false,
+          enterpriseActivationStatus: 'activating',
+          error: null,
         },
       }
     case 'activation_confirmed_without_key':

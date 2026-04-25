@@ -1,5 +1,10 @@
 import type { AppEdition } from '../../shared/edition'
-import type { AccessState, SubscriptionPlan } from '../../shared/types'
+import type {
+  AccessState,
+  ConsentOutcome,
+  PendingConsent,
+  SubscriptionPlan,
+} from '../../shared/types'
 
 export interface AccessUpdatePayload {
   error?: string
@@ -18,6 +23,8 @@ export interface AccessProvider {
   startCheckout(plan?: SubscriptionPlan): Promise<void>
   openSubscriptionPortal(): Promise<void>
   activateEnterpriseLicense(activationKey: string): Promise<void>
+  getPendingConsent(): Promise<PendingConsent | null>
+  submitConsentDecision(outcome: ConsentOutcome): Promise<void>
 }
 
 export function createInitialAccessState(edition: AppEdition): AccessState {

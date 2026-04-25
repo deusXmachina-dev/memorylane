@@ -98,9 +98,18 @@ export type EnterpriseActivationStatus =
   | 'idle'
   | 'inactive'
   | 'activating'
+  | 'awaiting_consent'
   | 'waiting_for_key'
   | 'activated'
   | 'error'
+
+export interface PendingConsent {
+  title: string
+  contentType: string
+  bytesBase64: string
+}
+
+export type ConsentOutcome = 'accepted' | 'declined'
 
 export interface SubscriptionUpdate {
   status: SubscriptionStatus
@@ -236,6 +245,8 @@ export interface MainWindowAPI {
   refreshAccessState: () => Promise<AccessState>
   onAccessStateChanged: (callback: (state: AccessState) => void) => void
   activateEnterpriseLicense: (activationKey: string) => Promise<SaveResult>
+  getPendingConsent: () => Promise<PendingConsent | null>
+  submitConsentDecision: (outcome: ConsentOutcome) => Promise<SaveResult>
   getStatus: () => Promise<MainWindowStatus>
   toggleCapture: () => Promise<MainWindowStatus>
   onStatusChanged: (callback: (status: MainWindowStatus) => void) => void

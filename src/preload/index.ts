@@ -15,6 +15,9 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   },
   activateEnterpriseLicense: (activationKey: string) =>
     ipcRenderer.invoke('main-window:activateEnterpriseLicense', activationKey),
+  getPendingConsent: () => ipcRenderer.invoke('main-window:getPendingConsent'),
+  submitConsentDecision: (outcome: 'accepted' | 'declined') =>
+    ipcRenderer.invoke('main-window:submitConsentDecision', outcome),
   // Capture control
   getStatus: () => ipcRenderer.invoke('main-window:getStatus'),
   toggleCapture: () => ipcRenderer.invoke('main-window:toggleCapture'),
