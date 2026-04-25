@@ -1,10 +1,10 @@
-# MemoryLane v0.23.8
+# MemoryLane v0.24.0
 
-Fix the MCP server crashing on start when launched by Claude Desktop.
+Adds an enterprise consent step before a device is bound to an activation key.
 
 ## What's Changed
 
-- **MCP server no longer crashes with `Cannot find module 'electron'`**: a top-level `import { app } from 'electron'` in `edition.ts` was code-split into a shared chunk that the MCP entry transitively required. Under `ELECTRON_RUN_AS_NODE=1` the `electron` module is unresolvable, so the process died before `main()` ran. Electron APIs are now read through a lazy, shared `getElectronAppOrNull()` helper, and a compiler-API-based guard test fails if any file in the MCP import graph reintroduces a top-level `electron` import.
+- **Enterprise consent step on activation** (#126): the activate endpoint is now a probe — when the server returns a consent document, the app renders it (PDF) inline, gates Accept on a checkbox, and only binds the device after the user accepts. Decline returns to key entry; a 15-minute timeout protects against abandoned decisions. Probe responses are restricted to PDF, and the downloaded document is verified against the sha256 from the probe before it is shown.
 
 ## Known Issues & Limitations
 
@@ -20,4 +20,4 @@ Fix the MCP server crashing on start when launched by Claude Desktop.
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v0.23.7...v0.23.8
+https://github.com/deusXmachina-dev/memorylane/compare/v0.23.8...v0.24.0
