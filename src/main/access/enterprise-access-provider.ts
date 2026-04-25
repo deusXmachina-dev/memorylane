@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { ENTERPRISE_BACKEND_CONFIG } from '../../shared/constants'
 import type { ConsentOutcome, PendingConsent } from '../../shared/types'
 import log from '../logger'
@@ -205,6 +206,16 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     }
 
     const buffer = Buffer.from(await response.arrayBuffer())
+    const actualSha256 = createHash('sha256').update(buffer).digest('hex')
+    const expectedSha256 = pending.sha256.toLowerCase()
+    if (actualSha256 !== expectedSha256) {
+      log.warn(
+        '[EnterpriseAccess] Consent document hash mismatch',
+        `expected=${expectedSha256}`,
+        `actual=${actualSha256}`,
+      )
+      throw new Error('Consent document failed integrity check')
+    }
     return {
       title: pending.title,
       contentType: pending.contentType,
