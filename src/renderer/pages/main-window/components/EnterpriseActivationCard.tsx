@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { Button } from '@components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@components/ui/card'
 import { Input } from '@components/ui/input'
-import type { AccessState, MainWindowAPI, PendingConsent } from '@types'
+import type { AccessState, ConsentOutcome, MainWindowAPI, PendingConsent } from '@types'
 
 interface EnterpriseActivationCardProps {
   api: MainWindowAPI
@@ -76,8 +76,6 @@ function ActivationKeyEntry({
     }
   }, [activationKey, api])
 
-  const status = accessState?.enterpriseActivationStatus ?? 'idle'
-
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -88,9 +86,7 @@ function ActivationKeyEntry({
           Enter your enterprise activation key to provision this device.
         </p>
 
-        {status === 'error' && accessState?.error && (
-          <p className="text-xs text-destructive">{accessState.error}</p>
-        )}
+        {accessState?.error && <p className="text-xs text-destructive">{accessState.error}</p>}
 
         <Input
           type="password"
@@ -143,7 +139,7 @@ function ConsentScreen({ api, accessState }: EnterpriseActivationCardProps): Rea
   }, [api])
 
   const decide = useCallback(
-    async (outcome: 'accepted' | 'declined') => {
+    async (outcome: ConsentOutcome) => {
       setSubmitting(true)
       try {
         const result = await api.submitConsentDecision(outcome)
@@ -158,7 +154,9 @@ function ConsentScreen({ api, accessState }: EnterpriseActivationCardProps): Rea
   )
 
   const docDataUrl =
-    consent !== null ? `data:${consent.contentType};base64,${consent.bytesBase64}` : null
+    consent !== null && consent.contentType === 'application/pdf'
+      ? `data:application/pdf;base64,${consent.bytesBase64}`
+      : null
 
   return (
     <Card>
@@ -179,6 +177,7 @@ function ConsentScreen({ api, accessState }: EnterpriseActivationCardProps): Rea
           <iframe
             title="Consent document"
             src={docDataUrl}
+            referrerPolicy="no-referrer"
             className="h-96 w-full rounded border border-border bg-background"
           />
         ) : (

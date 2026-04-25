@@ -14,7 +14,19 @@ interface PendingConsentState {
   version: number
   sha256: string
   title: string
-  contentType: string
+  contentType: AllowedConsentContentType
+}
+
+const ALLOWED_CONSENT_CONTENT_TYPES = ['application/pdf'] as const
+type AllowedConsentContentType = (typeof ALLOWED_CONSENT_CONTENT_TYPES)[number]
+
+function normalizeConsentContentType(raw: string | undefined): AllowedConsentContentType | null {
+  if (typeof raw !== 'string') return null
+  const base = raw.split(';')[0]?.trim().toLowerCase()
+  if (base === undefined) return null
+  return (ALLOWED_CONSENT_CONTENT_TYPES as readonly string[]).includes(base)
+    ? (base as AllowedConsentContentType)
+    : null
 }
 
 interface ProbeConsentPayload {
@@ -45,6 +57,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
   private pollTimer: ReturnType<typeof setInterval> | null = null
   private timeoutTimer: ReturnType<typeof setTimeout> | null = null
   private refreshTimer: ReturnType<typeof setInterval> | null = null
+  private consentTimeoutTimer: ReturnType<typeof setTimeout> | null = null
   private pendingConsent: PendingConsentState | null = null
 
   constructor(deviceIdentity: DeviceIdentity) {
@@ -138,18 +151,42 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     }
 
     const probe = (await response.json()) as Partial<ProbeResponse>
-    if (probe.ok === false && probe.consent) {
+    if (probe.ok === false) {
+      if (!probe.consent) {
+        const errorMessage = 'Activation rejected by server.'
+        this.applyTransition(
+          transitionEnterpriseAccess(this.accessState, {
+            type: 'activation_failed',
+            error: errorMessage,
+          }),
+        )
+        throw new Error(errorMessage)
+      }
+
+      const contentType = normalizeConsentContentType(probe.consent.content_type)
+      if (contentType === null) {
+        const errorMessage = `Unsupported consent document type: ${probe.consent.content_type}`
+        this.applyTransition(
+          transitionEnterpriseAccess(this.accessState, {
+            type: 'activation_failed',
+            error: errorMessage,
+          }),
+        )
+        throw new Error(errorMessage)
+      }
+
       this.pendingConsent = {
         activationKey: trimmedKey,
         version: probe.consent.version,
         sha256: probe.consent.sha256,
         title: probe.consent.title,
-        contentType: probe.consent.content_type,
+        contentType,
       }
       log.info('[EnterpriseAccess] Consent required before activation can complete')
       this.applyTransition(
         transitionEnterpriseAccess(this.accessState, { type: 'consent_required' }),
       )
+      this.startConsentTimeout()
       return
     }
 
@@ -195,10 +232,11 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       }),
     })
 
-    if (response.status === 502) {
+    if (response.status === 502 && outcome === 'accepted') {
       log.warn(
         '[EnterpriseAccess] Consent accepted but downstream key provisioning failed; polling',
       )
+      this.clearConsentTimeout()
       this.pendingConsent = null
       this.applyTransition(
         transitionEnterpriseAccess(this.accessState, { type: 'consent_decision_accepted' }),
@@ -209,6 +247,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
 
     if (!response.ok) {
       const errorMessage = await this.readErrorMessage(response, 'Consent request failed')
+      this.clearConsentTimeout()
       this.pendingConsent = null
       this.applyTransition(
         transitionEnterpriseAccess(this.accessState, {
@@ -223,6 +262,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
 
     if (outcome === 'declined' || data.declined === true) {
       log.info('[EnterpriseAccess] User declined consent; resetting activation state')
+      this.clearConsentTimeout()
       this.pendingConsent = null
       this.applyTransition(
         transitionEnterpriseAccess(this.accessState, { type: 'activation_inactive' }),
@@ -231,6 +271,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     }
 
     log.info('[EnterpriseAccess] Consent accepted; polling for activation state')
+    this.clearConsentTimeout()
     this.pendingConsent = null
     this.applyTransition(
       transitionEnterpriseAccess(this.accessState, { type: 'consent_decision_accepted' }),
@@ -371,6 +412,30 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     if (this.timeoutTimer !== null) {
       clearTimeout(this.timeoutTimer)
       this.timeoutTimer = null
+    }
+    this.clearConsentTimeout()
+  }
+
+  private startConsentTimeout(): void {
+    this.clearConsentTimeout()
+    this.consentTimeoutTimer = setTimeout(() => {
+      log.warn('[EnterpriseAccess] Consent decision timed out')
+      this.consentTimeoutTimer = null
+      this.pendingConsent = null
+      this.applyTransition(
+        transitionEnterpriseAccess(this.accessState, {
+          type: 'activation_failed',
+          error: 'Consent decision timed out. Re-enter your activation key to try again.',
+        }),
+      )
+    }, ENTERPRISE_BACKEND_CONFIG.CONSENT_DECISION_TIMEOUT_MS)
+    this.consentTimeoutTimer.unref?.()
+  }
+
+  private clearConsentTimeout(): void {
+    if (this.consentTimeoutTimer !== null) {
+      clearTimeout(this.consentTimeoutTimer)
+      this.consentTimeoutTimer = null
     }
   }
 

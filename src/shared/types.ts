@@ -105,7 +105,7 @@ export type EnterpriseActivationStatus =
 
 export interface PendingConsent {
   title: string
-  contentType: string
+  contentType: 'application/pdf'
   bytesBase64: string
 }
 
