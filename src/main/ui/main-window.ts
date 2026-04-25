@@ -28,6 +28,7 @@ import type { CustomEndpointManager } from '../settings/custom-endpoint-manager'
 import type { AccessProvider } from '../access'
 import type {
   AccessState,
+  ConsentOutcome,
   CustomEndpointConfig,
   LlmHealthStatus,
   MainWindowStatus,
@@ -154,6 +155,7 @@ export function openMainWindow(): void {
       preload: path.join(appRoot, 'out', 'preload', 'index.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      plugins: true,
     },
   })
 
@@ -281,6 +283,29 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Activation failed'
+      return { success: false, error: message }
+    }
+  })
+
+  ipcMain.handle('main-window:getPendingConsent', async () => {
+    if (!deps) return null
+    try {
+      return await deps.accessProvider.getPendingConsent()
+    } catch (error) {
+      log.warn('[MainWindow] Failed to fetch pending consent document:', error)
+      return null
+    }
+  })
+
+  ipcMain.handle('main-window:submitConsentDecision', async (_event, outcome: ConsentOutcome) => {
+    if (!deps) {
+      return { success: false, error: 'Dependencies not initialized' }
+    }
+    try {
+      await deps.accessProvider.submitConsentDecision(outcome)
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Consent request failed'
       return { success: false, error: message }
     }
   })

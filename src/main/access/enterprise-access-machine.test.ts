@@ -44,6 +44,26 @@ describe('enterprise access machine', () => {
     expect(completed.payload).toEqual({ key: 'sk-or-managed' })
   })
 
+  it('parks in awaiting_consent on consent_required', () => {
+    const result = transitionEnterpriseAccess(
+      makeState({ enterpriseActivationStatus: 'activating' }),
+      {
+        type: 'consent_required',
+      },
+    )
+    expect(result.state.enterpriseActivationStatus).toBe('awaiting_consent')
+    expect(result.state.isEnterpriseActivated).toBe(false)
+    expect(result.state.error).toBeNull()
+  })
+
+  it('returns to activating when the consent decision is accepted', () => {
+    const result = transitionEnterpriseAccess(
+      makeState({ enterpriseActivationStatus: 'awaiting_consent' }),
+      { type: 'consent_decision_accepted' },
+    )
+    expect(result.state.enterpriseActivationStatus).toBe('activating')
+  })
+
   it('captures activation errors without clearing prior activation flag implicitly', () => {
     const result = transitionEnterpriseAccess(makeState({ isEnterpriseActivated: true }), {
       type: 'activation_failed',

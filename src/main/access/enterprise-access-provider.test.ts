@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../logger', () => ({
@@ -30,7 +31,7 @@ describe('EnterpriseAccessProvider', () => {
 
   it('publishes activation completion after status and key polling succeed', async () => {
     const responses = [
-      { ok: true, json: async () => ({ ok: true }) } as unknown as Response,
+      { ok: true, json: async () => ({ ok: true, consent: null }) } as unknown as Response,
       { ok: true, json: async () => ({ activated: false }) } as unknown as Response,
       { ok: true, json: async () => ({ activated: true }) } as unknown as Response,
       { ok: true, json: async () => ({ key: 'sk-or-enterprise' }) } as unknown as Response,
@@ -49,6 +50,298 @@ describe('EnterpriseAccessProvider', () => {
     expect(updates[0]?.status).toBe('activating')
     expect(updates.at(-1)?.status).toBe('activated')
     expect(updates.at(-1)?.payload).toEqual({ key: 'sk-or-enterprise' })
+  })
+
+  it('parks in awaiting_consent when probe returns a consent payload', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        ok: false,
+        consent: {
+          url: '/api/license/consent-document/abc',
+          version: 3,
+          sha256: 'abc',
+          title: 'Employee data consent',
+          content_type: 'application/pdf',
+        },
+      }),
+    })) as unknown as typeof fetch
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const updates: Array<{ status: string | null }> = []
+    provider.setUpdateCallback((state) => {
+      updates.push({ status: state.enterpriseActivationStatus })
+    })
+
+    await provider.activateEnterpriseLicense('ACT-123')
+
+    expect(updates.at(-1)?.status).toBe('awaiting_consent')
+  })
+
+  it('resumes activation polling after consent is accepted', async () => {
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          ok: false,
+          consent: {
+            url: '/api/license/consent-document/abc',
+            version: 3,
+            sha256: 'abc',
+            title: 'Employee data consent',
+            content_type: 'application/pdf',
+          },
+        }),
+      } as unknown as Response,
+      { ok: true, json: async () => ({ ok: true, declined: false }) } as unknown as Response,
+      { ok: true, json: async () => ({ activated: true }) } as unknown as Response,
+      { ok: true, json: async () => ({ key: 'sk-or-enterprise' }) } as unknown as Response,
+    ]
+    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const updates: Array<{ status: string | null; payload?: unknown }> = []
+    provider.setUpdateCallback((state, payload) => {
+      updates.push({ status: state.enterpriseActivationStatus, payload })
+    })
+
+    await provider.activateEnterpriseLicense('ACT-123')
+    expect(updates.at(-1)?.status).toBe('awaiting_consent')
+
+    await provider.submitConsentDecision('accepted')
+    await vi.advanceTimersByTimeAsync(ENTERPRISE_BACKEND_CONFIG.POLL_INTERVAL_MS)
+
+    expect(updates.at(-1)?.status).toBe('activated')
+    expect(updates.at(-1)?.payload).toEqual({ key: 'sk-or-enterprise' })
+  })
+
+  it('returns to inactive when consent is declined', async () => {
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          ok: false,
+          consent: {
+            url: '/api/license/consent-document/abc',
+            version: 3,
+            sha256: 'abc',
+            title: 'Employee data consent',
+            content_type: 'application/pdf',
+          },
+        }),
+      } as unknown as Response,
+      { ok: true, json: async () => ({ ok: false, declined: true }) } as unknown as Response,
+    ]
+    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const updates: Array<{ status: string | null }> = []
+    provider.setUpdateCallback((state) => {
+      updates.push({ status: state.enterpriseActivationStatus })
+    })
+
+    await provider.activateEnterpriseLicense('ACT-123')
+    await provider.submitConsentDecision('declined')
+
+    expect(updates.at(-1)?.status).toBe('inactive')
+  })
+
+  it('rejects probe responses with ok=false and no consent payload', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ok: false, consent: null }),
+    })) as unknown as typeof fetch
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const updates: Array<{ status: string | null }> = []
+    provider.setUpdateCallback((state) => {
+      updates.push({ status: state.enterpriseActivationStatus })
+    })
+
+    await expect(provider.activateEnterpriseLicense('ACT-123')).rejects.toThrow()
+    expect(updates.at(-1)?.status).toBe('error')
+  })
+
+  it('rejects probe consent payloads with disallowed content types', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        ok: false,
+        consent: {
+          url: '/api/license/consent-document/abc',
+          version: 1,
+          sha256: 'abc',
+          title: 'Sketchy consent',
+          content_type: 'text/html',
+        },
+      }),
+    })) as unknown as typeof fetch
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const updates: Array<{ status: string | null }> = []
+    provider.setUpdateCallback((state) => {
+      updates.push({ status: state.enterpriseActivationStatus })
+    })
+
+    await expect(provider.activateEnterpriseLicense('ACT-123')).rejects.toThrow()
+    expect(updates.at(-1)?.status).toBe('error')
+  })
+
+  it('treats 502 on a decline submission as an error', async () => {
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          ok: false,
+          consent: {
+            url: '/api/license/consent-document/abc',
+            version: 3,
+            sha256: 'abc',
+            title: 'Employee data consent',
+            content_type: 'application/pdf',
+          },
+        }),
+      } as unknown as Response,
+      {
+        ok: false,
+        status: 502,
+        json: async () => ({ error: 'Upstream failed' }),
+      } as unknown as Response,
+    ]
+    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const updates: Array<{ status: string | null }> = []
+    provider.setUpdateCallback((state) => {
+      updates.push({ status: state.enterpriseActivationStatus })
+    })
+
+    await provider.activateEnterpriseLicense('ACT-123')
+    await expect(provider.submitConsentDecision('declined')).rejects.toThrow()
+    expect(updates.at(-1)?.status).toBe('error')
+  })
+
+  it('verifies the consent document hash before returning it', async () => {
+    const docBytes = Buffer.from('%PDF-1.4 fake consent doc')
+    const sha256 = createHash('sha256').update(docBytes).digest('hex')
+
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          ok: false,
+          consent: {
+            url: '/api/license/consent-document/abc',
+            version: 3,
+            sha256,
+            title: 'Employee data consent',
+            content_type: 'application/pdf',
+          },
+        }),
+      } as unknown as Response,
+      {
+        ok: true,
+        arrayBuffer: async () =>
+          docBytes.buffer.slice(docBytes.byteOffset, docBytes.byteOffset + docBytes.byteLength),
+      } as unknown as Response,
+    ]
+    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    await provider.activateEnterpriseLicense('ACT-123')
+
+    const consent = await provider.getPendingConsent()
+    expect(consent?.bytesBase64).toBe(docBytes.toString('base64'))
+  })
+
+  it('rejects a consent document whose hash does not match the probe', async () => {
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          ok: false,
+          consent: {
+            url: '/api/license/consent-document/abc',
+            version: 3,
+            sha256: 'a'.repeat(64),
+            title: 'Employee data consent',
+            content_type: 'application/pdf',
+          },
+        }),
+      } as unknown as Response,
+      {
+        ok: true,
+        arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
+      } as unknown as Response,
+    ]
+    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    await provider.activateEnterpriseLicense('ACT-123')
+
+    await expect(provider.getPendingConsent()).rejects.toThrow(/integrity check/i)
+  })
+
+  it('skips refresh while awaiting_consent', async () => {
+    const probeResponse = {
+      ok: true,
+      json: async () => ({
+        ok: false,
+        consent: {
+          url: '/api/license/consent-document/abc',
+          version: 3,
+          sha256: 'abc',
+          title: 'Employee data consent',
+          content_type: 'application/pdf',
+        },
+      }),
+    } as unknown as Response
+
+    const fetchMock = vi.fn(async () => probeResponse) as unknown as typeof fetch
+    globalThis.fetch = fetchMock
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    await provider.activateEnterpriseLicense('ACT-123')
+
+    const callsBeforeRefresh = (fetchMock as unknown as { mock: { calls: unknown[] } }).mock.calls
+      .length
+    await provider.refreshAccessState()
+    const callsAfterRefresh = (fetchMock as unknown as { mock: { calls: unknown[] } }).mock.calls
+      .length
+    expect(callsAfterRefresh).toBe(callsBeforeRefresh)
+  })
+
+  it('times out the consent decision and surfaces an error', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        ok: false,
+        consent: {
+          url: '/api/license/consent-document/abc',
+          version: 3,
+          sha256: 'abc',
+          title: 'Employee data consent',
+          content_type: 'application/pdf',
+        },
+      }),
+    })) as unknown as typeof fetch
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const updates: Array<{ status: string | null; error: string | null }> = []
+    provider.setUpdateCallback((state) => {
+      updates.push({
+        status: state.enterpriseActivationStatus,
+        error: state.error,
+      })
+    })
+
+    await provider.activateEnterpriseLicense('ACT-123')
+    expect(updates.at(-1)?.status).toBe('awaiting_consent')
+
+    await vi.advanceTimersByTimeAsync(ENTERPRISE_BACKEND_CONFIG.CONSENT_DECISION_TIMEOUT_MS)
+
+    expect(updates.at(-1)?.status).toBe('error')
+    expect(updates.at(-1)?.error).toMatch(/timed out/i)
   })
 
   it('publishes invalidation on refresh when license status is inactive', async () => {

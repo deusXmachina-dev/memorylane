@@ -2,6 +2,7 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
 import { contextBridge, ipcRenderer } from 'electron'
+import type { ConsentOutcome } from '../shared/types'
 
 console.log('[Preload] Script loading...')
 
@@ -15,6 +16,9 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   },
   activateEnterpriseLicense: (activationKey: string) =>
     ipcRenderer.invoke('main-window:activateEnterpriseLicense', activationKey),
+  getPendingConsent: () => ipcRenderer.invoke('main-window:getPendingConsent'),
+  submitConsentDecision: (outcome: ConsentOutcome) =>
+    ipcRenderer.invoke('main-window:submitConsentDecision', outcome),
   // Capture control
   getStatus: () => ipcRenderer.invoke('main-window:getStatus'),
   toggleCapture: () => ipcRenderer.invoke('main-window:toggleCapture'),
