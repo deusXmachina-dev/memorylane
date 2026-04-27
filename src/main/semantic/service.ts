@@ -172,6 +172,14 @@ export class ActivitySemanticService implements SemanticServiceContract {
     }
 
     const normalizedKey = apiKey && apiKey.trim().length > 0 ? apiKey : null
+
+    if (
+      normalizedKey === this.openRouterApiKey &&
+      (normalizedKey === null || this.client !== null)
+    ) {
+      return
+    }
+
     this.openRouterApiKey = normalizedKey
 
     if (normalizedKey) {

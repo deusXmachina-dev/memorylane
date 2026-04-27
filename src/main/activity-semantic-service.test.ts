@@ -475,6 +475,23 @@ describe('ActivitySemanticService', () => {
     })
   })
 
+  it('does not rebuild the OpenRouter client or reset health when updateApiKey gets the same key', async () => {
+    mockSend.mockResolvedValueOnce(response('OK'))
+
+    const service = new ActivitySemanticService('test-key', {
+      usageTracker: { recordUsage: vi.fn() },
+    })
+
+    await service.testConnection()
+    expect(service.getLlmHealthStatus().state).toBe('active')
+    expect(OpenRouter).toHaveBeenCalledTimes(1)
+
+    service.updateApiKey('test-key')
+
+    expect(OpenRouter).toHaveBeenCalledTimes(1)
+    expect(service.getLlmHealthStatus().state).toBe('active')
+  })
+
   it('marks LLM failing after a failed connection test', async () => {
     const service = new ActivitySemanticService(undefined, {
       client: { chat: { send: vi.fn().mockRejectedValue(new Error('connect ECONNREFUSED')) } },
