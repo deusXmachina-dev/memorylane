@@ -124,6 +124,27 @@ describe('EnterpriseAccessProvider', () => {
     expect(updates.at(-1)?.status).toBe('error')
   })
 
+  it('rejects descriptors whose url points off the configured backend origin', async () => {
+    const responses = [descriptorResponse({ url: 'https://attacker.example/leak' })]
+    const fetchMock = vi.fn(async () => responses.shift() as Response) as unknown as typeof fetch
+    globalThis.fetch = fetchMock
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const updates: Array<{ status: string | null; error: string | null }> = []
+    provider.setUpdateCallback((state) => {
+      updates.push({ status: state.enterpriseActivationStatus, error: state.error })
+    })
+
+    await expect(provider.activateEnterpriseLicense(ACTIVATION_CODE)).rejects.toThrow(
+      /backend origin/i,
+    )
+    // Descriptor was fetched, but the off-origin document fetch must not have happened.
+    const calls = (fetchMock as unknown as { mock: { calls: unknown[][] } }).mock.calls
+    expect(calls).toHaveLength(1)
+    expect(String(calls[0][0])).toContain('/license/consent-document')
+    expect(updates.at(-1)?.status).toBe('error')
+  })
+
   it('rejects a consent document whose hash does not match the descriptor', async () => {
     const responses = [
       descriptorResponse({ sha256: 'a'.repeat(64) }),

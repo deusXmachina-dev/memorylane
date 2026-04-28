@@ -29,13 +29,7 @@ export function parseActivationCode(rawCode: string): ParsedActivationCode {
     throw new Error('Activation code is malformed.')
   }
 
-  let email: string
-  try {
-    email = Buffer.from(emailEncoded, 'base64url').toString('utf8')
-  } catch {
-    throw new Error('Activation code is malformed.')
-  }
-
+  const email = Buffer.from(emailEncoded, 'base64url').toString('utf8')
   if (email === '' || !email.includes('@')) {
     throw new Error('Activation code is malformed.')
   }

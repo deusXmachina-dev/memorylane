@@ -26,11 +26,14 @@ describe('parseActivationCode', () => {
   })
 
   it('rejects standard-alphabet base64 with + or /', () => {
+    expect(() => parseActivationCode(`${tenantToken}.abc+def`)).toThrow(/malformed/i)
+    expect(() => parseActivationCode(`${tenantToken}.abc/def`)).toThrow(/malformed/i)
+  })
+
+  it('rejects base64 with `=` padding', () => {
     const padded = Buffer.from(email, 'utf8').toString('base64')
-    if (padded.includes('=') || /[+/]/.test(padded)) {
-      // make sure we still have something to test against
-      expect(() => parseActivationCode(`${tenantToken}.${padded}`)).toThrow(/malformed/i)
-    }
+    expect(padded.endsWith('=')).toBe(true)
+    expect(() => parseActivationCode(`${tenantToken}.${padded}`)).toThrow(/malformed/i)
   })
 
   it('rejects an empty string', () => {

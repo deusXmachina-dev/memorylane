@@ -331,7 +331,11 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     expectedSha256: string,
     tenantToken: string,
   ): Promise<string> {
-    const documentUrl = new URL(url, ENTERPRISE_BACKEND_CONFIG.BACKEND_URL.replace(/\/?$/, '/'))
+    const backendBase = ENTERPRISE_BACKEND_CONFIG.BACKEND_URL.replace(/\/?$/, '/')
+    const documentUrl = new URL(url, backendBase)
+    if (documentUrl.origin !== new URL(backendBase).origin) {
+      throw new Error('Consent document URL is not on the configured backend origin')
+    }
     const response = await fetch(documentUrl.toString(), {
       headers: bearer(tenantToken),
     })
