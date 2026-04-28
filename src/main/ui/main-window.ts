@@ -273,19 +273,22 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     await deps.accessProvider.refreshAccessState()
     return deps.accessProvider.getAccessState()
   })
-  ipcMain.handle('main-window:activateEnterpriseLicense', async (_event, activationKey: string) => {
-    if (!deps) {
-      return { success: false, error: 'Dependencies not initialized' }
-    }
+  ipcMain.handle(
+    'main-window:activateEnterpriseLicense',
+    async (_event, activationCode: string) => {
+      if (!deps) {
+        return { success: false, error: 'Dependencies not initialized' }
+      }
 
-    try {
-      await deps.accessProvider.activateEnterpriseLicense(activationKey)
-      return { success: true }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Activation failed'
-      return { success: false, error: message }
-    }
-  })
+      try {
+        await deps.accessProvider.activateEnterpriseLicense(activationCode)
+        return { success: true }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Activation failed'
+        return { success: false, error: message }
+      }
+    },
+  )
 
   ipcMain.handle('main-window:getPendingConsent', async () => {
     if (!deps) return null

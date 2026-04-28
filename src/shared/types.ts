@@ -244,7 +244,7 @@ export interface MainWindowAPI {
   getAccessState: () => Promise<AccessState>
   refreshAccessState: () => Promise<AccessState>
   onAccessStateChanged: (callback: (state: AccessState) => void) => void
-  activateEnterpriseLicense: (activationKey: string) => Promise<SaveResult>
+  activateEnterpriseLicense: (activationCode: string) => Promise<SaveResult>
   getPendingConsent: () => Promise<PendingConsent | null>
   submitConsentDecision: (outcome: ConsentOutcome) => Promise<SaveResult>
   getStatus: () => Promise<MainWindowStatus>

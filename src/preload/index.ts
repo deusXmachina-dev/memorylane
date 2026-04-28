@@ -14,8 +14,8 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   onAccessStateChanged: (callback: (state: unknown) => void) => {
     ipcRenderer.on('main-window:accessStateChanged', (_event, state) => callback(state))
   },
-  activateEnterpriseLicense: (activationKey: string) =>
-    ipcRenderer.invoke('main-window:activateEnterpriseLicense', activationKey),
+  activateEnterpriseLicense: (activationCode: string) =>
+    ipcRenderer.invoke('main-window:activateEnterpriseLicense', activationCode),
   getPendingConsent: () => ipcRenderer.invoke('main-window:getPendingConsent'),
   submitConsentDecision: (outcome: ConsentOutcome) =>
     ipcRenderer.invoke('main-window:submitConsentDecision', outcome),

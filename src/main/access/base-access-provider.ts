@@ -27,7 +27,7 @@ export abstract class BaseAccessProvider implements AccessProvider {
   public abstract stopPeriodicRefresh(): void
   public abstract startCheckout(plan?: SubscriptionPlan): Promise<void>
   public abstract openSubscriptionPortal(): Promise<void>
-  public abstract activateEnterpriseLicense(activationKey: string): Promise<void>
+  public abstract activateEnterpriseLicense(activationCode: string): Promise<void>
   public abstract getPendingConsent(): Promise<PendingConsent | null>
   public abstract submitConsentDecision(outcome: ConsentOutcome): Promise<void>
 

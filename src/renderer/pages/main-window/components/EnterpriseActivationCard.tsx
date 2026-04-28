@@ -53,28 +53,28 @@ function ActivationKeyEntry({
   api,
   accessState,
 }: EnterpriseActivationCardProps): React.JSX.Element {
-  const [activationKey, setActivationKey] = useState('')
+  const [activationCode, setActivationCode] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   const handleActivate = useCallback(async () => {
-    const key = activationKey.trim()
-    if (key === '') {
-      toast.error('Enter an activation key')
+    const code = activationCode.trim()
+    if (code === '') {
+      toast.error('Enter an activation code')
       return
     }
 
     setSubmitting(true)
     try {
-      const result = await api.activateEnterpriseLicense(key)
+      const result = await api.activateEnterpriseLicense(code)
       if (!result.success) {
         toast.error(result.error ?? 'Activation failed')
         return
       }
-      setActivationKey('')
+      setActivationCode('')
     } finally {
       setSubmitting(false)
     }
-  }, [activationKey, api])
+  }, [activationCode, api])
 
   return (
     <Card>
@@ -83,17 +83,17 @@ function ActivationKeyEntry({
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">
-          Enter your enterprise activation key to provision this device.
+          Enter the activation code your admin shared with you.
         </p>
 
         {accessState?.error && <p className="text-xs text-destructive">{accessState.error}</p>}
 
         <Input
           type="password"
-          placeholder="Activation key"
+          placeholder="Activation code"
           autoComplete="off"
-          value={activationKey}
-          onChange={(e) => setActivationKey(e.target.value)}
+          value={activationCode}
+          onChange={(e) => setActivationCode(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               void handleActivate()
