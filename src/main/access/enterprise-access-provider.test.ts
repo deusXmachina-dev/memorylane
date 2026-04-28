@@ -192,6 +192,7 @@ describe('EnterpriseAccessProvider', () => {
     expect(activateCall).toBeDefined()
     const init = activateCall![1] as RequestInit
     expect(init.method).toBe('POST')
+    expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${TENANT_TOKEN}`)
     expect(JSON.parse(init.body as string)).toEqual({
       tenant_token: TENANT_TOKEN,
       device_id: 'device-123',
@@ -199,6 +200,43 @@ describe('EnterpriseAccessProvider', () => {
       document_version: 7,
       outcome: 'accepted',
     })
+  })
+
+  it('sends Bearer auth and no query params on activation, status, and key endpoints', async () => {
+    const responses = [
+      descriptorResponse(),
+      pdfResponse(),
+      { ok: true, json: async () => ({ ok: true }) } as unknown as Response,
+      { ok: true, json: async () => ({ activated: true }) } as unknown as Response,
+      { ok: true, json: async () => ({ key: 'sk-or-enterprise' }) } as unknown as Response,
+    ]
+    const fetchMock = vi.fn(async () => responses.shift() as Response) as unknown as typeof fetch
+    globalThis.fetch = fetchMock
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    await provider.activateEnterpriseLicense(ACTIVATION_CODE)
+    await provider.submitConsentDecision('accepted')
+    await vi.advanceTimersByTimeAsync(ENTERPRISE_BACKEND_CONFIG.POLL_INTERVAL_MS)
+
+    const calls = (
+      fetchMock as unknown as { mock: { calls: [unknown, RequestInit | undefined][] } }
+    ).mock.calls
+
+    const descriptorCall = calls.find((c) => String(c[0]).includes('/license/consent-document'))!
+    expect(String(descriptorCall[0])).not.toContain('tenant_token=')
+    expect((descriptorCall[1]?.headers as Record<string, string>).Authorization).toBe(
+      `Bearer ${TENANT_TOKEN}`,
+    )
+
+    const statusCall = calls.find((c) => String(c[0]).includes('/license/status'))!
+    expect(String(statusCall[0])).not.toContain('device_id=')
+    expect((statusCall[1]?.headers as Record<string, string>).Authorization).toBe(
+      'Bearer device-123',
+    )
+
+    const keyCall = calls.find((c) => String(c[0]).includes('/license/key'))!
+    expect(String(keyCall[0])).not.toContain('device_id=')
+    expect((keyCall[1]?.headers as Record<string, string>).Authorization).toBe('Bearer device-123')
   })
 
   it('returns to inactive when consent is declined', async () => {

@@ -51,6 +51,10 @@ function enterpriseUrl(path: string): URL {
   return new URL(path, base)
 }
 
+function bearer(token: string): Record<string, string> {
+  return { Authorization: `Bearer ${token}` }
+}
+
 export class EnterpriseAccessProvider extends BaseAccessProvider {
   private readonly deviceIdentity: DeviceIdentity
   private pollTimer: ReturnType<typeof setInterval> | null = null
@@ -136,9 +140,10 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     )
 
     const descriptorUrl = enterpriseUrl('license/consent-document')
-    descriptorUrl.searchParams.set('tenant_token', parsed.tenantToken)
 
-    const descriptorResponse = await fetch(descriptorUrl.toString())
+    const descriptorResponse = await fetch(descriptorUrl.toString(), {
+      headers: bearer(parsed.tenantToken),
+    })
     if (!descriptorResponse.ok) {
       const errorMessage = await this.readErrorMessage(
         descriptorResponse,
@@ -187,6 +192,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       documentBytesBase64 = await this.fetchAndVerifyConsentDocument(
         descriptor.url,
         descriptor.sha256,
+        parsed.tenantToken,
       )
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to fetch consent document.'
@@ -235,6 +241,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...bearer(pending.tenantToken),
       },
       body: JSON.stringify({
         tenant_token: pending.tenantToken,
@@ -322,9 +329,12 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
   private async fetchAndVerifyConsentDocument(
     url: string,
     expectedSha256: string,
+    tenantToken: string,
   ): Promise<string> {
     const documentUrl = new URL(url, ENTERPRISE_BACKEND_CONFIG.BACKEND_URL.replace(/\/?$/, '/'))
-    const response = await fetch(documentUrl.toString())
+    const response = await fetch(documentUrl.toString(), {
+      headers: bearer(tenantToken),
+    })
     if (!response.ok) {
       throw new Error(`Consent document request failed (${response.status})`)
     }
@@ -397,9 +407,8 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
 
   private async fetchEnterpriseStatus(deviceId: string): Promise<boolean> {
     const url = enterpriseUrl('license/status')
-    url.searchParams.set('device_id', deviceId)
 
-    const response = await fetch(url.toString())
+    const response = await fetch(url.toString(), { headers: bearer(deviceId) })
     if (!response.ok) {
       throw new Error(`License status request failed (${response.status})`)
     }
@@ -414,9 +423,8 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
 
   private async fetchEnterpriseKey(deviceId: string): Promise<string | null> {
     const url = enterpriseUrl('license/key')
-    url.searchParams.set('device_id', deviceId)
 
-    const response = await fetch(url.toString())
+    const response = await fetch(url.toString(), { headers: bearer(deviceId) })
     if (!response.ok) {
       throw new Error(`License key request failed (${response.status})`)
     }
