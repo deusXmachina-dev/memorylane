@@ -349,6 +349,25 @@ describe('EnterpriseAccessProvider', () => {
     expect(updates.at(-1)?.error).toMatch(/timed out/i)
   })
 
+  it('treats 401 on /status as inactive (unknown device pre-activation)', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: 'unauthorized' }),
+    })) as unknown as typeof fetch
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const updates: Array<{ status: string | null; error: string | null }> = []
+    provider.setUpdateCallback((state) => {
+      updates.push({ status: state.enterpriseActivationStatus, error: state.error })
+    })
+
+    await provider.refreshAccessState()
+
+    expect(updates.at(-1)?.status).toBe('inactive')
+    expect(updates.at(-1)?.error).toBeNull()
+  })
+
   it('publishes invalidation on refresh when license status is inactive', async () => {
     globalThis.fetch = vi.fn(async () => ({
       ok: true,

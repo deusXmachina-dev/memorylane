@@ -409,6 +409,9 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     const url = enterpriseUrl('license/status')
 
     const response = await fetch(url.toString(), { headers: bearer(deviceId) })
+    if (response.status === 401) {
+      return false
+    }
     if (!response.ok) {
       throw new Error(`License status request failed (${response.status})`)
     }
@@ -425,6 +428,9 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     const url = enterpriseUrl('license/key')
 
     const response = await fetch(url.toString(), { headers: bearer(deviceId) })
+    if (response.status === 401) {
+      return null
+    }
     if (!response.ok) {
       throw new Error(`License key request failed (${response.status})`)
     }
