@@ -1,10 +1,11 @@
-# MemoryLane v0.24.0
+# MemoryLane v0.25.0
 
-Adds an enterprise consent step before a device is bound to an activation key.
+Reshapes the enterprise activation flow around a single user-facing activation code and a Bearer-auth backend contract.
 
 ## What's Changed
 
-- **Enterprise consent step on activation** (#126): the activate endpoint is now a probe — when the server returns a consent document, the app renders it (PDF) inline, gates Accept on a checkbox, and only binds the device after the user accepts. Decline returns to key entry; a 15-minute timeout protects against abandoned decisions. Probe responses are restricted to PDF, and the downloaded document is verified against the sha256 from the probe before it is shown.
+- **Single activation code for enterprise** (#128): users now paste one `tt_<token>.<email>` activation code instead of separate fields. The device parses it locally, sends `tenant_token` and `email` to the backend, and uses Bearer auth on `/license/*` and `/device/upload` endpoints. The consent document is fetched up-front via a descriptor, hash-verified, and pinned to the configured backend origin to prevent off-host redirection. 401 on `/status` and `/key` is now treated as inactive rather than an error.
+- **Skip semantic client rebuild on no-op key updates** (#127): `updateApiKey` no longer rebuilds the embedding client when the key hasn't changed.
 
 ## Known Issues & Limitations
 
@@ -20,4 +21,4 @@ Adds an enterprise consent step before a device is bound to an activation key.
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v0.23.8...v0.24.0
+https://github.com/deusXmachina-dev/memorylane/compare/v0.24.0...v0.25.0
