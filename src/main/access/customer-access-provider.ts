@@ -72,8 +72,8 @@ export class CustomerAccessProvider extends BaseAccessProvider {
     log.info('[CustomerAccess] Opened subscription portal in system browser')
   }
 
-  public async activateEnterpriseLicense(_activationKey: string): Promise<void> {
-    void _activationKey
+  public async activateEnterpriseLicense(_activationCode: string): Promise<void> {
+    void _activationCode
     throw new Error('Enterprise activation is only available in the enterprise edition')
   }
 

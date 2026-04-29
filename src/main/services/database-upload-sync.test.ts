@@ -56,6 +56,8 @@ describe('DatabaseUploadSync', () => {
     expect(url.toString()).toBe('http://localhost:8000/device/upload')
     expect(init.method).toBe('POST')
     expect(init.body).toBeInstanceOf(FormData)
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer device-hex-id')
+    expect((init.body as FormData).has('device_id')).toBe(false)
   })
 
   it('skips upload when not activated', async () => {

@@ -22,7 +22,7 @@ export interface AccessProvider {
   stopPeriodicRefresh(): void
   startCheckout(plan?: SubscriptionPlan): Promise<void>
   openSubscriptionPortal(): Promise<void>
-  activateEnterpriseLicense(activationKey: string): Promise<void>
+  activateEnterpriseLicense(activationCode: string): Promise<void>
   getPendingConsent(): Promise<PendingConsent | null>
   submitConsentDecision(outcome: ConsentOutcome): Promise<void>
 }

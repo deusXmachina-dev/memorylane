@@ -122,12 +122,15 @@ export class DatabaseUploadSync {
 
       const fileBuffer = fs.readFileSync(tempPath)
       const formData = new FormData()
-      formData.append('device_id', this.getDeviceId())
       formData.append('file', new Blob([fileBuffer]), 'memorylane.db')
 
       const base = this.backendUrl.replace(/\/?$/, '/')
       const url = new URL('device/upload', base)
-      const response = await fetch(url, { method: 'POST', body: formData })
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.getDeviceId()}` },
+        body: formData,
+      })
 
       if (!response.ok) {
         const body = await response.text().catch(() => '')
