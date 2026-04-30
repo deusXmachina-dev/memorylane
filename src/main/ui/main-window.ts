@@ -423,6 +423,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         buildModelChain(next.semanticVideoModel, presets.semanticVideo),
         buildModelChain(next.semanticSnapshotModel, presets.semanticSnapshot),
       )
+      deps.semanticService.updatePipelinePreference(next.semanticPipelineMode)
       deps.patternDetector?.updateModel(next.patternDetectionModel)
       deps.inferenceProvider.notifyConfigChanged()
       void deps.semanticService.testConnection()
