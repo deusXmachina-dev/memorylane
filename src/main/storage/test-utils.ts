@@ -28,6 +28,7 @@ export const createStoredActivity = (
   windowTitle: overrides.windowTitle ?? 'Test Window',
   tld: overrides.tld ?? null,
   summary: overrides.summary ?? 'Test activity summary',
+  summaryModel: overrides.summaryModel ?? '',
   ocrText: overrides.ocrText ?? 'Sample OCR text',
   vector: overrides.vector ?? v(0.1, 0.2, 0.3),
 })

@@ -70,7 +70,9 @@ function makeDeps() {
   }
 
   const semantic: ActivitySemanticService = {
-    summarizeFromVideo: vi.fn().mockResolvedValue('A summary of the activity'),
+    summarizeFromVideo: vi
+      .fn()
+      .mockResolvedValue({ summary: 'A summary of the activity', model: 'test-model' }),
   }
 
   const embedder: ActivityEmbeddingService = {
@@ -128,6 +130,7 @@ describe('DefaultActivityTransformer', () => {
       windowTitle: 'Editor',
       tld: 'github.com',
       summary: 'A summary of the activity',
+      summaryModel: 'test-model',
       ocrText: 'ocr text',
       vector: [0.1, 0.2, 0.3],
     })
@@ -166,7 +169,10 @@ describe('DefaultActivityTransformer', () => {
 
   it('falls back to embedding ocrText when summary is empty', async () => {
     const { stitcher, ocr, semantic, embedder } = makeDeps()
-    ;(semantic.summarizeFromVideo as ReturnType<typeof vi.fn>).mockResolvedValue('')
+    ;(semantic.summarizeFromVideo as ReturnType<typeof vi.fn>).mockResolvedValue({
+      summary: '',
+      model: '',
+    })
 
     const transformer = new DefaultActivityTransformer(stitcher, ocr, semantic, embedder, {
       outputDir: OUTPUT_DIR,
@@ -233,7 +239,10 @@ describe('DefaultActivityTransformer', () => {
     it('falls back to empty OCR text for embedding when OCR and summary both fail soft', async () => {
       const { stitcher, ocr, semantic, embedder } = makeDeps()
       ;(ocr.extractText as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('ocr failed'))
-      ;(semantic.summarizeFromVideo as ReturnType<typeof vi.fn>).mockResolvedValue('')
+      ;(semantic.summarizeFromVideo as ReturnType<typeof vi.fn>).mockResolvedValue({
+        summary: '',
+        model: '',
+      })
 
       const transformer = new DefaultActivityTransformer(stitcher, ocr, semantic, embedder, {
         outputDir: OUTPUT_DIR,

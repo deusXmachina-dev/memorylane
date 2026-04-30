@@ -3,7 +3,7 @@ import * as path from 'path'
 import log from '../logger'
 import type { CaptureSettings, Vendor } from '../../shared/types'
 import { VENDORS } from '../../shared/types'
-import { VENDOR_DEFAULTS } from '../../shared/vendor-defaults'
+import { getVendorDefaults } from '../../shared/vendor-defaults'
 import { normalizeExcludedApps, normalizeWildcardPatterns } from '../capture-exclusions'
 import {
   VISUAL_DETECTOR_CONFIG,
@@ -25,6 +25,8 @@ function normalizeDatabaseExportDirectory(value: string | null | undefined): str
   return typeof value === 'string' && /\S/.test(value) ? value : ''
 }
 
+const OPENROUTER_DEFAULTS = getVendorDefaults('openrouter')
+
 const DEFAULTS: CaptureSettings = {
   autoStartEnabled: true,
   visualThreshold: VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT,
@@ -43,9 +45,9 @@ const DEFAULTS: CaptureSettings = {
   excludedWindowTitlePatterns: [],
   excludedUrlPatterns: [],
   activeVendor: 'openrouter',
-  semanticVideoModel: VENDOR_DEFAULTS.openrouter.semanticVideoModel,
-  semanticSnapshotModel: VENDOR_DEFAULTS.openrouter.semanticSnapshotModel,
-  patternDetectionModel: VENDOR_DEFAULTS.openrouter.patternDetectionModel,
+  semanticVideoModel: OPENROUTER_DEFAULTS.semanticVideoModel,
+  semanticSnapshotModel: OPENROUTER_DEFAULTS.semanticSnapshotModel,
+  patternDetectionModel: OPENROUTER_DEFAULTS.patternDetectionModel,
   patternDetectionEnabled: true,
   uploadDetailLevel: 'off',
 }
@@ -144,12 +146,13 @@ export class CaptureSettingsManager {
    * defaults in one persisted write.
    */
   public setActiveVendor(vendor: Vendor): void {
-    const defaults = VENDOR_DEFAULTS[vendor]
+    const defaults = getVendorDefaults(vendor)
     this.save({
       activeVendor: vendor,
       semanticVideoModel: defaults.semanticVideoModel,
       semanticSnapshotModel: defaults.semanticSnapshotModel,
       patternDetectionModel: defaults.patternDetectionModel,
+      semanticPipelineMode: defaults.semanticVideoModel.length > 0 ? 'auto' : 'image',
     })
   }
 

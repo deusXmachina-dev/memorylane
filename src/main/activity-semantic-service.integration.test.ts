@@ -144,7 +144,7 @@ describeIntegration('semantic service integration', () => {
     })
 
     const startedAt = Date.now()
-    const summary = await service.summarizeFromVideo({
+    const { summary } = await service.summarizeFromVideo({
       activity,
       videoPath,
     })

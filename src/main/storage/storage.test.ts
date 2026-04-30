@@ -66,6 +66,7 @@ describe('StorageService', () => {
         windowTitle: 'Win',
         tld: null,
         summary: 'test',
+        summaryModel: '',
         ocrText: 'text',
         vector: v(0.1),
       })
@@ -96,6 +97,7 @@ describe('StorageService', () => {
         windowTitle: 'Backup Window',
         tld: null,
         summary: 'backup summary',
+        summaryModel: '',
         ocrText: 'backup text',
         vector: v(0.25),
       })

@@ -37,14 +37,14 @@ const VENDOR_META: Record<Vendor, VendorMeta> = {
     keyPrefix: 'sk-',
     keyHint: 'sk-...',
     needsBaseURL: 'optional',
-    defaultBaseURL: 'https://api.openai.com/v1',
+    defaultBaseURL: null,
   },
   anthropic: {
     label: 'Anthropic',
     keyPrefix: 'sk-ant-',
     keyHint: 'sk-ant-...',
     needsBaseURL: 'optional',
-    defaultBaseURL: 'https://api.anthropic.com',
+    defaultBaseURL: null,
   },
   google: {
     label: 'Google Gemini',
@@ -58,7 +58,7 @@ const VENDOR_META: Record<Vendor, VendorMeta> = {
     keyPrefix: null,
     keyHint: 'api key (optional for some local servers)',
     needsBaseURL: 'required',
-    defaultBaseURL: 'http://localhost:11434/v1',
+    defaultBaseURL: 'http://localhost:11434/api',
   },
 }
 
@@ -164,7 +164,7 @@ export function ManageKeySection({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="font-mono text-xs">
-              {status.maskedKey}
+              {status.maskedKey || 'no key'}
             </Badge>
             {status.source === 'env' && (
               <span className="text-xs text-muted-foreground">(from env)</span>

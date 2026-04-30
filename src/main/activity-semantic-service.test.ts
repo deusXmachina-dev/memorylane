@@ -225,10 +225,12 @@ function setupService(options: SetupOptions = {}): {
 
   // For custom-endpoint runs, the configured model becomes the only model for
   // both video and snapshot (mirrors the legacy single-model custom-endpoint
-  // behavior).
-  const videoModels = options.videoModels ?? (storedEndpoint ? [storedEndpoint.model] : undefined)
+  // behavior). Otherwise the test fixtures' default chains are used.
+  const videoModels =
+    options.videoModels ?? (storedEndpoint ? [storedEndpoint.model] : [...DEFAULT_VIDEO_MODELS])
   const snapshotModels =
-    options.snapshotModels ?? (storedEndpoint ? [storedEndpoint.model] : undefined)
+    options.snapshotModels ??
+    (storedEndpoint ? [storedEndpoint.model] : [...DEFAULT_SNAPSHOT_MODELS])
 
   const service = new ActivitySemanticService(provider, {
     videoModels,
@@ -421,7 +423,7 @@ describe('ActivitySemanticService', () => {
       videoPath,
     })
 
-    expect(result).toBe('video summary')
+    expect(result.summary).toBe('video summary')
     expect(fetchMock.calls).toHaveLength(1)
     expect(fetchMock.calls[0]?.body.model).toBe(DEFAULT_VIDEO_MODELS[0])
     expect(service.getLlmHealthStatus()).toEqual({
@@ -451,7 +453,7 @@ describe('ActivitySemanticService', () => {
       videoPath,
     })
 
-    expect(result).toBe('third model summary')
+    expect(result.summary).toBe('third model summary')
     expect(fetchMock.calls.map((c) => c.body.model)).toEqual(DEFAULT_VIDEO_MODELS)
     expect(service.getLlmHealthStatus().state).toBe('active')
   })
@@ -549,7 +551,7 @@ describe('ActivitySemanticService', () => {
       videoPath,
     })
 
-    expect(result).toBe('snapshot summary')
+    expect(result.summary).toBe('snapshot summary')
     expect(fetchMock.calls.map((c) => c.body.model)).toEqual([
       ...DEFAULT_VIDEO_MODELS,
       DEFAULT_SNAPSHOT_MODELS[0],
@@ -573,7 +575,7 @@ describe('ActivitySemanticService', () => {
       activity: makeActivity({ frames }),
     })
 
-    expect(result).toBe('image summary only')
+    expect(result.summary).toBe('image summary only')
     expect(fetchMock.calls).toHaveLength(1)
     expect(bodyHasVideo(fetchMock.calls[0]!.body)).toBe(false)
     const diagnostics = service.getLastRunDiagnostics()
@@ -600,7 +602,7 @@ describe('ActivitySemanticService', () => {
       videoPath,
     })
 
-    expect(result).toBe('')
+    expect(result.summary).toBe('')
     expect(fetchMock.calls.map((c) => c.body.model)).toEqual(DEFAULT_VIDEO_MODELS)
     const diagnostics = service.getLastRunDiagnostics()
     expect(diagnostics?.pipelinePreference).toBe('video')
@@ -633,7 +635,7 @@ describe('ActivitySemanticService', () => {
       videoPath,
     })
 
-    expect(result).toBe('snapshot summary from custom model')
+    expect(result.summary).toBe('snapshot summary from custom model')
     expect(fetchMock.calls.map((c) => c.body.model)).toEqual([
       'moondream:latest',
       'moondream:latest',
@@ -684,7 +686,7 @@ describe('ActivitySemanticService', () => {
       activity: makeActivity({ id: 'activity-1', frames }),
       videoPath,
     })
-    expect(firstResult).toBe('snapshot summary after cached skip')
+    expect(firstResult.summary).toBe('snapshot summary after cached skip')
 
     fetchMock.calls.length = 0
 
@@ -693,7 +695,7 @@ describe('ActivitySemanticService', () => {
       videoPath,
     })
 
-    expect(secondResult).toBe('snapshot summary after cached skip')
+    expect(secondResult.summary).toBe('snapshot summary after cached skip')
     expect(fetchMock.calls).toHaveLength(1)
     expect(bodyHasVideo(fetchMock.calls[0]!.body)).toBe(false)
 
@@ -743,7 +745,7 @@ describe('ActivitySemanticService', () => {
       videoPath,
     })
 
-    expect(secondResult).toBe('snapshot summary')
+    expect(secondResult.summary).toBe('snapshot summary')
     expect(fetchMock.calls).toHaveLength(1)
     expect(bodyHasVideo(fetchMock.calls[0]!.body)).toBe(false)
 
@@ -1039,7 +1041,7 @@ describe('ActivitySemanticService', () => {
       videoPath,
     })
 
-    expect(result).toBe('trimmed summary')
+    expect(result.summary).toBe('trimmed summary')
   })
 
   it('records usage stats on success', async () => {
@@ -1108,7 +1110,7 @@ describe('ActivitySemanticService', () => {
       videoPath,
     })
 
-    expect(result).toBe('')
+    expect(result.summary).toBe('')
     const diagnostics = service.getLastRunDiagnostics()
     expect(diagnostics?.attempts).toHaveLength(
       DEFAULT_VIDEO_MODELS.length + DEFAULT_SNAPSHOT_MODELS.length,
@@ -1137,7 +1139,7 @@ describe('ActivitySemanticService', () => {
       videoPath,
     })
 
-    expect(result).toBe('dumped summary')
+    expect(result.summary).toBe('dumped summary')
 
     const runDir = dumper.getRunDir()
     const attempts = fs.readdirSync(runDir)

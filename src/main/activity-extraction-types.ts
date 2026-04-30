@@ -8,6 +8,7 @@ export interface ExtractedActivity {
   windowTitle: string
   tld?: string
   summary: string
+  summaryModel: string
   ocrText: string
   vector: number[]
 }

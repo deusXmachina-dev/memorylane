@@ -66,6 +66,7 @@ function makeExtracted(activity: Activity): ExtractedActivity {
     windowTitle: activity.context.windowTitle ?? '',
     tld: activity.context.tld,
     summary: `summary:${activity.id}`,
+    summaryModel: '',
     ocrText: `ocr:${activity.id}`,
     vector: [0.1, 0.2, 0.3],
   }

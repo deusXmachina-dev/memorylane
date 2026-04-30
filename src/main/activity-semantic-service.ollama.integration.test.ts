@@ -142,13 +142,13 @@ describeIntegration('semantic service ollama custom endpoint integration', () =>
       snapshotModels: [OLLAMA_MODEL],
     })
 
-    const firstSummary = await service.summarizeFromVideo({
+    const { summary: firstSummary } = await service.summarizeFromVideo({
       activity: makeActivity('ollama-custom-endpoint-1', frames),
       videoPath,
     })
     const firstDiagnostics = service.getLastRunDiagnostics()
 
-    const secondSummary = await service.summarizeFromVideo({
+    const { summary: secondSummary } = await service.summarizeFromVideo({
       activity: makeActivity('ollama-custom-endpoint-2', frames),
       videoPath,
     })
