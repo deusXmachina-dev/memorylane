@@ -97,3 +97,14 @@ export function getVendorDefaults(vendor: Vendor): VendorModelDefaults {
     patternDetectionModel: p.patternDetection[0]?.id ?? '',
   }
 }
+
+/**
+ * Build a model fallback chain: user's pick first, then the remaining vendor
+ * presets as a tail. Empty userPick yields the preset list as-is. A pick that
+ * matches a preset is filtered out of the tail to avoid retrying it.
+ */
+export function buildModelChain(userPick: string, presets: ModelPreset[]): string[] {
+  const presetIds = presets.map((p) => p.id)
+  if (!userPick) return presetIds
+  return [userPick, ...presetIds.filter((id) => id !== userPick)]
+}

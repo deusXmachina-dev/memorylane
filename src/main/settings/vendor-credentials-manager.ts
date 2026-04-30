@@ -50,6 +50,8 @@ export interface MigrationResult {
   ran: boolean
   /** True if a legacy custom-endpoint config was found and migrated. */
   hadCustomEndpoint: boolean
+  /** Model id read from the legacy custom-endpoint.json, when present. */
+  customEndpointModel?: string
 }
 
 export class VendorCredentialsManager {
@@ -265,6 +267,7 @@ export class VendorCredentialsManager {
     const store: StoredV2 = { version: 2, vendors: {} }
     let ran = false
     let hadCustomEndpoint = false
+    let customEndpointModel: string | undefined
 
     // Legacy api-key-manager config (OpenRouter).
     if (fs.existsSync(this.legacyApiKeyConfigPath)) {
@@ -291,6 +294,7 @@ export class VendorCredentialsManager {
       try {
         const raw = JSON.parse(fs.readFileSync(this.legacyCustomEndpointConfigPath, 'utf-8')) as {
           serverURL?: string
+          model?: string
           encryptedApiKey?: string
         }
         if (raw.serverURL && typeof raw.serverURL === 'string') {
@@ -302,6 +306,9 @@ export class VendorCredentialsManager {
             entry.apiKey = raw.encryptedApiKey
           }
           store.vendors['openai-compatible'] = entry
+          if (typeof raw.model === 'string' && raw.model.length > 0) {
+            customEndpointModel = raw.model
+          }
           ran = true
           hadCustomEndpoint = true
           log.info('[VendorCredentialsManager] migrated legacy custom-endpoint config')
@@ -319,7 +326,7 @@ export class VendorCredentialsManager {
       }
     }
 
-    return { store, migration: { ran, hadCustomEndpoint } }
+    return { store, migration: { ran, hadCustomEndpoint, customEndpointModel } }
   }
 }
 

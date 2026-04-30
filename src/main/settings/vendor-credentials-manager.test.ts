@@ -148,10 +148,26 @@ describe('VendorCredentialsManager', () => {
     })
     expect(m.migration.ran).toBe(true)
     expect(m.migration.hadCustomEndpoint).toBe(true)
+    expect(m.migration.customEndpointModel).toBe('llama3:8b')
     expect(m.getCredentials('openai-compatible')).toEqual({
       apiKey: 'legacy-ep-key',
       baseURL: 'http://localhost:11434/v1',
     })
+  })
+
+  it('legacy custom-endpoint without model leaves customEndpointModel undefined', () => {
+    const p = paths()
+    fs.writeFileSync(
+      p.legacyCustomEndpointConfigPath,
+      JSON.stringify({ serverURL: 'http://localhost:11434/v1' }),
+    )
+    const m = new VendorCredentialsManager({
+      ...p,
+      safeStorage: makeSafeStorage(),
+      env: {},
+    })
+    expect(m.migration.hadCustomEndpoint).toBe(true)
+    expect(m.migration.customEndpointModel).toBeUndefined()
   })
 
   it('does not re-migrate when v2 file is already present', () => {

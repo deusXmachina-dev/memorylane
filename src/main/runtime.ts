@@ -19,6 +19,7 @@ import { ActivitySemanticService, SemanticFileDebugDumper } from './activity-sem
 import type { SemanticPipelinePreference } from './activity-semantic-service'
 import { InferenceProviderImpl, type InferenceProvider } from './llm'
 import type { Vendor } from '../shared/types'
+import { VENDOR_PRESETS, buildModelChain } from '../shared/vendor-defaults'
 import { createCaptureBlacklistCoordinator } from './capture-blacklist-coordinator'
 import {
   createCaptureController,
@@ -85,14 +86,12 @@ export async function createMainRuntime(params: {
         })
       : undefined
 
-  const initialVideoModels =
-    params.initialVideoModel && params.initialVideoModel.length > 0
-      ? [params.initialVideoModel]
-      : undefined
-  const initialSnapshotModels =
-    params.initialSnapshotModel && params.initialSnapshotModel.length > 0
-      ? [params.initialSnapshotModel]
-      : undefined
+  const presets = VENDOR_PRESETS[params.getActiveVendor()]
+  const initialVideoModels = buildModelChain(params.initialVideoModel ?? '', presets.semanticVideo)
+  const initialSnapshotModels = buildModelChain(
+    params.initialSnapshotModel ?? '',
+    presets.semanticSnapshot,
+  )
   const semanticService = new ActivitySemanticService(inferenceProvider, {
     usageTracker,
     debugDumper,

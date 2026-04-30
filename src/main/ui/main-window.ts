@@ -24,6 +24,7 @@ import { integrations } from '../integrations'
 import { listInstalledApps } from '../apps/installed-apps'
 import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
 import { VENDORS } from '../../shared/types'
+import { VENDOR_PRESETS, buildModelChain } from '../../shared/vendor-defaults'
 import type { AccessProvider } from '../access'
 import type {
   AccessState,
@@ -417,9 +418,10 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     try {
       deps.captureSettingsManager.setActiveVendor(vendor)
       const next = deps.captureSettingsManager.get()
+      const presets = VENDOR_PRESETS[next.activeVendor]
       deps.semanticService.updateModels(
-        next.semanticVideoModel ? [next.semanticVideoModel] : [],
-        next.semanticSnapshotModel ? [next.semanticSnapshotModel] : [],
+        buildModelChain(next.semanticVideoModel, presets.semanticVideo),
+        buildModelChain(next.semanticSnapshotModel, presets.semanticSnapshot),
       )
       deps.patternDetector?.updateModel(next.patternDetectionModel)
       deps.inferenceProvider.notifyConfigChanged()
@@ -746,11 +748,13 @@ function applyModelSettings(
 ): void {
   if (
     updated.semanticVideoModel !== previous.semanticVideoModel ||
-    updated.semanticSnapshotModel !== previous.semanticSnapshotModel
+    updated.semanticSnapshotModel !== previous.semanticSnapshotModel ||
+    updated.activeVendor !== previous.activeVendor
   ) {
+    const presets = VENDOR_PRESETS[updated.activeVendor]
     d.semanticService.updateModels(
-      updated.semanticVideoModel ? [updated.semanticVideoModel] : [],
-      updated.semanticSnapshotModel ? [updated.semanticSnapshotModel] : [],
+      buildModelChain(updated.semanticVideoModel, presets.semanticVideo),
+      buildModelChain(updated.semanticSnapshotModel, presets.semanticSnapshot),
     )
   }
   if (updated.patternDetectionModel !== previous.patternDetectionModel) {

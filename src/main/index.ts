@@ -143,6 +143,12 @@ app.on('ready', async () => {
     captureSettingsManager.get().activeVendor === 'openrouter'
   ) {
     captureSettingsManager.setActiveVendor('openai-compatible')
+    const carriedModel = vendorCredentialsManager.migration.customEndpointModel
+    if (carriedModel) {
+      // Pre-PR custom endpoints stored a single model used for vision summaries;
+      // restore it to the snapshot slot so the user's prior choice survives.
+      captureSettingsManager.save({ semanticSnapshotModel: carriedModel })
+    }
     log.info('[Main] migrated activeVendor to openai-compatible from legacy custom-endpoint')
   }
   const captureStateManager = new CaptureStateManager()
