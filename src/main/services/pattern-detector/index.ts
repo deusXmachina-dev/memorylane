@@ -16,7 +16,7 @@
  */
 
 import type { StorageService } from '../../storage'
-import type { ApiKeyManager } from '../../settings/api-key-manager'
+import type { InferenceProvider } from '../../llm'
 import { PATTERN_DETECTION_CONFIG } from '../../../shared/constants'
 import log from '../../logger'
 import { EmbeddingService } from '../../processor/embedding'
@@ -38,7 +38,7 @@ export class PatternDetector {
 
   constructor(
     private readonly storage: StorageService,
-    private readonly apiKeyManager?: ApiKeyManager,
+    private readonly provider?: InferenceProvider,
   ) {}
 
   setEnabled(enabled: boolean): void {
@@ -58,9 +58,8 @@ export class PatternDetector {
     if (!this.enabled) return
     if (this.running || this.settleTimer) return
 
-    const apiKey = this.apiKeyManager?.getApiKey()
-    if (!apiKey) {
-      log.info('[PatternDetector] No API key, skipping')
+    if (!this.provider || !this.provider.isConfigured()) {
+      log.info('[PatternDetector] No inference provider configured, skipping')
       return
     }
 
@@ -81,9 +80,10 @@ export class PatternDetector {
     log.info(
       `[PatternDetector] Scheduling run in ${PATTERN_DETECTION_CONFIG.SETTLE_DELAY_MS / 1000}s`,
     )
+    const provider = this.provider
     this.settleTimer = setTimeout(() => {
       this.settleTimer = null
-      void this.execute(apiKey)
+      void this.execute(provider)
     }, PATTERN_DETECTION_CONFIG.SETTLE_DELAY_MS)
   }
 
@@ -91,17 +91,17 @@ export class PatternDetector {
    * Run detection immediately. Used by the CLI.
    */
   async run(
-    apiKey: string,
+    provider: InferenceProvider,
     config: Partial<PatternDetectorConfig> = {},
     onProgress?: ProgressCallback,
   ): Promise<DetectionRunResult> {
-    return runDetection(apiKey, this.storage, this.embeddingService, config, onProgress)
+    return runDetection(provider, this.storage, this.embeddingService, config, onProgress)
   }
 
-  private async execute(apiKey: string): Promise<void> {
+  private async execute(provider: InferenceProvider): Promise<void> {
     this.running = true
     try {
-      const result = await runDetection(apiKey, this.storage, this.embeddingService, {
+      const result = await runDetection(provider, this.storage, this.embeddingService, {
         model: this.model,
       })
       log.info(

@@ -1,17 +1,17 @@
 /**
  * User context builder service.
  *
- * Analyzes the past week of activities via a single LLM call (OpenRouter) to
- * produce a short and detailed summary of who the user is. These summaries
- * are stored in the DB and injected into other LLM prompts for personalization.
+ * Analyzes the past week of activities via a single LLM call to produce a
+ * short and detailed summary of who the user is. These summaries are stored
+ * in the DB and injected into other LLM prompts for personalization.
  *
  * Scheduling mirrors PatternDetector: call scheduleRun() on screen unlock
  * and the service handles interval guards, settle delays, and error isolation.
  */
 
-import { OpenRouter } from '@openrouter/sdk'
+import { generateText } from 'ai'
 import type { StorageService, ActivityDetail } from '../storage'
-import type { ApiKeyManager } from '../settings/api-key-manager'
+import type { InferenceProvider } from '../llm'
 import type { UserContext } from '../storage/user-context-repository'
 import { USER_CONTEXT_CONFIG } from '../../shared/constants'
 import log from '../logger'
@@ -238,7 +238,7 @@ export class UserContextBuilder {
 
   constructor(
     private readonly storage: StorageService,
-    private readonly apiKeyManager?: ApiKeyManager,
+    private readonly provider?: InferenceProvider,
   ) {}
 
   /**
@@ -248,9 +248,8 @@ export class UserContextBuilder {
   scheduleRun(): void {
     if (this.running || this.settleTimer) return
 
-    const apiKey = this.apiKeyManager?.getApiKey()
-    if (!apiKey) {
-      log.info('[UserContextBuilder] No API key, skipping')
+    if (!this.provider || !this.provider.isConfigured()) {
+      log.info('[UserContextBuilder] No inference provider configured, skipping')
       return
     }
 
@@ -271,9 +270,10 @@ export class UserContextBuilder {
     log.info(
       `[UserContextBuilder] Scheduling run in ${USER_CONTEXT_CONFIG.SETTLE_DELAY_MS / 1000}s`,
     )
+    const provider = this.provider
     this.settleTimer = setTimeout(() => {
       this.settleTimer = null
-      void this.execute(apiKey)
+      void this.execute(provider)
     }, USER_CONTEXT_CONFIG.SETTLE_DELAY_MS)
   }
 
@@ -281,17 +281,17 @@ export class UserContextBuilder {
    * Run context update immediately. Used by the CLI.
    */
   async run(
-    apiKey: string,
+    provider: InferenceProvider,
     config: Partial<UserContextBuilderConfig> = {},
     onProgress?: ProgressCallback,
   ): Promise<UserContextResult> {
-    return runUserContextUpdate(apiKey, this.storage, config, onProgress)
+    return runUserContextUpdate(provider, this.storage, config, onProgress)
   }
 
-  private async execute(apiKey: string): Promise<void> {
+  private async execute(provider: InferenceProvider): Promise<void> {
     this.running = true
     try {
-      const result = await runUserContextUpdate(apiKey, this.storage)
+      const result = await runUserContextUpdate(provider, this.storage)
       log.info(
         `[UserContextBuilder] Run complete, ` +
           `tokens: ${result.tokenUsage.input}in/${result.tokenUsage.output}out`,
@@ -309,7 +309,7 @@ export class UserContextBuilder {
 // ---------------------------------------------------------------------------
 
 async function runUserContextUpdate(
-  apiKey: string,
+  provider: InferenceProvider,
   storage: StorageService,
   config: Partial<UserContextBuilderConfig> = {},
   onProgress?: ProgressCallback,
@@ -355,26 +355,19 @@ async function runUserContextUpdate(
   const systemPrompt = buildSystemPrompt(existing)
   const userMessage = `Activity stats from the past ${cfg.lookbackDays} days:\n\n\`\`\`json\n${JSON.stringify(profile, null, 2)}\n\`\`\``
 
-  const client = new OpenRouter({ apiKey })
-
   progress(`Sending aggregated profile to ${cfg.model}...`)
-  const response = await client.chat.send({
-    model: cfg.model,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userMessage },
-    ],
+  const result = await generateText({
+    model: provider.languageModel(cfg.model),
+    system: systemPrompt,
+    prompt: userMessage,
   })
 
-  const choice = response.choices?.[0]
-  const content = typeof choice?.message?.content === 'string' ? choice.message.content : ''
-
-  const totalInputTokens = response.usage?.promptTokens || 0
-  const totalOutputTokens = response.usage?.completionTokens || 0
+  const totalInputTokens = result.usage.inputTokens ?? 0
+  const totalOutputTokens = result.usage.outputTokens ?? 0
   progress(`Response received (${totalInputTokens} in / ${totalOutputTokens} out tokens)`)
 
   // 5. Parse and persist
-  const parsed = extractContextFromResponse(content)
+  const parsed = extractContextFromResponse(result.text)
   if (!parsed) {
     throw new Error('Failed to parse user context from LLM response')
   }

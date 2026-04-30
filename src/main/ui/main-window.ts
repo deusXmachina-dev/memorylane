@@ -44,13 +44,15 @@ import type { StorageService } from '../storage'
 import type { UsageTracker } from '../services/usage-tracker'
 
 interface SemanticService {
-  updateApiKey(apiKey: string | null): void
-  updateEndpoint(config: CustomEndpointConfig | null, openRouterKey?: string | null): void
   updatePipelinePreference(preference: SemanticPipelineMode): void
   updateRequestTimeoutMs(timeoutMs: number): void
   updateModels(videoModels: string[], snapshotModels: string[]): void
   getLlmHealthStatus(): LlmHealthStatus
   testConnection(): Promise<void>
+}
+
+interface InferenceProviderLike {
+  notifyConfigChanged(): void
 }
 
 interface PatternDetectorService {
@@ -74,6 +76,7 @@ interface MainWindowDependencies {
   usageTracker: UsageTracker
   apiKeyManager: ApiKeyManager
   customEndpointManager: CustomEndpointManager
+  inferenceProvider: InferenceProviderLike
   semanticService: SemanticService
   accessProvider: AccessProvider
   captureSettingsManager: CaptureSettingsManager
@@ -364,7 +367,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
     try {
       deps.apiKeyManager.saveApiKey(key)
-      deps.semanticService.updateApiKey(key)
+      deps.inferenceProvider.notifyConfigChanged()
       void deps.semanticService.testConnection()
       return { success: true }
     } catch (error) {
@@ -379,7 +382,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
     try {
       deps.apiKeyManager.deleteApiKey()
-      deps.semanticService.updateApiKey(null)
+      deps.inferenceProvider.notifyConfigChanged()
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -434,7 +437,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       }
       try {
         deps.customEndpointManager.saveEndpoint(config)
-        deps.semanticService.updateEndpoint(deps.customEndpointManager.getEndpoint())
+        deps.inferenceProvider.notifyConfigChanged()
         void deps.semanticService.testConnection()
         return { success: true }
       } catch (error) {
@@ -450,8 +453,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
     try {
       deps.customEndpointManager.deleteEndpoint()
-      const openRouterKey = deps.apiKeyManager.getApiKey()
-      deps.semanticService.updateEndpoint(null, openRouterKey)
+      deps.inferenceProvider.notifyConfigChanged()
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -463,12 +465,12 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   deps.accessProvider.setUpdateCallback((state, payload) => {
     if (payload?.key && deps) {
       deps.apiKeyManager.saveApiKey(payload.key, 'managed')
-      deps.semanticService.updateApiKey(payload.key)
+      deps.inferenceProvider.notifyConfigChanged()
     }
     if (payload?.invalidate && deps && deps.apiKeyManager.getKeySource() === 'managed') {
       log.info('[MainWindow] Invalidating stale managed key')
       deps.apiKeyManager.deleteApiKey()
-      deps.semanticService.updateApiKey(null)
+      deps.inferenceProvider.notifyConfigChanged()
     }
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('main-window:accessStateChanged', state)

@@ -1,29 +1,41 @@
 import log from '../logger'
-import {
-  describeSemanticError,
-  extractSemanticSummary,
-  extractSemanticUsage,
-  safeJsonStringify,
-} from './response-utils'
+import { describeSemanticError, safeJsonStringify } from './response-utils'
 import type {
   AttemptResult,
   ChatContentItem,
-  ChatRequest,
-  ChatResponseLike,
-  SemanticChatClient,
   SemanticMode,
   SemanticRoundTripDump,
   SemanticRunDiagnostics,
 } from './types'
 
+/**
+ * Outcome of a single LLM call. Returned by the `invoke` callback in
+ * trySemanticModelChain.
+ */
+export interface ChainAttemptOutcome {
+  summary: string
+  promptTokens: number
+  completionTokens: number
+  /** Optional response payload to write into debug dumps. */
+  responseDump?: unknown
+}
+
 export interface TrySemanticModelChainParams {
-  client: SemanticChatClient
   requestTimeoutMs: number
   mode: SemanticMode
   models: string[]
   prompt: string
   diagnostics: SemanticRunDiagnostics
   buildContent: (model: string) => ChatContentItem[]
+  /**
+   * Invoke the LLM for `model` with `content`. Implementations choose the
+   * underlying transport (AI SDK generateText, raw HTTP, etc.).
+   */
+  invoke: (input: {
+    model: string
+    content: ChatContentItem[]
+    signal: AbortSignal
+  }) => Promise<ChainAttemptOutcome>
   onRecordUsage(input: { model: string; promptTokens: number; completionTokens: number }): void
   onDumpRoundTrip(input: SemanticRoundTripDump): void
   onAttemptFailed?(input: { mode: SemanticMode; model: string; error: string }): void
@@ -37,29 +49,23 @@ export async function trySemanticModelChain(
   }
 
   for (const model of params.models) {
-    const request: ChatRequest = {
-      model,
-      messages: [
-        {
-          role: 'user',
-          content: params.buildContent(model),
-        },
-      ],
-    }
-    const requestJson = safeJsonStringify(request)
+    const content = params.buildContent(model)
+    const requestForDump = { model, messages: [{ role: 'user' as const, content }] }
+    const requestJson = safeJsonStringify(requestForDump)
     const startedAt = Date.now()
 
     try {
-      const response = (await withTimeout(
-        params.client.chat.send(request),
+      const outcome = await withTimeout(
+        (signal) => params.invoke({ model, content, signal }),
         params.requestTimeoutMs,
         `semantic model request timed out after ${params.requestTimeoutMs}ms`,
-      )) as ChatResponseLike
+      )
 
-      const responseJson = safeJsonStringify(response)
-      const summary = extractSemanticSummary(response)
-      const usage = extractSemanticUsage(response)
       const durationMs = Date.now() - startedAt
+      const summary = outcome.summary.trim()
+      const responseJson = outcome.responseDump
+        ? safeJsonStringify(outcome.responseDump)
+        : undefined
 
       if (summary.length === 0) {
         params.diagnostics.attempts.push({
@@ -68,8 +74,8 @@ export async function trySemanticModelChain(
           durationMs,
           success: false,
           error: 'empty summary',
-          promptTokens: usage.promptTokens,
-          completionTokens: usage.completionTokens,
+          promptTokens: outcome.promptTokens,
+          completionTokens: outcome.completionTokens,
         })
 
         params.onDumpRoundTrip({
@@ -79,7 +85,7 @@ export async function trySemanticModelChain(
           startedAt,
           durationMs,
           success: false,
-          request,
+          request: requestForDump,
           error: 'empty summary',
           requestJson,
           responseJson,
@@ -93,14 +99,14 @@ export async function trySemanticModelChain(
         model,
         durationMs,
         success: true,
-        promptTokens: usage.promptTokens,
-        completionTokens: usage.completionTokens,
+        promptTokens: outcome.promptTokens,
+        completionTokens: outcome.completionTokens,
       })
 
       params.onRecordUsage({
         model,
-        promptTokens: usage.promptTokens,
-        completionTokens: usage.completionTokens,
+        promptTokens: outcome.promptTokens,
+        completionTokens: outcome.completionTokens,
       })
 
       params.onDumpRoundTrip({
@@ -110,7 +116,7 @@ export async function trySemanticModelChain(
         startedAt,
         durationMs,
         success: true,
-        request,
+        request: requestForDump,
         requestJson,
         responseJson,
         summary,
@@ -148,7 +154,7 @@ export async function trySemanticModelChain(
         startedAt,
         durationMs,
         success: false,
-        request,
+        request: requestForDump,
         requestJson,
         error: detail,
       })
@@ -175,17 +181,23 @@ export async function trySemanticModelChain(
   return null
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+async function withTimeout<T>(
+  fn: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  const controller = new AbortController()
   let timeoutHandle: NodeJS.Timeout | null = null
 
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutHandle = setTimeout(() => {
+      controller.abort()
       reject(new Error(message))
     }, timeoutMs)
   })
 
   try {
-    return await Promise.race([promise, timeoutPromise])
+    return await Promise.race([fn(controller.signal), timeoutPromise])
   } finally {
     if (timeoutHandle) {
       clearTimeout(timeoutHandle)

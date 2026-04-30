@@ -18,6 +18,7 @@ import { SqliteActivitySink } from './sqlite-activity-sink'
 import { FfmpegVideoStitcher } from './video/video-stitcher'
 import { ActivitySemanticService, SemanticFileDebugDumper } from './activity-semantic-service'
 import type { SemanticPipelinePreference } from './activity-semantic-service'
+import { InferenceProviderImpl, type InferenceProvider } from './llm'
 import { createCaptureBlacklistCoordinator } from './capture-blacklist-coordinator'
 import {
   createCaptureController,
@@ -31,6 +32,7 @@ export interface MainRuntime {
   usageTracker: UsageTracker
   apiKeyManager: ApiKeyManager
   customEndpointManager: CustomEndpointManager
+  inferenceProvider: InferenceProvider
   semanticService: ActivitySemanticService
   accessProvider: AccessProvider
   updateExclusions(exclusions: {
@@ -60,6 +62,10 @@ export async function createMainRuntime(params: {
 
   const apiKeyManager = new ApiKeyManager()
   const customEndpointManager = new CustomEndpointManager()
+  const inferenceProvider = new InferenceProviderImpl({
+    apiKeyManager,
+    customEndpointManager,
+  })
   const dev = !app.isPackaged
   const userDataPath = app.getPath('userData')
   const dbFile = dev ? 'memorylane-dev.db' : 'memorylane.db'
@@ -77,19 +83,11 @@ export async function createMainRuntime(params: {
         })
       : undefined
 
-  const savedEndpoint = customEndpointManager.getEndpoint()
-  const semanticService = new ActivitySemanticService(apiKeyManager.getApiKey() || undefined, {
+  const semanticService = new ActivitySemanticService(inferenceProvider, {
     usageTracker,
     debugDumper,
     pipelinePreference: params.semanticPipelinePreference,
     requestTimeoutMs: params.semanticRequestTimeoutMs,
-    endpointConfig: savedEndpoint
-      ? {
-          serverURL: savedEndpoint.serverURL,
-          model: savedEndpoint.model,
-          apiKey: savedEndpoint.apiKey,
-        }
-      : undefined,
   })
 
   semanticService.setUserContext(() => storage.userContext.get()?.shortSummary ?? null)
@@ -172,6 +170,7 @@ export async function createMainRuntime(params: {
     usageTracker,
     apiKeyManager,
     customEndpointManager,
+    inferenceProvider,
     semanticService,
     accessProvider,
     updateExclusions(exclusions): void {

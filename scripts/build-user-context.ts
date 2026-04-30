@@ -15,6 +15,7 @@ import * as fs from 'fs'
 import { StorageService } from '../src/main/storage/index'
 import { getDefaultDbPath } from '../src/main/paths'
 import { UserContextBuilder } from '../src/main/services/user-context-builder'
+import { InferenceProviderImpl } from '../src/main/llm'
 import { USER_CONTEXT_CONFIG } from '../src/shared/constants'
 
 // ---------------------------------------------------------------------------
@@ -91,8 +92,11 @@ async function main() {
   console.log('\n--- Running update ---\n')
 
   try {
+    const provider = new InferenceProviderImpl({
+      apiKeyManager: { getApiKey: () => apiKey },
+    })
     const builder = new UserContextBuilder(storageService)
-    const result = await builder.run(apiKey, { model, lookbackDays: days }, (msg) => {
+    const result = await builder.run(provider, { model, lookbackDays: days }, (msg) => {
       console.log(`  ${msg}`)
     })
 

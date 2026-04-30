@@ -16,6 +16,7 @@ import * as fs from 'fs'
 import { StorageService } from '../src/main/storage/index'
 import { getDefaultDbPath } from '../src/main/paths'
 import { PatternDetector } from '../src/main/services/pattern-detector'
+import { InferenceProviderImpl } from '../src/main/llm'
 import { PATTERN_DETECTION_CONFIG } from '../src/shared/constants'
 
 // ---------------------------------------------------------------------------
@@ -97,9 +98,12 @@ async function main() {
   }
 
   try {
+    const provider = new InferenceProviderImpl({
+      apiKeyManager: { getApiKey: () => apiKey },
+    })
     const detector = new PatternDetector(storageService)
     const result = await detector.run(
-      apiKey,
+      provider,
       {
         model,
         lookbackDays: days,

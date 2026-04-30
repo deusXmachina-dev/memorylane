@@ -4,6 +4,7 @@ import sharp from 'sharp'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { Activity, ActivityFrame } from './activity-types'
 import { ActivitySemanticService, SemanticFileDebugDumper } from './activity-semantic-service'
+import { InferenceProviderImpl } from './llm'
 import { FfmpegVideoStitcher } from './video/video-stitcher'
 
 const RUN_INTEGRATION = process.env.RUN_SEMANTIC_OLLAMA_INTEGRATION === '1'
@@ -124,12 +125,16 @@ describeIntegration('semantic service ollama custom endpoint integration', () =>
       copyMediaAssets: true,
     })
 
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: OLLAMA_BASE_URL,
-        model: OLLAMA_MODEL,
-        apiKey: OLLAMA_API_KEY,
+    const provider = new InferenceProviderImpl({
+      customEndpointManager: {
+        getEndpoint: () => ({
+          serverURL: OLLAMA_BASE_URL,
+          model: OLLAMA_MODEL,
+          apiKey: OLLAMA_API_KEY,
+        }),
       },
+    })
+    const service = new ActivitySemanticService(provider, {
       usageTracker: { recordUsage: () => undefined },
       debugDumper,
       requestTimeoutMs: 120_000,

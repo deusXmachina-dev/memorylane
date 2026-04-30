@@ -4,6 +4,7 @@ import sharp from 'sharp'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { Activity, ActivityFrame } from './activity-types'
 import { ActivitySemanticService, SemanticFileDebugDumper } from './activity-semantic-service'
+import { InferenceProviderImpl } from './llm'
 import { FfmpegVideoStitcher } from './video/video-stitcher'
 
 const RUN_INTEGRATION =
@@ -130,7 +131,10 @@ describeIntegration('semantic service integration', () => {
       rootDir: llmDumpRootDir,
       copyMediaAssets: true,
     })
-    const service = new ActivitySemanticService(process.env.OPENROUTER_API_KEY, {
+    const provider = new InferenceProviderImpl({
+      apiKeyManager: { getApiKey: () => process.env.OPENROUTER_API_KEY ?? null },
+    })
+    const service = new ActivitySemanticService(provider, {
       usageTracker: { recordUsage: () => undefined },
       debugDumper,
     })
