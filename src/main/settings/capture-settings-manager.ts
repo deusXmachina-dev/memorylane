@@ -1,7 +1,9 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import log from '../logger'
-import type { CaptureSettings } from '../../shared/types'
+import type { CaptureSettings, Vendor } from '../../shared/types'
+import { VENDORS } from '../../shared/types'
+import { VENDOR_DEFAULTS } from '../../shared/vendor-defaults'
 import { normalizeExcludedApps, normalizeWildcardPatterns } from '../capture-exclusions'
 import {
   VISUAL_DETECTOR_CONFIG,
@@ -12,6 +14,12 @@ import {
   DEFAULT_CAPTURE_HOTKEY_ACCELERATOR,
   normalizeCaptureHotkeyAccelerator,
 } from '../hotkey-capture'
+
+function normalizeVendor(value: unknown): Vendor {
+  return typeof value === 'string' && (VENDORS as readonly string[]).includes(value)
+    ? (value as Vendor)
+    : 'openrouter'
+}
 
 function normalizeDatabaseExportDirectory(value: string | null | undefined): string {
   return typeof value === 'string' && /\S/.test(value) ? value : ''
@@ -34,9 +42,10 @@ const DEFAULTS: CaptureSettings = {
   excludedApps: [],
   excludedWindowTitlePatterns: [],
   excludedUrlPatterns: [],
-  semanticVideoModel: '',
-  semanticSnapshotModel: '',
-  patternDetectionModel: '',
+  activeVendor: 'openrouter',
+  semanticVideoModel: VENDOR_DEFAULTS.openrouter.semanticVideoModel,
+  semanticSnapshotModel: VENDOR_DEFAULTS.openrouter.semanticSnapshotModel,
+  patternDetectionModel: VENDOR_DEFAULTS.openrouter.patternDetectionModel,
   patternDetectionEnabled: true,
   uploadDetailLevel: 'off',
 }
@@ -78,12 +87,19 @@ export class CaptureSettingsManager {
             data.captureHotkeyAccelerator ?? data.pauseHotkeyAccelerator,
           ),
           databaseExportDirectory: normalizeDatabaseExportDirectory(data.databaseExportDirectory),
+          activeVendor: normalizeVendor(data.activeVendor),
           semanticVideoModel:
-            typeof data.semanticVideoModel === 'string' ? data.semanticVideoModel : '',
+            typeof data.semanticVideoModel === 'string'
+              ? data.semanticVideoModel
+              : DEFAULTS.semanticVideoModel,
           semanticSnapshotModel:
-            typeof data.semanticSnapshotModel === 'string' ? data.semanticSnapshotModel : '',
+            typeof data.semanticSnapshotModel === 'string'
+              ? data.semanticSnapshotModel
+              : DEFAULTS.semanticSnapshotModel,
           patternDetectionModel:
-            typeof data.patternDetectionModel === 'string' ? data.patternDetectionModel : '',
+            typeof data.patternDetectionModel === 'string'
+              ? data.patternDetectionModel
+              : DEFAULTS.patternDetectionModel,
         }
       }
     } catch (error) {
@@ -121,6 +137,20 @@ export class CaptureSettingsManager {
       log.error('[CaptureSettings] Failed to save settings:', error)
       throw error
     }
+  }
+
+  /**
+   * Switch the active vendor and reset the three model fields to that vendor's
+   * defaults in one persisted write.
+   */
+  public setActiveVendor(vendor: Vendor): void {
+    const defaults = VENDOR_DEFAULTS[vendor]
+    this.save({
+      activeVendor: vendor,
+      semanticVideoModel: defaults.semanticVideoModel,
+      semanticSnapshotModel: defaults.semanticSnapshotModel,
+      patternDetectionModel: defaults.patternDetectionModel,
+    })
   }
 
   public reset(): void {

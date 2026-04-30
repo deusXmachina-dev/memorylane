@@ -6,7 +6,18 @@ import { ACTIVITY_CONFIG, VISUAL_DETECTOR_CONFIG } from '@constants'
 import type { Activity, ActivityFrame } from './activity-types'
 import { ActivitySemanticService, SemanticFileDebugDumper } from './activity-semantic-service'
 import { InferenceProviderImpl } from './llm'
-import type { CustomEndpointManager } from './settings/custom-endpoint-manager'
+import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
+import type { Vendor } from '../shared/types'
+
+function makeSafeStorageShim() {
+  return {
+    isEncryptionAvailable: () => true,
+    encryptString: (s: string) => Buffer.from(s, 'utf-8'),
+    decryptString: (b: Buffer) => b.toString('utf-8'),
+  }
+}
+
+const tempDirs: string[] = []
 
 vi.mock('./logger', () => ({
   default: {
@@ -186,22 +197,47 @@ function setupService(options: SetupOptions = {}): {
   const fetchMock = makeFetchMock()
   const storedKey = options.apiKey === undefined ? 'test-key' : options.apiKey
   const storedEndpoint = options.endpoint ?? null
+  const activeVendor: Vendor = storedEndpoint ? 'openai-compatible' : 'openrouter'
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sem-svc-test-'))
+  tempDirs.push(tmpDir)
+  const vendorCredentials = new VendorCredentialsManager({
+    configPath: path.join(tmpDir, 'vendor-credentials.json'),
+    legacyApiKeyConfigPath: path.join(tmpDir, '__missing-api-key.json'),
+    legacyCustomEndpointConfigPath: path.join(tmpDir, '__missing-endpoint.json'),
+    safeStorage: makeSafeStorageShim(),
+    env: {},
+  })
+  if (storedEndpoint) {
+    vendorCredentials.saveCredentials('openai-compatible', {
+      apiKey: storedEndpoint.apiKey ?? 'noop',
+      baseURL: storedEndpoint.serverURL,
+    })
+  } else if (storedKey) {
+    vendorCredentials.saveCredentials('openrouter', { apiKey: storedKey })
+  }
+
   const provider = new InferenceProviderImpl({
-    apiKeyOverride: storedKey ?? undefined,
-    customEndpointOverride: storedEndpoint,
+    credentials: vendorCredentials,
+    getActiveVendor: () => activeVendor,
     fetch: fetchMock.fn as unknown as typeof globalThis.fetch,
   })
+
+  // For custom-endpoint runs, the configured model becomes the only model for
+  // both video and snapshot (mirrors the legacy single-model custom-endpoint
+  // behavior).
+  const videoModels = options.videoModels ?? (storedEndpoint ? [storedEndpoint.model] : undefined)
+  const snapshotModels =
+    options.snapshotModels ?? (storedEndpoint ? [storedEndpoint.model] : undefined)
+
   const service = new ActivitySemanticService(provider, {
-    videoModels: options.videoModels,
-    snapshotModels: options.snapshotModels,
+    videoModels,
+    snapshotModels,
     pipelinePreference: options.pipelinePreference,
     requestTimeoutMs: options.requestTimeoutMs,
     usageTracker: options.usageTracker ?? { recordUsage: vi.fn() },
     debugDumper: options.debugDumper,
     fetchImpl: fetchMock.fn as unknown as typeof globalThis.fetch,
-    customEndpointManager: storedEndpoint
-      ? ({ getEndpoint: () => storedEndpoint } as unknown as CustomEndpointManager)
-      : undefined,
   })
   return { service, fetchMock, provider }
 }
@@ -269,7 +305,6 @@ function makeActivity(params?: {
 }
 
 describe('ActivitySemanticService', () => {
-  const tempDirs: string[] = []
   const originalSnapshotCap = ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM
   const originalVisualThreshold = VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT
   const originalSemanticTimeout = ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS
@@ -296,7 +331,7 @@ describe('ActivitySemanticService', () => {
   it('reports configured when an API key is set', () => {
     const { service } = setupService({ apiKey: 'test-key' })
     expect(service.isConfigured()).toBe(true)
-    expect(service.isUsingCustomEndpoint()).toBe(false)
+    expect(service.isConfigured()).toBe(true)
   })
 
   it('reports configured when only a custom endpoint is set', () => {
@@ -305,7 +340,6 @@ describe('ActivitySemanticService', () => {
       endpoint: { serverURL: 'http://localhost:11434/v1', model: 'custom-model' },
     })
     expect(service.isConfigured()).toBe(true)
-    expect(service.isUsingCustomEndpoint()).toBe(true)
   })
 
   it('uses shared semantic timeout default when requestTimeoutMs is not provided', async () => {
@@ -666,7 +700,7 @@ describe('ActivitySemanticService', () => {
     const secondDiagnostics = service.getLastRunDiagnostics()
     expect(secondDiagnostics?.attempts.map((a) => a.mode)).toEqual(['snapshot'])
     expect(secondDiagnostics?.fallbackReason).toBe(
-      'custom endpoint model marked video-unsupported (session)',
+      'active model marked video-unsupported (session)',
     )
   })
 
@@ -716,7 +750,7 @@ describe('ActivitySemanticService', () => {
     const secondDiagnostics = service.getLastRunDiagnostics()
     expect(secondDiagnostics?.attempts.map((a) => a.mode)).toEqual(['snapshot'])
     expect(secondDiagnostics?.fallbackReason).toBe(
-      'custom endpoint model marked video-unsupported (session)',
+      'active model marked video-unsupported (session)',
     )
     expect(secondDiagnostics?.chosenMode).toBe('snapshot')
   })

@@ -1,111 +1,103 @@
 import type { LanguageModel } from 'ai'
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import type { ApiKeyManager } from '../settings/api-key-manager'
-import type { CustomEndpointManager } from '../settings/custom-endpoint-manager'
-import type { CustomEndpointConfig } from '../../shared/types'
+import type { Vendor, VendorCredentials } from '../../shared/types'
+import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
+import { createSdkProvider, rawHttpBaseURL, vendorSupportsRawHttp } from './adapters'
 import log from '../logger'
 
-const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
-
-export interface InferenceRouteSnapshot {
+export interface VendorRouteSnapshot {
+  vendor: Vendor
   baseURL: string
   apiKey: string
 }
 
 export interface InferenceProvider {
+  /** True when the *active* vendor has usable credentials. */
   isConfigured(): boolean
+  /** Currently active vendor. */
+  getActiveVendor(): Vendor
   /**
-   * Resolve a Vercel AI SDK LanguageModel handle for the given model id, pointed
-   * at the active route (custom endpoint if configured, OpenRouter otherwise).
-   * Throws when no route is configured.
+   * Resolve a Vercel AI SDK LanguageModel for the active vendor and given
+   * model id. Throws when the active vendor is not configured.
    */
   languageModel(modelId: string): LanguageModel
   /**
-   * Snapshot of the active route's credentials. Used by code paths that send
-   * raw HTTP requests (e.g. multimodal video, which the OpenAI-compatible
-   * adapter does not handle).
+   * Snapshot of the active route's wire-level details. Returns non-null only
+   * for vendors that speak the OpenAI-compatible chat-completions wire format
+   * ('openrouter', 'openai-compatible'). Used by the raw-HTTP video pipeline.
    */
-  getRouteSnapshot(): InferenceRouteSnapshot | null
-  /**
-   * Notify the provider that ApiKeyManager / CustomEndpointManager state has
-   * changed. Invalidates the cached SDK provider and fires listeners.
-   */
+  getRouteSnapshot(): VendorRouteSnapshot | null
+  /** Invalidate cached SDK providers and notify listeners. */
   notifyConfigChanged(): void
   onConfigChanged(listener: () => void): () => void
 }
 
 export interface InferenceProviderOptions {
-  apiKeyManager?: ApiKeyManager | null
-  customEndpointManager?: CustomEndpointManager | null
+  credentials: VendorCredentialsManager
   /**
-   * Direct API key, taking precedence over `apiKeyManager`. For CLI scripts
-   * and tests that hold a key in hand and don't want to construct a real
-   * `ApiKeyManager` (which depends on Electron's `safeStorage` and `userData`).
+   * Accessor returning the currently active vendor. Typically reads from
+   * CaptureSettingsManager.
    */
-  apiKeyOverride?: string
-  /**
-   * Direct custom-endpoint config, taking precedence over `customEndpointManager`.
-   * For tests; mirrors `apiKeyOverride`.
-   */
-  customEndpointOverride?: CustomEndpointConfig | null
-  /**
-   * Optional custom fetch implementation, primarily for tests. Forwarded to
-   * the underlying @ai-sdk/openai-compatible provider.
-   */
+  getActiveVendor: () => Vendor
+  /** Optional fetch override forwarded to all underlying SDK providers (tests). */
   fetch?: typeof globalThis.fetch
 }
 
+interface CacheEntry {
+  signature: string
+  sdkProvider: { languageModel(modelId: string): LanguageModel }
+}
+
 export class InferenceProviderImpl implements InferenceProvider {
-  private readonly apiKeyManager: ApiKeyManager | null
-  private readonly customEndpointManager: CustomEndpointManager | null
-  private readonly apiKeyOverride: string | null
-  private readonly hasCustomEndpointOverride: boolean
-  private readonly customEndpointOverride: CustomEndpointConfig | null
+  private readonly credentials: VendorCredentialsManager
+  private readonly getActiveVendorAccessor: () => Vendor
   private readonly customFetch: typeof globalThis.fetch | undefined
-  private cachedSignature: string | null = null
-  private cachedSdkProvider: ReturnType<typeof createOpenAICompatible> | null = null
+  private readonly sdkCache = new Map<Vendor, CacheEntry>()
   private readonly listeners = new Set<() => void>()
 
-  constructor(options: InferenceProviderOptions = {}) {
-    this.apiKeyManager = options.apiKeyManager ?? null
-    this.customEndpointManager = options.customEndpointManager ?? null
-    this.apiKeyOverride = options.apiKeyOverride ?? null
-    this.hasCustomEndpointOverride = 'customEndpointOverride' in options
-    this.customEndpointOverride = options.customEndpointOverride ?? null
+  constructor(options: InferenceProviderOptions) {
+    this.credentials = options.credentials
+    this.getActiveVendorAccessor = options.getActiveVendor
     this.customFetch = options.fetch
   }
 
   isConfigured(): boolean {
-    return this.resolveRoute() !== null
+    return this.credentials.getCredentials(this.getActiveVendor()) !== null
+  }
+
+  getActiveVendor(): Vendor {
+    return this.getActiveVendorAccessor()
   }
 
   languageModel(modelId: string): LanguageModel {
-    const route = this.resolveRoute()
-    if (!route) {
-      throw new Error(
-        'InferenceProvider has no active route (no API key and no custom endpoint configured)',
-      )
+    const vendor = this.getActiveVendor()
+    const creds = this.credentials.getCredentials(vendor)
+    if (!creds) {
+      throw new Error(`InferenceProvider: vendor "${vendor}" is not configured`)
     }
-    const signature = this.signatureFor(route)
-    if (this.cachedSignature !== signature || !this.cachedSdkProvider) {
-      this.cachedSdkProvider = createOpenAICompatible({
-        baseURL: route.baseURL,
-        name: 'inference-provider',
-        apiKey: route.apiKey,
-        fetch: this.customFetch,
-      })
-      this.cachedSignature = signature
+    const signature = signatureFor(creds)
+    const cached = this.sdkCache.get(vendor)
+    if (cached && cached.signature === signature) {
+      return cached.sdkProvider.languageModel(modelId)
     }
-    return this.cachedSdkProvider.languageModel(modelId)
+    const sdkProvider = createSdkProvider(vendor, creds, { fetch: this.customFetch })
+    this.sdkCache.set(vendor, { signature, sdkProvider })
+    return sdkProvider.languageModel(modelId)
   }
 
-  getRouteSnapshot(): InferenceRouteSnapshot | null {
-    return this.resolveRoute()
+  getRouteSnapshot(): VendorRouteSnapshot | null {
+    const vendor = this.getActiveVendor()
+    if (!vendorSupportsRawHttp(vendor)) return null
+    const creds = this.credentials.getCredentials(vendor)
+    if (!creds) return null
+    return {
+      vendor,
+      baseURL: rawHttpBaseURL(vendor, creds),
+      apiKey: creds.apiKey,
+    }
   }
 
   notifyConfigChanged(): void {
-    this.cachedSignature = null
-    this.cachedSdkProvider = null
+    this.sdkCache.clear()
     for (const listener of this.listeners) {
       try {
         listener()
@@ -121,41 +113,8 @@ export class InferenceProviderImpl implements InferenceProvider {
       this.listeners.delete(listener)
     }
   }
+}
 
-  private resolveApiKey(): string | null {
-    if (this.apiKeyOverride && this.apiKeyOverride.trim().length > 0) {
-      return this.apiKeyOverride
-    }
-    return this.apiKeyManager?.getApiKey() ?? null
-  }
-
-  private resolveCustomEndpoint(): CustomEndpointConfig | null {
-    if (this.hasCustomEndpointOverride) {
-      return this.customEndpointOverride
-    }
-    return this.customEndpointManager?.getEndpoint() ?? null
-  }
-
-  private resolveRoute(): InferenceRouteSnapshot | null {
-    const endpoint = this.resolveCustomEndpoint()
-    if (endpoint) {
-      const apiKey = endpoint.apiKey ?? this.resolveApiKey() ?? ''
-      return {
-        baseURL: endpoint.serverURL,
-        apiKey,
-      }
-    }
-    const apiKey = this.resolveApiKey()
-    if (apiKey && apiKey.trim().length > 0) {
-      return {
-        baseURL: OPENROUTER_BASE_URL,
-        apiKey,
-      }
-    }
-    return null
-  }
-
-  private signatureFor(route: InferenceRouteSnapshot): string {
-    return `${route.baseURL}|${route.apiKey}`
-  }
+function signatureFor(creds: VendorCredentials): string {
+  return `${creds.baseURL ?? ''}|${creds.apiKey}`
 }

@@ -26,6 +26,7 @@ import { startPowerMonitoring, shouldPause } from './power-monitor'
 import { CaptureStateManager } from './settings/capture-state-manager'
 import { CaptureSettingsManager } from './settings/capture-settings-manager'
 import { DeviceIdentity } from './settings/device-identity'
+import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
 import { PatternDetector } from './services/pattern-detector'
 import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
@@ -133,7 +134,17 @@ app.on('ready', async () => {
     return
   }
 
+  const vendorCredentialsManager = new VendorCredentialsManager()
   const captureSettingsManager = new CaptureSettingsManager()
+  // First-launch migration: if a legacy custom-endpoint config existed and no
+  // explicit activeVendor has been persisted yet, switch to openai-compatible.
+  if (
+    vendorCredentialsManager.migration.hadCustomEndpoint &&
+    captureSettingsManager.get().activeVendor === 'openrouter'
+  ) {
+    captureSettingsManager.setActiveVendor('openai-compatible')
+    log.info('[Main] migrated activeVendor to openai-compatible from legacy custom-endpoint')
+  }
   const captureStateManager = new CaptureStateManager()
   const deviceIdentity = new DeviceIdentity()
   captureSettingsManager.applyToConstants()
@@ -162,6 +173,10 @@ app.on('ready', async () => {
     excludedUrlPatterns: initialCaptureSettings.excludedUrlPatterns,
     excludePrivateBrowsing: initialCaptureSettings.excludePrivateBrowsing,
     deviceIdentity,
+    vendorCredentials: vendorCredentialsManager,
+    getActiveVendor: () => captureSettingsManager.get().activeVendor,
+    initialVideoModel: initialCaptureSettings.semanticVideoModel,
+    initialSnapshotModel: initialCaptureSettings.semanticSnapshotModel,
   })
 
   rawDatabaseExportSync = new RawDatabaseExportSync({
@@ -248,8 +263,7 @@ app.on('ready', async () => {
     capture: captureCoordinator.controls,
     storage: runtime.storage,
     usageTracker: runtime.usageTracker,
-    apiKeyManager: runtime.apiKeyManager,
-    customEndpointManager: runtime.customEndpointManager,
+    vendorCredentials: runtime.vendorCredentials,
     inferenceProvider: runtime.inferenceProvider,
     semanticService: runtime.semanticService,
     accessProvider: runtime.accessProvider,

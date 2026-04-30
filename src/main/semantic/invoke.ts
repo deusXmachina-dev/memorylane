@@ -1,5 +1,5 @@
 import { generateText } from 'ai'
-import type { InferenceProvider, InferenceRouteSnapshot } from '../llm'
+import type { InferenceProvider, VendorRouteSnapshot } from '../llm'
 import type { ChainAttemptOutcome } from './model-chain'
 import type { ChatContentItem } from './types'
 
@@ -53,9 +53,15 @@ function toAiSdkContentPart(
       mediaType: extractMediaType(item.imageUrl.url, 'image/jpeg'),
     }
   }
-  // input_video must not reach this path; the video pipeline uses raw HTTP.
+  if (item.type === 'input_video') {
+    return {
+      type: 'file',
+      data: item.videoUrl.url,
+      mediaType: extractMediaType(item.videoUrl.url, 'video/mp4'),
+    }
+  }
   throw new Error(
-    `invokeViaGenerateText cannot serialize content of type "${item.type}". Use invokeViaRawHttp for video.`,
+    `invokeViaGenerateText cannot serialize content of type "${(item as { type: string }).type}".`,
   )
 }
 
@@ -65,7 +71,7 @@ function extractMediaType(dataUrl: string, fallback: string): string {
 }
 
 interface RawVideoCompletionInput {
-  route: InferenceRouteSnapshot
+  route: VendorRouteSnapshot
   model: string
   content: ChatContentItem[]
   signal: AbortSignal

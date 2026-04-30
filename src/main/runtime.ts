@@ -2,8 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { app } from 'electron'
 import log from './logger'
-import { ApiKeyManager } from './settings/api-key-manager'
-import { CustomEndpointManager } from './settings/custom-endpoint-manager'
+import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
 import { DeviceIdentity } from './settings/device-identity'
 import { createAccessProvider, type AccessProvider } from './access'
 import type { AppEdition } from '../shared/edition'
@@ -19,6 +18,7 @@ import { FfmpegVideoStitcher } from './video/video-stitcher'
 import { ActivitySemanticService, SemanticFileDebugDumper } from './activity-semantic-service'
 import type { SemanticPipelinePreference } from './activity-semantic-service'
 import { InferenceProviderImpl, type InferenceProvider } from './llm'
+import type { Vendor } from '../shared/types'
 import { createCaptureBlacklistCoordinator } from './capture-blacklist-coordinator'
 import {
   createCaptureController,
@@ -30,8 +30,7 @@ export interface MainRuntime {
   capture: RuntimeCapture
   storage: StorageService
   usageTracker: UsageTracker
-  apiKeyManager: ApiKeyManager
-  customEndpointManager: CustomEndpointManager
+  vendorCredentials: VendorCredentialsManager
   inferenceProvider: InferenceProvider
   semanticService: ActivitySemanticService
   accessProvider: AccessProvider
@@ -55,16 +54,19 @@ export async function createMainRuntime(params: {
   excludePrivateBrowsing?: boolean
   deviceIdentity?: DeviceIdentity
   edition: AppEdition
+  vendorCredentials: VendorCredentialsManager
+  getActiveVendor: () => Vendor
+  initialVideoModel?: string
+  initialSnapshotModel?: string
 }): Promise<MainRuntime> {
   const onCaptureStateChanged = params.onCaptureStateChanged ?? (() => undefined)
 
   const interactionMonitor = await import('./recorder/interaction-monitor')
 
-  const apiKeyManager = new ApiKeyManager()
-  const customEndpointManager = new CustomEndpointManager()
+  const vendorCredentials = params.vendorCredentials
   const inferenceProvider = new InferenceProviderImpl({
-    apiKeyManager,
-    customEndpointManager,
+    credentials: vendorCredentials,
+    getActiveVendor: params.getActiveVendor,
   })
   const dev = !app.isPackaged
   const userDataPath = app.getPath('userData')
@@ -83,12 +85,21 @@ export async function createMainRuntime(params: {
         })
       : undefined
 
+  const initialVideoModels =
+    params.initialVideoModel && params.initialVideoModel.length > 0
+      ? [params.initialVideoModel]
+      : undefined
+  const initialSnapshotModels =
+    params.initialSnapshotModel && params.initialSnapshotModel.length > 0
+      ? [params.initialSnapshotModel]
+      : undefined
   const semanticService = new ActivitySemanticService(inferenceProvider, {
     usageTracker,
     debugDumper,
     pipelinePreference: params.semanticPipelinePreference,
     requestTimeoutMs: params.semanticRequestTimeoutMs,
-    customEndpointManager,
+    videoModels: initialVideoModels,
+    snapshotModels: initialSnapshotModels,
   })
 
   semanticService.setUserContext(() => storage.userContext.get()?.shortSummary ?? null)
@@ -169,8 +180,7 @@ export async function createMainRuntime(params: {
     capture,
     storage,
     usageTracker,
-    apiKeyManager,
-    customEndpointManager,
+    vendorCredentials,
     inferenceProvider,
     semanticService,
     accessProvider,

@@ -2,5 +2,6 @@ export { InferenceProviderImpl } from './inference-provider'
 export type {
   InferenceProvider,
   InferenceProviderOptions,
-  InferenceRouteSnapshot,
+  VendorRouteSnapshot,
 } from './inference-provider'
+export { OPENROUTER_BASE_URL } from './adapters'

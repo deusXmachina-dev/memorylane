@@ -4,14 +4,10 @@ import { UsageTracker } from '../services/usage-tracker'
 import type { Activity } from '../activity-types'
 import type { ActivitySemanticService as SemanticServiceContract } from '../activity-transformer-types'
 import type { InferenceProvider } from '../llm'
-import type { CustomEndpointManager } from '../settings/custom-endpoint-manager'
-import type { CustomEndpointConfig } from '../../shared/types'
 import { DEFAULT_SNAPSHOT_MODELS, DEFAULT_VIDEO_MODELS } from './constants'
 import {
-  customEndpointVideoUnsupportedCacheKey,
-  getEffectiveSemanticModels,
-  isLikelyCustomEndpointVideoUnsupportedError,
-  normalizeCustomEndpointModel,
+  isLikelyVideoUnsupportedError,
+  videoUnsupportedCacheKey,
 } from './custom-endpoint-video-fallback'
 import { invokeViaGenerateText, invokeRawVideoCompletion } from './invoke'
 import { tryLoadVideoAsDataUrl, encodeSnapshots } from './media'
@@ -31,7 +27,6 @@ import type {
 
 export class ActivitySemanticService implements SemanticServiceContract {
   private readonly provider: InferenceProvider
-  private readonly customEndpointManager: CustomEndpointManager | null
   private videoModels: string[]
   private snapshotModels: string[]
   private readonly maxVideoBytes: number
@@ -40,7 +35,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
   private readonly usageTracker: ActivitySemanticServiceConfig['usageTracker']
   private readonly debugDumper: ActivitySemanticServiceConfig['debugDumper']
   private readonly fetchImpl: typeof globalThis.fetch | undefined
-  private readonly videoUnsupportedCustomModels = new Set<string>()
+  private readonly videoUnsupportedKeys = new Set<string>()
   private readonly unsubscribeProvider: () => void
 
   private userContextGetter: (() => string | null) | null = null
@@ -60,7 +55,6 @@ export class ActivitySemanticService implements SemanticServiceContract {
 
   constructor(provider: InferenceProvider, config?: ActivitySemanticServiceConfig) {
     this.provider = provider
-    this.customEndpointManager = config?.customEndpointManager ?? null
     this.videoModels = config?.videoModels?.length
       ? [...config.videoModels]
       : [...DEFAULT_VIDEO_MODELS]
@@ -80,25 +74,13 @@ export class ActivitySemanticService implements SemanticServiceContract {
     this.assertValidRequestTimeoutMs(this.requestTimeoutMs)
 
     this.unsubscribeProvider = this.provider.onConfigChanged(() => {
-      this.videoUnsupportedCustomModels.clear()
+      this.videoUnsupportedKeys.clear()
       this.resetLlmHealth()
     })
   }
 
   isConfigured(): boolean {
     return this.provider.isConfigured()
-  }
-
-  isUsingCustomEndpoint(): boolean {
-    return this.getCustomEndpoint() !== null
-  }
-
-  private getCustomEndpoint(): CustomEndpointConfig | null {
-    return this.customEndpointManager?.getEndpoint() ?? null
-  }
-
-  private getCustomEndpointModel(): string | null {
-    return normalizeCustomEndpointModel(this.getCustomEndpoint()?.model)
   }
 
   setUserContext(getter: (() => string | null) | null): void {
@@ -219,17 +201,18 @@ export class ActivitySemanticService implements SemanticServiceContract {
     )
     diagnostics.promptChars = videoPrompt.length
 
-    const shouldAttemptVideo = this.pipelinePreference !== 'image'
+    const shouldAttemptVideo = this.pipelinePreference !== 'image' && this.videoModels.length > 0
     const shouldAttemptSnapshots = this.pipelinePreference !== 'video'
 
     if (shouldAttemptVideo) {
-      if (this.shouldSkipCustomEndpointVideo()) {
-        diagnostics.fallbackReason = 'custom endpoint model marked video-unsupported (session)'
+      if (this.shouldSkipVideoForActiveRoute()) {
+        diagnostics.fallbackReason = 'active model marked video-unsupported (session)'
         log.info(
-          '[ActivitySemanticService] Skipping video summarization for custom endpoint model',
+          '[ActivitySemanticService] Skipping video summarization for video-unsupported model',
           JSON.stringify({
             activityId: input.activity.id,
-            model: this.getCustomEndpointModel(),
+            vendor: this.provider.getActiveVendor(),
+            model: this.videoModels[0],
           }),
         )
       } else if (typeof input.videoPath === 'string' && input.videoPath.trim().length > 0) {
@@ -241,7 +224,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
           const videoResult = await trySemanticModelChain({
             requestTimeoutMs: this.requestTimeoutMs,
             mode: 'video',
-            models: this.getEffectiveVideoModels(),
+            models: this.videoModels,
             prompt: videoPrompt,
             diagnostics,
             buildContent: () => [
@@ -249,17 +232,23 @@ export class ActivitySemanticService implements SemanticServiceContract {
               { type: 'input_video', videoUrl: { url: videoAsset.dataUrl } },
             ],
             invoke: async ({ model, content, signal }) => {
-              const route = this.provider.getRouteSnapshot()
-              if (!route) {
-                throw new Error('semantic service is not configured')
+              const vendor = this.provider.getActiveVendor()
+              if (vendor === 'openrouter' || vendor === 'openai-compatible') {
+                const route = this.provider.getRouteSnapshot()
+                if (!route) {
+                  throw new Error('semantic service is not configured')
+                }
+                return invokeRawVideoCompletion({
+                  route,
+                  model,
+                  content,
+                  signal,
+                  fetchImpl: this.fetchImpl,
+                })
               }
-              return invokeRawVideoCompletion({
-                route,
-                model,
-                content,
-                signal,
-                fetchImpl: this.fetchImpl,
-              })
+              // Native vendors (openai, anthropic, google) handle file parts
+              // through the AI SDK directly.
+              return invokeViaGenerateText({ provider: this.provider, model, content, signal })
             },
             onRecordUsage: ({ model, promptTokens, completionTokens }) => {
               recordSemanticUsageSafe({
@@ -271,8 +260,8 @@ export class ActivitySemanticService implements SemanticServiceContract {
             },
             onDumpRoundTrip: (roundTrip) => this.dumpRoundTripSafe(roundTrip),
             onAttemptFailed: ({ mode, model, error }) => {
-              if (mode === 'video' && this.isLikelyVideoUnsupportedError(error)) {
-                this.markCustomEndpointVideoUnsupported(model, error)
+              if (mode === 'video' && this.shouldMarkUnsupported(error)) {
+                this.markVideoUnsupported(model, error)
               }
             },
           })
@@ -291,13 +280,18 @@ export class ActivitySemanticService implements SemanticServiceContract {
       } else {
         diagnostics.fallbackReason = 'video unavailable'
       }
-    } else {
+    } else if (this.pipelinePreference === 'image') {
       diagnostics.fallbackReason = 'video pipeline disabled by preference'
+    } else if (this.videoModels.length === 0) {
+      diagnostics.fallbackReason = 'no video model configured for active vendor'
     }
 
-    if (!shouldAttemptSnapshots) {
+    if (!shouldAttemptSnapshots || this.snapshotModels.length === 0) {
       if (!diagnostics.fallbackReason) {
-        diagnostics.fallbackReason = 'snapshot pipeline disabled by preference'
+        diagnostics.fallbackReason =
+          this.snapshotModels.length === 0
+            ? 'no snapshot model configured for active vendor'
+            : 'snapshot pipeline disabled by preference'
       }
       this.updateLlmHealthFromDiagnostics(diagnostics)
       return ''
@@ -343,7 +337,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
     const snapshotResult = await trySemanticModelChain({
       requestTimeoutMs: this.requestTimeoutMs,
       mode: 'snapshot',
-      models: this.getEffectiveSnapshotModels(),
+      models: this.snapshotModels,
       prompt: snapshotPrompt,
       diagnostics,
       buildContent: () => {
@@ -403,59 +397,40 @@ export class ActivitySemanticService implements SemanticServiceContract {
     }
   }
 
-  private getEffectiveVideoModels(): string[] {
-    return getEffectiveSemanticModels({
-      isCustomEndpoint: this.isUsingCustomEndpoint(),
-      customEndpointModel: this.getCustomEndpointModel(),
-      defaultModels: this.videoModels,
+  private currentRouteCacheKey(model: string): string | null {
+    const route = this.provider.getRouteSnapshot()
+    if (!route) return null
+    return videoUnsupportedCacheKey({
+      vendor: route.vendor,
+      baseURL: route.baseURL,
+      model,
     })
   }
 
-  private getEffectiveSnapshotModels(): string[] {
-    return getEffectiveSemanticModels({
-      isCustomEndpoint: this.isUsingCustomEndpoint(),
-      customEndpointModel: this.getCustomEndpointModel(),
-      defaultModels: this.snapshotModels,
-    })
+  private shouldSkipVideoForActiveRoute(): boolean {
+    const model = this.videoModels[0]
+    if (!model) return false
+    const key = this.currentRouteCacheKey(model)
+    return key !== null && this.videoUnsupportedKeys.has(key)
   }
 
-  private customEndpointCacheKey(): string | null {
-    const endpoint = this.getCustomEndpoint()
-    return customEndpointVideoUnsupportedCacheKey({
-      isCustomEndpoint: endpoint !== null,
-      serverURL: endpoint?.serverURL ?? null,
-      model: normalizeCustomEndpointModel(endpoint?.model),
-    })
-  }
-
-  private shouldSkipCustomEndpointVideo(): boolean {
-    const key = this.customEndpointCacheKey()
-    return key !== null && this.videoUnsupportedCustomModels.has(key)
-  }
-
-  private markCustomEndpointVideoUnsupported(model: string, reason: string): void {
-    const endpoint = this.getCustomEndpoint()
-    if (!endpoint) return
-    const customModel = normalizeCustomEndpointModel(endpoint.model)
-    if (!customModel || customModel !== model) return
-
-    const key = this.customEndpointCacheKey()
-    if (!key || this.videoUnsupportedCustomModels.has(key)) return
-
-    this.videoUnsupportedCustomModels.add(key)
+  private markVideoUnsupported(model: string, reason: string): void {
+    const key = this.currentRouteCacheKey(model)
+    if (!key || this.videoUnsupportedKeys.has(key)) return
+    this.videoUnsupportedKeys.add(key)
     log.info(
-      '[ActivitySemanticService] Marked custom endpoint model as video-unsupported for session',
+      '[ActivitySemanticService] Marked model as video-unsupported for session',
       JSON.stringify({
-        serverURL: endpoint.serverURL,
+        vendor: this.provider.getActiveVendor(),
         model,
         reason,
       }),
     )
   }
 
-  private isLikelyVideoUnsupportedError(message: string): boolean {
-    if (!this.isUsingCustomEndpoint()) return false
-    return isLikelyCustomEndpointVideoUnsupportedError(message)
+  private shouldMarkUnsupported(message: string): boolean {
+    if (this.provider.getActiveVendor() !== 'openai-compatible') return false
+    return isLikelyVideoUnsupportedError(message)
   }
 
   private normalizePipelinePreference(
@@ -579,7 +554,6 @@ export class ActivitySemanticService implements SemanticServiceContract {
   }
 
   private getProbeModel(): string | null {
-    const models = this.getEffectiveSnapshotModels()
-    return models[0] ?? null
+    return this.snapshotModels[0] ?? null
   }
 }

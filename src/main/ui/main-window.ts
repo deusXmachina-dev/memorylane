@@ -15,7 +15,6 @@ import {
   shell,
 } from 'electron'
 import path from 'node:path'
-import { DEFAULT_VIDEO_MODELS, DEFAULT_SNAPSHOT_MODELS } from '../semantic/constants'
 import { syncAutoStartSetting } from '../auto-start'
 import { DEFAULT_EDITION, type AppEditionConfig } from '../../shared/edition'
 import log from '../logger'
@@ -23,13 +22,12 @@ import { updateTrayMenu } from './tray'
 import { exportDatabaseZip } from './database-export'
 import { integrations } from '../integrations'
 import { listInstalledApps } from '../apps/installed-apps'
-import type { ApiKeyManager } from '../settings/api-key-manager'
-import type { CustomEndpointManager } from '../settings/custom-endpoint-manager'
+import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
+import { VENDORS } from '../../shared/types'
 import type { AccessProvider } from '../access'
 import type {
   AccessState,
   ConsentOutcome,
-  CustomEndpointConfig,
   LlmHealthStatus,
   MainWindowStatus,
   MainWindowStats,
@@ -38,6 +36,9 @@ import type {
   ObservationState,
   SemanticPipelineMode,
   SubscriptionPlan,
+  Vendor,
+  VendorCredentials,
+  VendorStatus,
 } from '../../shared/types'
 import type { CaptureSettingsManager } from '../settings/capture-settings-manager'
 import type { StorageService } from '../storage'
@@ -74,8 +75,7 @@ interface MainWindowDependencies {
   }
   storage: StorageService
   usageTracker: UsageTracker
-  apiKeyManager: ApiKeyManager
-  customEndpointManager: CustomEndpointManager
+  vendorCredentials: VendorCredentialsManager
   inferenceProvider: InferenceProviderLike
   semanticService: SemanticService
   accessProvider: AccessProvider
@@ -353,22 +353,53 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     return buildStatus()
   })
 
-  // API key management
-  ipcMain.handle('main-window:getKeyStatus', () => {
-    if (!deps) {
-      return { hasKey: false, source: 'none', maskedKey: null }
+  // Vendor credentials & active-vendor management
+  function emptyStatuses(): Record<Vendor, VendorStatus> {
+    const out = {} as Record<Vendor, VendorStatus>
+    for (const v of VENDORS) {
+      out[v] = { hasKey: false, source: 'none', maskedKey: null, baseURL: null }
     }
-    return deps.apiKeyManager.getKeyStatus()
+    return out
+  }
+
+  ipcMain.handle('main-window:getCredentialStatuses', () => {
+    if (!deps) return emptyStatuses()
+    return deps.vendorCredentials.getAllStatuses()
   })
 
-  ipcMain.handle('main-window:saveApiKey', (_event: IpcMainInvokeEvent, key: string) => {
+  ipcMain.handle(
+    'main-window:saveCredentials',
+    (_event: IpcMainInvokeEvent, vendor: Vendor, creds: VendorCredentials) => {
+      if (!deps) {
+        return { success: false, error: 'Dependencies not initialized' }
+      }
+      if (!(VENDORS as readonly string[]).includes(vendor)) {
+        return { success: false, error: `Unknown vendor: ${vendor}` }
+      }
+      try {
+        deps.vendorCredentials.saveCredentials(vendor, creds)
+        deps.inferenceProvider.notifyConfigChanged()
+        if (vendor === deps.captureSettingsManager.get().activeVendor) {
+          void deps.semanticService.testConnection()
+        }
+        return { success: true }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        return { success: false, error: message }
+      }
+    },
+  )
+
+  ipcMain.handle('main-window:deleteCredentials', (_event: IpcMainInvokeEvent, vendor: Vendor) => {
     if (!deps) {
       return { success: false, error: 'Dependencies not initialized' }
     }
+    if (!(VENDORS as readonly string[]).includes(vendor)) {
+      return { success: false, error: `Unknown vendor: ${vendor}` }
+    }
     try {
-      deps.apiKeyManager.saveApiKey(key)
+      deps.vendorCredentials.deleteCredentials(vendor)
       deps.inferenceProvider.notifyConfigChanged()
-      void deps.semanticService.testConnection()
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -376,13 +407,23 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
   })
 
-  ipcMain.handle('main-window:deleteApiKey', () => {
+  ipcMain.handle('main-window:setActiveVendor', (_event: IpcMainInvokeEvent, vendor: Vendor) => {
     if (!deps) {
       return { success: false, error: 'Dependencies not initialized' }
     }
+    if (!(VENDORS as readonly string[]).includes(vendor)) {
+      return { success: false, error: `Unknown vendor: ${vendor}` }
+    }
     try {
-      deps.apiKeyManager.deleteApiKey()
+      deps.captureSettingsManager.setActiveVendor(vendor)
+      const next = deps.captureSettingsManager.get()
+      deps.semanticService.updateModels(
+        next.semanticVideoModel ? [next.semanticVideoModel] : [],
+        next.semanticSnapshotModel ? [next.semanticSnapshotModel] : [],
+      )
+      deps.patternDetector?.updateModel(next.patternDetectionModel)
       deps.inferenceProvider.notifyConfigChanged()
+      void deps.semanticService.testConnection()
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -403,14 +444,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     return status
   })
 
-  // Custom endpoint management
-  ipcMain.handle('main-window:getCustomEndpoint', () => {
-    if (!deps) {
-      return { enabled: false, serverURL: null, model: null, hasApiKey: false }
-    }
-    return deps.customEndpointManager.getStatus()
-  })
-
   ipcMain.handle('main-window:getLlmHealth', () => {
     if (!deps) {
       return {
@@ -429,47 +462,19 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     await deps.semanticService.testConnection()
   })
 
-  ipcMain.handle(
-    'main-window:saveCustomEndpoint',
-    (_event: IpcMainInvokeEvent, config: CustomEndpointConfig) => {
-      if (!deps) {
-        return { success: false, error: 'Dependencies not initialized' }
-      }
-      try {
-        deps.customEndpointManager.saveEndpoint(config)
-        deps.inferenceProvider.notifyConfigChanged()
-        void deps.semanticService.testConnection()
-        return { success: true }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error'
-        return { success: false, error: message }
-      }
-    },
-  )
-
-  ipcMain.handle('main-window:deleteCustomEndpoint', () => {
-    if (!deps) {
-      return { success: false, error: 'Dependencies not initialized' }
-    }
-    try {
-      deps.customEndpointManager.deleteEndpoint()
-      deps.inferenceProvider.notifyConfigChanged()
-      return { success: true }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      return { success: false, error: message }
-    }
-  })
-
-  // Subscription / managed key
+  // Subscription / managed key — managed keys are always OpenRouter for now.
   deps.accessProvider.setUpdateCallback((state, payload) => {
     if (payload?.key && deps) {
-      deps.apiKeyManager.saveApiKey(payload.key, 'managed')
+      deps.vendorCredentials.saveManagedKey('openrouter', payload.key)
       deps.inferenceProvider.notifyConfigChanged()
     }
-    if (payload?.invalidate && deps && deps.apiKeyManager.getKeySource() === 'managed') {
+    if (
+      payload?.invalidate &&
+      deps &&
+      deps.vendorCredentials.getStatus('openrouter').source === 'managed'
+    ) {
       log.info('[MainWindow] Invalidating stale managed key')
-      deps.apiKeyManager.deleteApiKey()
+      deps.vendorCredentials.deleteCredentials('openrouter')
       deps.inferenceProvider.notifyConfigChanged()
     }
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -734,11 +739,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   })
 }
 
-function buildModelChain(userPick: string, defaults: readonly string[]): string[] {
-  if (!userPick) return [...defaults]
-  return [userPick, ...defaults.filter((m) => m !== userPick)]
-}
-
 function applyModelSettings(
   d: MainWindowDependencies,
   updated: CaptureSettings,
@@ -749,8 +749,8 @@ function applyModelSettings(
     updated.semanticSnapshotModel !== previous.semanticSnapshotModel
   ) {
     d.semanticService.updateModels(
-      buildModelChain(updated.semanticVideoModel, DEFAULT_VIDEO_MODELS),
-      buildModelChain(updated.semanticSnapshotModel, DEFAULT_SNAPSHOT_MODELS),
+      updated.semanticVideoModel ? [updated.semanticVideoModel] : [],
+      updated.semanticSnapshotModel ? [updated.semanticSnapshotModel] : [],
     )
   }
   if (updated.patternDetectionModel !== previous.patternDetectionModel) {

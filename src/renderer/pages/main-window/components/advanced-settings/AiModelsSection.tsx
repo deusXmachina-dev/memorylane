@@ -1,13 +1,21 @@
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { Button } from '@components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@components/ui/select'
 import type {
   CaptureSettings,
-  CustomEndpointStatus,
-  KeyStatus,
   MainWindowAPI,
   SemanticPipelineMode,
+  Vendor,
+  VendorStatus,
 } from '@types'
-import { CustomEndpointSection } from '../CustomEndpointSection'
+import { VENDORS } from '@types'
 import { ManageKeySection } from '../ManageKeySection'
 import { SectionToggle } from './SectionToggle'
 import { SubSectionToggle } from './SubSectionToggle'
@@ -17,34 +25,62 @@ import type { ModelPreset } from './ModelSelector'
 import type { NumericCaptureSetting } from './types'
 import { formatMinSec } from './utils'
 
-type ProviderTab = 'openrouter' | 'custom'
+const VENDOR_LABELS: Record<Vendor, string> = {
+  openrouter: 'OpenRouter',
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  google: 'Google Gemini',
+  'openai-compatible': 'OpenAI-compatible',
+}
 
-const VIDEO_PRESETS: ModelPreset[] = [
-  { id: 'google/gemini-2.5-flash-lite-preview-09-2025', label: 'Gemini Flash Lite' },
-  { id: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash' },
-  { id: 'allenai/molmo-2-8b', label: 'Molmo 2 8B' },
-]
+const VENDOR_VIDEO_PRESETS: Record<Vendor, ModelPreset[]> = {
+  openrouter: [
+    { id: 'google/gemini-2.5-flash-lite-preview-09-2025', label: 'Gemini Flash Lite' },
+    { id: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash' },
+    { id: 'allenai/molmo-2-8b', label: 'Molmo 2 8B' },
+  ],
+  openai: [],
+  anthropic: [],
+  google: [
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+  ],
+  'openai-compatible': [],
+}
 
-const SNAPSHOT_PRESETS: ModelPreset[] = [
-  { id: 'mistralai/mistral-small-3.2-24b-instruct', label: 'Mistral Small 3.2' },
-  { id: 'google/gemini-2.5-flash-lite', label: 'Gemini Flash Lite' },
-]
+const VENDOR_SNAPSHOT_PRESETS: Record<Vendor, ModelPreset[]> = {
+  openrouter: [
+    { id: 'mistralai/mistral-small-3.2-24b-instruct', label: 'Mistral Small 3.2' },
+    { id: 'google/gemini-2.5-flash-lite', label: 'Gemini Flash Lite' },
+  ],
+  openai: [
+    { id: 'gpt-4o', label: 'GPT-4o' },
+    { id: 'gpt-4o-mini', label: 'GPT-4o mini' },
+  ],
+  anthropic: [
+    { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
+    { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+  ],
+  google: [{ id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' }],
+  'openai-compatible': [],
+}
 
-const PATTERN_PRESETS: ModelPreset[] = [{ id: 'moonshotai/kimi-k2.5', label: 'Kimi K2.5' }]
-
-const DEFAULT_VIDEO_MODEL = 'google/gemini-2.5-flash-lite-preview-09-2025'
-const DEFAULT_SNAPSHOT_MODEL = 'mistralai/mistral-small-3.2-24b-instruct'
-const DEFAULT_PATTERN_MODEL = 'moonshotai/kimi-k2.5'
+const VENDOR_PATTERN_PRESETS: Record<Vendor, ModelPreset[]> = {
+  openrouter: [{ id: 'moonshotai/kimi-k2.5', label: 'Kimi K2.5' }],
+  openai: [{ id: 'gpt-4o-mini', label: 'GPT-4o mini' }],
+  anthropic: [{ id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' }],
+  google: [{ id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' }],
+  'openai-compatible': [],
+}
 
 interface AiModelsSectionProps {
   api: MainWindowAPI
   open: boolean
   onToggle: () => void
   form: CaptureSettings
-  keyStatus: KeyStatus | null
-  endpointStatus: CustomEndpointStatus | null
-  onKeyStatusChanged: () => void
-  onEndpointStatusChanged: () => void
+  credentialStatuses: Record<Vendor, VendorStatus> | null
+  onCredentialsChanged: () => void
+  onActiveVendorChanged: () => void
   onSemanticPipelineModeChange: (mode: SemanticPipelineMode) => void
   onSettingChange: (key: NumericCaptureSetting, value: number) => void
   onSettingCommit: (key: NumericCaptureSetting, value: number) => void
@@ -60,67 +96,75 @@ export function AiModelsSection({
   open,
   onToggle,
   form,
-  keyStatus,
-  endpointStatus,
-  onKeyStatusChanged,
-  onEndpointStatusChanged,
+  credentialStatuses,
+  onCredentialsChanged,
+  onActiveVendorChanged,
   onSemanticPipelineModeChange,
   onSettingChange,
   onSettingCommit,
   onModelChange,
   onPatternDetectionEnabledChange,
 }: AiModelsSectionProps): React.JSX.Element {
-  const isCustomEndpoint = endpointStatus?.enabled === true
-  const hasLlmAccess = keyStatus?.hasKey === true || isCustomEndpoint
+  const activeVendor = form.activeVendor
+  const activeStatus = credentialStatuses?.[activeVendor] ?? null
+  const hasLlmAccess = activeStatus?.hasKey === true
   const selectorMode: 'preset' | 'freetext' =
-    keyStatus?.source === 'managed' ? 'preset' : 'freetext'
+    activeStatus?.source === 'managed' ? 'preset' : 'freetext'
+  const videoSupported = form.semanticVideoModel.length > 0
   const [moreOpen, setMoreOpen] = useState(false)
-  const [providerTab, setProviderTab] = useState<ProviderTab>('openrouter')
 
+  // When the active vendor has no video model, lock the pipeline to 'image'.
   useEffect(() => {
-    if (isCustomEndpoint) setProviderTab('custom')
-  }, [isCustomEndpoint])
+    if (!videoSupported && form.semanticPipelineMode !== 'image') {
+      onSemanticPipelineModeChange('image')
+    }
+  }, [videoSupported, form.semanticPipelineMode, onSemanticPipelineModeChange])
+
+  const handleVendorChange = async (vendor: Vendor): Promise<void> => {
+    if (vendor === activeVendor) return
+    const result = await api.setActiveVendor(vendor)
+    if (result.success) {
+      toast.success(`Switched to ${VENDOR_LABELS[vendor]}`)
+      onActiveVendorChanged()
+    } else {
+      toast.error(result.error ?? 'Failed to switch vendor')
+    }
+  }
 
   return (
     <section>
       <SectionToggle label="AI Models" open={open} onToggle={onToggle} />
       {open && (
         <div className="mt-3 space-y-5">
-          {keyStatus && endpointStatus && (
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant={providerTab === 'openrouter' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setProviderTab('openrouter')}
-              >
-                OpenRouter
-              </Button>
-              <Button
-                variant={providerTab === 'custom' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setProviderTab('custom')}
-              >
-                Custom Endpoint
-              </Button>
-            </div>
-          )}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">Active Vendor</p>
+            <Select
+              value={activeVendor}
+              onValueChange={(v) => void handleVendorChange(v as Vendor)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {VENDORS.map((v) => (
+                  <SelectItem key={v} value={v}>
+                    {VENDOR_LABELS[v]}
+                    {credentialStatuses?.[v]?.hasKey ? ' — key set' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Switching vendor resets the model selections to that vendor's defaults.
+            </p>
+          </div>
 
-          {providerTab === 'openrouter' && keyStatus && (
-            <>
-              <ManageKeySection
-                api={api}
-                keyStatus={keyStatus}
-                onKeyDeleted={onKeyStatusChanged}
-                onKeyUpdated={onKeyStatusChanged}
-              />
-            </>
-          )}
-
-          {providerTab === 'custom' && endpointStatus && (
-            <CustomEndpointSection
+          {activeStatus && (
+            <ManageKeySection
               api={api}
-              endpointStatus={endpointStatus}
-              onEndpointChanged={onEndpointStatusChanged}
+              vendor={activeVendor}
+              status={activeStatus}
+              onChanged={onCredentialsChanged}
             />
           )}
 
@@ -165,6 +209,7 @@ export function AiModelsSection({
                       <Button
                         variant={form.semanticPipelineMode === 'auto' ? 'default' : 'outline'}
                         size="sm"
+                        disabled={!videoSupported}
                         onClick={() => onSemanticPipelineModeChange('auto')}
                       >
                         Auto
@@ -172,6 +217,7 @@ export function AiModelsSection({
                       <Button
                         variant={form.semanticPipelineMode === 'video' ? 'default' : 'outline'}
                         size="sm"
+                        disabled={!videoSupported}
                         onClick={() => onSemanticPipelineModeChange('video')}
                       >
                         Video only
@@ -185,11 +231,13 @@ export function AiModelsSection({
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {form.semanticPipelineMode === 'auto'
-                        ? 'Tries video first, then falls back to images when needed.'
-                        : form.semanticPipelineMode === 'video'
-                          ? 'Uses only the video pipeline and never falls back to images.'
-                          : 'Uses only image snapshots and skips video requests.'}
+                      {!videoSupported
+                        ? `${VENDOR_LABELS[activeVendor]} has no default video model — using image snapshots only.`
+                        : form.semanticPipelineMode === 'auto'
+                          ? 'Tries video first, then falls back to images when needed.'
+                          : form.semanticPipelineMode === 'video'
+                            ? 'Uses only the video pipeline and never falls back to images.'
+                            : 'Uses only image snapshots and skips video requests.'}
                     </p>
                     <SliderRow
                       label="LLM request timeout"
@@ -202,39 +250,37 @@ export function AiModelsSection({
                       onCommit={(v) => onSettingCommit('semanticRequestTimeoutMs', v)}
                     />
                   </div>
-                  {keyStatus?.hasKey && (
-                    <div className="space-y-3">
-                      <p className="text-xs font-medium text-muted-foreground">Model Selection</p>
-                      {form.semanticPipelineMode !== 'image' && (
-                        <ModelSelector
-                          mode={selectorMode}
-                          presets={VIDEO_PRESETS}
-                          value={form.semanticVideoModel}
-                          defaultValue={DEFAULT_VIDEO_MODEL}
-                          onChange={(v) => onModelChange('semanticVideoModel', v)}
-                          label="Video analysis model"
-                        />
-                      )}
-                      {form.semanticPipelineMode !== 'video' && (
-                        <ModelSelector
-                          mode={selectorMode}
-                          presets={SNAPSHOT_PRESETS}
-                          value={form.semanticSnapshotModel}
-                          defaultValue={DEFAULT_SNAPSHOT_MODEL}
-                          onChange={(v) => onModelChange('semanticSnapshotModel', v)}
-                          label="Snapshot analysis model"
-                        />
-                      )}
+                  <div className="space-y-3">
+                    <p className="text-xs font-medium text-muted-foreground">Model Selection</p>
+                    {form.semanticPipelineMode !== 'image' && (
                       <ModelSelector
                         mode={selectorMode}
-                        presets={PATTERN_PRESETS}
-                        value={form.patternDetectionModel}
-                        defaultValue={DEFAULT_PATTERN_MODEL}
-                        onChange={(v) => onModelChange('patternDetectionModel', v)}
-                        label="Automation opportunities model"
+                        presets={VENDOR_VIDEO_PRESETS[activeVendor]}
+                        value={form.semanticVideoModel}
+                        defaultValue={form.semanticVideoModel}
+                        onChange={(v) => onModelChange('semanticVideoModel', v)}
+                        label="Video analysis model"
                       />
-                    </div>
-                  )}
+                    )}
+                    {form.semanticPipelineMode !== 'video' && (
+                      <ModelSelector
+                        mode={selectorMode}
+                        presets={VENDOR_SNAPSHOT_PRESETS[activeVendor]}
+                        value={form.semanticSnapshotModel}
+                        defaultValue={form.semanticSnapshotModel}
+                        onChange={(v) => onModelChange('semanticSnapshotModel', v)}
+                        label="Snapshot analysis model"
+                      />
+                    )}
+                    <ModelSelector
+                      mode={selectorMode}
+                      presets={VENDOR_PATTERN_PRESETS[activeVendor]}
+                      value={form.patternDetectionModel}
+                      defaultValue={form.patternDetectionModel}
+                      onChange={(v) => onModelChange('patternDetectionModel', v)}
+                      label="Automation opportunities model"
+                    />
+                  </div>
                 </div>
               )}
             </div>

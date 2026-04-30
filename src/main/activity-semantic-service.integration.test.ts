@@ -131,8 +131,12 @@ describeIntegration('semantic service integration', () => {
       rootDir: llmDumpRootDir,
       copyMediaAssets: true,
     })
+    const apiKey = process.env.OPENROUTER_API_KEY ?? ''
     const provider = new InferenceProviderImpl({
-      apiKeyOverride: process.env.OPENROUTER_API_KEY ?? undefined,
+      credentials: {
+        getCredentials: () => (apiKey ? { apiKey } : null),
+      } as unknown as import('./settings/vendor-credentials-manager').VendorCredentialsManager,
+      getActiveVendor: () => 'openrouter',
     })
     const service = new ActivitySemanticService(provider, {
       usageTracker: { recordUsage: () => undefined },
