@@ -47,9 +47,9 @@ const VENDOR_META: Record<Vendor, VendorMeta> = {
     defaultBaseURL: null,
   },
   google: {
-    label: 'Google Gemini',
+    label: 'Google Vertex AI',
     keyPrefix: null,
-    keyHint: 'AIza...',
+    keyHint: 'Vertex Express API key',
     needsBaseURL: 'no',
     defaultBaseURL: null,
   },
@@ -58,7 +58,7 @@ const VENDOR_META: Record<Vendor, VendorMeta> = {
     keyPrefix: null,
     keyHint: 'api key (optional for some local servers)',
     needsBaseURL: 'required',
-    defaultBaseURL: 'http://localhost:11434/api',
+    defaultBaseURL: 'http://localhost:11434/v1',
   },
 }
 

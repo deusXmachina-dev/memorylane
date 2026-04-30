@@ -25,7 +25,7 @@ const ENV_VARS: Record<Vendor, { apiKey: string; baseURL?: string }> = {
   openrouter: { apiKey: 'OPENROUTER_API_KEY' },
   openai: { apiKey: 'OPENAI_API_KEY', baseURL: 'OPENAI_BASE_URL' },
   anthropic: { apiKey: 'ANTHROPIC_API_KEY', baseURL: 'ANTHROPIC_BASE_URL' },
-  google: { apiKey: 'GOOGLE_GENERATIVE_AI_API_KEY' },
+  google: { apiKey: 'GOOGLE_VERTEX_API_KEY' },
   'openai-compatible': {
     apiKey: 'OPENAI_COMPATIBLE_API_KEY',
     baseURL: 'OPENAI_COMPATIBLE_BASE_URL',
@@ -97,8 +97,12 @@ export class VendorCredentialsManager {
     const key = this.resolveApiKey(vendor)
     const entry = this.store.vendors[vendor]
     const baseURL = entry?.baseURL ?? this.envBaseURL(vendor)
-    if (!key && !baseURL) return null
-    if (vendor === 'openai-compatible' && (!key || !baseURL)) return null
+    // openai-compatible only requires a baseURL (e.g. Ollama needs no key).
+    // All other vendors require an api key.
+    if (vendor === 'openai-compatible') {
+      if (!baseURL) return null
+      return { apiKey: key ?? '', baseURL }
+    }
     if (!key) return null
     const out: VendorCredentials = { apiKey: key }
     if (baseURL) out.baseURL = baseURL

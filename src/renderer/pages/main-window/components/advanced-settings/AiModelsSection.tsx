@@ -29,7 +29,7 @@ const VENDOR_LABELS: Record<Vendor, string> = {
   openrouter: 'OpenRouter',
   openai: 'OpenAI',
   anthropic: 'Anthropic',
-  google: 'Google Gemini',
+  google: 'Google Vertex AI',
   'openai-compatible': 'OpenAI-compatible',
 }
 

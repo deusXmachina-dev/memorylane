@@ -1,7 +1,7 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { createOpenAI } from '@ai-sdk/openai'
 import { createAnthropic } from '@ai-sdk/anthropic'
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import { createVertex } from '@ai-sdk/google-vertex'
 import type { LanguageModel } from 'ai'
 import type { Vendor, VendorCredentials } from '../../shared/types'
 
@@ -48,7 +48,9 @@ export function createSdkProvider(
         fetch: fetchImpl,
       }) as unknown as SdkProvider
     case 'google':
-      return createGoogleGenerativeAI({
+      // Vertex AI Express Mode: API key only, no project/location/service
+      // account required. The SDK infers project + location from the key.
+      return createVertex({
         apiKey: creds.apiKey,
         fetch: fetchImpl,
       }) as unknown as SdkProvider

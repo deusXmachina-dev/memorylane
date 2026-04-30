@@ -69,6 +69,7 @@ export const VENDOR_PRESETS: Record<Vendor, VendorPresets> = {
   },
   google: {
     semanticVideo: [
+      { id: 'gemini-2.5-flash-lite-preview-09-2025', label: 'Gemini 2.5 Flash Lite (preview)' },
       { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
       { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
     ],

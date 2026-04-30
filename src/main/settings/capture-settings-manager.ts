@@ -74,6 +74,22 @@ export class CaptureSettingsManager {
           pauseHotkeyAccelerator?: string
         }
         const data = JSON.parse(fs.readFileSync(this.configPath, 'utf-8')) as StoredCaptureSettings
+        const activeVendor = normalizeVendor(data.activeVendor)
+        const vendorDefaults = getVendorDefaults(activeVendor)
+        // Backfill empty model fields from current vendor defaults — handles
+        // the case where the vendor was selected before its presets existed.
+        const semanticVideoModel =
+          typeof data.semanticVideoModel === 'string' && data.semanticVideoModel.length > 0
+            ? data.semanticVideoModel
+            : vendorDefaults.semanticVideoModel
+        const semanticSnapshotModel =
+          typeof data.semanticSnapshotModel === 'string' && data.semanticSnapshotModel.length > 0
+            ? data.semanticSnapshotModel
+            : vendorDefaults.semanticSnapshotModel
+        const patternDetectionModel =
+          typeof data.patternDetectionModel === 'string' && data.patternDetectionModel.length > 0
+            ? data.patternDetectionModel
+            : vendorDefaults.patternDetectionModel
         return {
           ...DEFAULTS,
           ...data,
@@ -89,19 +105,10 @@ export class CaptureSettingsManager {
             data.captureHotkeyAccelerator ?? data.pauseHotkeyAccelerator,
           ),
           databaseExportDirectory: normalizeDatabaseExportDirectory(data.databaseExportDirectory),
-          activeVendor: normalizeVendor(data.activeVendor),
-          semanticVideoModel:
-            typeof data.semanticVideoModel === 'string'
-              ? data.semanticVideoModel
-              : DEFAULTS.semanticVideoModel,
-          semanticSnapshotModel:
-            typeof data.semanticSnapshotModel === 'string'
-              ? data.semanticSnapshotModel
-              : DEFAULTS.semanticSnapshotModel,
-          patternDetectionModel:
-            typeof data.patternDetectionModel === 'string'
-              ? data.patternDetectionModel
-              : DEFAULTS.patternDetectionModel,
+          activeVendor,
+          semanticVideoModel,
+          semanticSnapshotModel,
+          patternDetectionModel,
         }
       }
     } catch (error) {
