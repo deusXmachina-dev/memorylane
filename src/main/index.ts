@@ -249,6 +249,7 @@ app.on('ready', async () => {
     storage: runtime.storage,
     usageTracker: runtime.usageTracker,
     providerRegistry: runtime.providerRegistry,
+    providerResolver: runtime.providerResolver,
     semanticService: runtime.semanticService,
     accessProvider: runtime.accessProvider,
     captureSettingsManager,

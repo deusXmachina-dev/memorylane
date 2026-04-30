@@ -1,15 +1,47 @@
+import type { ProviderKind } from '../../shared/types'
+
 export const LLM_IMAGE_MAX_WIDTH = 1920
 
-export const DEFAULT_VIDEO_MODELS = [
-  'google/gemini-2.5-flash-lite-preview-09-2025',
-  'google/gemini-3-flash-preview',
-  'allenai/molmo-2-8b',
-] as const
+export const DEFAULT_MODELS_BY_KIND: Record<
+  ProviderKind,
+  { video: readonly string[]; snapshot: readonly string[] }
+> = {
+  openrouter: {
+    video: [
+      'google/gemini-2.5-flash-lite-preview-09-2025',
+      'google/gemini-3-flash-preview',
+      'allenai/molmo-2-8b',
+    ],
+    snapshot: ['mistralai/mistral-small-3.2-24b-instruct', 'google/gemini-2.5-flash-lite'],
+  },
+  openai: {
+    video: [],
+    snapshot: ['gpt-4o-mini', 'gpt-4o'],
+  },
+  anthropic: {
+    video: [],
+    snapshot: ['claude-3-5-haiku-latest', 'claude-3-5-sonnet-latest'],
+  },
+  google: {
+    video: ['gemini-2.5-flash', 'gemini-2.5-flash-lite'],
+    snapshot: ['gemini-2.5-flash-lite', 'gemini-2.5-flash'],
+  },
+  'openai-compatible': {
+    video: [],
+    snapshot: [],
+  },
+}
 
-export const DEFAULT_SNAPSHOT_MODELS = [
-  'mistralai/mistral-small-3.2-24b-instruct',
-  'google/gemini-2.5-flash-lite',
-] as const
+export function getDefaultModelsForKind(kind: ProviderKind): {
+  video: readonly string[]
+  snapshot: readonly string[]
+} {
+  return DEFAULT_MODELS_BY_KIND[kind]
+}
+
+// Back-compat aliases — prefer getDefaultModelsForKind in new code.
+export const DEFAULT_VIDEO_MODELS = DEFAULT_MODELS_BY_KIND.openrouter.video
+export const DEFAULT_SNAPSHOT_MODELS = DEFAULT_MODELS_BY_KIND.openrouter.snapshot
 
 export const MODEL_PRICING_USD_PER_MILLION: Record<
   string,

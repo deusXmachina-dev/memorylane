@@ -20,6 +20,7 @@ export const PROVIDER_KINDS: ProviderKind[] = [
   'openrouter',
   'openai',
   'anthropic',
+  'google',
   'openai-compatible',
 ]
 

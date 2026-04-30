@@ -15,7 +15,7 @@ import {
   shell,
 } from 'electron'
 import path from 'node:path'
-import { DEFAULT_VIDEO_MODELS, DEFAULT_SNAPSHOT_MODELS } from '../semantic/constants'
+import { getDefaultModelsForKind } from '../semantic/constants'
 import { syncAutoStartSetting } from '../auto-start'
 import { DEFAULT_EDITION, type AppEditionConfig } from '../../shared/edition'
 import log from '../logger'
@@ -24,7 +24,8 @@ import { exportDatabaseZip } from './database-export'
 import { integrations } from '../integrations'
 import { listInstalledApps } from '../apps/installed-apps'
 import type { AccessProvider } from '../access'
-import type { ProviderRegistry } from '../llm'
+import type { ProviderRegistry, ProviderResolver, ProviderHealthResult } from '../llm'
+import { pingProvider } from '../llm'
 import type { ProviderConfigInput, ProviderConfigPatch, ProvidersSnapshot } from '../llm/provider'
 import type {
   AccessState,
@@ -71,6 +72,7 @@ interface MainWindowDependencies {
   storage: StorageService
   usageTracker: UsageTracker
   providerRegistry: ProviderRegistry
+  providerResolver: ProviderResolver
   semanticService: SemanticService
   accessProvider: AccessProvider
   captureSettingsManager: CaptureSettingsManager
@@ -709,17 +711,35 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
 
   ipcMain.handle(
     'main-window:addProvider',
-    (_event: IpcMainInvokeEvent, input: ProviderConfigInput) => {
+    async (_event: IpcMainInvokeEvent, input: ProviderConfigInput) => {
       if (!deps) return { success: false, error: 'Dependencies not initialized' }
+      let providerId: string
       try {
         const config = deps.providerRegistry.add(input)
-        return { success: true, providerId: config.id }
+        providerId = config.id
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'
         return { success: false, error: message }
       }
+      // If this provider was auto-actived (first add), rebuild the model chain to its kind.
+      if (deps.providerRegistry.getActive()?.id === providerId) {
+        applySemanticModelChain(deps, deps.captureSettingsManager.get())
+        deps.semanticService.refresh()
+      }
+      const provider = deps.providerRegistry.get(providerId)
+      const health = provider
+        ? await pingProvider(deps.providerResolver, provider)
+        : ({ state: 'failed', error: 'Provider missing after add' } as ProviderHealthResult)
+      return { success: true, providerId, health }
     },
   )
+
+  ipcMain.handle('main-window:testProvider', async (_event: IpcMainInvokeEvent, id: string) => {
+    if (!deps) return { state: 'failed', error: 'Dependencies not initialized' } as const
+    const provider = deps.providerRegistry.get(id)
+    if (!provider) return { state: 'failed', error: 'Provider not found' } as const
+    return await pingProvider(deps.providerResolver, provider)
+  })
 
   ipcMain.handle(
     'main-window:updateProvider',
@@ -752,6 +772,8 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       if (!deps) return { success: false, error: 'Dependencies not initialized' }
       try {
         deps.providerRegistry.setActive(id)
+        applySemanticModelChain(deps, deps.captureSettingsManager.get())
+        deps.semanticService.refresh()
         return { success: true }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'
@@ -775,10 +797,7 @@ function applyModelSettings(
     updated.semanticVideoModel !== previous.semanticVideoModel ||
     updated.semanticSnapshotModel !== previous.semanticSnapshotModel
   ) {
-    d.semanticService.updateModels(
-      buildModelChain(updated.semanticVideoModel, DEFAULT_VIDEO_MODELS),
-      buildModelChain(updated.semanticSnapshotModel, DEFAULT_SNAPSHOT_MODELS),
-    )
+    applySemanticModelChain(d, updated)
   }
   if (updated.patternDetectionModel !== previous.patternDetectionModel) {
     d.patternDetector?.updateModel(updated.patternDetectionModel)
@@ -786,4 +805,13 @@ function applyModelSettings(
   if (updated.patternDetectionEnabled !== previous.patternDetectionEnabled) {
     d.patternDetector?.setEnabled(updated.patternDetectionEnabled)
   }
+}
+
+function applySemanticModelChain(d: MainWindowDependencies, settings: CaptureSettings): void {
+  const activeKind = d.providerRegistry.getActive()?.kind ?? 'openrouter'
+  const defaults = getDefaultModelsForKind(activeKind)
+  d.semanticService.updateModels(
+    buildModelChain(settings.semanticVideoModel, defaults.video),
+    buildModelChain(settings.semanticSnapshotModel, defaults.snapshot),
+  )
 }

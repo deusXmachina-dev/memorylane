@@ -10,6 +10,7 @@ const CAPABILITIES: Record<ProviderKind, ProviderCapabilities> = {
   openrouter: { vision: true, video: true, toolUse: true },
   openai: { vision: true, video: false, toolUse: true },
   anthropic: { vision: true, video: false, toolUse: true },
+  google: { vision: true, video: true, toolUse: true },
   'openai-compatible': { vision: true, video: false, toolUse: true },
 }
 

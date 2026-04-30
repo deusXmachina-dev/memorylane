@@ -18,4 +18,8 @@ describe('getCapabilities', () => {
     expect(caps.toolUse).toBe(true)
     expect(caps.video).toBe(false)
   })
+
+  it('reports google supports vision, video, and tool use', () => {
+    expect(getCapabilities('google')).toEqual({ vision: true, video: true, toolUse: true })
+  })
 })

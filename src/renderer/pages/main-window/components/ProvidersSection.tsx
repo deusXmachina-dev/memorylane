@@ -16,10 +16,17 @@ const PROVIDER_KIND_LABELS: Record<ProviderKind, string> = {
   openrouter: 'OpenRouter',
   openai: 'OpenAI',
   anthropic: 'Anthropic',
+  google: 'Google (Gemini)',
   'openai-compatible': 'OpenAI-compatible',
 }
 
-const KIND_ORDER: ProviderKind[] = ['openrouter', 'openai', 'anthropic', 'openai-compatible']
+const KIND_ORDER: ProviderKind[] = [
+  'openrouter',
+  'openai',
+  'anthropic',
+  'google',
+  'openai-compatible',
+]
 
 interface ProvidersSectionProps {
   api: MainWindowAPI
@@ -57,6 +64,8 @@ function baseURLPlaceholder(kind: ProviderKind): string {
       return 'https://api.openai.com/v1 (optional)'
     case 'anthropic':
       return 'https://api.anthropic.com/v1 (optional)'
+    case 'google':
+      return 'https://generativelanguage.googleapis.com/v1beta (optional)'
     case 'openai-compatible':
       return 'http://localhost:11434/v1'
   }
@@ -145,7 +154,16 @@ export function ProvidersSection({ api }: ProvidersSectionProps): React.JSX.Elem
         toast.error(result.error ?? 'Failed to add provider')
         return
       }
-      toast.success(`Connected ${name}`)
+      const health = result.health
+      if (health?.state === 'ok') {
+        toast.success(`Connected ${name} — health check ok (${health.latencyMs}ms)`)
+      } else if (health?.state === 'failed') {
+        toast.warning(`Connected ${name}, but health check failed: ${health.error}`)
+      } else if (health?.state === 'skipped') {
+        toast.success(`Connected ${name} — ${health.reason}`)
+      } else {
+        toast.success(`Connected ${name}`)
+      }
       setForm(EMPTY_FORM)
       setAdding(false)
       await refresh()

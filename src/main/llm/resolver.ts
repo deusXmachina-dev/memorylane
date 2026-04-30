@@ -1,6 +1,7 @@
 import type { LanguageModel } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai'
 import { createAnthropic } from '@ai-sdk/anthropic'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import type { ProviderConfig } from './provider'
@@ -38,6 +39,10 @@ export class ProviderResolver {
       }
       case 'anthropic': {
         const factory = createAnthropic({ apiKey, baseURL: provider.baseURL })
+        return factory(modelId)
+      }
+      case 'google': {
+        const factory = createGoogleGenerativeAI({ apiKey, baseURL: provider.baseURL })
         return factory(modelId)
       }
       case 'openai-compatible': {

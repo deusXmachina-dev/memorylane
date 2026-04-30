@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
     ipcRenderer.invoke('main-window:updateProvider', { id, patch }),
   removeProvider: (id: string) => ipcRenderer.invoke('main-window:removeProvider', id),
   setActiveProvider: (id: string | null) => ipcRenderer.invoke('main-window:setActiveProvider', id),
+  testProvider: (id: string) => ipcRenderer.invoke('main-window:testProvider', id),
   getLlmHealth: () => ipcRenderer.invoke('main-window:getLlmHealth'),
   testLlmConnection: () => ipcRenderer.invoke('main-window:testLlmConnection'),
   // Subscription

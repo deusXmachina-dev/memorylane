@@ -1,7 +1,7 @@
 import type { AppEditionConfig } from './edition'
 
 // LLM provider registry
-export type ProviderKind = 'openrouter' | 'openai' | 'anthropic' | 'openai-compatible'
+export type ProviderKind = 'openrouter' | 'openai' | 'anthropic' | 'openai-compatible' | 'google'
 
 /** 'managed' = key delivered by the subscription system; 'byok' = user-supplied. */
 export type ProviderSource = 'managed' | 'byok'
@@ -39,6 +39,11 @@ export interface ProvidersSnapshot {
   providers: ProviderStatus[]
   activeProviderId: string | null
 }
+
+export type ProviderHealthResult =
+  | { state: 'ok'; model: string; latencyMs: number }
+  | { state: 'failed'; error: string }
+  | { state: 'skipped'; reason: string }
 
 export interface InteractionContext {
   type: 'click' | 'keyboard' | 'scroll' | 'app_change'
@@ -291,12 +296,16 @@ export interface MainWindowAPI {
   getCustomEndpoint: () => Promise<CustomEndpointStatus>
   // Multi-provider registry
   listProviders: () => Promise<ProvidersSnapshot>
-  addProvider: (
-    input: ProviderConfigInput,
-  ) => Promise<{ success: boolean; error?: string; providerId?: string }>
+  addProvider: (input: ProviderConfigInput) => Promise<{
+    success: boolean
+    error?: string
+    providerId?: string
+    health?: ProviderHealthResult
+  }>
   updateProvider: (id: string, patch: ProviderConfigPatch) => Promise<SaveResult>
   removeProvider: (id: string) => Promise<SaveResult>
   setActiveProvider: (id: string | null) => Promise<SaveResult>
+  testProvider: (id: string) => Promise<ProviderHealthResult>
   getLlmHealth: () => Promise<LlmHealthStatus>
   testLlmConnection: () => Promise<void>
   // Subscription
