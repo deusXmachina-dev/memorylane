@@ -92,9 +92,7 @@ async function main() {
   console.log('\n--- Running update ---\n')
 
   try {
-    const provider = new InferenceProviderImpl({
-      apiKeyManager: { getApiKey: () => apiKey },
-    })
+    const provider = new InferenceProviderImpl({ apiKeyOverride: apiKey })
     const builder = new UserContextBuilder(storageService)
     const result = await builder.run(provider, { model, lookbackDays: days }, (msg) => {
       console.log(`  ${msg}`)

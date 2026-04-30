@@ -1,25 +1,19 @@
 import type { LanguageModel } from 'ai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { normalizeCustomEndpointModel } from '../semantic/custom-endpoint-video-fallback'
+import type { ApiKeyManager } from '../settings/api-key-manager'
+import type { CustomEndpointManager } from '../settings/custom-endpoint-manager'
+import type { CustomEndpointConfig } from '../../shared/types'
 import log from '../logger'
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 
-export type InferenceRouteKind = 'openrouter' | 'custom'
-
 export interface InferenceRouteSnapshot {
-  kind: InferenceRouteKind
   baseURL: string
   apiKey: string
-  /** Custom endpoint's configured model id, if route is custom. */
-  customEndpointModel: string | null
 }
 
 export interface InferenceProvider {
   isConfigured(): boolean
-  isUsingCustomEndpoint(): boolean
-  /** Custom endpoint's configured model id (or null when not using a custom endpoint). */
-  getCustomEndpointModel(): string | null
   /**
    * Resolve a Vercel AI SDK LanguageModel handle for the given model id, pointed
    * at the active route (custom endpoint if configured, OpenRouter otherwise).
@@ -40,17 +34,20 @@ export interface InferenceProvider {
   onConfigChanged(listener: () => void): () => void
 }
 
-interface ApiKeyAccessor {
-  getApiKey(): string | null
-}
-
-interface CustomEndpointAccessor {
-  getEndpoint(): { serverURL: string; model: string; apiKey?: string } | null
-}
-
 export interface InferenceProviderOptions {
-  apiKeyManager?: ApiKeyAccessor | null
-  customEndpointManager?: CustomEndpointAccessor | null
+  apiKeyManager?: ApiKeyManager | null
+  customEndpointManager?: CustomEndpointManager | null
+  /**
+   * Direct API key, taking precedence over `apiKeyManager`. For CLI scripts
+   * and tests that hold a key in hand and don't want to construct a real
+   * `ApiKeyManager` (which depends on Electron's `safeStorage` and `userData`).
+   */
+  apiKeyOverride?: string
+  /**
+   * Direct custom-endpoint config, taking precedence over `customEndpointManager`.
+   * For tests; mirrors `apiKeyOverride`.
+   */
+  customEndpointOverride?: CustomEndpointConfig | null
   /**
    * Optional custom fetch implementation, primarily for tests. Forwarded to
    * the underlying @ai-sdk/openai-compatible provider.
@@ -59,8 +56,11 @@ export interface InferenceProviderOptions {
 }
 
 export class InferenceProviderImpl implements InferenceProvider {
-  private readonly apiKeyManager: ApiKeyAccessor | null
-  private readonly customEndpointManager: CustomEndpointAccessor | null
+  private readonly apiKeyManager: ApiKeyManager | null
+  private readonly customEndpointManager: CustomEndpointManager | null
+  private readonly apiKeyOverride: string | null
+  private readonly hasCustomEndpointOverride: boolean
+  private readonly customEndpointOverride: CustomEndpointConfig | null
   private readonly customFetch: typeof globalThis.fetch | undefined
   private cachedSignature: string | null = null
   private cachedSdkProvider: ReturnType<typeof createOpenAICompatible> | null = null
@@ -69,19 +69,14 @@ export class InferenceProviderImpl implements InferenceProvider {
   constructor(options: InferenceProviderOptions = {}) {
     this.apiKeyManager = options.apiKeyManager ?? null
     this.customEndpointManager = options.customEndpointManager ?? null
+    this.apiKeyOverride = options.apiKeyOverride ?? null
+    this.hasCustomEndpointOverride = 'customEndpointOverride' in options
+    this.customEndpointOverride = options.customEndpointOverride ?? null
     this.customFetch = options.fetch
   }
 
   isConfigured(): boolean {
     return this.resolveRoute() !== null
-  }
-
-  isUsingCustomEndpoint(): boolean {
-    return this.customEndpointManager?.getEndpoint() != null
-  }
-
-  getCustomEndpointModel(): string | null {
-    return this.customEndpointManager?.getEndpoint()?.model ?? null
   }
 
   languageModel(modelId: string): LanguageModel {
@@ -95,7 +90,7 @@ export class InferenceProviderImpl implements InferenceProvider {
     if (this.cachedSignature !== signature || !this.cachedSdkProvider) {
       this.cachedSdkProvider = createOpenAICompatible({
         baseURL: route.baseURL,
-        name: route.kind,
+        name: 'inference-provider',
         apiKey: route.apiKey,
         fetch: this.customFetch,
       })
@@ -127,30 +122,40 @@ export class InferenceProviderImpl implements InferenceProvider {
     }
   }
 
+  private resolveApiKey(): string | null {
+    if (this.apiKeyOverride && this.apiKeyOverride.trim().length > 0) {
+      return this.apiKeyOverride
+    }
+    return this.apiKeyManager?.getApiKey() ?? null
+  }
+
+  private resolveCustomEndpoint(): CustomEndpointConfig | null {
+    if (this.hasCustomEndpointOverride) {
+      return this.customEndpointOverride
+    }
+    return this.customEndpointManager?.getEndpoint() ?? null
+  }
+
   private resolveRoute(): InferenceRouteSnapshot | null {
-    const endpoint = this.customEndpointManager?.getEndpoint()
+    const endpoint = this.resolveCustomEndpoint()
     if (endpoint) {
-      const apiKey = endpoint.apiKey ?? this.apiKeyManager?.getApiKey() ?? ''
+      const apiKey = endpoint.apiKey ?? this.resolveApiKey() ?? ''
       return {
-        kind: 'custom',
         baseURL: endpoint.serverURL,
         apiKey,
-        customEndpointModel: normalizeCustomEndpointModel(endpoint.model),
       }
     }
-    const apiKey = this.apiKeyManager?.getApiKey()
+    const apiKey = this.resolveApiKey()
     if (apiKey && apiKey.trim().length > 0) {
       return {
-        kind: 'openrouter',
         baseURL: OPENROUTER_BASE_URL,
         apiKey,
-        customEndpointModel: null,
       }
     }
     return null
   }
 
   private signatureFor(route: InferenceRouteSnapshot): string {
-    return `${route.kind}|${route.baseURL}|${route.apiKey}`
+    return `${route.baseURL}|${route.apiKey}`
   }
 }

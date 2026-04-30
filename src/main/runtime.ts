@@ -88,6 +88,7 @@ export async function createMainRuntime(params: {
     debugDumper,
     pipelinePreference: params.semanticPipelinePreference,
     requestTimeoutMs: params.semanticRequestTimeoutMs,
+    customEndpointManager,
   })
 
   semanticService.setUserContext(() => storage.userContext.get()?.shortSummary ?? null)

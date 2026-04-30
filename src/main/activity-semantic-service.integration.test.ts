@@ -132,7 +132,7 @@ describeIntegration('semantic service integration', () => {
       copyMediaAssets: true,
     })
     const provider = new InferenceProviderImpl({
-      apiKeyManager: { getApiKey: () => process.env.OPENROUTER_API_KEY ?? null },
+      apiKeyOverride: process.env.OPENROUTER_API_KEY ?? undefined,
     })
     const service = new ActivitySemanticService(provider, {
       usageTracker: { recordUsage: () => undefined },

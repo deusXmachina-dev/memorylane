@@ -1,4 +1,5 @@
 import type { ActivityFrame } from '../activity-types'
+import type { CustomEndpointManager } from '../settings/custom-endpoint-manager'
 
 export type SemanticMode = 'video' | 'snapshot'
 export type SemanticPipelinePreference = 'auto' | 'video' | 'image'
@@ -42,6 +43,12 @@ export interface ActivitySemanticServiceConfig {
   requestTimeoutMs?: number
   usageTracker?: UsageTrackerLike
   debugDumper?: SemanticDebugDumper
+  /**
+   * Custom-endpoint manager. When set, the service consults it directly to
+   * apply custom-endpoint-specific behaviors (model override, video-unsupported
+   * caching). Optional in tests that don't exercise custom endpoints.
+   */
+  customEndpointManager?: CustomEndpointManager
   /**
    * Optional fetch override used by the raw-HTTP video pipeline. Mostly for
    * tests; production uses globalThis.fetch.

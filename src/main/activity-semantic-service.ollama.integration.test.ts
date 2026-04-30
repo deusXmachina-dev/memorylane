@@ -125,19 +125,21 @@ describeIntegration('semantic service ollama custom endpoint integration', () =>
       copyMediaAssets: true,
     })
 
+    const ollamaEndpoint = {
+      serverURL: OLLAMA_BASE_URL,
+      model: OLLAMA_MODEL,
+      apiKey: OLLAMA_API_KEY,
+    }
     const provider = new InferenceProviderImpl({
-      customEndpointManager: {
-        getEndpoint: () => ({
-          serverURL: OLLAMA_BASE_URL,
-          model: OLLAMA_MODEL,
-          apiKey: OLLAMA_API_KEY,
-        }),
-      },
+      customEndpointOverride: ollamaEndpoint,
     })
     const service = new ActivitySemanticService(provider, {
       usageTracker: { recordUsage: () => undefined },
       debugDumper,
       requestTimeoutMs: 120_000,
+      customEndpointManager: {
+        getEndpoint: () => ollamaEndpoint,
+      } as unknown as import('./settings/custom-endpoint-manager').CustomEndpointManager,
     })
 
     const firstSummary = await service.summarizeFromVideo({

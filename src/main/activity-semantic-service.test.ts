@@ -6,6 +6,7 @@ import { ACTIVITY_CONFIG, VISUAL_DETECTOR_CONFIG } from '@constants'
 import type { Activity, ActivityFrame } from './activity-types'
 import { ActivitySemanticService, SemanticFileDebugDumper } from './activity-semantic-service'
 import { InferenceProviderImpl } from './llm'
+import type { CustomEndpointManager } from './settings/custom-endpoint-manager'
 
 vi.mock('./logger', () => ({
   default: {
@@ -186,8 +187,8 @@ function setupService(options: SetupOptions = {}): {
   const storedKey = options.apiKey === undefined ? 'test-key' : options.apiKey
   const storedEndpoint = options.endpoint ?? null
   const provider = new InferenceProviderImpl({
-    apiKeyManager: { getApiKey: () => storedKey },
-    customEndpointManager: { getEndpoint: () => storedEndpoint },
+    apiKeyOverride: storedKey ?? undefined,
+    customEndpointOverride: storedEndpoint,
     fetch: fetchMock.fn as unknown as typeof globalThis.fetch,
   })
   const service = new ActivitySemanticService(provider, {
@@ -198,6 +199,9 @@ function setupService(options: SetupOptions = {}): {
     usageTracker: options.usageTracker ?? { recordUsage: vi.fn() },
     debugDumper: options.debugDumper,
     fetchImpl: fetchMock.fn as unknown as typeof globalThis.fetch,
+    customEndpointManager: storedEndpoint
+      ? ({ getEndpoint: () => storedEndpoint } as unknown as CustomEndpointManager)
+      : undefined,
   })
   return { service, fetchMock, provider }
 }

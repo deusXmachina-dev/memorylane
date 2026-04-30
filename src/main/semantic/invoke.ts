@@ -64,7 +64,7 @@ function extractMediaType(dataUrl: string, fallback: string): string {
   return match ? match[1] : fallback
 }
 
-interface RawHttpInvokeInput {
+interface RawVideoCompletionInput {
   route: InferenceRouteSnapshot
   model: string
   content: ChatContentItem[]
@@ -97,11 +97,13 @@ interface RawChatCompletionResponse {
 }
 
 /**
- * Video/multimodal path: posts an OpenAI-compatible chat completions request
- * directly. Used because the OpenAI-compatible adapter does not support
- * `input_video` content; OpenRouter (and some custom endpoints) do.
+ * Video pipeline only: posts an OpenAI-compatible chat completions request
+ * directly. Bypasses the AI SDK because @ai-sdk/openai-compatible does not
+ * support `input_video` content; OpenRouter (and some custom endpoints) do.
  */
-export async function invokeViaRawHttp(input: RawHttpInvokeInput): Promise<ChainAttemptOutcome> {
+export async function invokeRawVideoCompletion(
+  input: RawVideoCompletionInput,
+): Promise<ChainAttemptOutcome> {
   const fetchImpl = input.fetchImpl ?? globalThis.fetch
   const url = joinUrl(input.route.baseURL, '/chat/completions')
   const body = {
@@ -109,7 +111,7 @@ export async function invokeViaRawHttp(input: RawHttpInvokeInput): Promise<Chain
     messages: [
       {
         role: 'user',
-        content: input.content.map(toRawHttpContentPart),
+        content: input.content.map(toVideoContentPart),
       },
     ],
   }
@@ -167,26 +169,19 @@ export async function invokeViaRawHttp(input: RawHttpInvokeInput): Promise<Chain
   }
 }
 
-function toRawHttpContentPart(item: ChatContentItem): Record<string, unknown> {
-  switch (item.type) {
-    case 'text':
-      return { type: 'text', text: item.text }
-    case 'image_url':
-      return {
-        type: 'image_url',
-        image_url: {
-          url: item.imageUrl.url,
-          detail: item.imageUrl.detail,
-        },
-      }
-    case 'input_video':
-      return {
-        type: 'input_video',
-        video_url: {
-          url: item.videoUrl.url,
-        },
-      }
+function toVideoContentPart(item: ChatContentItem): Record<string, unknown> {
+  if (item.type === 'text') {
+    return { type: 'text', text: item.text }
   }
+  if (item.type === 'input_video') {
+    return {
+      type: 'input_video',
+      video_url: { url: item.videoUrl.url },
+    }
+  }
+  throw new Error(
+    `invokeRawVideoCompletion does not serialize content of type "${item.type}". Use invokeViaGenerateText for text/image content.`,
+  )
 }
 
 function joinUrl(base: string, path: string): string {

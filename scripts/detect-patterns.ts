@@ -98,9 +98,7 @@ async function main() {
   }
 
   try {
-    const provider = new InferenceProviderImpl({
-      apiKeyManager: { getApiKey: () => apiKey },
-    })
+    const provider = new InferenceProviderImpl({ apiKeyOverride: apiKey })
     const detector = new PatternDetector(storageService)
     const result = await detector.run(
       provider,
