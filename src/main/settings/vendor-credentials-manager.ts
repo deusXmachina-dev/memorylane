@@ -165,16 +165,23 @@ export class VendorCredentialsManager {
     const key = stored ?? envKey ?? null
     const entry = this.store.vendors[vendor]
     const baseURL = entry?.baseURL ?? this.envBaseURL(vendor) ?? null
+    // openai-compatible can be fully configured via baseURL alone (e.g. Ollama
+    // accepts requests with no api key). For every other vendor a key is
+    // mandatory. Mirror this in `hasKey`/`source` so the renderer's
+    // is-configured check matches `getCredentials()`.
+    const baseURLOnlyConfigured = vendor === 'openai-compatible' && baseURL !== null
     let source: VendorStatus['source']
     if (stored) {
       source = entry?.source === 'managed' ? 'managed' : 'stored'
     } else if (envKey) {
       source = 'env'
+    } else if (baseURLOnlyConfigured) {
+      source = entry?.baseURL ? 'stored' : 'env'
     } else {
       source = 'none'
     }
     return {
-      hasKey: key !== null,
+      hasKey: key !== null || baseURLOnlyConfigured,
       source,
       maskedKey: key ? maskKey(key) : null,
       baseURL,

@@ -109,6 +109,34 @@ describe('VendorCredentialsManager', () => {
     })
   })
 
+  it('openai-compatible reports hasKey=true when only baseURL is set (Ollama case)', () => {
+    const p = paths()
+    fs.writeFileSync(
+      p.configPath,
+      JSON.stringify({
+        version: 2,
+        vendors: {
+          'openai-compatible': {
+            baseURL: 'http://localhost:11434/v1',
+            source: 'byok',
+          },
+        },
+      }),
+    )
+    const m = new VendorCredentialsManager({
+      ...p,
+      safeStorage: makeSafeStorage(),
+      env: {},
+    })
+    const status = m.getStatus('openai-compatible')
+    expect(status.hasKey).toBe(true)
+    expect(status.maskedKey).toBeNull()
+    expect(status.baseURL).toBe('http://localhost:11434/v1')
+    expect(status.source).toBe('stored')
+    // Other vendors with no creds remain hasKey=false.
+    expect(m.getStatus('openrouter').hasKey).toBe(false)
+  })
+
   it('migrates legacy secure-config.json to v2 openrouter slot', () => {
     const p = paths()
     // Production encodes safeStorage.encryptString(plain).toString('base64').

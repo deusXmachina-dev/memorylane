@@ -136,20 +136,19 @@ app.on('ready', async () => {
 
   const vendorCredentialsManager = new VendorCredentialsManager()
   const captureSettingsManager = new CaptureSettingsManager()
-  // First-launch migration: if a legacy custom-endpoint config existed and no
-  // explicit activeVendor has been persisted yet, switch to openai-compatible.
-  if (
-    vendorCredentialsManager.migration.hadCustomEndpoint &&
-    captureSettingsManager.get().activeVendor === 'openrouter'
-  ) {
-    captureSettingsManager.setActiveVendor('openai-compatible')
+  // First-launch migration from legacy custom-endpoint config.
+  if (vendorCredentialsManager.migration.hadCustomEndpoint) {
+    if (captureSettingsManager.get().activeVendor === 'openrouter') {
+      captureSettingsManager.setActiveVendor('openai-compatible')
+      log.info('[Main] migrated activeVendor to openai-compatible from legacy custom-endpoint')
+    }
     const carriedModel = vendorCredentialsManager.migration.customEndpointModel
-    if (carriedModel) {
+    if (carriedModel && captureSettingsManager.get().activeVendor === 'openai-compatible') {
       // Pre-PR custom endpoints stored a single model used for vision summaries;
       // restore it to the snapshot slot so the user's prior choice survives.
       captureSettingsManager.save({ semanticSnapshotModel: carriedModel })
+      log.info(`[Main] restored legacy custom-endpoint snapshot model: ${carriedModel}`)
     }
-    log.info('[Main] migrated activeVendor to openai-compatible from legacy custom-endpoint')
   }
   const captureStateManager = new CaptureStateManager()
   const deviceIdentity = new DeviceIdentity()
