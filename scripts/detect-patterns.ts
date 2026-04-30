@@ -13,6 +13,7 @@ import { config as loadEnv } from 'dotenv'
 loadEnv()
 
 import * as fs from 'fs'
+import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import { StorageService } from '../src/main/storage/index'
 import { getDefaultDbPath } from '../src/main/paths'
 import { PatternDetector } from '../src/main/services/pattern-detector'
@@ -98,8 +99,9 @@ async function main() {
 
   try {
     const detector = new PatternDetector(storageService)
+    const languageModel = createOpenRouter({ apiKey })(model)
     const result = await detector.run(
-      apiKey,
+      languageModel,
       {
         model,
         lookbackDays: days,

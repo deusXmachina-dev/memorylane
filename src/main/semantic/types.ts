@@ -1,4 +1,5 @@
 import type { ActivityFrame } from '../activity-types'
+import type { ProviderResolver } from '../llm'
 
 export type SemanticMode = 'video' | 'snapshot'
 export type SemanticPipelinePreference = 'auto' | 'video' | 'image'
@@ -56,12 +57,6 @@ export interface VideoAssetData {
   mimeType: string
 }
 
-export interface SemanticEndpointConfig {
-  serverURL: string
-  model: string
-  apiKey?: string
-}
-
 export interface ActivitySemanticServiceConfig {
   videoModels?: string[]
   snapshotModels?: string[]
@@ -70,7 +65,7 @@ export interface ActivitySemanticServiceConfig {
   requestTimeoutMs?: number
   usageTracker?: UsageTrackerLike
   client?: SemanticChatClient
-  endpointConfig?: SemanticEndpointConfig
+  resolver?: ProviderResolver
   debugDumper?: SemanticDebugDumper
 }
 

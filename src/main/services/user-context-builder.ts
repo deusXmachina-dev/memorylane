@@ -1,17 +1,17 @@
 /**
  * User context builder service.
  *
- * Analyzes the past week of activities via a single LLM call (OpenRouter) to
- * produce a short and detailed summary of who the user is. These summaries
- * are stored in the DB and injected into other LLM prompts for personalization.
+ * Analyzes the past week of activities via a single LLM call to produce a
+ * short and detailed summary of who the user is. These summaries are stored
+ * in the DB and injected into other LLM prompts for personalization.
  *
  * Scheduling mirrors PatternDetector: call scheduleRun() on screen unlock
  * and the service handles interval guards, settle delays, and error isolation.
  */
 
-import { OpenRouter } from '@openrouter/sdk'
+import { generateText, type LanguageModel } from 'ai'
 import type { StorageService, ActivityDetail } from '../storage'
-import type { ApiKeyManager } from '../settings/api-key-manager'
+import type { ProviderResolver } from '../llm'
 import type { UserContext } from '../storage/user-context-repository'
 import { USER_CONTEXT_CONFIG } from '../../shared/constants'
 import log from '../logger'
@@ -73,17 +73,13 @@ interface AggregatedProfile {
 }
 
 function aggregateActivities(activities: ActivityDetail[]): AggregatedProfile {
-  // Per-app stats
   const appMap = new Map<string, { totalMs: number; count: number; windows: Map<string, number> }>()
-  // Per-TLD stats
   const tldMap = new Map<string, number>()
-  // Collect unique summaries
   const summarySet = new Set<string>()
 
   for (const a of activities) {
     const durationMs = a.endTimestamp - a.startTimestamp
 
-    // App stats
     let app = appMap.get(a.appName)
     if (!app) {
       app = { totalMs: 0, count: 0, windows: new Map() }
@@ -95,18 +91,15 @@ function aggregateActivities(activities: ActivityDetail[]): AggregatedProfile {
       app.windows.set(a.windowTitle, (app.windows.get(a.windowTitle) || 0) + durationMs)
     }
 
-    // TLD stats
     if (a.tld) {
       tldMap.set(a.tld, (tldMap.get(a.tld) || 0) + durationMs)
     }
 
-    // Summaries (deduplicate)
     if (a.summary) {
       summarySet.add(a.summary)
     }
   }
 
-  // Sort apps by total time
   const apps = [...appMap.entries()]
     .sort((a, b) => b[1].totalMs - a[1].totalMs)
     .slice(0, 15)
@@ -120,7 +113,6 @@ function aggregateActivities(activities: ActivityDetail[]): AggregatedProfile {
         .map(([title]) => title),
     }))
 
-  // Sort TLDs by total time
   const top_tlds = [...tldMap.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
@@ -129,7 +121,6 @@ function aggregateActivities(activities: ActivityDetail[]): AggregatedProfile {
       hours: Math.round((ms / 3_600_000) * 10) / 10,
     }))
 
-  // Sample up to 80 unique summaries evenly across the set
   const allSummaries = [...summarySet]
   const maxSamples = 160
   const step = Math.max(1, Math.floor(allSummaries.length / maxSamples))
@@ -238,7 +229,7 @@ export class UserContextBuilder {
 
   constructor(
     private readonly storage: StorageService,
-    private readonly apiKeyManager?: ApiKeyManager,
+    private readonly resolver?: ProviderResolver,
   ) {}
 
   /**
@@ -248,9 +239,17 @@ export class UserContextBuilder {
   scheduleRun(): void {
     if (this.running || this.settleTimer) return
 
-    const apiKey = this.apiKeyManager?.getApiKey()
-    if (!apiKey) {
-      log.info('[UserContextBuilder] No API key, skipping')
+    if (!this.resolver) {
+      log.info('[UserContextBuilder] No resolver, skipping')
+      return
+    }
+
+    const cfg = DEFAULT_BUILDER_CONFIG
+    let model: LanguageModel
+    try {
+      model = this.resolver.buildActive(cfg.model)
+    } catch (err) {
+      log.info(`[UserContextBuilder] Cannot build model: ${(err as Error).message}, skipping`)
       return
     }
 
@@ -273,7 +272,7 @@ export class UserContextBuilder {
     )
     this.settleTimer = setTimeout(() => {
       this.settleTimer = null
-      void this.execute(apiKey)
+      void this.execute(model, cfg)
     }, USER_CONTEXT_CONFIG.SETTLE_DELAY_MS)
   }
 
@@ -281,17 +280,17 @@ export class UserContextBuilder {
    * Run context update immediately. Used by the CLI.
    */
   async run(
-    apiKey: string,
+    model: LanguageModel,
     config: Partial<UserContextBuilderConfig> = {},
     onProgress?: ProgressCallback,
   ): Promise<UserContextResult> {
-    return runUserContextUpdate(apiKey, this.storage, config, onProgress)
+    return runUserContextUpdate(model, this.storage, config, onProgress)
   }
 
-  private async execute(apiKey: string): Promise<void> {
+  private async execute(model: LanguageModel, cfg: UserContextBuilderConfig): Promise<void> {
     this.running = true
     try {
-      const result = await runUserContextUpdate(apiKey, this.storage)
+      const result = await runUserContextUpdate(model, this.storage, cfg)
       log.info(
         `[UserContextBuilder] Run complete, ` +
           `tokens: ${result.tokenUsage.input}in/${result.tokenUsage.output}out`,
@@ -309,7 +308,7 @@ export class UserContextBuilder {
 // ---------------------------------------------------------------------------
 
 async function runUserContextUpdate(
-  apiKey: string,
+  model: LanguageModel,
   storage: StorageService,
   config: Partial<UserContextBuilderConfig> = {},
   onProgress?: ProgressCallback,
@@ -321,9 +320,8 @@ async function runUserContextUpdate(
     onProgress?.(msg)
   }
 
-  progress(`Starting run (model=${cfg.model}, lookback=${cfg.lookbackDays}d)`)
+  progress(`Starting run (lookback=${cfg.lookbackDays}d)`)
 
-  // 1. Gather activities for the past week
   const allActivities: ActivityDetail[] = []
   for (let d = 1; d <= cfg.lookbackDays; d++) {
     const { start, end } = getDayBoundaries(d)
@@ -342,39 +340,28 @@ async function runUserContextUpdate(
     }
   }
 
-  // 2. Aggregate activities into compact stats
   const profile = aggregateActivities(allActivities)
   progress(
     `Aggregated into ${profile.apps.length} apps, ${profile.top_tlds.length} TLDs, ${profile.sample_summaries.length} sample summaries`,
   )
 
-  // 3. Load existing context for continuity
   const existing = storage.userContext.get()
 
-  // 4. Build prompt and make LLM call
   const systemPrompt = buildSystemPrompt(existing)
   const userMessage = `Activity stats from the past ${cfg.lookbackDays} days:\n\n\`\`\`json\n${JSON.stringify(profile, null, 2)}\n\`\`\``
 
-  const client = new OpenRouter({ apiKey })
-
-  progress(`Sending aggregated profile to ${cfg.model}...`)
-  const response = await client.chat.send({
-    model: cfg.model,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userMessage },
-    ],
+  progress('Sending aggregated profile to LLM...')
+  const response = await generateText({
+    model,
+    system: systemPrompt,
+    prompt: userMessage,
   })
 
-  const choice = response.choices?.[0]
-  const content = typeof choice?.message?.content === 'string' ? choice.message.content : ''
-
-  const totalInputTokens = response.usage?.promptTokens || 0
-  const totalOutputTokens = response.usage?.completionTokens || 0
+  const totalInputTokens = response.usage?.inputTokens ?? 0
+  const totalOutputTokens = response.usage?.outputTokens ?? 0
   progress(`Response received (${totalInputTokens} in / ${totalOutputTokens} out tokens)`)
 
-  // 5. Parse and persist
-  const parsed = extractContextFromResponse(content)
+  const parsed = extractContextFromResponse(response.text)
   if (!parsed) {
     throw new Error('Failed to parse user context from LLM response')
   }

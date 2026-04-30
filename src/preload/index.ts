@@ -2,7 +2,7 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ConsentOutcome } from '../shared/types'
+import type { ConsentOutcome, ProviderConfigInput, ProviderConfigPatch } from '../shared/types'
 
 console.log('[Preload] Script loading...')
 
@@ -25,20 +25,22 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   onStatusChanged: (callback: (status: unknown) => void) => {
     ipcRenderer.on('main-window:statusChanged', (_event, status) => callback(status))
   },
-  // API key management
+  // API key status (read-only; legacy compatibility)
   getKeyStatus: () => ipcRenderer.invoke('main-window:getKeyStatus'),
-  saveApiKey: (key: string) => ipcRenderer.invoke('main-window:saveApiKey', key),
-  deleteApiKey: () => ipcRenderer.invoke('main-window:deleteApiKey'),
   // Integrations
   addToClaude: () => ipcRenderer.invoke('main-window:addToClaude'),
   addToCursor: () => ipcRenderer.invoke('main-window:addToCursor'),
   addToClaudeCode: () => ipcRenderer.invoke('main-window:addToClaudeCode'),
   getMcpStatus: () => ipcRenderer.invoke('main-window:getMcpStatus'),
-  // Custom endpoint
+  // Custom endpoint status (read-only; legacy compatibility)
   getCustomEndpoint: () => ipcRenderer.invoke('main-window:getCustomEndpoint'),
-  saveCustomEndpoint: (config: { serverURL: string; model: string; apiKey?: string }) =>
-    ipcRenderer.invoke('main-window:saveCustomEndpoint', config),
-  deleteCustomEndpoint: () => ipcRenderer.invoke('main-window:deleteCustomEndpoint'),
+  // Multi-provider registry
+  listProviders: () => ipcRenderer.invoke('main-window:listProviders'),
+  addProvider: (input: ProviderConfigInput) => ipcRenderer.invoke('main-window:addProvider', input),
+  updateProvider: (id: string, patch: ProviderConfigPatch) =>
+    ipcRenderer.invoke('main-window:updateProvider', { id, patch }),
+  removeProvider: (id: string) => ipcRenderer.invoke('main-window:removeProvider', id),
+  setActiveProvider: (id: string | null) => ipcRenderer.invoke('main-window:setActiveProvider', id),
   getLlmHealth: () => ipcRenderer.invoke('main-window:getLlmHealth'),
   testLlmConnection: () => ipcRenderer.invoke('main-window:testLlmConnection'),
   // Subscription

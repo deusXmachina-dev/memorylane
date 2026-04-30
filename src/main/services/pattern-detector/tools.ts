@@ -1,4 +1,4 @@
-import { tool } from '@openrouter/sdk'
+import { tool } from 'ai'
 import { z } from 'zod'
 import type { StorageService } from '../../storage'
 import type { EmbeddingService } from '../../processor/embedding'
@@ -10,9 +10,8 @@ export function buildVerificationTools(
   dayEnd: number,
   progress: (msg: string) => void,
 ) {
-  return [
-    tool({
-      name: 'get_activity_ocr',
+  return {
+    get_activity_ocr: tool({
       description:
         'Fetch OCR text (what was on screen) for specific activities by ID. Use to see the actual content the user was looking at.',
       inputSchema: z.object({
@@ -37,8 +36,7 @@ export function buildVerificationTools(
         }))
       },
     }),
-    tool({
-      name: 'search_similar_activities',
+    search_similar_activities: tool({
       description:
         'Semantic search for activities similar to a query within the current detection day. Use to find related activities the candidate may have missed.',
       inputSchema: z.object({
@@ -49,7 +47,6 @@ export function buildVerificationTools(
         progress(`  [tool] search_similar_activities: "${params.query}"`)
         const embedding = await embeddingService.generateEmbedding(params.query)
         const allResults = storage.activities.searchVectors(embedding, (params.limit ?? 10) * 3)
-        // Filter to detection day time range
         const results = allResults
           .filter((a) => a.startTimestamp >= dayStart && a.startTimestamp < dayEnd)
           .slice(0, params.limit ?? 10)
@@ -63,8 +60,7 @@ export function buildVerificationTools(
         }))
       },
     }),
-    tool({
-      name: 'browse_timeline',
+    browse_timeline: tool({
       description:
         'Browse the activity timeline around a specific time to see surrounding context. Returns activities within a time window, ordered chronologically.',
       inputSchema: z.object({
@@ -101,5 +97,5 @@ export function buildVerificationTools(
         }))
       },
     }),
-  ] as const
+  } as const
 }

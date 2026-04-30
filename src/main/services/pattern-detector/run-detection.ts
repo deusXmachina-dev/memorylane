@@ -1,6 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
-import { OpenRouter, stepCountIs } from '@openrouter/sdk'
-import { callModel } from '@openrouter/sdk/funcs/call-model'
+import { generateText, stepCountIs, type LanguageModel } from 'ai'
 import type { StorageService } from '../../storage'
 import type { Pattern, PatternSighting } from '../../storage/pattern-repository'
 import type { EmbeddingService } from '../../processor/embedding'
@@ -21,7 +20,7 @@ import { buildVerificationTools } from './tools'
 const VERIFICATION_MAX_STEPS = 8
 
 export async function runDetection(
-  apiKey: string,
+  model: LanguageModel,
   storage: StorageService,
   embeddingService: EmbeddingService,
   config: Partial<PatternDetectorConfig> = {},
@@ -93,26 +92,18 @@ export async function runDetection(
   const scanPrompt = buildScanSystemPrompt(label, rejectedPatterns, userContextStr)
   const scanUserMessage = `Here are all ${activities.length} activities from ${label}:\n\n\`\`\`json\n${JSON.stringify(serialized, null, 2)}\n\`\`\``
 
-  const client = new OpenRouter({ apiKey })
-
   progress(`[Phase 1] Sending ${activities.length} activities to ${cfg.model}...`)
-  const scanResponse = await client.chat.send({
-    model: cfg.model,
-    messages: [
-      { role: 'system', content: scanPrompt },
-      { role: 'user', content: scanUserMessage },
-    ],
+  const scanResponse = await generateText({
+    model,
+    system: scanPrompt,
+    prompt: scanUserMessage,
   })
 
-  const scanChoice = scanResponse.choices?.[0]
-  const scanContent =
-    typeof scanChoice?.message?.content === 'string' ? scanChoice.message.content : ''
+  const scanContent = scanResponse.text
 
-  scanInputTokens = scanResponse.usage?.promptTokens || 0
-  scanOutputTokens = scanResponse.usage?.completionTokens || 0
-  progress(
-    `[Phase 1] Response received (${scanResponse.usage?.promptTokens || 0} in / ${scanResponse.usage?.completionTokens || 0} out tokens)`,
-  )
+  scanInputTokens = scanResponse.usage?.inputTokens ?? 0
+  scanOutputTokens = scanResponse.usage?.outputTokens ?? 0
+  progress(`[Phase 1] Response received (${scanInputTokens} in / ${scanOutputTokens} out tokens)`)
 
   const rawCandidates = extractJsonArray<unknown>(scanContent)
   const { candidates, malformedCount, missingActivityIdsCount } =
@@ -192,24 +183,21 @@ export async function runDetection(
 
       const candidateInput = `Investigate this candidate pattern:\n\n\`\`\`json\n${JSON.stringify(candidateWithActivities, null, 2)}\n\`\`\``
 
-      const result = callModel(client, {
-        model: cfg.model,
-        instructions: verifyPrompt,
-        input: candidateInput,
+      const result = await generateText({
+        model,
+        system: verifyPrompt,
+        prompt: candidateInput,
         tools,
         stopWhen: stepCountIs(VERIFICATION_MAX_STEPS),
       })
 
-      const text = await result.getText()
-      const response = await result.getResponse()
-
-      const usage = response?.usage
+      const usage = result.usage
       if (usage) {
-        verifyInputTokens += usage.inputTokens || 0
-        verifyOutputTokens += usage.outputTokens || 0
+        verifyInputTokens += usage.inputTokens ?? 0
+        verifyOutputTokens += usage.outputTokens ?? 0
       }
 
-      const parsed = extractJsonObject<Record<string, unknown>>(text)
+      const parsed = extractJsonObject<Record<string, unknown>>(result.text)
       if (!parsed) {
         candidatesRejected++
         progress(`[Phase 2] Error verifying "${candidate.name}": Could not parse response`)

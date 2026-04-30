@@ -23,13 +23,12 @@ import { updateTrayMenu } from './tray'
 import { exportDatabaseZip } from './database-export'
 import { integrations } from '../integrations'
 import { listInstalledApps } from '../apps/installed-apps'
-import type { ApiKeyManager } from '../settings/api-key-manager'
-import type { CustomEndpointManager } from '../settings/custom-endpoint-manager'
 import type { AccessProvider } from '../access'
+import type { ProviderRegistry } from '../llm'
+import type { ProviderConfigInput, ProviderConfigPatch, ProvidersSnapshot } from '../llm/provider'
 import type {
   AccessState,
   ConsentOutcome,
-  CustomEndpointConfig,
   LlmHealthStatus,
   MainWindowStatus,
   MainWindowStats,
@@ -44,13 +43,12 @@ import type { StorageService } from '../storage'
 import type { UsageTracker } from '../services/usage-tracker'
 
 interface SemanticService {
-  updateApiKey(apiKey: string | null): void
-  updateEndpoint(config: CustomEndpointConfig | null, openRouterKey?: string | null): void
   updatePipelinePreference(preference: SemanticPipelineMode): void
   updateRequestTimeoutMs(timeoutMs: number): void
   updateModels(videoModels: string[], snapshotModels: string[]): void
   getLlmHealthStatus(): LlmHealthStatus
   testConnection(): Promise<void>
+  refresh(): void
 }
 
 interface PatternDetectorService {
@@ -72,8 +70,7 @@ interface MainWindowDependencies {
   }
   storage: StorageService
   usageTracker: UsageTracker
-  apiKeyManager: ApiKeyManager
-  customEndpointManager: CustomEndpointManager
+  providerRegistry: ProviderRegistry
   semanticService: SemanticService
   accessProvider: AccessProvider
   captureSettingsManager: CaptureSettingsManager
@@ -102,6 +99,8 @@ interface MainWindowDependencies {
 let mainWindow: BrowserWindow | null = null
 let deps: MainWindowDependencies | null = null
 let isQuitting = false
+
+const MANAGED_PROVIDER_NAME = 'Managed (subscription)'
 
 app.on('before-quit', () => {
   isQuitting = true
@@ -350,40 +349,20 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     return buildStatus()
   })
 
-  // API key management
+  // API key status (derived from providers registry — managed-key UI surfaces use this)
   ipcMain.handle('main-window:getKeyStatus', () => {
     if (!deps) {
       return { hasKey: false, source: 'none', maskedKey: null }
     }
-    return deps.apiKeyManager.getKeyStatus()
-  })
-
-  ipcMain.handle('main-window:saveApiKey', (_event: IpcMainInvokeEvent, key: string) => {
-    if (!deps) {
-      return { success: false, error: 'Dependencies not initialized' }
+    const snapshot = deps.providerRegistry.getSnapshot()
+    const active = snapshot.providers.find((p) => p.id === snapshot.activeProviderId) ?? null
+    if (!active || !active.hasApiKey) {
+      return { hasKey: false, source: 'none', maskedKey: null }
     }
-    try {
-      deps.apiKeyManager.saveApiKey(key)
-      deps.semanticService.updateApiKey(key)
-      void deps.semanticService.testConnection()
-      return { success: true }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      return { success: false, error: message }
-    }
-  })
-
-  ipcMain.handle('main-window:deleteApiKey', () => {
-    if (!deps) {
-      return { success: false, error: 'Dependencies not initialized' }
-    }
-    try {
-      deps.apiKeyManager.deleteApiKey()
-      deps.semanticService.updateApiKey(null)
-      return { success: true }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      return { success: false, error: message }
+    return {
+      hasKey: true,
+      source: active.source === 'managed' ? 'managed' : 'stored',
+      maskedKey: active.maskedApiKey,
     }
   })
 
@@ -400,12 +379,22 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     return status
   })
 
-  // Custom endpoint management
+  // Custom endpoint status (derived from providers registry — kept for status panels)
   ipcMain.handle('main-window:getCustomEndpoint', () => {
     if (!deps) {
       return { enabled: false, serverURL: null, model: null, hasApiKey: false }
     }
-    return deps.customEndpointManager.getStatus()
+    const snapshot = deps.providerRegistry.getSnapshot()
+    const active = snapshot.providers.find((p) => p.id === snapshot.activeProviderId) ?? null
+    if (!active || active.kind !== 'openai-compatible') {
+      return { enabled: false, serverURL: null, model: null, hasApiKey: false }
+    }
+    return {
+      enabled: true,
+      serverURL: active.baseURL,
+      model: active.defaultModel,
+      hasApiKey: active.hasApiKey,
+    }
   })
 
   ipcMain.handle('main-window:getLlmHealth', () => {
@@ -426,49 +415,30 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     await deps.semanticService.testConnection()
   })
 
-  ipcMain.handle(
-    'main-window:saveCustomEndpoint',
-    (_event: IpcMainInvokeEvent, config: CustomEndpointConfig) => {
-      if (!deps) {
-        return { success: false, error: 'Dependencies not initialized' }
-      }
-      try {
-        deps.customEndpointManager.saveEndpoint(config)
-        deps.semanticService.updateEndpoint(deps.customEndpointManager.getEndpoint())
-        void deps.semanticService.testConnection()
-        return { success: true }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error'
-        return { success: false, error: message }
-      }
-    },
-  )
-
-  ipcMain.handle('main-window:deleteCustomEndpoint', () => {
-    if (!deps) {
-      return { success: false, error: 'Dependencies not initialized' }
-    }
-    try {
-      deps.customEndpointManager.deleteEndpoint()
-      const openRouterKey = deps.apiKeyManager.getApiKey()
-      deps.semanticService.updateEndpoint(null, openRouterKey)
-      return { success: true }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      return { success: false, error: message }
-    }
-  })
-
   // Subscription / managed key
   deps.accessProvider.setUpdateCallback((state, payload) => {
     if (payload?.key && deps) {
-      deps.apiKeyManager.saveApiKey(payload.key, 'managed')
-      deps.semanticService.updateApiKey(payload.key)
+      const existingManaged = deps.providerRegistry.list().find((p) => p.source === 'managed')
+      if (existingManaged) {
+        deps.providerRegistry.update(existingManaged.id, { apiKey: payload.key })
+      } else {
+        deps.providerRegistry.add({
+          kind: 'openrouter',
+          name: MANAGED_PROVIDER_NAME,
+          apiKey: payload.key,
+          source: 'managed',
+        })
+      }
+      deps.semanticService.refresh()
+      void deps.semanticService.testConnection()
     }
-    if (payload?.invalidate && deps && deps.apiKeyManager.getKeySource() === 'managed') {
-      log.info('[MainWindow] Invalidating stale managed key')
-      deps.apiKeyManager.deleteApiKey()
-      deps.semanticService.updateApiKey(null)
+    if (payload?.invalidate && deps) {
+      const managed = deps.providerRegistry.list().find((p) => p.source === 'managed')
+      if (managed) {
+        log.info('[MainWindow] Invalidating stale managed key')
+        deps.providerRegistry.remove(managed.id)
+        deps.semanticService.refresh()
+      }
     }
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('main-window:accessStateChanged', state)
@@ -730,6 +700,65 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: false, error: message }
     }
   })
+
+  // LLM Providers (multi-provider registry)
+  ipcMain.handle('main-window:listProviders', (): ProvidersSnapshot => {
+    if (!deps) return { providers: [], activeProviderId: null }
+    return deps.providerRegistry.getSnapshot()
+  })
+
+  ipcMain.handle(
+    'main-window:addProvider',
+    (_event: IpcMainInvokeEvent, input: ProviderConfigInput) => {
+      if (!deps) return { success: false, error: 'Dependencies not initialized' }
+      try {
+        const config = deps.providerRegistry.add(input)
+        return { success: true, providerId: config.id }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        return { success: false, error: message }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'main-window:updateProvider',
+    (_event: IpcMainInvokeEvent, payload: { id: string; patch: ProviderConfigPatch }) => {
+      if (!deps) return { success: false, error: 'Dependencies not initialized' }
+      try {
+        deps.providerRegistry.update(payload.id, payload.patch)
+        return { success: true }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        return { success: false, error: message }
+      }
+    },
+  )
+
+  ipcMain.handle('main-window:removeProvider', (_event: IpcMainInvokeEvent, id: string) => {
+    if (!deps) return { success: false, error: 'Dependencies not initialized' }
+    try {
+      deps.providerRegistry.remove(id)
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      return { success: false, error: message }
+    }
+  })
+
+  ipcMain.handle(
+    'main-window:setActiveProvider',
+    (_event: IpcMainInvokeEvent, id: string | null) => {
+      if (!deps) return { success: false, error: 'Dependencies not initialized' }
+      try {
+        deps.providerRegistry.setActive(id)
+        return { success: true }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        return { success: false, error: message }
+      }
+    },
+  )
 }
 
 function buildModelChain(userPick: string, defaults: readonly string[]): string[] {

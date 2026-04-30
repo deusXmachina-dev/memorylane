@@ -15,8 +15,10 @@
  * service handles interval guards, settle delays, and error isolation.
  */
 
+import type { LanguageModel } from 'ai'
 import type { StorageService } from '../../storage'
-import type { ApiKeyManager } from '../../settings/api-key-manager'
+import type { ProviderResolver } from '../../llm'
+import { getCapabilities } from '../../llm'
 import { PATTERN_DETECTION_CONFIG } from '../../../shared/constants'
 import log from '../../logger'
 import { EmbeddingService } from '../../processor/embedding'
@@ -38,7 +40,7 @@ export class PatternDetector {
 
   constructor(
     private readonly storage: StorageService,
-    private readonly apiKeyManager?: ApiKeyManager,
+    private readonly resolver?: ProviderResolver,
   ) {}
 
   setEnabled(enabled: boolean): void {
@@ -58,9 +60,29 @@ export class PatternDetector {
     if (!this.enabled) return
     if (this.running || this.settleTimer) return
 
-    const apiKey = this.apiKeyManager?.getApiKey()
-    if (!apiKey) {
-      log.info('[PatternDetector] No API key, skipping')
+    if (!this.resolver) {
+      log.info('[PatternDetector] No resolver, skipping')
+      return
+    }
+
+    const active = this.resolver.getActive()
+    if (!active) {
+      log.info('[PatternDetector] No active provider, skipping')
+      return
+    }
+
+    if (!getCapabilities(active.kind).toolUse) {
+      log.info(
+        `[PatternDetector] Active provider (${active.kind}) does not support tool use, skipping`,
+      )
+      return
+    }
+
+    let languageModel: LanguageModel
+    try {
+      languageModel = this.resolver.buildActive(this.model)
+    } catch (err) {
+      log.info(`[PatternDetector] Cannot build model: ${(err as Error).message}, skipping`)
       return
     }
 
@@ -83,7 +105,7 @@ export class PatternDetector {
     )
     this.settleTimer = setTimeout(() => {
       this.settleTimer = null
-      void this.execute(apiKey)
+      void this.execute(languageModel)
     }, PATTERN_DETECTION_CONFIG.SETTLE_DELAY_MS)
   }
 
@@ -91,17 +113,17 @@ export class PatternDetector {
    * Run detection immediately. Used by the CLI.
    */
   async run(
-    apiKey: string,
+    model: LanguageModel,
     config: Partial<PatternDetectorConfig> = {},
     onProgress?: ProgressCallback,
   ): Promise<DetectionRunResult> {
-    return runDetection(apiKey, this.storage, this.embeddingService, config, onProgress)
+    return runDetection(model, this.storage, this.embeddingService, config, onProgress)
   }
 
-  private async execute(apiKey: string): Promise<void> {
+  private async execute(model: LanguageModel): Promise<void> {
     this.running = true
     try {
-      const result = await runDetection(apiKey, this.storage, this.embeddingService, {
+      const result = await runDetection(model, this.storage, this.embeddingService, {
         model: this.model,
       })
       log.info(

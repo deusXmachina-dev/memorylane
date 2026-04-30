@@ -1,14 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Button } from '@components/ui/button'
-import type {
-  CaptureSettings,
-  CustomEndpointStatus,
-  KeyStatus,
-  MainWindowAPI,
-  SemanticPipelineMode,
-} from '@types'
-import { CustomEndpointSection } from '../CustomEndpointSection'
-import { ManageKeySection } from '../ManageKeySection'
+import type { CaptureSettings, KeyStatus, MainWindowAPI, SemanticPipelineMode } from '@types'
+import { ProvidersSection } from '../ProvidersSection'
 import { SectionToggle } from './SectionToggle'
 import { SubSectionToggle } from './SubSectionToggle'
 import { SliderRow } from './SliderRow'
@@ -16,8 +9,6 @@ import { ModelSelector } from './ModelSelector'
 import type { ModelPreset } from './ModelSelector'
 import type { NumericCaptureSetting } from './types'
 import { formatMinSec } from './utils'
-
-type ProviderTab = 'openrouter' | 'custom'
 
 const VIDEO_PRESETS: ModelPreset[] = [
   { id: 'google/gemini-2.5-flash-lite-preview-09-2025', label: 'Gemini Flash Lite' },
@@ -42,9 +33,6 @@ interface AiModelsSectionProps {
   onToggle: () => void
   form: CaptureSettings
   keyStatus: KeyStatus | null
-  endpointStatus: CustomEndpointStatus | null
-  onKeyStatusChanged: () => void
-  onEndpointStatusChanged: () => void
   onSemanticPipelineModeChange: (mode: SemanticPipelineMode) => void
   onSettingChange: (key: NumericCaptureSetting, value: number) => void
   onSettingCommit: (key: NumericCaptureSetting, value: number) => void
@@ -61,68 +49,26 @@ export function AiModelsSection({
   onToggle,
   form,
   keyStatus,
-  endpointStatus,
-  onKeyStatusChanged,
-  onEndpointStatusChanged,
   onSemanticPipelineModeChange,
   onSettingChange,
   onSettingCommit,
   onModelChange,
   onPatternDetectionEnabledChange,
 }: AiModelsSectionProps): React.JSX.Element {
-  const isCustomEndpoint = endpointStatus?.enabled === true
-  const hasLlmAccess = keyStatus?.hasKey === true || isCustomEndpoint
+  const hasLlmAccess = keyStatus?.hasKey === true
   const selectorMode: 'preset' | 'freetext' =
     keyStatus?.source === 'managed' ? 'preset' : 'freetext'
   const [moreOpen, setMoreOpen] = useState(false)
-  const [providerTab, setProviderTab] = useState<ProviderTab>('openrouter')
-
-  useEffect(() => {
-    if (isCustomEndpoint) setProviderTab('custom')
-  }, [isCustomEndpoint])
 
   return (
     <section>
       <SectionToggle label="AI Models" open={open} onToggle={onToggle} />
       {open && (
         <div className="mt-3 space-y-5">
-          {keyStatus && endpointStatus && (
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant={providerTab === 'openrouter' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setProviderTab('openrouter')}
-              >
-                OpenRouter
-              </Button>
-              <Button
-                variant={providerTab === 'custom' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setProviderTab('custom')}
-              >
-                Custom Endpoint
-              </Button>
-            </div>
-          )}
-
-          {providerTab === 'openrouter' && keyStatus && (
-            <>
-              <ManageKeySection
-                api={api}
-                keyStatus={keyStatus}
-                onKeyDeleted={onKeyStatusChanged}
-                onKeyUpdated={onKeyStatusChanged}
-              />
-            </>
-          )}
-
-          {providerTab === 'custom' && endpointStatus && (
-            <CustomEndpointSection
-              api={api}
-              endpointStatus={endpointStatus}
-              onEndpointChanged={onEndpointStatusChanged}
-            />
-          )}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">Providers</p>
+            <ProvidersSection api={api} />
+          </div>
 
           {hasLlmAccess && (
             <div>

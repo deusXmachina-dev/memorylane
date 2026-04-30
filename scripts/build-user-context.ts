@@ -12,6 +12,7 @@ import { config as loadEnv } from 'dotenv'
 loadEnv()
 
 import * as fs from 'fs'
+import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import { StorageService } from '../src/main/storage/index'
 import { getDefaultDbPath } from '../src/main/paths'
 import { UserContextBuilder } from '../src/main/services/user-context-builder'
@@ -92,7 +93,8 @@ async function main() {
 
   try {
     const builder = new UserContextBuilder(storageService)
-    const result = await builder.run(apiKey, { model, lookbackDays: days }, (msg) => {
+    const languageModel = createOpenRouter({ apiKey })(model)
+    const result = await builder.run(languageModel, { model, lookbackDays: days }, (msg) => {
       console.log(`  ${msg}`)
     })
 

@@ -186,8 +186,8 @@ app.on('ready', async () => {
     databaseUploadSync.start()
   }
 
-  userContextBuilder = new UserContextBuilder(runtime.storage, runtime.apiKeyManager)
-  patternDetector = new PatternDetector(runtime.storage, runtime.apiKeyManager)
+  userContextBuilder = new UserContextBuilder(runtime.storage, runtime.providerResolver)
+  patternDetector = new PatternDetector(runtime.storage, runtime.providerResolver)
   patternDetector.setEnabled(captureSettingsManager.get().patternDetectionEnabled)
   const captureCoordinator = createCaptureCoordinator({
     capture: runtime.capture,
@@ -248,8 +248,7 @@ app.on('ready', async () => {
     capture: captureCoordinator.controls,
     storage: runtime.storage,
     usageTracker: runtime.usageTracker,
-    apiKeyManager: runtime.apiKeyManager,
-    customEndpointManager: runtime.customEndpointManager,
+    providerRegistry: runtime.providerRegistry,
     semanticService: runtime.semanticService,
     accessProvider: runtime.accessProvider,
     captureSettingsManager,

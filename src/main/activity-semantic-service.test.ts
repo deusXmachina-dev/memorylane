@@ -46,28 +46,6 @@ vi.mock('sharp', () => ({
   }),
 }))
 
-const mockSend = vi.fn()
-const mockOpenAICreate = vi.fn()
-vi.mock('@openrouter/sdk', () => ({
-  OpenRouter: vi.fn().mockImplementation(function () {
-    return { chat: { send: mockSend } }
-  }),
-}))
-vi.mock('openai', () => ({
-  default: vi.fn().mockImplementation(function () {
-    return {
-      chat: {
-        completions: {
-          create: mockOpenAICreate,
-        },
-      },
-    }
-  }),
-}))
-
-import { OpenRouter } from '@openrouter/sdk'
-import OpenAI from 'openai'
-
 const DEFAULT_VIDEO_MODELS = [
   'google/gemini-2.5-flash-lite-preview-09-2025',
   'google/gemini-3-flash-preview',
@@ -173,21 +151,13 @@ describe('ActivitySemanticService', () => {
     }
   })
 
-  it('creates OpenRouter client without serverURL by default', () => {
-    new ActivitySemanticService('test-key', {
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    expect(OpenRouter).toHaveBeenCalledWith({ apiKey: 'test-key' })
-  })
-
   it('uses shared semantic timeout default when requestTimeoutMs is not provided', async () => {
     ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS = 5
     const tempDir = createTempDir()
     tempDirs.push(tempDir)
     const videoPath = createVideoFile(tempDir)
 
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send: () => new Promise(() => undefined) } },
       videoModels: ['slow/model'],
       snapshotModels: [],
@@ -209,7 +179,7 @@ describe('ActivitySemanticService', () => {
     tempDirs.push(tempDir)
     const videoPath = createVideoFile(tempDir)
 
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send: () => new Promise(() => undefined) } },
       requestTimeoutMs: 60_000,
       videoModels: ['slow/model'],
@@ -228,165 +198,6 @@ describe('ActivitySemanticService', () => {
     expect(diagnostics?.attempts[0]?.error).toContain('semantic model request timed out after 7ms')
   })
 
-  it('passes baseURL to OpenAI when custom endpoint is provided', () => {
-    new ActivitySemanticService('test-key', {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'custom-model',
-      },
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    expect(OpenAI).toHaveBeenCalledWith({
-      apiKey: 'test-key',
-      baseURL: 'http://localhost:11434/v1',
-      maxRetries: 0,
-    })
-  })
-
-  it('uses empty string as apiKey for OpenAI when custom endpoint has no key and no default key', () => {
-    new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'custom-model',
-      },
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    expect(OpenAI).toHaveBeenCalledWith({
-      apiKey: '',
-      baseURL: 'http://localhost:11434/v1',
-      maxRetries: 0,
-    })
-  })
-
-  it('uses custom endpoint apiKey over OpenRouter key for the OpenAI client', () => {
-    new ActivitySemanticService('openrouter-key', {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'custom-model',
-        apiKey: 'custom-key',
-      },
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    expect(OpenAI).toHaveBeenCalledWith({
-      apiKey: 'custom-key',
-      baseURL: 'http://localhost:11434/v1',
-      maxRetries: 0,
-    })
-  })
-
-  it('forwards configured custom model name in chat.send()', async () => {
-    const tempDir = createTempDir()
-    tempDirs.push(tempDir)
-    const videoPath = createVideoFile(tempDir)
-    mockOpenAICreate.mockResolvedValue(response('custom model summary'))
-
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'my-custom-model',
-      },
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    await service.summarizeFromVideo({
-      activity: makeActivity(),
-      videoPath,
-    })
-
-    expect(mockOpenAICreate).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'my-custom-model' }),
-      expect.objectContaining({
-        timeout: ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS,
-        maxRetries: 0,
-      }),
-    )
-  })
-
-  it('switches to custom endpoint via updateEndpoint()', () => {
-    const service = new ActivitySemanticService('test-key', {
-      usageTracker: { recordUsage: vi.fn() },
-    })
-    expect(service.isUsingCustomEndpoint()).toBe(false)
-
-    service.updateEndpoint({
-      serverURL: 'http://localhost:11434/v1',
-      model: 'custom-model',
-      apiKey: 'custom-key',
-    })
-
-    expect(service.isUsingCustomEndpoint()).toBe(true)
-    expect(service.isConfigured()).toBe(true)
-    expect(OpenAI).toHaveBeenLastCalledWith({
-      apiKey: 'custom-key',
-      baseURL: 'http://localhost:11434/v1',
-      maxRetries: 0,
-    })
-  })
-
-  it('reverts from custom endpoint via updateEndpoint(null, openRouterKey)', () => {
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'custom-model',
-      },
-      usageTracker: { recordUsage: vi.fn() },
-    })
-    expect(service.isUsingCustomEndpoint()).toBe(true)
-
-    service.updateEndpoint(null, 'openrouter-key')
-
-    expect(service.isUsingCustomEndpoint()).toBe(false)
-    expect(service.isConfigured()).toBe(true)
-    expect(OpenRouter).toHaveBeenLastCalledWith({
-      apiKey: 'openrouter-key',
-    })
-  })
-
-  it('reverts to unconfigured when removing custom endpoint without OpenRouter key', () => {
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'custom-model',
-      },
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    service.updateEndpoint(null)
-
-    expect(service.isUsingCustomEndpoint()).toBe(false)
-    expect(service.isConfigured()).toBe(false)
-  })
-
-  it('reports isConfigured() true when custom endpoint is set without OpenRouter key', () => {
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'custom-model',
-      },
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    expect(service.isUsingCustomEndpoint()).toBe(true)
-    expect(service.isConfigured()).toBe(true)
-  })
-
-  it('ignores updateApiKey when custom endpoint is active', () => {
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'custom-model',
-      },
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    service.updateApiKey('new-key')
-
-    expect(service.isUsingCustomEndpoint()).toBe(true)
-  })
-
   it('uses first video model when it succeeds', async () => {
     const tempDir = createTempDir()
     tempDirs.push(tempDir)
@@ -395,7 +206,7 @@ describe('ActivitySemanticService', () => {
     const send = vi.fn().mockResolvedValue(response('video summary'))
     const usageTracker = { recordUsage: vi.fn() }
 
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send } },
       usageTracker,
     })
@@ -428,7 +239,7 @@ describe('ActivitySemanticService', () => {
       return response('third model summary')
     })
 
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send } },
       usageTracker: { recordUsage: vi.fn() },
     })
@@ -444,7 +255,7 @@ describe('ActivitySemanticService', () => {
   })
 
   it('reports configured but waiting before any semantic request runs', () => {
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send: vi.fn() } },
       usageTracker: { recordUsage: vi.fn() },
     })
@@ -459,7 +270,7 @@ describe('ActivitySemanticService', () => {
   })
 
   it('marks LLM active after a successful connection test', async () => {
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send: vi.fn().mockResolvedValue(response('OK')) } },
       usageTracker: { recordUsage: vi.fn() },
     })
@@ -475,25 +286,8 @@ describe('ActivitySemanticService', () => {
     })
   })
 
-  it('does not rebuild the OpenRouter client or reset health when updateApiKey gets the same key', async () => {
-    mockSend.mockResolvedValueOnce(response('OK'))
-
-    const service = new ActivitySemanticService('test-key', {
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    await service.testConnection()
-    expect(service.getLlmHealthStatus().state).toBe('active')
-    expect(OpenRouter).toHaveBeenCalledTimes(1)
-
-    service.updateApiKey('test-key')
-
-    expect(OpenRouter).toHaveBeenCalledTimes(1)
-    expect(service.getLlmHealthStatus().state).toBe('active')
-  })
-
   it('marks LLM failing after a failed connection test', async () => {
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send: vi.fn().mockRejectedValue(new Error('connect ECONNREFUSED')) } },
       usageTracker: { recordUsage: vi.fn() },
     })
@@ -514,7 +308,7 @@ describe('ActivitySemanticService', () => {
     tempDirs.push(tempDir)
     const videoPath = createVideoFile(tempDir)
 
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send: vi.fn().mockRejectedValue(new Error('connect ECONNREFUSED')) } },
       usageTracker: { recordUsage: vi.fn() },
       snapshotModels: [],
@@ -558,7 +352,7 @@ describe('ActivitySemanticService', () => {
       return response('snapshot summary')
     })
 
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send } },
       usageTracker: { recordUsage: vi.fn() },
     })
@@ -588,7 +382,7 @@ describe('ActivitySemanticService', () => {
     ]
 
     const send = vi.fn().mockResolvedValue(response('image summary only'))
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send } },
       pipelinePreference: 'image',
       usageTracker: { recordUsage: vi.fn() },
@@ -622,7 +416,7 @@ describe('ActivitySemanticService', () => {
     ]
 
     const send = vi.fn().mockRejectedValue(new Error('video failed'))
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send } },
       pipelinePreference: 'video',
       usageTracker: { recordUsage: vi.fn() },
@@ -645,274 +439,6 @@ describe('ActivitySemanticService', () => {
     expect(diagnostics?.chosenMode).toBeNull()
   })
 
-  it('uses custom endpoint model for both video and snapshot attempts', async () => {
-    const tempDir = createTempDir()
-    tempDirs.push(tempDir)
-    const videoPath = createVideoFile(tempDir)
-    const frames = [
-      makeFrame(createImageFile(tempDir, 'f0.png'), 1_000, 0),
-      makeFrame(createImageFile(tempDir, 'f1.png'), 25_000, 1),
-    ]
-
-    mockOpenAICreate.mockImplementation(
-      async (request: { model: string; messages: Array<{ content: Array<{ type: string }> }> }) => {
-        const hasVideo = request.messages[0]?.content.some((item) => item.type === 'input_video')
-        if (hasVideo) {
-          throw new Error('input_video is not supported by this model')
-        }
-        return response('snapshot summary from custom model')
-      },
-    )
-
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'moondream:latest',
-      },
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    const result = await service.summarizeFromVideo({
-      activity: makeActivity({ frames }),
-      videoPath,
-    })
-
-    expect(result).toBe('snapshot summary from custom model')
-    expect(mockOpenAICreate.mock.calls.map((call) => call[0].model)).toEqual([
-      'moondream:latest',
-      'moondream:latest',
-    ])
-    const diagnostics = service.getLastRunDiagnostics()
-    expect(diagnostics?.attempts.map((attempt) => attempt.mode)).toEqual(['video', 'snapshot'])
-    expect(diagnostics?.chosenMode).toBe('snapshot')
-    expect(diagnostics?.chosenModel).toBe('moondream:latest')
-  })
-
-  it('accepts custom endpoint responses with null tool_calls', async () => {
-    const tempDir = createTempDir()
-    tempDirs.push(tempDir)
-    const frames = [makeFrame(createImageFile(tempDir, 'f0.png'), 1_000, 0)]
-
-    mockOpenAICreate.mockResolvedValue({
-      id: 'chatcmpl-test',
-      object: 'chat.completion',
-      created: 1_763_163_976,
-      model: 'mistral-small-2503',
-      choices: [
-        {
-          index: 0,
-          finish_reason: 'stop',
-          message: {
-            role: 'assistant',
-            content: 'snapshot summary from azure-style response',
-            tool_calls: null,
-          },
-        },
-      ],
-      usage: {
-        prompt_tokens: 8,
-        completion_tokens: 7,
-        total_tokens: 15,
-      },
-    })
-
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'https://example.test/openai/v1',
-        model: 'mistral-small-2503',
-      },
-      pipelinePreference: 'image',
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    const result = await service.summarizeFromVideo({
-      activity: makeActivity({ frames }),
-    })
-
-    expect(result).toBe('snapshot summary from azure-style response')
-    expect(mockOpenAICreate).toHaveBeenCalledTimes(1)
-  })
-
-  it('cache-skips video after OpenAI 422 details expose input_video as unsupported', async () => {
-    const tempDir = createTempDir()
-    tempDirs.push(tempDir)
-    const videoPath = createVideoFile(tempDir)
-    const frames = [
-      makeFrame(createImageFile(tempDir, 'f0.png'), 1_000, 0),
-      makeFrame(createImageFile(tempDir, 'f1.png'), 25_000, 1),
-    ]
-
-    mockOpenAICreate.mockImplementationOnce(async () => {
-      const error = new Error('422 invalid input error')
-      Object.assign(error, {
-        error: {
-          code: 'Invalid input',
-          message: 'invalid input error',
-          details: [
-            {
-              loc: [
-                'body',
-                'messages',
-                0,
-                'content',
-                'list[function-after[validate_content_part(), ContentPart]]',
-                1,
-                'type',
-              ],
-              msg: "Input should be 'text', 'image' or 'image_url'",
-              input: 'input_video',
-              ctx: { expected: "'text', 'image' or 'image_url'" },
-            },
-          ],
-        },
-      })
-      throw error
-    })
-    mockOpenAICreate.mockResolvedValue(response('snapshot summary after cached skip'))
-
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'https://example.test/openai/v1',
-        model: 'mistral-small-2503',
-      },
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    const firstResult = await service.summarizeFromVideo({
-      activity: makeActivity({ id: 'activity-1', frames }),
-      videoPath,
-    })
-    expect(firstResult).toBe('snapshot summary after cached skip')
-
-    mockOpenAICreate.mockClear()
-    mockOpenAICreate.mockResolvedValue(response('snapshot summary after cached skip'))
-
-    const secondResult = await service.summarizeFromVideo({
-      activity: makeActivity({ id: 'activity-2', frames }),
-      videoPath,
-    })
-
-    expect(secondResult).toBe('snapshot summary after cached skip')
-    expect(mockOpenAICreate).toHaveBeenCalledTimes(1)
-    expect(
-      mockOpenAICreate.mock.calls[0][0].messages[0].content.some(
-        (item: { type: string }) => item.type === 'input_video',
-      ),
-    ).toBe(false)
-
-    const secondDiagnostics = service.getLastRunDiagnostics()
-    expect(secondDiagnostics?.attempts.map((attempt) => attempt.mode)).toEqual(['snapshot'])
-    expect(secondDiagnostics?.fallbackReason).toBe(
-      'custom endpoint model marked video-unsupported (session)',
-    )
-  })
-
-  it('skips video on subsequent calls after custom model reports video unsupported', async () => {
-    const tempDir = createTempDir()
-    tempDirs.push(tempDir)
-    const videoPath = createVideoFile(tempDir)
-    const frames = [
-      makeFrame(createImageFile(tempDir, 'f0.png'), 1_000, 0),
-      makeFrame(createImageFile(tempDir, 'f1.png'), 25_000, 1),
-      makeFrame(createImageFile(tempDir, 'f2.png'), 45_000, 2),
-    ]
-
-    mockOpenAICreate.mockImplementation(
-      async (request: { messages: Array<{ content: Array<{ type: string }> }> }) => {
-        const hasVideo = request.messages[0]?.content.some((item) => item.type === 'input_video')
-        if (hasVideo) {
-          throw new Error('video input not supported; input_video unsupported')
-        }
-        return response('snapshot summary')
-      },
-    )
-
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'moondream:latest',
-      },
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    await service.summarizeFromVideo({
-      activity: makeActivity({ frames }),
-      videoPath,
-    })
-
-    const firstDiagnostics = service.getLastRunDiagnostics()
-    expect(firstDiagnostics?.attempts.some((attempt) => attempt.mode === 'video')).toBe(true)
-    expect(firstDiagnostics?.chosenMode).toBe('snapshot')
-
-    mockOpenAICreate.mockClear()
-
-    const secondResult = await service.summarizeFromVideo({
-      activity: makeActivity({ id: 'activity-2', frames }),
-      videoPath,
-    })
-
-    expect(secondResult).toBe('snapshot summary')
-    expect(mockOpenAICreate).toHaveBeenCalledTimes(1)
-    expect(
-      mockOpenAICreate.mock.calls[0][0].messages[0].content.some(
-        (item: { type: string }) => item.type === 'input_video',
-      ),
-    ).toBe(false)
-
-    const secondDiagnostics = service.getLastRunDiagnostics()
-    expect(secondDiagnostics?.attempts.map((attempt) => attempt.mode)).toEqual(['snapshot'])
-    expect(secondDiagnostics?.fallbackReason).toBe(
-      'custom endpoint model marked video-unsupported (session)',
-    )
-    expect(secondDiagnostics?.chosenMode).toBe('snapshot')
-  })
-
-  it('does not cache-skip video after generic failures', async () => {
-    const tempDir = createTempDir()
-    tempDirs.push(tempDir)
-    const videoPath = createVideoFile(tempDir)
-    const frames = [
-      makeFrame(createImageFile(tempDir, 'f0.png'), 1_000, 0),
-      makeFrame(createImageFile(tempDir, 'f1.png'), 25_000, 1),
-    ]
-
-    mockOpenAICreate.mockImplementation(
-      async (request: { messages: Array<{ content: Array<{ type: string }> }> }) => {
-        const hasVideo = request.messages[0]?.content.some((item) => item.type === 'input_video')
-        if (hasVideo) {
-          throw new Error('network timeout')
-        }
-        return response('snapshot summary')
-      },
-    )
-
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'moondream:latest',
-      },
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    await service.summarizeFromVideo({
-      activity: makeActivity({ frames }),
-      videoPath,
-    })
-    const firstDiagnostics = service.getLastRunDiagnostics()
-    expect(firstDiagnostics?.attempts.map((attempt) => attempt.mode)).toEqual(['video', 'snapshot'])
-
-    mockOpenAICreate.mockClear()
-    await service.summarizeFromVideo({
-      activity: makeActivity({ id: 'activity-3', frames }),
-      videoPath,
-    })
-    const secondDiagnostics = service.getLastRunDiagnostics()
-    expect(secondDiagnostics?.attempts.map((attempt) => attempt.mode)).toEqual([
-      'video',
-      'snapshot',
-    ])
-  })
-
   it('snapshot sampling selects frames nearest to interaction anchors', async () => {
     const tempDir = createTempDir()
     tempDirs.push(tempDir)
@@ -926,7 +452,7 @@ describe('ActivitySemanticService', () => {
     ]
 
     const send = vi.fn().mockResolvedValue(response('snapshot summary'))
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send } },
       videoModels: ['video/fail'],
       snapshotModels: ['snapshot/success'],
@@ -974,7 +500,7 @@ describe('ActivitySemanticService', () => {
       return response('snapshot summary')
     })
 
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send } },
       usageTracker: { recordUsage: vi.fn() },
     })
@@ -1009,7 +535,7 @@ describe('ActivitySemanticService', () => {
     ]
 
     const send = vi.fn().mockResolvedValue(response('snapshot summary'))
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send } },
       videoModels: ['video/fail'],
       snapshotModels: ['snapshot/success'],
@@ -1049,7 +575,7 @@ describe('ActivitySemanticService', () => {
 
     const send = vi.fn().mockResolvedValue(response('snapshot summary'))
 
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send } },
       videoModels: ['video/fail'],
       snapshotModels: ['snapshot/success'],
@@ -1090,7 +616,7 @@ describe('ActivitySemanticService', () => {
     ]
 
     const send = vi.fn().mockResolvedValue(response('snapshot summary'))
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send } },
       videoModels: ['video/fail'],
       snapshotModels: ['snapshot/success'],
@@ -1133,7 +659,7 @@ describe('ActivitySemanticService', () => {
 
     const send = vi.fn().mockResolvedValue(response('snapshot summary'))
 
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send } },
       videoModels: ['video/fail'],
       snapshotModels: ['snapshot/success'],
@@ -1161,7 +687,7 @@ describe('ActivitySemanticService', () => {
 
     const send = vi.fn().mockResolvedValue(response('summary'))
 
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send } },
       usageTracker: { recordUsage: vi.fn() },
     })
@@ -1181,7 +707,7 @@ describe('ActivitySemanticService', () => {
 
     const send = vi.fn().mockResolvedValue(response('  trimmed summary  '))
 
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send } },
       usageTracker: { recordUsage: vi.fn() },
     })
@@ -1202,7 +728,7 @@ describe('ActivitySemanticService', () => {
     const send = vi.fn().mockResolvedValue(response('summary', 123, 45))
     const usageTracker = { recordUsage: vi.fn() }
 
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send } },
       videoModels: ['mistralai/mistral-small-3.2-24b-instruct'],
       usageTracker,
@@ -1230,7 +756,7 @@ describe('ActivitySemanticService', () => {
     const send = vi.fn().mockResolvedValue(response('summary', 200, 100))
     const usageTracker = { recordUsage: vi.fn() }
 
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send } },
       videoModels: ['unknown/video-model'],
       usageTracker,
@@ -1259,7 +785,7 @@ describe('ActivitySemanticService', () => {
 
     const send = vi.fn().mockRejectedValue(new Error('all failed'))
 
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send } },
       usageTracker: { recordUsage: vi.fn() },
     })
@@ -1287,7 +813,7 @@ describe('ActivitySemanticService', () => {
     })
 
     const send = vi.fn().mockResolvedValue(response('dumped summary'))
-    const service = new ActivitySemanticService(undefined, {
+    const service = new ActivitySemanticService({
       client: { chat: { send } },
       debugDumper: dumper,
       usageTracker: { recordUsage: vi.fn() },

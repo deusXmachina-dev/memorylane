@@ -2,9 +2,8 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { app } from 'electron'
 import log from './logger'
-import { ApiKeyManager } from './settings/api-key-manager'
-import { CustomEndpointManager } from './settings/custom-endpoint-manager'
 import { DeviceIdentity } from './settings/device-identity'
+import { ProviderRegistry, ProviderResolver, seedRegistryFromLegacy } from './llm'
 import { createAccessProvider, type AccessProvider } from './access'
 import type { AppEdition } from '../shared/edition'
 import { StorageService } from './storage'
@@ -29,8 +28,8 @@ export interface MainRuntime {
   capture: RuntimeCapture
   storage: StorageService
   usageTracker: UsageTracker
-  apiKeyManager: ApiKeyManager
-  customEndpointManager: CustomEndpointManager
+  providerRegistry: ProviderRegistry
+  providerResolver: ProviderResolver
   semanticService: ActivitySemanticService
   accessProvider: AccessProvider
   updateExclusions(exclusions: {
@@ -58,8 +57,14 @@ export async function createMainRuntime(params: {
 
   const interactionMonitor = await import('./recorder/interaction-monitor')
 
-  const apiKeyManager = new ApiKeyManager()
-  const customEndpointManager = new CustomEndpointManager()
+  const providerRegistry = new ProviderRegistry()
+  const providerResolver = new ProviderResolver(providerRegistry)
+  const migration = seedRegistryFromLegacy({ registry: providerRegistry })
+  if (migration.ranMigration) {
+    log.info(
+      `[Runtime] Provider registry seeded (openrouter=${migration.seededOpenRouter}, openai-compatible=${migration.seededOpenAICompatible})`,
+    )
+  }
   const dev = !app.isPackaged
   const userDataPath = app.getPath('userData')
   const dbFile = dev ? 'memorylane-dev.db' : 'memorylane.db'
@@ -77,19 +82,12 @@ export async function createMainRuntime(params: {
         })
       : undefined
 
-  const savedEndpoint = customEndpointManager.getEndpoint()
-  const semanticService = new ActivitySemanticService(apiKeyManager.getApiKey() || undefined, {
+  const semanticService = new ActivitySemanticService({
+    resolver: providerResolver,
     usageTracker,
     debugDumper,
     pipelinePreference: params.semanticPipelinePreference,
     requestTimeoutMs: params.semanticRequestTimeoutMs,
-    endpointConfig: savedEndpoint
-      ? {
-          serverURL: savedEndpoint.serverURL,
-          model: savedEndpoint.model,
-          apiKey: savedEndpoint.apiKey,
-        }
-      : undefined,
   })
 
   semanticService.setUserContext(() => storage.userContext.get()?.shortSummary ?? null)
@@ -170,8 +168,8 @@ export async function createMainRuntime(params: {
     capture,
     storage,
     usageTracker,
-    apiKeyManager,
-    customEndpointManager,
+    providerRegistry,
+    providerResolver,
     semanticService,
     accessProvider,
     updateExclusions(exclusions): void {

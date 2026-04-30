@@ -1,5 +1,45 @@
 import type { AppEditionConfig } from './edition'
 
+// LLM provider registry
+export type ProviderKind = 'openrouter' | 'openai' | 'anthropic' | 'openai-compatible'
+
+/** 'managed' = key delivered by the subscription system; 'byok' = user-supplied. */
+export type ProviderSource = 'managed' | 'byok'
+
+export interface ProviderConfigInput {
+  kind: ProviderKind
+  name: string
+  apiKey: string
+  baseURL?: string
+  defaultModel?: string
+  source?: ProviderSource
+}
+
+export interface ProviderConfigPatch {
+  name?: string
+  apiKey?: string
+  baseURL?: string | null
+  defaultModel?: string | null
+  source?: ProviderSource
+}
+
+export interface ProviderStatus {
+  id: string
+  kind: ProviderKind
+  name: string
+  baseURL: string | null
+  defaultModel: string | null
+  hasApiKey: boolean
+  maskedApiKey: string | null
+  source: ProviderSource
+  createdAt: number
+}
+
+export interface ProvidersSnapshot {
+  providers: ProviderStatus[]
+  activeProviderId: string | null
+}
+
 export interface InteractionContext {
   type: 'click' | 'keyboard' | 'scroll' | 'app_change'
   timestamp: number
@@ -142,17 +182,6 @@ export interface DirectorySelectionResult {
   error?: string | undefined
 }
 
-export interface SettingsAPI {
-  getKeyStatus: () => Promise<KeyStatus>
-  saveApiKey: (key: string) => Promise<SaveResult>
-  deleteApiKey: () => Promise<SaveResult>
-  close: () => void
-  openExternal: (url: string) => Promise<void>
-  addToClaude: () => Promise<boolean>
-  addToCursor: () => Promise<boolean>
-  addToClaudeCode: () => Promise<boolean>
-}
-
 export interface MainWindowStatus {
   capturing: boolean
   captureHotkeyLabel: string
@@ -260,8 +289,14 @@ export interface MainWindowAPI {
   getMcpStatus: () => Promise<McpRegistrationStatus>
   // Custom endpoint
   getCustomEndpoint: () => Promise<CustomEndpointStatus>
-  saveCustomEndpoint: (config: CustomEndpointConfig) => Promise<SaveResult>
-  deleteCustomEndpoint: () => Promise<SaveResult>
+  // Multi-provider registry
+  listProviders: () => Promise<ProvidersSnapshot>
+  addProvider: (
+    input: ProviderConfigInput,
+  ) => Promise<{ success: boolean; error?: string; providerId?: string }>
+  updateProvider: (id: string, patch: ProviderConfigPatch) => Promise<SaveResult>
+  removeProvider: (id: string) => Promise<SaveResult>
+  setActiveProvider: (id: string | null) => Promise<SaveResult>
   getLlmHealth: () => Promise<LlmHealthStatus>
   testLlmConnection: () => Promise<void>
   // Subscription
