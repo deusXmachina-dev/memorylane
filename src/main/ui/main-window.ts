@@ -25,6 +25,7 @@ import { listInstalledApps } from '../apps/installed-apps'
 import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
 import { VENDORS } from '../../shared/types'
 import { VENDOR_PRESETS, buildModelChain } from '../../shared/vendor-defaults'
+import { applyVendorSwitch } from './vendor-switch'
 import type { AccessProvider } from '../access'
 import type {
   AccessState,
@@ -417,16 +418,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
     try {
       deps.captureSettingsManager.setActiveVendor(vendor)
-      const next = deps.captureSettingsManager.get()
-      const presets = VENDOR_PRESETS[next.activeVendor]
-      deps.semanticService.updateModels(
-        buildModelChain(next.semanticVideoModel, presets.semanticVideo),
-        buildModelChain(next.semanticSnapshotModel, presets.semanticSnapshot),
-      )
-      deps.semanticService.updatePipelinePreference(next.semanticPipelineMode)
-      deps.patternDetector?.updateModel(next.patternDetectionModel)
-      deps.inferenceProvider.notifyConfigChanged()
-      void deps.semanticService.testConnection()
+      applyVendorSwitch(deps, deps.captureSettingsManager.get())
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
