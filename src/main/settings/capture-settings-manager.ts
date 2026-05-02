@@ -1,7 +1,12 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import log from '../logger'
-import type { CaptureSettings, Vendor } from '../../shared/types'
+import type {
+  CaptureSettings,
+  SemanticPipelineMode,
+  Vendor,
+  VendorModelSelection,
+} from '../../shared/types'
 import { VENDORS } from '../../shared/types'
 import { getVendorDefaults } from '../../shared/vendor-defaults'
 import { normalizeExcludedApps, normalizeWildcardPatterns } from '../capture-exclusions'
@@ -48,8 +53,60 @@ const DEFAULTS: CaptureSettings = {
   semanticVideoModel: OPENROUTER_DEFAULTS.semanticVideoModel,
   semanticSnapshotModel: OPENROUTER_DEFAULTS.semanticSnapshotModel,
   patternDetectionModel: OPENROUTER_DEFAULTS.patternDetectionModel,
+  modelsByVendor: {},
   patternDetectionEnabled: true,
   uploadDetailLevel: 'off',
+}
+
+const MIRRORED_KEYS = [
+  'semanticVideoModel',
+  'semanticSnapshotModel',
+  'patternDetectionModel',
+  'semanticPipelineMode',
+] as const
+
+function pickVendorSelection(s: {
+  semanticVideoModel: string
+  semanticSnapshotModel: string
+  patternDetectionModel: string
+  semanticPipelineMode: SemanticPipelineMode
+}): VendorModelSelection {
+  return {
+    semanticVideoModel: s.semanticVideoModel,
+    semanticSnapshotModel: s.semanticSnapshotModel,
+    patternDetectionModel: s.patternDetectionModel,
+    semanticPipelineMode: s.semanticPipelineMode,
+  }
+}
+
+function normalizeVendorSelection(value: unknown): VendorModelSelection | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const v = value as Partial<VendorModelSelection>
+  const mode: SemanticPipelineMode =
+    v.semanticPipelineMode === 'auto' ||
+    v.semanticPipelineMode === 'video' ||
+    v.semanticPipelineMode === 'image'
+      ? v.semanticPipelineMode
+      : 'auto'
+  return {
+    semanticVideoModel: typeof v.semanticVideoModel === 'string' ? v.semanticVideoModel : '',
+    semanticSnapshotModel:
+      typeof v.semanticSnapshotModel === 'string' ? v.semanticSnapshotModel : '',
+    patternDetectionModel:
+      typeof v.patternDetectionModel === 'string' ? v.patternDetectionModel : '',
+    semanticPipelineMode: mode,
+  }
+}
+
+function normalizeModelsByVendor(value: unknown): Partial<Record<Vendor, VendorModelSelection>> {
+  const out: Partial<Record<Vendor, VendorModelSelection>> = {}
+  if (!value || typeof value !== 'object') return out
+  for (const vendor of VENDORS) {
+    const entry = (value as Record<string, unknown>)[vendor]
+    const normalized = normalizeVendorSelection(entry)
+    if (normalized) out[vendor] = normalized
+  }
+  return out
 }
 
 export class CaptureSettingsManager {
@@ -90,6 +147,23 @@ export class CaptureSettingsManager {
           typeof data.patternDetectionModel === 'string' && data.patternDetectionModel.length > 0
             ? data.patternDetectionModel
             : vendorDefaults.patternDetectionModel
+        const semanticPipelineMode: SemanticPipelineMode =
+          data.semanticPipelineMode === 'auto' ||
+          data.semanticPipelineMode === 'video' ||
+          data.semanticPipelineMode === 'image'
+            ? data.semanticPipelineMode
+            : DEFAULTS.semanticPipelineMode
+        const modelsByVendor = normalizeModelsByVendor(data.modelsByVendor)
+        // Legacy file (no per-vendor map): seed it with the active vendor's
+        // current flat fields so the next switch can find them again.
+        if (!modelsByVendor[activeVendor]) {
+          modelsByVendor[activeVendor] = {
+            semanticVideoModel,
+            semanticSnapshotModel,
+            patternDetectionModel,
+            semanticPipelineMode,
+          }
+        }
         return {
           ...DEFAULTS,
           ...data,
@@ -109,6 +183,8 @@ export class CaptureSettingsManager {
           semanticVideoModel,
           semanticSnapshotModel,
           patternDetectionModel,
+          semanticPipelineMode,
+          modelsByVendor,
         }
       }
     } catch (error) {
@@ -122,7 +198,7 @@ export class CaptureSettingsManager {
   }
 
   public save(partial: Partial<CaptureSettings>): void {
-    this.settings = {
+    const merged: CaptureSettings = {
       ...this.settings,
       ...partial,
       captureHotkeyAccelerator: normalizeCaptureHotkeyAccelerator(
@@ -139,6 +215,19 @@ export class CaptureSettingsManager {
         partial.excludedUrlPatterns ?? this.settings.excludedUrlPatterns,
       ),
     }
+    // Mirror flat model picks into the per-vendor map for the active vendor,
+    // unless the caller provided an explicit modelsByVendor (e.g. setActiveVendor
+    // restoring a remembered selection). This keeps the map in sync with edits.
+    if (
+      partial.modelsByVendor === undefined &&
+      MIRRORED_KEYS.some((k) => partial[k] !== undefined)
+    ) {
+      merged.modelsByVendor = {
+        ...merged.modelsByVendor,
+        [merged.activeVendor]: pickVendorSelection(merged),
+      }
+    }
+    this.settings = merged
     try {
       fs.writeFileSync(this.configPath, JSON.stringify(this.settings, null, 2))
       log.info('[CaptureSettings] Settings saved')
@@ -149,17 +238,37 @@ export class CaptureSettingsManager {
   }
 
   /**
-   * Switch the active vendor and reset the three model fields to that vendor's
-   * defaults in one persisted write.
+   * Switch the active vendor. Snapshots the current vendor's flat model fields
+   * into the per-vendor map, then restores the target vendor's previously
+   * remembered selection — falling back to vendor defaults on the first switch
+   * to that vendor.
    */
   public setActiveVendor(vendor: Vendor): void {
-    const defaults = getVendorDefaults(vendor)
+    const current = this.settings
+    const updatedMap: Partial<Record<Vendor, VendorModelSelection>> = {
+      ...current.modelsByVendor,
+      [current.activeVendor]: pickVendorSelection(current),
+    }
+    const remembered = updatedMap[vendor]
+    let next: VendorModelSelection
+    if (remembered) {
+      next = remembered
+    } else {
+      const defaults = getVendorDefaults(vendor)
+      next = {
+        semanticVideoModel: defaults.semanticVideoModel,
+        semanticSnapshotModel: defaults.semanticSnapshotModel,
+        patternDetectionModel: defaults.patternDetectionModel,
+        semanticPipelineMode: defaults.semanticVideoModel.length > 0 ? 'auto' : 'image',
+      }
+    }
     this.save({
       activeVendor: vendor,
-      semanticVideoModel: defaults.semanticVideoModel,
-      semanticSnapshotModel: defaults.semanticSnapshotModel,
-      patternDetectionModel: defaults.patternDetectionModel,
-      semanticPipelineMode: defaults.semanticVideoModel.length > 0 ? 'auto' : 'image',
+      semanticVideoModel: next.semanticVideoModel,
+      semanticSnapshotModel: next.semanticSnapshotModel,
+      patternDetectionModel: next.patternDetectionModel,
+      semanticPipelineMode: next.semanticPipelineMode,
+      modelsByVendor: updatedMap,
     })
   }
 

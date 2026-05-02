@@ -203,8 +203,16 @@ export interface CaptureSettings {
   semanticVideoModel: string
   semanticSnapshotModel: string
   patternDetectionModel: string
+  modelsByVendor: Partial<Record<Vendor, VendorModelSelection>>
   patternDetectionEnabled: boolean
   uploadDetailLevel: 'off' | 'summary' | 'detailed'
+}
+
+export interface VendorModelSelection {
+  semanticVideoModel: string
+  semanticSnapshotModel: string
+  patternDetectionModel: string
+  semanticPipelineMode: SemanticPipelineMode
 }
 
 export interface InstalledApp {

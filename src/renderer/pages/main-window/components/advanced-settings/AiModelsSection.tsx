@@ -114,7 +114,7 @@ export function AiModelsSection({
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Switching vendor resets the model selections to that vendor's defaults.
+              Each vendor remembers its own model selections.
             </p>
           </div>
 

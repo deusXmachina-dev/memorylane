@@ -204,6 +204,85 @@ describe('CaptureSettingsManager', () => {
     })
   })
 
+  describe('per-vendor model memory', () => {
+    it('restores a previously customized model when switching back to the vendor', () => {
+      const manager = new CaptureSettingsManager(configPath)
+      // Customize OpenRouter (the default active vendor).
+      manager.save({ semanticSnapshotModel: 'google/gemini-2.5-flash-lite' })
+
+      // Switch to Google — flat fields should now hold Google's defaults.
+      manager.setActiveVendor('google')
+      expect(manager.get().activeVendor).toBe('google')
+      expect(manager.get().semanticSnapshotModel).not.toBe('google/gemini-2.5-flash-lite')
+
+      // Switch back to OpenRouter — the customized snapshot model returns.
+      manager.setActiveVendor('openrouter')
+      expect(manager.get().activeVendor).toBe('openrouter')
+      expect(manager.get().semanticSnapshotModel).toBe('google/gemini-2.5-flash-lite')
+    })
+
+    it('first switch to a vendor uses that vendor defaults', () => {
+      const manager = new CaptureSettingsManager(configPath)
+      manager.setActiveVendor('openai-compatible')
+      const settings = manager.get()
+      expect(settings.activeVendor).toBe('openai-compatible')
+      // openai-compatible has no video preset, so pipeline locks to image.
+      expect(settings.semanticPipelineMode).toBe('image')
+      expect(settings.semanticSnapshotModel).toBe('gemma4:e4b')
+    })
+
+    it('save() writes flat model picks into modelsByVendor[activeVendor]', () => {
+      const manager = new CaptureSettingsManager(configPath)
+      manager.save({ semanticVideoModel: 'google/gemini-2.5-flash' })
+      const settings = manager.get()
+      expect(settings.modelsByVendor.openrouter?.semanticVideoModel).toBe('google/gemini-2.5-flash')
+    })
+
+    it('persists per-vendor selections across instance reloads', () => {
+      const m1 = new CaptureSettingsManager(configPath)
+      m1.save({ semanticSnapshotModel: 'google/gemini-2.5-flash-lite' })
+      m1.setActiveVendor('google')
+      m1.save({ semanticSnapshotModel: 'gemini-2.5-flash' })
+
+      const m2 = new CaptureSettingsManager(configPath)
+      m2.setActiveVendor('openrouter')
+      expect(m2.get().semanticSnapshotModel).toBe('google/gemini-2.5-flash-lite')
+      m2.setActiveVendor('google')
+      expect(m2.get().semanticSnapshotModel).toBe('gemini-2.5-flash')
+    })
+
+    it('legacy file without modelsByVendor is migrated on load', () => {
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          activeVendor: 'openrouter',
+          semanticSnapshotModel: 'mistralai/mistral-small-3.2-24b-instruct',
+          semanticPipelineMode: 'image',
+        }),
+      )
+      const manager = new CaptureSettingsManager(configPath)
+      const map = manager.get().modelsByVendor
+      expect(map.openrouter).toBeDefined()
+      expect(map.openrouter?.semanticSnapshotModel).toBe('mistralai/mistral-small-3.2-24b-instruct')
+      expect(map.openrouter?.semanticPipelineMode).toBe('image')
+    })
+
+    it('switching vendors does not lose other vendor selections', () => {
+      const manager = new CaptureSettingsManager(configPath)
+      // Customize OpenRouter.
+      manager.save({ patternDetectionModel: 'moonshotai/kimi-k2.5' })
+      // Switch to Google, customize.
+      manager.setActiveVendor('google')
+      manager.save({ patternDetectionModel: 'gemini-2.5-pro' })
+      // Switch to openai-compatible.
+      manager.setActiveVendor('openai-compatible')
+
+      const map = manager.get().modelsByVendor
+      expect(map.openrouter?.patternDetectionModel).toBe('moonshotai/kimi-k2.5')
+      expect(map.google?.patternDetectionModel).toBe('gemini-2.5-pro')
+    })
+  })
+
   describe('reset', () => {
     it('restores defaults in memory', () => {
       const manager = new CaptureSettingsManager(configPath)
