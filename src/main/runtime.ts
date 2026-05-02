@@ -205,6 +205,12 @@ export async function createMainRuntime(params: {
         }
 
         try {
+          semanticService.dispose()
+        } catch (error) {
+          log.warn('[Runtime] Failed to dispose semantic service:', error)
+        }
+
+        try {
           storage.close()
         } catch (error) {
           log.warn('[Runtime] Failed to close storage:', error)

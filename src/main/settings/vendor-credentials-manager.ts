@@ -23,8 +23,6 @@ interface StoredV2 {
 
 const ENV_VARS: Record<Vendor, { apiKey: string; baseURL?: string }> = {
   openrouter: { apiKey: 'OPENROUTER_API_KEY' },
-  openai: { apiKey: 'OPENAI_API_KEY', baseURL: 'OPENAI_BASE_URL' },
-  anthropic: { apiKey: 'ANTHROPIC_API_KEY', baseURL: 'ANTHROPIC_BASE_URL' },
   google: { apiKey: 'GOOGLE_VERTEX_API_KEY' },
   'openai-compatible': {
     apiKey: 'OPENAI_COMPATIBLE_API_KEY',
@@ -262,11 +260,22 @@ export class VendorCredentialsManager {
             migration: { ran: false, hadCustomEndpoint: false },
           }
         }
+        // The file is present but the shape is wrong. Preserve it for manual
+        // recovery rather than letting legacy migration overwrite it.
+        log.error(
+          '[VendorCredentialsManager] v2 config has unexpected shape; preserving file, skipping migration',
+        )
       } catch (error) {
-        log.error('[VendorCredentialsManager] failed to read v2 config, falling back:', error)
+        log.error(
+          '[VendorCredentialsManager] failed to parse v2 config; preserving file, skipping migration:',
+          error,
+        )
+      }
+      return {
+        store: { version: 2, vendors: {} },
+        migration: { ran: false, hadCustomEndpoint: false },
       }
     }
-    // Either file is missing or unparseable -> attempt migration from legacy.
     return this.migrateFromLegacy()
   }
 

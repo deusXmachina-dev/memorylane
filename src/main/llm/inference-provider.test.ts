@@ -68,12 +68,12 @@ describe('InferenceProviderImpl', () => {
 
   it('isConfigured reflects the active vendor only', () => {
     const h = buildHarness('openrouter', (m) => {
-      m.saveCredentials('openai', { apiKey: 'sk-openai' })
+      m.saveCredentials('google', { apiKey: 'AIza' })
     })
     harnesses.push(h)
-    // Active vendor is openrouter but only openai has a key.
+    // Active vendor is openrouter but only google has a key.
     expect(h.provider.isConfigured()).toBe(false)
-    h.setActive('openai')
+    h.setActive('google')
     expect(h.provider.isConfigured()).toBe(true)
   })
 
@@ -87,8 +87,6 @@ describe('InferenceProviderImpl', () => {
     const cases: Array<[Vendor, boolean]> = [
       ['openrouter', true],
       ['openai-compatible', true],
-      ['openai', false],
-      ['anthropic', false],
       ['google', false],
     ]
     for (const [vendor, expectNonNull] of cases) {

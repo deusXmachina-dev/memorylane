@@ -1,6 +1,4 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { createOpenAI } from '@ai-sdk/openai'
-import { createAnthropic } from '@ai-sdk/anthropic'
 import { createVertex } from '@ai-sdk/google-vertex'
 import type { LanguageModel } from 'ai'
 import type { Vendor, VendorCredentials } from '../../shared/types'
@@ -35,21 +33,12 @@ export function createSdkProvider(
         apiKey: creds.apiKey,
         fetch: fetchImpl,
       }) as SdkProvider
-    case 'openai':
-      return createOpenAI({
-        apiKey: creds.apiKey,
-        baseURL: creds.baseURL,
-        fetch: fetchImpl,
-      }) as unknown as SdkProvider
-    case 'anthropic':
-      return createAnthropic({
-        apiKey: creds.apiKey,
-        baseURL: creds.baseURL,
-        fetch: fetchImpl,
-      }) as unknown as SdkProvider
     case 'google':
       // Vertex AI Express Mode: API key only, no project/location/service
       // account required. The SDK infers project + location from the key.
+      // `createVertex`'s public return type doesn't structurally match
+      // SdkProvider but it does implement `languageModel(id)`. Revisit
+      // if @ai-sdk/google-vertex tightens its public typing.
       return createVertex({
         apiKey: creds.apiKey,
         fetch: fetchImpl,
@@ -70,8 +59,8 @@ export function createSdkProvider(
 
 /**
  * Whether the vendor can be reached via raw OpenAI-compatible chat-completions
- * HTTP. Only these vendors expose a usable `getRouteSnapshot()`; native vendors
- * (openai, anthropic, google) go through the AI SDK exclusively.
+ * HTTP. Only these vendors expose a usable `getRouteSnapshot()`; google goes
+ * through the AI SDK exclusively.
  */
 export function vendorSupportsRawHttp(vendor: Vendor): boolean {
   return vendor === 'openrouter' || vendor === 'openai-compatible'

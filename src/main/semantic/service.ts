@@ -202,14 +202,15 @@ export class ActivitySemanticService implements SemanticServiceContract {
     const shouldAttemptSnapshots = this.pipelinePreference !== 'video'
 
     if (shouldAttemptVideo) {
-      if (this.shouldSkipVideoForActiveRoute()) {
-        diagnostics.fallbackReason = 'active model marked video-unsupported (session)'
+      const effectiveVideoModels = this.filterCachedSupportedVideoModels()
+      if (effectiveVideoModels.length === 0) {
+        diagnostics.fallbackReason = 'all video models marked unsupported (session)'
         log.info(
-          '[ActivitySemanticService] Skipping video summarization for video-unsupported model',
+          '[ActivitySemanticService] Skipping video summarization; all configured video models are cached as unsupported on this route',
           JSON.stringify({
             activityId: input.activity.id,
             vendor: this.provider.getActiveVendor(),
-            model: this.videoModels[0],
+            models: this.videoModels,
           }),
         )
       } else if (typeof input.videoPath === 'string' && input.videoPath.trim().length > 0) {
@@ -221,7 +222,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
           const videoResult = await trySemanticModelChain({
             requestTimeoutMs: this.requestTimeoutMs,
             mode: 'video',
-            models: this.videoModels,
+            models: effectiveVideoModels,
             prompt: videoPrompt,
             diagnostics,
             buildContent: () => [
@@ -404,11 +405,11 @@ export class ActivitySemanticService implements SemanticServiceContract {
     })
   }
 
-  private shouldSkipVideoForActiveRoute(): boolean {
-    const model = this.videoModels[0]
-    if (!model) return false
-    const key = this.currentRouteCacheKey(model)
-    return key !== null && this.videoUnsupportedKeys.has(key)
+  private filterCachedSupportedVideoModels(): string[] {
+    return this.videoModels.filter((model) => {
+      const key = this.currentRouteCacheKey(model)
+      return key === null || !this.videoUnsupportedKeys.has(key)
+    })
   }
 
   private markVideoUnsupported(model: string, reason: string): void {

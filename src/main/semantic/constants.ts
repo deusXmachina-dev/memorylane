@@ -8,9 +8,9 @@ export const MODEL_PRICING_USD_PER_MILLION: Record<
     input_tokens_per_million: 0.1,
     completion_tokens_per_million: 0.4,
   },
-  'google/gemini-3-flash-preview': {
-    input_tokens_per_million: 0.5,
-    completion_tokens_per_million: 3,
+  'google/gemini-2.5-flash': {
+    input_tokens_per_million: 0.3,
+    completion_tokens_per_million: 2.5,
   },
   'allenai/molmo-2-8b': {
     input_tokens_per_million: 0.2,

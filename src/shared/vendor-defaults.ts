@@ -31,7 +31,7 @@ export const VENDOR_PRESETS: Record<Vendor, VendorPresets> = {
   openrouter: {
     semanticVideo: [
       { id: 'google/gemini-2.5-flash-lite-preview-09-2025', label: 'Gemini 2.5 Flash Lite' },
-      { id: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash' },
+      { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
       { id: 'allenai/molmo-2-8b', label: 'Molmo 2 8B' },
     ],
     semanticSnapshot: [
@@ -39,32 +39,8 @@ export const VENDOR_PRESETS: Record<Vendor, VendorPresets> = {
       { id: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
     ],
     patternDetection: [
-      { id: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash' },
+      { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
       { id: 'moonshotai/kimi-k2.5', label: 'Kimi K2.5' },
-    ],
-  },
-  openai: {
-    semanticVideo: [],
-    semanticSnapshot: [
-      { id: 'gpt-4.1-nano', label: 'GPT-4.1 nano' },
-      { id: 'gpt-4.1-mini', label: 'GPT-4.1 mini' },
-      { id: 'gpt-4o-mini', label: 'GPT-4o mini' },
-    ],
-    patternDetection: [
-      { id: 'gpt-5-mini', label: 'GPT-5 mini' },
-      { id: 'gpt-5', label: 'GPT-5' },
-      { id: 'gpt-4.1-mini', label: 'GPT-4.1 mini' },
-    ],
-  },
-  anthropic: {
-    semanticVideo: [],
-    semanticSnapshot: [
-      { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
-      { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-    ],
-    patternDetection: [
-      { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-      { id: 'claude-opus-4-7', label: 'Claude Opus 4.7' },
     ],
   },
   google: {

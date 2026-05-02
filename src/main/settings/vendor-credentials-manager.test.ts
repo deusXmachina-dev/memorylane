@@ -58,12 +58,9 @@ describe('VendorCredentialsManager', () => {
       env: {},
     })
     m.saveCredentials('openrouter', { apiKey: 'sk-or-test' })
-    m.saveCredentials('anthropic', { apiKey: 'sk-ant-test', baseURL: 'https://proxy/' })
+    m.saveCredentials('google', { apiKey: 'AIza-test' })
     expect(m.getCredentials('openrouter')).toEqual({ apiKey: 'sk-or-test' })
-    expect(m.getCredentials('anthropic')).toEqual({
-      apiKey: 'sk-ant-test',
-      baseURL: 'https://proxy/',
-    })
+    expect(m.getCredentials('google')).toEqual({ apiKey: 'AIza-test' })
   })
 
   it('per-vendor isolation: deleting one does not affect others', () => {
@@ -72,10 +69,10 @@ describe('VendorCredentialsManager', () => {
       safeStorage: makeSafeStorage(),
       env: {},
     })
-    m.saveCredentials('openai', { apiKey: 'sk-openai' })
+    m.saveCredentials('openrouter', { apiKey: 'sk-or-test' })
     m.saveCredentials('google', { apiKey: 'AIza-google' })
-    m.deleteCredentials('openai')
-    expect(m.getCredentials('openai')).toBeNull()
+    m.deleteCredentials('openrouter')
+    expect(m.getCredentials('openrouter')).toBeNull()
     expect(m.getCredentials('google')).toEqual({ apiKey: 'AIza-google' })
   })
 
@@ -85,12 +82,12 @@ describe('VendorCredentialsManager', () => {
       safeStorage: makeSafeStorage(),
       env: {
         OPENROUTER_API_KEY: 'env-or',
-        ANTHROPIC_API_KEY: 'env-ant',
+        GOOGLE_VERTEX_API_KEY: 'env-google',
       },
     })
     expect(m.getCredentials('openrouter')).toEqual({ apiKey: 'env-or' })
-    expect(m.getCredentials('anthropic')).toEqual({ apiKey: 'env-ant' })
-    expect(m.getCredentials('openai')).toBeNull()
+    expect(m.getCredentials('google')).toEqual({ apiKey: 'env-google' })
+    expect(m.getCredentials('openai-compatible')).toBeNull()
     expect(m.getStatus('openrouter').source).toBe('env')
   })
 
@@ -198,6 +195,47 @@ describe('VendorCredentialsManager', () => {
     expect(m.migration.customEndpointModel).toBeUndefined()
   })
 
+  it('preserves a corrupt v2 file and does not migrate over it', () => {
+    const p = paths()
+    const corrupt = '{ this is not valid json'
+    fs.writeFileSync(p.configPath, corrupt)
+    // A legacy file that *would* be migrated if the v2 file weren't present.
+    const stored = Buffer.from('legacy-or-key', 'utf-8').toString('base64')
+    fs.writeFileSync(p.legacyApiKeyConfigPath, JSON.stringify({ apiKey: stored, source: 'byok' }))
+
+    const m = new VendorCredentialsManager({
+      ...p,
+      safeStorage: makeSafeStorage(),
+      env: {},
+    })
+
+    // Migration must NOT run, otherwise the corrupt file would be clobbered.
+    expect(m.migration.ran).toBe(false)
+    expect(m.getCredentials('openrouter')).toBeNull()
+    // Corrupt file is preserved on disk for manual recovery.
+    expect(fs.readFileSync(p.configPath, 'utf-8')).toBe(corrupt)
+  })
+
+  it('preserves a v2 file with unexpected shape and does not migrate over it', () => {
+    const p = paths()
+    fs.writeFileSync(p.configPath, JSON.stringify({ version: 1, foo: 'bar' }))
+    const stored = Buffer.from('legacy-or-key', 'utf-8').toString('base64')
+    fs.writeFileSync(p.legacyApiKeyConfigPath, JSON.stringify({ apiKey: stored, source: 'byok' }))
+
+    const m = new VendorCredentialsManager({
+      ...p,
+      safeStorage: makeSafeStorage(),
+      env: {},
+    })
+
+    expect(m.migration.ran).toBe(false)
+    expect(m.getCredentials('openrouter')).toBeNull()
+    expect(JSON.parse(fs.readFileSync(p.configPath, 'utf-8'))).toEqual({
+      version: 1,
+      foo: 'bar',
+    })
+  })
+
   it('does not re-migrate when v2 file is already present', () => {
     const p = paths()
     fs.writeFileSync(
@@ -234,14 +272,8 @@ describe('VendorCredentialsManager', () => {
     })
     m.saveCredentials('openrouter', { apiKey: 'sk-or-x' })
     const all = m.getAllStatuses()
-    expect(Object.keys(all).sort()).toEqual([
-      'anthropic',
-      'google',
-      'openai',
-      'openai-compatible',
-      'openrouter',
-    ])
+    expect(Object.keys(all).sort()).toEqual(['google', 'openai-compatible', 'openrouter'])
     expect(all.openrouter.hasKey).toBe(true)
-    expect(all.openai.hasKey).toBe(false)
+    expect(all.google.hasKey).toBe(false)
   })
 })

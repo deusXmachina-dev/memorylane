@@ -32,20 +32,6 @@ const VENDOR_META: Record<Vendor, VendorMeta> = {
     defaultBaseURL: null,
     externalLink: { href: 'https://openrouter.ai', label: 'OpenRouter' },
   },
-  openai: {
-    label: 'OpenAI',
-    keyPrefix: 'sk-',
-    keyHint: 'sk-...',
-    needsBaseURL: 'optional',
-    defaultBaseURL: null,
-  },
-  anthropic: {
-    label: 'Anthropic',
-    keyPrefix: 'sk-ant-',
-    keyHint: 'sk-ant-...',
-    needsBaseURL: 'optional',
-    defaultBaseURL: null,
-  },
   google: {
     label: 'Google Vertex AI',
     keyPrefix: null,

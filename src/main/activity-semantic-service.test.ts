@@ -61,7 +61,7 @@ vi.mock('sharp', () => ({
 
 const DEFAULT_VIDEO_MODELS = [
   'google/gemini-2.5-flash-lite-preview-09-2025',
-  'google/gemini-3-flash-preview',
+  'google/gemini-2.5-flash',
   'allenai/molmo-2-8b',
 ]
 
@@ -701,9 +701,7 @@ describe('ActivitySemanticService', () => {
 
     const secondDiagnostics = service.getLastRunDiagnostics()
     expect(secondDiagnostics?.attempts.map((a) => a.mode)).toEqual(['snapshot'])
-    expect(secondDiagnostics?.fallbackReason).toBe(
-      'active model marked video-unsupported (session)',
-    )
+    expect(secondDiagnostics?.fallbackReason).toBe('all video models marked unsupported (session)')
   })
 
   it('skips video on subsequent calls after custom model reports video unsupported', async () => {
@@ -751,10 +749,60 @@ describe('ActivitySemanticService', () => {
 
     const secondDiagnostics = service.getLastRunDiagnostics()
     expect(secondDiagnostics?.attempts.map((a) => a.mode)).toEqual(['snapshot'])
-    expect(secondDiagnostics?.fallbackReason).toBe(
-      'active model marked video-unsupported (session)',
-    )
+    expect(secondDiagnostics?.fallbackReason).toBe('all video models marked unsupported (session)')
     expect(secondDiagnostics?.chosenMode).toBe('snapshot')
+  })
+
+  it('falls through cached-unsupported video model to a later supported one in the chain', async () => {
+    const tempDir = createTempDir()
+    tempDirs.push(tempDir)
+    const videoPath = createVideoFile(tempDir)
+    const frames = [
+      makeFrame(createImageFile(tempDir, 'f0.png'), 1_000, 0),
+      makeFrame(createImageFile(tempDir, 'f1.png'), 25_000, 1),
+    ]
+
+    const { service, fetchMock } = setupService({
+      apiKey: null,
+      endpoint: { serverURL: 'http://localhost:11434/v1', model: 'unused' },
+      videoModels: ['model-a-no-video', 'model-b-with-video'],
+      snapshotModels: ['snap-model'],
+    })
+
+    fetchMock.setHandler(({ body }) => {
+      if (bodyHasVideo(body) && body.model === 'model-a-no-video') {
+        return httpError(400, {
+          error: { message: 'input_video is not supported by this model' },
+        })
+      }
+      if (bodyHasVideo(body) && body.model === 'model-b-with-video') {
+        return chatCompletionResponse('video summary from B')
+      }
+      return chatCompletionResponse('snapshot summary')
+    })
+
+    // First activity: A fails fast and gets cached, B succeeds.
+    const first = await service.summarizeFromVideo({
+      activity: makeActivity({ id: 'activity-1', frames }),
+      videoPath,
+    })
+    expect(first.summary).toBe('video summary from B')
+    expect(first.model).toBe('model-b-with-video')
+
+    fetchMock.calls.length = 0
+
+    // Second activity: A is cached as unsupported and skipped; B is tried first.
+    const second = await service.summarizeFromVideo({
+      activity: makeActivity({ id: 'activity-2', frames }),
+      videoPath,
+    })
+    expect(second.summary).toBe('video summary from B')
+    expect(second.model).toBe('model-b-with-video')
+
+    const videoModelsTried = fetchMock.calls
+      .filter((c) => bodyHasVideo(c.body))
+      .map((c) => c.body.model)
+    expect(videoModelsTried).toEqual(['model-b-with-video'])
   })
 
   it('does not cache-skip video after generic failures', async () => {

@@ -61,15 +61,9 @@ export interface SearchOptions extends SearchFilters {
   limit?: number | undefined
 }
 
-export type Vendor = 'openrouter' | 'openai' | 'anthropic' | 'google' | 'openai-compatible'
+export type Vendor = 'openrouter' | 'google' | 'openai-compatible'
 
-export const VENDORS: readonly Vendor[] = [
-  'openrouter',
-  'openai',
-  'anthropic',
-  'google',
-  'openai-compatible',
-] as const
+export const VENDORS: readonly Vendor[] = ['openrouter', 'google', 'openai-compatible'] as const
 
 export interface VendorCredentials {
   apiKey: string

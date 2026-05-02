@@ -28,12 +28,6 @@ export interface VideoAssetData {
   mimeType: string
 }
 
-export interface SemanticEndpointConfig {
-  serverURL: string
-  model: string
-  apiKey?: string
-}
-
 export interface ActivitySemanticServiceConfig {
   videoModels?: string[]
   snapshotModels?: string[]

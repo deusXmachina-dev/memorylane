@@ -16,7 +16,7 @@ import type {
   VendorStatus,
 } from '@types'
 import { VENDORS } from '@types'
-import { VENDOR_PRESETS } from '@/shared/vendor-defaults'
+import { VENDOR_PRESETS, getVendorDefaults } from '@/shared/vendor-defaults'
 import { ManageKeySection } from '../ManageKeySection'
 import { SectionToggle } from './SectionToggle'
 import { SubSectionToggle } from './SubSectionToggle'
@@ -27,8 +27,6 @@ import { formatMinSec } from './utils'
 
 const VENDOR_LABELS: Record<Vendor, string> = {
   openrouter: 'OpenRouter',
-  openai: 'OpenAI',
-  anthropic: 'Anthropic',
   google: 'Google Vertex AI',
   'openai-compatible': 'OpenAI-compatible',
 }
@@ -70,7 +68,8 @@ export function AiModelsSection({
   const hasLlmAccess = activeStatus?.hasKey === true
   const selectorMode: 'preset' | 'freetext' =
     activeStatus?.source === 'managed' ? 'preset' : 'freetext'
-  const videoSupported = form.semanticVideoModel.length > 0
+  const vendorDefaults = getVendorDefaults(activeVendor)
+  const videoSupported = vendorDefaults.semanticVideoModel.length > 0
   const [moreOpen, setMoreOpen] = useState(false)
 
   // When the active vendor has no video model, lock the pipeline to 'image'.
@@ -217,7 +216,7 @@ export function AiModelsSection({
                         mode={selectorMode}
                         presets={VENDOR_PRESETS[activeVendor].semanticVideo}
                         value={form.semanticVideoModel}
-                        defaultValue={form.semanticVideoModel}
+                        defaultValue={vendorDefaults.semanticVideoModel}
                         onChange={(v) => onModelChange('semanticVideoModel', v)}
                         label="Video analysis model"
                       />
@@ -227,7 +226,7 @@ export function AiModelsSection({
                         mode={selectorMode}
                         presets={VENDOR_PRESETS[activeVendor].semanticSnapshot}
                         value={form.semanticSnapshotModel}
-                        defaultValue={form.semanticSnapshotModel}
+                        defaultValue={vendorDefaults.semanticSnapshotModel}
                         onChange={(v) => onModelChange('semanticSnapshotModel', v)}
                         label="Snapshot analysis model"
                       />
@@ -236,7 +235,7 @@ export function AiModelsSection({
                       mode={selectorMode}
                       presets={VENDOR_PRESETS[activeVendor].patternDetection}
                       value={form.patternDetectionModel}
-                      defaultValue={form.patternDetectionModel}
+                      defaultValue={vendorDefaults.patternDetectionModel}
                       onChange={(v) => onModelChange('patternDetectionModel', v)}
                       label="Automation opportunities model"
                     />
