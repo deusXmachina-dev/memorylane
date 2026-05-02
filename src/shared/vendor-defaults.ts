@@ -58,10 +58,13 @@ export const VENDOR_PRESETS: Record<Vendor, VendorPresets> = {
       { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
     ],
   },
+  // Local OpenAI-compatible endpoints (Ollama, LM Studio, vLLM) ship no
+  // defaults — the user's local catalog varies per machine, so any preset
+  // would be wrong for most installs. The user picks a model id explicitly.
   'openai-compatible': {
     semanticVideo: [],
-    semanticSnapshot: [{ id: 'gemma4:e4b', label: 'Gemma 4 e4b' }],
-    patternDetection: [{ id: 'gemma4:e4b', label: 'Gemma 4 e4b' }],
+    semanticSnapshot: [],
+    patternDetection: [],
   },
 }
 

@@ -228,7 +228,10 @@ describe('CaptureSettingsManager', () => {
       expect(settings.activeVendor).toBe('openai-compatible')
       // openai-compatible has no video preset, so pipeline locks to image.
       expect(settings.semanticPipelineMode).toBe('image')
-      expect(settings.semanticSnapshotModel).toBe('gemma4:e4b')
+      // openai-compatible ships no model defaults — slots stay empty until
+      // the user picks (or legacy migration restores) a model id.
+      expect(settings.semanticSnapshotModel).toBe('')
+      expect(settings.patternDetectionModel).toBe('')
     })
 
     it('save() writes flat model picks into modelsByVendor[activeVendor]', () => {

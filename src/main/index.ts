@@ -144,10 +144,16 @@ app.on('ready', async () => {
     }
     const carriedModel = vendorCredentialsManager.migration.customEndpointModel
     if (carriedModel && captureSettingsManager.get().activeVendor === 'openai-compatible') {
-      // Pre-PR custom endpoints stored a single model used for vision summaries;
-      // restore it to the snapshot slot so the user's prior choice survives.
-      captureSettingsManager.save({ semanticSnapshotModel: carriedModel })
-      log.info(`[Main] restored legacy custom-endpoint snapshot model: ${carriedModel}`)
+      // Pre-PR custom endpoints stored a single model id used wherever the
+      // custom endpoint was hit. Restore it into every slot so the user's
+      // prior choice survives — they can re-pick per slot afterwards.
+      captureSettingsManager.save({
+        semanticSnapshotModel: carriedModel,
+        patternDetectionModel: carriedModel,
+      })
+      log.info(
+        `[Main] restored legacy custom-endpoint model into snapshot+pattern slots: ${carriedModel}`,
+      )
     }
   }
   const captureStateManager = new CaptureStateManager()
