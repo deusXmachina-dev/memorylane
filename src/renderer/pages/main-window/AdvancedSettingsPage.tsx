@@ -273,6 +273,7 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
                 open={aiModelsOpen}
                 onToggle={() => setAiModelsOpen((v) => !v)}
                 form={form}
+                isEnterprise={editionConfig?.edition === 'enterprise'}
                 credentialStatuses={credentialStatuses}
                 onCredentialsChanged={() => void refreshCredentials()}
                 onActiveVendorChanged={() => void refreshActiveVendor()}

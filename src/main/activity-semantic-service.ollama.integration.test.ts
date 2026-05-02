@@ -191,8 +191,6 @@ describeIntegration('semantic service ollama custom endpoint integration', () =>
     expect(
       secondDiagnostics?.attempts.some((attempt) => attempt.mode === 'snapshot' && attempt.success),
     ).toBe(true)
-    expect(secondDiagnostics?.fallbackReason).toBe(
-      'custom endpoint model marked video-unsupported (session)',
-    )
+    expect(secondDiagnostics?.fallbackReason).toBe('all video models marked unsupported (session)')
   }, 240_000)
 })

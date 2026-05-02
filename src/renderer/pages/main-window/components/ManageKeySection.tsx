@@ -92,7 +92,7 @@ export function ManageKeySection({
     setSaving(true)
     try {
       const creds: { apiKey: string; baseURL?: string } = { apiKey: key }
-      if (baseURL.length > 0) creds.baseURL = baseURL
+      if (meta.needsBaseURL !== 'no' && baseURL.length > 0) creds.baseURL = baseURL
       const result = await api.saveCredentials(vendor, creds)
       if (result.success) {
         setInputKey('')

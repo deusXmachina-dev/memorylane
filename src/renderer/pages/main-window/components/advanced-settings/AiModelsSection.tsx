@@ -36,6 +36,7 @@ interface AiModelsSectionProps {
   open: boolean
   onToggle: () => void
   form: CaptureSettings
+  isEnterprise: boolean
   credentialStatuses: Record<Vendor, VendorStatus> | null
   onCredentialsChanged: () => void
   onActiveVendorChanged: () => void
@@ -54,6 +55,7 @@ export function AiModelsSection({
   open,
   onToggle,
   form,
+  isEnterprise,
   credentialStatuses,
   onCredentialsChanged,
   onActiveVendorChanged,
@@ -70,6 +72,7 @@ export function AiModelsSection({
     activeStatus?.source === 'managed' ? 'preset' : 'freetext'
   const vendorDefaults = getVendorDefaults(activeVendor)
   const videoSupported = vendorDefaults.semanticVideoModel.length > 0
+  const visibleVendors = isEnterprise ? VENDORS : VENDORS.filter((v) => v !== 'google')
   const [moreOpen, setMoreOpen] = useState(false)
 
   // When the active vendor has no video model, lock the pipeline to 'image'.
@@ -105,7 +108,7 @@ export function AiModelsSection({
                 <SelectValue>{(v) => VENDOR_LABELS[v as Vendor] ?? v}</SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {VENDORS.map((v) => (
+                {visibleVendors.map((v) => (
                   <SelectItem key={v} value={v}>
                     {VENDOR_LABELS[v]}
                     {credentialStatuses?.[v]?.hasKey ? ' — key set' : ''}
@@ -120,6 +123,7 @@ export function AiModelsSection({
 
           {activeStatus && (
             <ManageKeySection
+              key={activeVendor}
               api={api}
               vendor={activeVendor}
               status={activeStatus}

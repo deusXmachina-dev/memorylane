@@ -6,6 +6,7 @@ import type { Activity, ActivityFrame } from './activity-types'
 import { ActivitySemanticService, SemanticFileDebugDumper } from './activity-semantic-service'
 import { InferenceProviderImpl } from './llm'
 import { FfmpegVideoStitcher } from './video/video-stitcher'
+import { VENDOR_PRESETS } from '../shared/vendor-defaults'
 
 const RUN_INTEGRATION =
   process.env.RUN_SEMANTIC_INTEGRATION === '1' &&
@@ -141,6 +142,8 @@ describeIntegration('semantic service integration', () => {
     const service = new ActivitySemanticService(provider, {
       usageTracker: { recordUsage: () => undefined },
       debugDumper,
+      videoModels: VENDOR_PRESETS.openrouter.semanticVideo.map((p) => p.id),
+      snapshotModels: VENDOR_PRESETS.openrouter.semanticSnapshot.map((p) => p.id),
     })
 
     const startedAt = Date.now()
