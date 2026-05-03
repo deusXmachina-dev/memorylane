@@ -13,7 +13,15 @@ interface SafeStorageLike {
 interface StoredVendorEntry {
   apiKey?: string
   baseURL?: string
+  project?: string
+  location?: string
   source?: 'byok' | 'managed'
+}
+
+export interface ManagedCredentialsInput {
+  apiKey: string
+  project?: string
+  location?: string
 }
 
 interface StoredV2 {
@@ -106,6 +114,8 @@ export class VendorCredentialsManager {
     if (!key) return null
     const out: VendorCredentials = { apiKey: key }
     if (baseURL) out.baseURL = baseURL
+    if (entry?.project) out.project = entry.project
+    if (entry?.location) out.location = entry.location
     return out
   }
 
@@ -123,6 +133,9 @@ export class VendorCredentialsManager {
       if (creds.baseURL.length === 0) delete next.baseURL
       else next.baseURL = creds.baseURL
     }
+    // BYOK never carries Vertex managed-mode project/location.
+    delete next.project
+    delete next.location
     // Saving a key always implies user-provided ('byok'), unless caller is
     // calling saveManagedKey (separate path below).
     next.source = 'byok'
@@ -133,19 +146,36 @@ export class VendorCredentialsManager {
   }
 
   public saveManagedKey(vendor: Vendor, apiKey: string): void {
+    this.saveManagedCredentials(vendor, { apiKey })
+  }
+
+  public saveManagedCredentials(vendor: Vendor, input: ManagedCredentialsInput): void {
     if (!this.safeStorage.isEncryptionAvailable()) {
       throw new Error('Secure storage is not available on this system')
     }
-    const encrypted = this.safeStorage.encryptString(apiKey).toString('base64')
+    const encrypted = this.safeStorage.encryptString(input.apiKey).toString('base64')
     const existing = this.store.vendors[vendor] ?? {}
-    this.store.vendors[vendor] = {
+    const next: StoredVendorEntry = {
       ...existing,
       apiKey: encrypted,
       source: 'managed',
     }
-    this.cachedKeys[vendor] = apiKey
+    if (input.project !== undefined) {
+      if (input.project.length === 0) delete next.project
+      else next.project = input.project
+    } else {
+      delete next.project
+    }
+    if (input.location !== undefined) {
+      if (input.location.length === 0) delete next.location
+      else next.location = input.location
+    } else {
+      delete next.location
+    }
+    this.store.vendors[vendor] = next
+    this.cachedKeys[vendor] = input.apiKey
     this.persist()
-    log.info(`[VendorCredentialsManager] saved managed key for ${vendor}`)
+    log.info(`[VendorCredentialsManager] saved managed credentials for ${vendor}`)
   }
 
   public deleteCredentials(vendor: Vendor): void {

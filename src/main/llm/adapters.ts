@@ -34,11 +34,18 @@ export function createSdkProvider(
         fetch: fetchImpl,
       }) as SdkProvider
     case 'google':
-      // Vertex AI Express Mode: API key only, no project/location/service
-      // account required. The SDK infers project + location from the key.
-      // `createVertex`'s public return type doesn't structurally match
-      // SdkProvider but it does implement `languageModel(id)`. Revisit
-      // if @ai-sdk/google-vertex tightens its public typing.
+      // Managed mode: backend-minted OAuth2 access token + project + location.
+      // Inject the token via `headers` to bypass google-auth-library — we
+      // don't have a service-account JSON, just a short-lived bearer.
+      // Express mode: api-key only; the SDK infers project + location.
+      if (creds.project && creds.location) {
+        return createVertex({
+          project: creds.project,
+          location: creds.location,
+          headers: { Authorization: `Bearer ${creds.apiKey}` },
+          fetch: fetchImpl,
+        }) as unknown as SdkProvider
+      }
       return createVertex({
         apiKey: creds.apiKey,
         fetch: fetchImpl,

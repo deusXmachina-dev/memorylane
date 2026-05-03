@@ -69,6 +69,10 @@ export interface VendorCredentials {
   apiKey: string
   /** Optional override of the SDK default base URL. Required for openai-compatible. */
   baseURL?: string
+  /** Google Vertex managed mode only: GCP project id. */
+  project?: string
+  /** Google Vertex managed mode only: GCP region (e.g. us-central1). */
+  location?: string
 }
 
 export interface VendorStatus {

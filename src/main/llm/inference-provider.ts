@@ -116,5 +116,5 @@ export class InferenceProviderImpl implements InferenceProvider {
 }
 
 function signatureFor(creds: VendorCredentials): string {
-  return `${creds.baseURL ?? ''}|${creds.apiKey}`
+  return `${creds.baseURL ?? ''}|${creds.project ?? ''}|${creds.location ?? ''}|${creds.apiKey}`
 }

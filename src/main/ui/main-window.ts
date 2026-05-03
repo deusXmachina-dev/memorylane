@@ -24,7 +24,7 @@ import { integrations } from '../integrations'
 import { listInstalledApps } from '../apps/installed-apps'
 import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
 import { VENDORS } from '../../shared/types'
-import { VENDOR_PRESETS, buildModelChain } from '../../shared/vendor-defaults'
+import { VENDOR_PRESETS, buildModelChain, getVendorDefaults } from '../../shared/vendor-defaults'
 import { applyVendorSwitch } from './vendor-switch'
 import type { AccessProvider } from '../access'
 import type {
@@ -111,6 +111,49 @@ let isQuitting = false
 app.on('before-quit', () => {
   isQuitting = true
 })
+
+/**
+ * In managed mode the renderer only exposes the vendor's preset grid, so a
+ * non-preset model id lingering in the remembered selection is stale and
+ * unreachable from the UI. Reset such slots to the vendor's preset default.
+ * Returns true if any field was rewritten.
+ */
+function reconcileManagedModelSelections(
+  captureSettings: CaptureSettingsManager,
+  vendor: Vendor,
+): boolean {
+  const presets = VENDOR_PRESETS[vendor]
+  const settings = captureSettings.get()
+  const defaults = getVendorDefaults(vendor)
+  const updates: Partial<{
+    semanticVideoModel: string
+    semanticSnapshotModel: string
+    patternDetectionModel: string
+  }> = {}
+  const isValid = (id: string, list: { id: string }[]): boolean =>
+    list.length === 0 || list.some((p) => p.id === id)
+  if (settings.semanticVideoModel && !isValid(settings.semanticVideoModel, presets.semanticVideo)) {
+    updates.semanticVideoModel = defaults.semanticVideoModel
+  }
+  if (
+    settings.semanticSnapshotModel &&
+    !isValid(settings.semanticSnapshotModel, presets.semanticSnapshot)
+  ) {
+    updates.semanticSnapshotModel = defaults.semanticSnapshotModel
+  }
+  if (
+    settings.patternDetectionModel &&
+    !isValid(settings.patternDetectionModel, presets.patternDetection)
+  ) {
+    updates.patternDetectionModel = defaults.patternDetectionModel
+  }
+  if (Object.keys(updates).length === 0) return false
+  log.info(
+    `[MainWindow] Reconciling stale managed-mode model picks for ${vendor}: ${Object.keys(updates).join(', ')}`,
+  )
+  captureSettings.save(updates)
+  return true
+}
 
 function buildStatus(): MainWindowStatus {
   return {
@@ -457,19 +500,42 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     await deps.semanticService.testConnection()
   })
 
-  // Subscription / managed key — managed keys are always OpenRouter for now.
+  // Subscription / managed key — provider chosen by backend (openrouter | vertex).
   deps.accessProvider.setUpdateCallback((state, payload) => {
-    if (payload?.key && deps) {
-      deps.vendorCredentials.saveManagedKey('openrouter', payload.key)
-      deps.inferenceProvider.notifyConfigChanged()
+    if (payload?.config && deps) {
+      const cfg = payload.config
+      const vendor: Vendor = cfg.provider === 'vertex' ? 'google' : 'openrouter'
+      deps.vendorCredentials.saveManagedCredentials(vendor, {
+        apiKey: cfg.apiKey,
+        ...(cfg.project !== undefined ? { project: cfg.project } : {}),
+        ...(cfg.location !== undefined ? { location: cfg.location } : {}),
+      })
+      // Auto-switch active vendor — managed config is authoritative.
+      const settings = deps.captureSettingsManager.get()
+      const switching = settings.activeVendor !== vendor
+      if (switching) {
+        log.info(`[MainWindow] Switching active vendor to ${vendor} (managed)`)
+        deps.captureSettingsManager.setActiveVendor(vendor)
+      }
+      // In managed mode the UI only offers the vendor's preset grid, so any
+      // non-preset model lingering in the remembered selection (e.g. from a
+      // prior BYOK session with a freetext model id) is unreachable and stale.
+      // Reset such slots to the vendor's preset default; valid preset picks
+      // are preserved.
+      const reconciled = reconcileManagedModelSelections(deps.captureSettingsManager, vendor)
+      if (switching || reconciled) {
+        applyVendorSwitch(deps, deps.captureSettingsManager.get())
+      } else {
+        deps.inferenceProvider.notifyConfigChanged()
+      }
     }
-    if (
-      payload?.invalidate &&
-      deps &&
-      deps.vendorCredentials.getStatus('openrouter').source === 'managed'
-    ) {
-      log.info('[MainWindow] Invalidating stale managed key')
-      deps.vendorCredentials.deleteCredentials('openrouter')
+    if (payload?.invalidate && deps) {
+      for (const v of ['openrouter', 'google'] as const) {
+        if (deps.vendorCredentials.getStatus(v).source === 'managed') {
+          log.info(`[MainWindow] Invalidating stale managed key for ${v}`)
+          deps.vendorCredentials.deleteCredentials(v)
+        }
+      }
       deps.inferenceProvider.notifyConfigChanged()
     }
     if (mainWindow && !mainWindow.isDestroyed()) {

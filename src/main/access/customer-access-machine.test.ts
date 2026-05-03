@@ -29,13 +29,15 @@ describe('customer access machine', () => {
     })
   })
 
-  it('returns a managed-key payload when a key is received', () => {
+  it('returns a managed-config payload when a key is received', () => {
     const result = transitionCustomerAccess(makeState({ customerSubscriptionStatus: 'polling' }), {
       type: 'key_received',
       key: 'sk-or-managed',
     })
     expect(result.state.customerSubscriptionStatus).toBe('idle')
-    expect(result.payload).toEqual({ key: 'sk-or-managed' })
+    expect(result.payload).toEqual({
+      config: { provider: 'openrouter', apiKey: 'sk-or-managed' },
+    })
   })
 
   it('returns an invalidation payload when no key is available', () => {
