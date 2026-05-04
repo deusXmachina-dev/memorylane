@@ -1,11 +1,17 @@
 import { defineConfig } from 'vitest/config'
 import { resolve } from 'path'
 
+const buildTimeBackendUrl =
+  process.env.MEMORYLANE_BACKEND_URL ?? 'https://enterprise.trymemorylane.com/'
+
 export default defineConfig({
   resolve: {
     alias: {
       '@constants': resolve(__dirname, 'src/shared/constants'),
     },
+  },
+  define: {
+    __MEMORYLANE_BACKEND_URL__: JSON.stringify(buildTimeBackendUrl),
   },
   test: {
     globals: true,

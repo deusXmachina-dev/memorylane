@@ -31,6 +31,8 @@ npm run dev:debug-pipeline
 
 - `npm run build` compiles app code only.
 - `npm run make` (or `make:mac` / `make:win`) creates installable artifacts.
+- Enterprise builds bake the backend URL in at build time. Override the default with `MEMORYLANE_BACKEND_URL` for per-customer builds, e.g.
+  `MEMORYLANE_BACKEND_URL=https://acme.trymemorylane.com/ npm run make:enterprise:mac`.
 - Treat local builds as developer artifacts unless signing/notarization is configured.
 - Release CI in [`.github/workflows/release.yml`](C:\Users\fkubi\Documents\dxm\memorylane-1.github\workflows\release.yml) expects signing secrets and fails early when they are missing.
 

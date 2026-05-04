@@ -8,11 +8,11 @@ describe('parseActivationCode', () => {
   const code = `${tenantToken}.${emailEncoded}`
 
   it('parses a well-formed activation code', () => {
-    expect(parseActivationCode(code)).toEqual({ tenantToken, email, backendUrl: null })
+    expect(parseActivationCode(code)).toEqual({ tenantToken, email })
   })
 
   it('trims surrounding whitespace', () => {
-    expect(parseActivationCode(`  ${code}\n`)).toEqual({ tenantToken, email, backendUrl: null })
+    expect(parseActivationCode(`  ${code}\n`)).toEqual({ tenantToken, email })
   })
 
   it('accepts url-safe base64 with no padding for emails that need it', () => {
@@ -22,7 +22,6 @@ describe('parseActivationCode', () => {
     expect(parseActivationCode(`${tenantToken}.${tricky}`)).toEqual({
       tenantToken,
       email: trickyEmail,
-      backendUrl: null,
     })
   })
 
@@ -49,11 +48,9 @@ describe('parseActivationCode', () => {
     expect(() => parseActivationCode(tenantToken)).toThrow(/malformed/i)
   })
 
-  it('rejects codes with more than two dots', () => {
+  it('rejects codes with more than one dot', () => {
     expect(() =>
-      parseActivationCode(
-        `${tenantToken}.${emailEncoded}.${encodeUrlSafe('https://x.com/')}.extra`,
-      ),
+      parseActivationCode(`${tenantToken}.${emailEncoded}.${encodeUrlSafe('https://x.com/')}`),
     ).toThrow(/malformed/i)
   })
 
@@ -65,72 +62,6 @@ describe('parseActivationCode', () => {
   it('rejects codes whose decoded email lacks an @', () => {
     const noAt = encodeUrlSafe('not-an-email')
     expect(() => parseActivationCode(`${tenantToken}.${noAt}`)).toThrow(/malformed/i)
-  })
-
-  describe('with embedded backend URL', () => {
-    it('parses an https URL and normalizes to host-only', () => {
-      const encoded = encodeUrlSafe('https://acme.trymemorylane.com/')
-      expect(parseActivationCode(`${code}.${encoded}`)).toEqual({
-        tenantToken,
-        email,
-        backendUrl: 'https://acme.trymemorylane.com/',
-      })
-    })
-
-    it('strips a legacy `/api/` path so old activation codes still work', () => {
-      const encoded = encodeUrlSafe('https://acme.trymemorylane.com/api/')
-      expect(parseActivationCode(`${code}.${encoded}`)).toEqual({
-        tenantToken,
-        email,
-        backendUrl: 'https://acme.trymemorylane.com/',
-      })
-    })
-
-    it('strips a missing trailing slash and any embedded path', () => {
-      const encoded = encodeUrlSafe('https://acme.trymemorylane.com/api')
-      expect(parseActivationCode(`${code}.${encoded}`)).toEqual({
-        tenantToken,
-        email,
-        backendUrl: 'https://acme.trymemorylane.com/',
-      })
-    })
-
-    it('allows http for localhost', () => {
-      const encoded = encodeUrlSafe('http://localhost:8000/')
-      expect(parseActivationCode(`${code}.${encoded}`)).toEqual({
-        tenantToken,
-        email,
-        backendUrl: 'http://localhost:8000/',
-      })
-    })
-
-    it('rejects http for non-localhost hosts', () => {
-      const encoded = encodeUrlSafe('http://acme.example.com/')
-      expect(() => parseActivationCode(`${code}.${encoded}`)).toThrow(/malformed/i)
-    })
-
-    it('rejects an unparseable URL', () => {
-      const encoded = encodeUrlSafe('not a url')
-      expect(() => parseActivationCode(`${code}.${encoded}`)).toThrow(/malformed/i)
-    })
-
-    it('rejects a non-base64url third segment', () => {
-      expect(() => parseActivationCode(`${code}.has spaces`)).toThrow(/malformed/i)
-      expect(() => parseActivationCode(`${code}.abc+def`)).toThrow(/malformed/i)
-    })
-
-    it('rejects an empty third segment', () => {
-      expect(() => parseActivationCode(`${code}.`)).toThrow(/malformed/i)
-    })
-
-    it('strips query string and fragment from the URL', () => {
-      const encoded = encodeUrlSafe('https://acme.trymemorylane.com/api?foo=bar#x')
-      expect(parseActivationCode(`${code}.${encoded}`)).toEqual({
-        tenantToken,
-        email,
-        backendUrl: 'https://acme.trymemorylane.com/',
-      })
-    })
   })
 })
 

@@ -26,7 +26,6 @@ import { startPowerMonitoring, shouldPause } from './power-monitor'
 import { CaptureStateManager } from './settings/capture-state-manager'
 import { CaptureSettingsManager } from './settings/capture-settings-manager'
 import { DeviceIdentity } from './settings/device-identity'
-import { EnterpriseLicenseConfig } from './settings/enterprise-license-config'
 import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
 import { PatternDetector } from './services/pattern-detector'
 import { UserContextBuilder } from './services/user-context-builder'
@@ -159,8 +158,6 @@ app.on('ready', async () => {
   }
   const captureStateManager = new CaptureStateManager()
   const deviceIdentity = new DeviceIdentity()
-  const licenseConfig = new EnterpriseLicenseConfig()
-  licenseConfig.load()
   captureSettingsManager.applyToConstants()
   const initialCaptureSettings = captureSettingsManager.get()
 
@@ -187,7 +184,6 @@ app.on('ready', async () => {
     excludedUrlPatterns: initialCaptureSettings.excludedUrlPatterns,
     excludePrivateBrowsing: initialCaptureSettings.excludePrivateBrowsing,
     deviceIdentity,
-    licenseConfig,
     vendorCredentials: vendorCredentialsManager,
     getActiveVendor: () => captureSettingsManager.get().activeVendor,
     initialVideoModel: initialCaptureSettings.semanticVideoModel,
@@ -211,7 +207,7 @@ app.on('ready', async () => {
         const level = captureSettingsManager.get().uploadDetailLevel
         return { detailLevel: level === 'detailed' ? 'detailed' : 'summary' }
       },
-      getBackendUrl: () => licenseConfig.getBackendUrl() ?? ENTERPRISE_BACKEND_CONFIG.BACKEND_URL,
+      getBackendUrl: () => ENTERPRISE_BACKEND_CONFIG.BACKEND_URL,
     })
     databaseUploadSync.start()
   }

@@ -3,12 +3,21 @@ import { resolve } from 'path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 
+const buildTimeBackendUrl =
+  process.env.MEMORYLANE_BACKEND_URL ??
+  (process.env.NODE_ENV === 'development'
+    ? 'http://localhost:8000/'
+    : 'https://enterprise.trymemorylane.com/')
+
 export default defineConfig({
   main: {
     resolve: {
       alias: {
         '@constants': resolve(__dirname, 'src/shared/constants'),
       },
+    },
+    define: {
+      __MEMORYLANE_BACKEND_URL__: JSON.stringify(buildTimeBackendUrl),
     },
     plugins: [externalizeDepsPlugin()],
     build: {
