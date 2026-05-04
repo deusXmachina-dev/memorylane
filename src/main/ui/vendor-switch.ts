@@ -13,6 +13,7 @@ export interface VendorSwitchDeps {
     testConnection(): Promise<void>
   }
   patternDetector?: { updateModel(model: string): void }
+  userContextBuilder?: { updateModel(model: string): void }
   inferenceProvider: { notifyConfigChanged(): void }
 }
 
@@ -33,6 +34,7 @@ export function applyVendorSwitch(d: VendorSwitchDeps, next: CaptureSettings): v
   )
   d.semanticService.updatePipelinePreference(next.semanticPipelineMode)
   d.patternDetector?.updateModel(next.patternDetectionModel)
+  d.userContextBuilder?.updateModel(next.patternDetectionModel)
   d.inferenceProvider.notifyConfigChanged()
   void d.semanticService.testConnection()
 }

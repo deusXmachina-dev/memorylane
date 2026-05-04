@@ -235,11 +235,17 @@ function extractContextFromResponse(content: string): ParsedContext | null {
 export class UserContextBuilder {
   private running = false
   private settleTimer: ReturnType<typeof setTimeout> | null = null
+  private model: string = DEFAULT_BUILDER_CONFIG.model
 
   constructor(
     private readonly storage: StorageService,
     private readonly provider?: InferenceProvider,
   ) {}
+
+  updateModel(model: string): void {
+    this.model = model && model.trim().length > 0 ? model.trim() : DEFAULT_BUILDER_CONFIG.model
+    log.info(`[UserContextBuilder] Model updated to: ${this.model}`)
+  }
 
   /**
    * Try to schedule a context update. Call this on screen unlock / wake.
@@ -291,7 +297,7 @@ export class UserContextBuilder {
   private async execute(provider: InferenceProvider): Promise<void> {
     this.running = true
     try {
-      const result = await runUserContextUpdate(provider, this.storage)
+      const result = await runUserContextUpdate(provider, this.storage, { model: this.model })
       log.info(
         `[UserContextBuilder] Run complete, ` +
           `tokens: ${result.tokenUsage.input}in/${result.tokenUsage.output}out`,

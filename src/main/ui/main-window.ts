@@ -63,6 +63,10 @@ interface PatternDetectorService {
   setEnabled(enabled: boolean): void
 }
 
+interface UserContextBuilderService {
+  updateModel(model: string): void
+}
+
 interface MainWindowDependencies {
   editionConfig: AppEditionConfig
   capture: {
@@ -83,6 +87,7 @@ interface MainWindowDependencies {
   accessProvider: AccessProvider
   captureSettingsManager: CaptureSettingsManager
   patternDetector?: PatternDetectorService
+  userContextBuilder?: UserContextBuilderService
   getCaptureHotkeyLabel: () => string
   reconfigureCaptureHotkey: (accelerator: string) => { success: boolean; error?: string }
   updateExclusions: (exclusions: {
@@ -818,6 +823,7 @@ function applyModelSettings(
   }
   if (updated.patternDetectionModel !== previous.patternDetectionModel) {
     d.patternDetector?.updateModel(updated.patternDetectionModel)
+    d.userContextBuilder?.updateModel(updated.patternDetectionModel)
   }
   if (updated.patternDetectionEnabled !== previous.patternDetectionEnabled) {
     d.patternDetector?.setEnabled(updated.patternDetectionEnabled)
