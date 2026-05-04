@@ -291,7 +291,12 @@ export class UserContextBuilder {
     config: Partial<UserContextBuilderConfig> = {},
     onProgress?: ProgressCallback,
   ): Promise<UserContextResult> {
-    return runUserContextUpdate(provider, this.storage, config, onProgress)
+    return runUserContextUpdate(
+      provider,
+      this.storage,
+      { model: this.model, ...config },
+      onProgress,
+    )
   }
 
   private async execute(provider: InferenceProvider): Promise<void> {

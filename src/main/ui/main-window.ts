@@ -24,8 +24,9 @@ import { integrations } from '../integrations'
 import { listInstalledApps } from '../apps/installed-apps'
 import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
 import { VENDORS } from '../../shared/types'
-import { VENDOR_PRESETS, buildModelChain, getVendorDefaults } from '../../shared/vendor-defaults'
+import { VENDOR_PRESETS, getVendorDefaults } from '../../shared/vendor-defaults'
 import { applyVendorSwitch } from './vendor-switch'
+import { applyModelSettings } from './model-settings'
 import type { AccessProvider } from '../access'
 import type {
   AccessState,
@@ -803,29 +804,4 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: false, error: message }
     }
   })
-}
-
-function applyModelSettings(
-  d: MainWindowDependencies,
-  updated: CaptureSettings,
-  previous: CaptureSettings,
-): void {
-  if (
-    updated.semanticVideoModel !== previous.semanticVideoModel ||
-    updated.semanticSnapshotModel !== previous.semanticSnapshotModel ||
-    updated.activeVendor !== previous.activeVendor
-  ) {
-    const presets = VENDOR_PRESETS[updated.activeVendor]
-    d.semanticService.updateModels(
-      buildModelChain(updated.semanticVideoModel, presets.semanticVideo),
-      buildModelChain(updated.semanticSnapshotModel, presets.semanticSnapshot),
-    )
-  }
-  if (updated.patternDetectionModel !== previous.patternDetectionModel) {
-    d.patternDetector?.updateModel(updated.patternDetectionModel)
-    d.userContextBuilder?.updateModel(updated.patternDetectionModel)
-  }
-  if (updated.patternDetectionEnabled !== previous.patternDetectionEnabled) {
-    d.patternDetector?.setEnabled(updated.patternDetectionEnabled)
-  }
 }
