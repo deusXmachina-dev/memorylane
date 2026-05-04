@@ -94,8 +94,8 @@ export const ENTERPRISE_BACKEND_CONFIG = {
     return (
       process.env.MEMORYLANE_BACKEND_URL ??
       (process.env.NODE_ENV === 'development'
-        ? 'http://localhost:8000/api'
-        : 'https://enterprise.trymemorylane.com/api')
+        ? 'http://localhost:8000/'
+        : 'https://enterprise.trymemorylane.com/')
     )
   },
   POLL_INTERVAL_MS: 2_000,

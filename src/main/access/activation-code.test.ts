@@ -68,38 +68,44 @@ describe('parseActivationCode', () => {
   })
 
   describe('with embedded backend URL', () => {
-    it('parses an https URL', () => {
-      const url = 'https://acme.trymemorylane.com/api/'
-      const encoded = encodeUrlSafe(url)
+    it('parses an https URL and normalizes to host-only', () => {
+      const encoded = encodeUrlSafe('https://acme.trymemorylane.com/')
       expect(parseActivationCode(`${code}.${encoded}`)).toEqual({
         tenantToken,
         email,
-        backendUrl: url,
+        backendUrl: 'https://acme.trymemorylane.com/',
       })
     })
 
-    it('normalizes a missing trailing slash on the path', () => {
-      const url = 'https://acme.trymemorylane.com/api'
-      const encoded = encodeUrlSafe(url)
+    it('strips a legacy `/api/` path so old activation codes still work', () => {
+      const encoded = encodeUrlSafe('https://acme.trymemorylane.com/api/')
       expect(parseActivationCode(`${code}.${encoded}`)).toEqual({
         tenantToken,
         email,
-        backendUrl: 'https://acme.trymemorylane.com/api/',
+        backendUrl: 'https://acme.trymemorylane.com/',
+      })
+    })
+
+    it('strips a missing trailing slash and any embedded path', () => {
+      const encoded = encodeUrlSafe('https://acme.trymemorylane.com/api')
+      expect(parseActivationCode(`${code}.${encoded}`)).toEqual({
+        tenantToken,
+        email,
+        backendUrl: 'https://acme.trymemorylane.com/',
       })
     })
 
     it('allows http for localhost', () => {
-      const url = 'http://localhost:8000/api/'
-      const encoded = encodeUrlSafe(url)
+      const encoded = encodeUrlSafe('http://localhost:8000/')
       expect(parseActivationCode(`${code}.${encoded}`)).toEqual({
         tenantToken,
         email,
-        backendUrl: url,
+        backendUrl: 'http://localhost:8000/',
       })
     })
 
     it('rejects http for non-localhost hosts', () => {
-      const encoded = encodeUrlSafe('http://acme.example.com/api/')
+      const encoded = encodeUrlSafe('http://acme.example.com/')
       expect(() => parseActivationCode(`${code}.${encoded}`)).toThrow(/malformed/i)
     })
 
@@ -122,7 +128,7 @@ describe('parseActivationCode', () => {
       expect(parseActivationCode(`${code}.${encoded}`)).toEqual({
         tenantToken,
         email,
-        backendUrl: 'https://acme.trymemorylane.com/api/',
+        backendUrl: 'https://acme.trymemorylane.com/',
       })
     })
   })

@@ -53,10 +53,13 @@ export function parseActivationCode(rawCode: string): ParsedActivationCode {
 }
 
 /**
- * Validate and normalize a decoded backend URL. Returns the normalized URL
- * (with a guaranteed trailing slash on the path so it composes with
- * `new URL(path, base)`), or `null` if the URL is unparseable, uses a
- * disallowed scheme, or otherwise fails validation.
+ * Validate and normalize a decoded backend URL. Returns origin + trailing
+ * slash (host-only) so call sites can compose API paths like
+ * `new URL('api/license/activate', base)`. Returns `null` if the URL is
+ * unparseable or uses a disallowed scheme.
+ *
+ * Any pathname, query, or fragment in the input is stripped — older
+ * activation codes that embed `/api/` are absorbed transparently.
  *
  * Shared between activation-code parsing and `EnterpriseLicenseConfig.load`
  * so persisted state goes through the same checks as fresh activation input.
@@ -76,9 +79,7 @@ export function normalizeBackendUrl(decoded: string): string | null {
     return null
   }
 
-  parsed.search = ''
-  parsed.hash = ''
-  return parsed.pathname.endsWith('/') ? parsed.toString() : `${parsed.toString()}/`
+  return `${parsed.origin}/`
 }
 
 const URLSAFE_BASE64_PATTERN = /^[A-Za-z0-9_-]+$/

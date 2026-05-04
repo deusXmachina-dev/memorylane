@@ -53,7 +53,7 @@ describe('DatabaseUploadSync', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url.toString()).toBe('http://localhost:8000/device/upload')
+    expect(url.toString()).toBe('http://localhost:8000/api/device/upload')
     expect(init.method).toBe('POST')
     expect(init.body).toBeInstanceOf(FormData)
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer device-hex-id')

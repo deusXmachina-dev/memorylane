@@ -158,7 +158,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       transitionEnterpriseAccess(this.accessState, { type: 'activation_started' }),
     )
 
-    const descriptorUrl = this.enterpriseUrl('license/consent-document')
+    const descriptorUrl = this.enterpriseUrl('api/license/consent-document')
 
     const descriptorResponse = await fetch(descriptorUrl.toString(), {
       headers: bearer(parsed.tenantToken),
@@ -256,7 +256,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     }
 
     const deviceId = this.deviceIdentity.getDeviceId()
-    const response = await fetch(this.enterpriseUrl('license/activate'), {
+    const response = await fetch(this.enterpriseUrl('api/license/activate'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -431,7 +431,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
   }
 
   private async fetchEnterpriseStatus(deviceId: string): Promise<boolean> {
-    const url = this.enterpriseUrl('license/status')
+    const url = this.enterpriseUrl('api/license/status')
 
     const response = await fetch(url.toString(), { headers: bearer(deviceId) })
     if (response.status === 401) {
@@ -450,7 +450,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
   }
 
   private async fetchInferenceConfig(deviceId: string): Promise<ManagedInferenceConfig | null> {
-    const url = this.enterpriseUrl('license/inference-config')
+    const url = this.enterpriseUrl('api/license/inference-config')
 
     const response = await fetch(url.toString(), { headers: bearer(deviceId) })
     if (response.status === 401) {
