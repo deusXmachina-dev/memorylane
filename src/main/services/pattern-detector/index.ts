@@ -95,7 +95,13 @@ export class PatternDetector {
     config: Partial<PatternDetectorConfig> = {},
     onProgress?: ProgressCallback,
   ): Promise<DetectionRunResult> {
-    return runDetection(provider, this.storage, this.embeddingService, config, onProgress)
+    return runDetection(
+      provider,
+      this.storage,
+      this.embeddingService,
+      { model: this.model, ...config },
+      onProgress,
+    )
   }
 
   private async execute(provider: InferenceProvider): Promise<void> {

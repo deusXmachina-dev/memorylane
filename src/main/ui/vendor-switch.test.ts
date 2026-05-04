@@ -11,6 +11,7 @@ function makeDeps(): {
     testConnection: ReturnType<typeof vi.fn>
   }
   patternDetector: { updateModel: ReturnType<typeof vi.fn> }
+  userContextBuilder: { updateModel: ReturnType<typeof vi.fn> }
   inferenceProvider: { notifyConfigChanged: ReturnType<typeof vi.fn> }
 } {
   const semanticService = {
@@ -19,13 +20,15 @@ function makeDeps(): {
     testConnection: vi.fn().mockResolvedValue(undefined),
   }
   const patternDetector = { updateModel: vi.fn() }
+  const userContextBuilder = { updateModel: vi.fn() }
   const inferenceProvider = { notifyConfigChanged: vi.fn() }
   const deps: VendorSwitchDeps = {
     semanticService,
     patternDetector,
+    userContextBuilder,
     inferenceProvider,
   }
-  return { deps, semanticService, patternDetector, inferenceProvider }
+  return { deps, semanticService, patternDetector, userContextBuilder, inferenceProvider }
 }
 
 function makeSettings(overrides: Partial<CaptureSettings> = {}): CaptureSettings {
@@ -114,8 +117,8 @@ describe('applyVendorSwitch', () => {
     expect(videoModels).toEqual([])
   })
 
-  it('updates the pattern detector model when present and skips when absent', () => {
-    const { deps, patternDetector } = makeDeps()
+  it('updates the pattern detector and user-context-builder models when present and skips when absent', () => {
+    const { deps, patternDetector, userContextBuilder } = makeDeps()
     const next = makeSettings({
       activeVendor: 'openrouter',
       patternDetectionModel: VENDOR_PRESETS.openrouter.patternDetection[0].id,
@@ -126,14 +129,17 @@ describe('applyVendorSwitch', () => {
     expect(patternDetector.updateModel).toHaveBeenCalledWith(
       VENDOR_PRESETS.openrouter.patternDetection[0].id,
     )
+    expect(userContextBuilder.updateModel).toHaveBeenCalledWith(
+      VENDOR_PRESETS.openrouter.patternDetection[0].id,
+    )
 
-    // No detector → no throw.
+    // No detector or builder → no throw.
     const { deps: bareDeps, semanticService } = makeDeps()
-    const depsWithoutDetector: VendorSwitchDeps = {
+    const depsWithoutOptionals: VendorSwitchDeps = {
       semanticService: bareDeps.semanticService,
       inferenceProvider: bareDeps.inferenceProvider,
     }
-    expect(() => applyVendorSwitch(depsWithoutDetector, next)).not.toThrow()
+    expect(() => applyVendorSwitch(depsWithoutOptionals, next)).not.toThrow()
     expect(semanticService.updatePipelinePreference).toHaveBeenCalled()
   })
 

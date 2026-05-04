@@ -217,8 +217,10 @@ app.on('ready', async () => {
   }
 
   userContextBuilder = new UserContextBuilder(runtime.storage, runtime.inferenceProvider)
+  userContextBuilder.updateModel(captureSettingsManager.get().patternDetectionModel)
   patternDetector = new PatternDetector(runtime.storage, runtime.inferenceProvider)
   patternDetector.setEnabled(captureSettingsManager.get().patternDetectionEnabled)
+  patternDetector.updateModel(captureSettingsManager.get().patternDetectionModel)
   const captureCoordinator = createCaptureCoordinator({
     capture: runtime.capture,
     captureStateManager,
@@ -284,6 +286,7 @@ app.on('ready', async () => {
     accessProvider: runtime.accessProvider,
     captureSettingsManager,
     patternDetector: patternDetector ?? undefined,
+    userContextBuilder: userContextBuilder ?? undefined,
     getCaptureHotkeyLabel: hotkeyManager.getLabel,
     reconfigureCaptureHotkey,
     updateExclusions: (exclusions) => runtime?.updateExclusions(exclusions),
