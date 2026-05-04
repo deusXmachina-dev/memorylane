@@ -116,6 +116,15 @@ describe('parseActivationCode', () => {
     it('rejects an empty third segment', () => {
       expect(() => parseActivationCode(`${code}.`)).toThrow(/malformed/i)
     })
+
+    it('strips query string and fragment from the URL', () => {
+      const encoded = encodeUrlSafe('https://acme.trymemorylane.com/api?foo=bar#x')
+      expect(parseActivationCode(`${code}.${encoded}`)).toEqual({
+        tenantToken,
+        email,
+        backendUrl: 'https://acme.trymemorylane.com/api/',
+      })
+    })
   })
 })
 

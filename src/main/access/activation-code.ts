@@ -76,6 +76,8 @@ export function normalizeBackendUrl(decoded: string): string | null {
     return null
   }
 
+  parsed.search = ''
+  parsed.hash = ''
   return parsed.pathname.endsWith('/') ? parsed.toString() : `${parsed.toString()}/`
 }
 
