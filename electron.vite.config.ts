@@ -39,6 +39,9 @@ export default defineConfig({
     },
   },
   preload: {
+    define: {
+      __MEMORYLANE_BACKEND_URL__: JSON.stringify(buildTimeBackendUrl),
+    },
     plugins: [externalizeDepsPlugin()],
     build: {
       sourcemap: true,
@@ -53,6 +56,9 @@ export default defineConfig({
         '@types': resolve(__dirname, 'src/shared/types'),
         '@assets': resolve(__dirname, 'assets'),
       },
+    },
+    define: {
+      __MEMORYLANE_BACKEND_URL__: JSON.stringify(buildTimeBackendUrl),
     },
     plugins: [tailwindcss(), react()],
     build: {
