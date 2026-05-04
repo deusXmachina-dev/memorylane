@@ -89,16 +89,9 @@ export const MANAGED_KEY_CONFIG = {
   KEY_REFRESH_INTERVAL_MS: 24 * 60 * 60 * 1000, // 24 hours
 }
 
-let backendUrlAccessor: () => string | null = () => null
-
-export function registerEnterpriseBackendUrlAccessor(fn: () => string | null): void {
-  backendUrlAccessor = fn
-}
-
 export const ENTERPRISE_BACKEND_CONFIG = {
   get BACKEND_URL(): string {
     return (
-      backendUrlAccessor() ??
       process.env.MEMORYLANE_BACKEND_URL ??
       (process.env.NODE_ENV === 'development'
         ? 'http://localhost:8000/api'

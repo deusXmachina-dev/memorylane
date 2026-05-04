@@ -36,10 +36,7 @@ import { createMainRuntime, type MainRuntime } from './runtime'
 import { createObservationController, type ObservationController } from './observation-controller'
 import { getAppDirectoryName } from './paths'
 import { loadAppEditionConfig } from './edition'
-import {
-  ENTERPRISE_BACKEND_CONFIG,
-  registerEnterpriseBackendUrlAccessor,
-} from '../shared/constants'
+import { ENTERPRISE_BACKEND_CONFIG } from '../shared/constants'
 
 // Keep single-instance behavior in packaged app, but allow dev to run
 // alongside production for local debugging.
@@ -164,7 +161,6 @@ app.on('ready', async () => {
   const deviceIdentity = new DeviceIdentity()
   const licenseConfig = new EnterpriseLicenseConfig()
   licenseConfig.load()
-  registerEnterpriseBackendUrlAccessor(() => licenseConfig.getBackendUrl())
   captureSettingsManager.applyToConstants()
   const initialCaptureSettings = captureSettingsManager.get()
 
@@ -215,7 +211,7 @@ app.on('ready', async () => {
         const level = captureSettingsManager.get().uploadDetailLevel
         return { detailLevel: level === 'detailed' ? 'detailed' : 'summary' }
       },
-      getBackendUrl: () => ENTERPRISE_BACKEND_CONFIG.BACKEND_URL,
+      getBackendUrl: () => licenseConfig.getBackendUrl() ?? ENTERPRISE_BACKEND_CONFIG.BACKEND_URL,
     })
     databaseUploadSync.start()
   }

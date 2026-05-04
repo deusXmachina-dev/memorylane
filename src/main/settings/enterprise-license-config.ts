@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
+import { normalizeBackendUrl } from '../access/activation-code'
 import log from '../logger'
 
 interface PersistedShape {
@@ -26,8 +27,15 @@ export class EnterpriseLicenseConfig {
       const data = fs.readFileSync(this.configPath, 'utf-8')
       const parsed = JSON.parse(data) as PersistedShape
       if (typeof parsed.backendUrl === 'string' && parsed.backendUrl !== '') {
-        this.backendUrl = parsed.backendUrl
-        log.info(`[EnterpriseLicenseConfig] Loaded backend URL: ${this.backendUrl}`)
+        const normalized = normalizeBackendUrl(parsed.backendUrl)
+        if (normalized === null) {
+          log.error(
+            `[EnterpriseLicenseConfig] Persisted backend URL failed validation; ignoring: ${parsed.backendUrl}`,
+          )
+        } else {
+          this.backendUrl = normalized
+          log.info(`[EnterpriseLicenseConfig] Loaded backend URL: ${this.backendUrl}`)
+        }
       }
     } catch (error) {
       log.error('[EnterpriseLicenseConfig] Failed to read config:', error)

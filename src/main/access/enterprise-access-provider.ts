@@ -51,11 +51,6 @@ interface ActivateResponse {
   declined?: boolean
 }
 
-function enterpriseUrl(path: string): URL {
-  const base = ENTERPRISE_BACKEND_CONFIG.BACKEND_URL.replace(/\/?$/, '/')
-  return new URL(path, base)
-}
-
 function bearer(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}` }
 }
@@ -74,6 +69,15 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     super(createInitialAccessState('enterprise'))
     this.deviceIdentity = deviceIdentity
     this.licenseConfig = licenseConfig ?? null
+  }
+
+  private resolveBackendBase(): string {
+    const url = this.licenseConfig?.getBackendUrl() ?? ENTERPRISE_BACKEND_CONFIG.BACKEND_URL
+    return url.replace(/\/?$/, '/')
+  }
+
+  private enterpriseUrl(path: string): URL {
+    return new URL(path, this.resolveBackendBase())
   }
 
   public async refreshAccessState(): Promise<void> {
@@ -154,7 +158,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       transitionEnterpriseAccess(this.accessState, { type: 'activation_started' }),
     )
 
-    const descriptorUrl = enterpriseUrl('license/consent-document')
+    const descriptorUrl = this.enterpriseUrl('license/consent-document')
 
     const descriptorResponse = await fetch(descriptorUrl.toString(), {
       headers: bearer(parsed.tenantToken),
@@ -252,7 +256,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     }
 
     const deviceId = this.deviceIdentity.getDeviceId()
-    const response = await fetch(enterpriseUrl('license/activate'), {
+    const response = await fetch(this.enterpriseUrl('license/activate'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -347,7 +351,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     expectedSha256: string,
     tenantToken: string,
   ): Promise<string> {
-    const backendBase = ENTERPRISE_BACKEND_CONFIG.BACKEND_URL.replace(/\/?$/, '/')
+    const backendBase = this.resolveBackendBase()
     const documentUrl = new URL(url, backendBase)
     if (documentUrl.origin !== new URL(backendBase).origin) {
       throw new Error('Consent document URL is not on the configured backend origin')
@@ -427,7 +431,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
   }
 
   private async fetchEnterpriseStatus(deviceId: string): Promise<boolean> {
-    const url = enterpriseUrl('license/status')
+    const url = this.enterpriseUrl('license/status')
 
     const response = await fetch(url.toString(), { headers: bearer(deviceId) })
     if (response.status === 401) {
@@ -446,7 +450,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
   }
 
   private async fetchInferenceConfig(deviceId: string): Promise<ManagedInferenceConfig | null> {
-    const url = enterpriseUrl('license/inference-config')
+    const url = this.enterpriseUrl('license/inference-config')
 
     const response = await fetch(url.toString(), { headers: bearer(deviceId) })
     if (response.status === 401) {

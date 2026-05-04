@@ -42,32 +42,40 @@ export function parseActivationCode(rawCode: string): ParsedActivationCode {
     if (backendEncoded === '' || !URLSAFE_BASE64_PATTERN.test(backendEncoded)) {
       throw new Error('Activation code is malformed.')
     }
-    backendUrl = decodeAndValidateBackendUrl(backendEncoded)
+    const decoded = Buffer.from(backendEncoded, 'base64url').toString('utf8')
+    backendUrl = normalizeBackendUrl(decoded)
+    if (backendUrl === null) {
+      throw new Error('Activation code is malformed.')
+    }
   }
 
   return { tenantToken, email, backendUrl }
 }
 
-function decodeAndValidateBackendUrl(encoded: string): string {
-  const decoded = Buffer.from(encoded, 'base64url').toString('utf8')
-  if (decoded === '') {
-    throw new Error('Activation code is malformed.')
-  }
+/**
+ * Validate and normalize a decoded backend URL. Returns the normalized URL
+ * (with a guaranteed trailing slash on the path so it composes with
+ * `new URL(path, base)`), or `null` if the URL is unparseable, uses a
+ * disallowed scheme, or otherwise fails validation.
+ *
+ * Shared between activation-code parsing and `EnterpriseLicenseConfig.load`
+ * so persisted state goes through the same checks as fresh activation input.
+ */
+export function normalizeBackendUrl(decoded: string): string | null {
+  if (decoded === '') return null
 
   let parsed: URL
   try {
     parsed = new URL(decoded)
   } catch {
-    throw new Error('Activation code is malformed.')
+    return null
   }
 
   const isLocalhost = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1'
   if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLocalhost)) {
-    throw new Error('Activation code is malformed.')
+    return null
   }
 
-  // Normalize trailing slash so it composes correctly with `new URL(path, base)`
-  // in the access provider (see enterprise-access-provider.ts).
   return parsed.pathname.endsWith('/') ? parsed.toString() : `${parsed.toString()}/`
 }
 

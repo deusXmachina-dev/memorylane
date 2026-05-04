@@ -52,6 +52,7 @@ export class InferenceProviderImpl implements InferenceProvider {
   private readonly getActiveVendorAccessor: () => Vendor
   private readonly customFetch: typeof globalThis.fetch | undefined
   private readonly sdkCache = new Map<Vendor, CacheEntry>()
+  private readonly loggedRouteSnapshots = new Set<string>()
   private readonly listeners = new Set<() => void>()
 
   constructor(options: InferenceProviderOptions) {
@@ -91,7 +92,11 @@ export class InferenceProviderImpl implements InferenceProvider {
     const creds = this.credentials.getCredentials(vendor)
     if (!creds) return null
     const baseURL = rawHttpBaseURL(vendor, creds)
-    log.info(`[InferenceProvider] route snapshot vendor=${vendor} baseURL=${baseURL}`)
+    const routeKey = `${vendor}|${baseURL}`
+    if (!this.loggedRouteSnapshots.has(routeKey)) {
+      this.loggedRouteSnapshots.add(routeKey)
+      log.info(`[InferenceProvider] route snapshot vendor=${vendor} baseURL=${baseURL}`)
+    }
     return {
       vendor,
       baseURL,
@@ -101,6 +106,7 @@ export class InferenceProviderImpl implements InferenceProvider {
 
   notifyConfigChanged(): void {
     this.sdkCache.clear()
+    this.loggedRouteSnapshots.clear()
     log.info(
       `[InferenceProvider] config changed; sdk cache cleared; active vendor=${this.getActiveVendor()}`,
     )
