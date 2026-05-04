@@ -8,6 +8,7 @@ import type {
   VendorModelSelection,
 } from '../../shared/types'
 import { VENDORS } from '../../shared/types'
+import type { AppEdition } from '../../shared/edition'
 import { getVendorDefaults } from '../../shared/vendor-defaults'
 import { normalizeExcludedApps, normalizeWildcardPatterns } from '../capture-exclusions'
 import {
@@ -31,6 +32,13 @@ function normalizeDatabaseExportDirectory(value: string | null | undefined): str
 }
 
 const OPENROUTER_DEFAULTS = getVendorDefaults('openrouter')
+
+function defaultUploadDetailLevel(edition: AppEdition): CaptureSettings['uploadDetailLevel'] {
+  // Enterprise installs opt into syncing by default — the backend is the
+  // whole reason the edition exists. Customer installs default to off so
+  // nothing leaves the device until the user explicitly turns it on.
+  return edition === 'enterprise' ? 'detailed' : 'off'
+}
 
 const DEFAULTS: CaptureSettings = {
   autoStartEnabled: true,
@@ -109,17 +117,29 @@ function normalizeModelsByVendor(value: unknown): Partial<Record<Vendor, VendorM
   return out
 }
 
+export interface CaptureSettingsManagerOptions {
+  configPath?: string
+  edition?: AppEdition
+}
+
 export class CaptureSettingsManager {
   private configPath: string
   private settings: CaptureSettings
+  private defaults: CaptureSettings
 
-  constructor(configPath?: string) {
-    if (configPath !== undefined) {
-      this.configPath = configPath
+  constructor(options: CaptureSettingsManagerOptions | string = {}) {
+    const opts: CaptureSettingsManagerOptions =
+      typeof options === 'string' ? { configPath: options } : options
+    if (opts.configPath !== undefined) {
+      this.configPath = opts.configPath
     } else {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { app } = require('electron') as typeof import('electron')
       this.configPath = path.join(app.getPath('userData'), 'capture-settings.json')
+    }
+    this.defaults = {
+      ...DEFAULTS,
+      uploadDetailLevel: defaultUploadDetailLevel(opts.edition ?? 'customer'),
     }
     this.settings = this.load()
   }
@@ -152,7 +172,7 @@ export class CaptureSettingsManager {
           data.semanticPipelineMode === 'video' ||
           data.semanticPipelineMode === 'image'
             ? data.semanticPipelineMode
-            : DEFAULTS.semanticPipelineMode
+            : this.defaults.semanticPipelineMode
         const modelsByVendor = normalizeModelsByVendor(data.modelsByVendor)
         // Legacy file (no per-vendor map): seed it with the active vendor's
         // current flat fields so the next switch can find them again.
@@ -165,7 +185,7 @@ export class CaptureSettingsManager {
           }
         }
         return {
-          ...DEFAULTS,
+          ...this.defaults,
           ...data,
           excludedApps: normalizeExcludedApps(data.excludedApps),
           excludedWindowTitlePatterns: normalizeWildcardPatterns(data.excludedWindowTitlePatterns),
@@ -173,7 +193,7 @@ export class CaptureSettingsManager {
           maxScreenshotsForLlm:
             typeof data.maxScreenshotsForLlm === 'number'
               ? data.maxScreenshotsForLlm
-              : DEFAULTS.maxScreenshotsForLlm,
+              : this.defaults.maxScreenshotsForLlm,
           // Backward compatibility for settings persisted before capture-hotkey rename.
           captureHotkeyAccelerator: normalizeCaptureHotkeyAccelerator(
             data.captureHotkeyAccelerator ?? data.pauseHotkeyAccelerator,
@@ -190,7 +210,7 @@ export class CaptureSettingsManager {
     } catch (error) {
       log.warn('[CaptureSettings] Failed to load settings, using defaults:', error)
     }
-    return { ...DEFAULTS }
+    return { ...this.defaults }
   }
 
   public get(): CaptureSettings {
@@ -273,7 +293,7 @@ export class CaptureSettingsManager {
   }
 
   public reset(): void {
-    this.settings = { ...DEFAULTS }
+    this.settings = { ...this.defaults }
     try {
       if (fs.existsSync(this.configPath)) {
         fs.unlinkSync(this.configPath)
@@ -286,7 +306,7 @@ export class CaptureSettingsManager {
   }
 
   public getDefaults(): CaptureSettings {
-    return { ...DEFAULTS }
+    return { ...this.defaults }
   }
 
   /**

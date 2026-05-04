@@ -155,9 +155,21 @@ describe('CaptureSettingsManager', () => {
       }
     })
 
-    it("fresh install (no config file) defaults uploadDetailLevel to 'off'", () => {
+    it("fresh install (no config file) defaults uploadDetailLevel to 'off' for customer edition", () => {
       expect(fs.existsSync(configPath)).toBe(false)
-      const manager = new CaptureSettingsManager(configPath)
+      const manager = new CaptureSettingsManager({ configPath, edition: 'customer' })
+      expect(manager.get().uploadDetailLevel).toBe('off')
+    })
+
+    it("fresh install (no config file) defaults uploadDetailLevel to 'detailed' for enterprise edition", () => {
+      expect(fs.existsSync(configPath)).toBe(false)
+      const manager = new CaptureSettingsManager({ configPath, edition: 'enterprise' })
+      expect(manager.get().uploadDetailLevel).toBe('detailed')
+    })
+
+    it('respects a previously persisted off value on enterprise (does not reapply default)', () => {
+      fs.writeFileSync(configPath, JSON.stringify({ uploadDetailLevel: 'off' }))
+      const manager = new CaptureSettingsManager({ configPath, edition: 'enterprise' })
       expect(manager.get().uploadDetailLevel).toBe('off')
     })
 

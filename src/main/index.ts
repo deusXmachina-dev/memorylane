@@ -135,7 +135,7 @@ app.on('ready', async () => {
   }
 
   const vendorCredentialsManager = new VendorCredentialsManager()
-  const captureSettingsManager = new CaptureSettingsManager()
+  const captureSettingsManager = new CaptureSettingsManager({ edition: editionConfig.edition })
   // First-launch migration from legacy custom-endpoint config.
   if (vendorCredentialsManager.migration.hadCustomEndpoint) {
     if (captureSettingsManager.get().activeVendor === 'openrouter') {
