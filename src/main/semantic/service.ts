@@ -230,12 +230,8 @@ export class ActivitySemanticService implements SemanticServiceContract {
               { type: 'input_video', videoUrl: { url: videoAsset.dataUrl } },
             ],
             invoke: async ({ model, content, signal }) => {
-              const vendor = this.provider.getActiveVendor()
-              if (vendor === 'openrouter' || vendor === 'openai-compatible') {
-                const route = this.provider.getRouteSnapshot()
-                if (!route) {
-                  throw new Error('semantic service is not configured')
-                }
+              const route = this.provider.getRouteSnapshot()
+              if (route) {
                 return invokeRawVideoCompletion({
                   route,
                   model,

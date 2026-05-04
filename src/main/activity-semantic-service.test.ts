@@ -333,7 +333,6 @@ describe('ActivitySemanticService', () => {
   it('reports configured when an API key is set', () => {
     const { service } = setupService({ apiKey: 'test-key' })
     expect(service.isConfigured()).toBe(true)
-    expect(service.isConfigured()).toBe(true)
   })
 
   it('reports configured when only a custom endpoint is set', () => {
