@@ -16,7 +16,7 @@ export interface DatabaseUploadSyncParams {
   isActivated: () => boolean
   isSyncEnabled: () => boolean
   getStripOptions: () => StripOptions
-  backendUrl: string
+  getBackendUrl: () => string
   intervalMs?: number
 }
 
@@ -26,7 +26,7 @@ export class DatabaseUploadSync {
   private readonly isActivated: () => boolean
   private readonly isSyncEnabled: () => boolean
   private readonly getStripOptions: () => StripOptions
-  private readonly backendUrl: string
+  private readonly getBackendUrl: () => string
   private readonly intervalMs: number
   private timer: ReturnType<typeof setInterval> | null = null
   private uploadRunning = false
@@ -39,7 +39,7 @@ export class DatabaseUploadSync {
     this.isActivated = params.isActivated
     this.isSyncEnabled = params.isSyncEnabled
     this.getStripOptions = params.getStripOptions
-    this.backendUrl = params.backendUrl
+    this.getBackendUrl = params.getBackendUrl
     this.intervalMs = params.intervalMs ?? DEFAULT_UPLOAD_INTERVAL_MS
   }
 
@@ -124,7 +124,7 @@ export class DatabaseUploadSync {
       const formData = new FormData()
       formData.append('file', new Blob([fileBuffer]), 'memorylane.db')
 
-      const base = this.backendUrl.replace(/\/?$/, '/')
+      const base = this.getBackendUrl().replace(/\/?$/, '/')
       const url = new URL('device/upload', base)
       const response = await fetch(url, {
         method: 'POST',

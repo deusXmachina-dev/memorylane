@@ -52,6 +52,7 @@ export class InferenceProviderImpl implements InferenceProvider {
   private readonly getActiveVendorAccessor: () => Vendor
   private readonly customFetch: typeof globalThis.fetch | undefined
   private readonly sdkCache = new Map<Vendor, CacheEntry>()
+  private readonly loggedRouteSnapshots = new Set<string>()
   private readonly listeners = new Set<() => void>()
 
   constructor(options: InferenceProviderOptions) {
@@ -81,6 +82,7 @@ export class InferenceProviderImpl implements InferenceProvider {
     }
     const sdkProvider = createSdkProvider(vendor, creds, { fetch: this.customFetch })
     this.sdkCache.set(vendor, { signature, sdkProvider })
+    log.info(`[InferenceProvider] built provider ${describeRoute(vendor, creds)}`)
     return sdkProvider.languageModel(modelId)
   }
 
@@ -89,15 +91,25 @@ export class InferenceProviderImpl implements InferenceProvider {
     if (!vendorSupportsRawHttp(vendor)) return null
     const creds = this.credentials.getCredentials(vendor)
     if (!creds) return null
+    const baseURL = rawHttpBaseURL(vendor, creds)
+    const routeKey = `${vendor}|${baseURL}`
+    if (!this.loggedRouteSnapshots.has(routeKey)) {
+      this.loggedRouteSnapshots.add(routeKey)
+      log.info(`[InferenceProvider] route snapshot vendor=${vendor} baseURL=${baseURL}`)
+    }
     return {
       vendor,
-      baseURL: rawHttpBaseURL(vendor, creds),
+      baseURL,
       apiKey: creds.apiKey,
     }
   }
 
   notifyConfigChanged(): void {
     this.sdkCache.clear()
+    this.loggedRouteSnapshots.clear()
+    log.info(
+      `[InferenceProvider] config changed; sdk cache cleared; active vendor=${this.getActiveVendor()}`,
+    )
     for (const listener of this.listeners) {
       try {
         listener()
@@ -117,4 +129,13 @@ export class InferenceProviderImpl implements InferenceProvider {
 
 function signatureFor(creds: VendorCredentials): string {
   return `${creds.baseURL ?? ''}|${creds.project ?? ''}|${creds.location ?? ''}|${creds.apiKey}`
+}
+
+function describeRoute(vendor: Vendor, creds: VendorCredentials): string {
+  const apiKeyTail = creds.apiKey.length >= 4 ? creds.apiKey.slice(-4) : '****'
+  const apiKey = `apiKey=…${apiKeyTail}`
+  if (vendor === 'google') {
+    return `vendor=${vendor} project=${creds.project ?? '?'} location=${creds.location ?? '?'} ${apiKey}`
+  }
+  return `vendor=${vendor} baseURL=${creds.baseURL ?? '(default)'} ${apiKey}`
 }
