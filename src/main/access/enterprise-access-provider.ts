@@ -3,7 +3,6 @@ import { ENTERPRISE_BACKEND_CONFIG } from '../../shared/constants'
 import type { ConsentOutcome, PendingConsent } from '../../shared/types'
 import log from '../logger'
 import type { DeviceIdentity } from '../settings/device-identity'
-import type { EnterpriseLicenseConfig } from '../settings/enterprise-license-config'
 import { parseActivationCode } from './activation-code'
 import { BaseAccessProvider } from './base-access-provider'
 import {
@@ -57,7 +56,6 @@ function bearer(token: string): Record<string, string> {
 
 export class EnterpriseAccessProvider extends BaseAccessProvider {
   private readonly deviceIdentity: DeviceIdentity
-  private readonly licenseConfig: EnterpriseLicenseConfig | null
   private pollTimer: ReturnType<typeof setInterval> | null = null
   private timeoutTimer: ReturnType<typeof setTimeout> | null = null
   private refreshTimer: ReturnType<typeof setInterval> | null = null
@@ -65,15 +63,13 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
   private tokenRefreshTimer: ReturnType<typeof setTimeout> | null = null
   private pendingConsent: PendingConsentState | null = null
 
-  constructor(deviceIdentity: DeviceIdentity, licenseConfig?: EnterpriseLicenseConfig) {
+  constructor(deviceIdentity: DeviceIdentity) {
     super(createInitialAccessState('enterprise'))
     this.deviceIdentity = deviceIdentity
-    this.licenseConfig = licenseConfig ?? null
   }
 
   private resolveBackendBase(): string {
-    const url = this.licenseConfig?.getBackendUrl() ?? ENTERPRISE_BACKEND_CONFIG.BACKEND_URL
-    return url.replace(/\/?$/, '/')
+    return ENTERPRISE_BACKEND_CONFIG.BACKEND_URL.replace(/\/?$/, '/')
   }
 
   private enterpriseUrl(path: string): URL {
@@ -136,7 +132,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       return
     }
 
-    let parsed: { tenantToken: string; email: string; backendUrl: string | null }
+    let parsed: { tenantToken: string; email: string }
     try {
       parsed = parseActivationCode(activationCode)
     } catch (error) {
@@ -148,10 +144,6 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
         }),
       )
       throw new Error(message)
-    }
-
-    if (parsed.backendUrl !== null && this.licenseConfig !== null) {
-      this.licenseConfig.setBackendUrl(parsed.backendUrl)
     }
 
     this.applyTransition(
