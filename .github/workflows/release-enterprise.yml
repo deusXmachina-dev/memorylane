@@ -1,0 +1,272 @@
+name: Release (Enterprise per-customer)
+
+# Manual-only. Builds only the enterprise edition (.pkg + .msi) with a
+# caller-supplied MEMORYLANE_BACKEND_URL baked in. Skips customer artifacts
+# entirely so no latest-*.yml is generated and customer auto-update is
+# untouched. The release is always prerelease so even if a stray latest-*.yml
+# ever leaked in, electron-updater (default allowPrerelease=false) would
+# ignore it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag — opaque suffix only, never customer name (e.g. v0.26.0-ent.1)'
+        required: true
+        type: string
+      backend_url:
+        description: 'MEMORYLANE_BACKEND_URL to bake into the binary (must end with /)'
+        required: true
+        type: string
+      ref:
+        description: 'Git ref to build from (branch, tag, or SHA)'
+        required: false
+        default: main
+        type: string
+      draft:
+        description: 'Create release as draft (private to collaborators). Default is public prerelease so customers can audit the source commit and SHA-256s'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: release-enterprise-${{ inputs.tag_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: '22'
+  RELEASE_TAG: ${{ inputs.tag_name }}
+  MEMORYLANE_BACKEND_URL: ${{ inputs.backend_url }}
+
+jobs:
+  validate:
+    name: Validate inputs
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+
+    steps:
+      - name: Sanity-check tag and URL
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+- ]]; then
+            echo "Tag '$RELEASE_TAG' must look like vX.Y.Z-<suffix> (the dash makes GitHub treat it as prerelease)" >&2
+            exit 1
+          fi
+          if [[ ! "$MEMORYLANE_BACKEND_URL" =~ ^https://.+/$ ]]; then
+            echo "MEMORYLANE_BACKEND_URL must be HTTPS and end with /" >&2
+            exit 1
+          fi
+
+      - name: Check macOS signing secrets
+        run: |
+          missing=0
+          for name in MAC_CERT_BASE64 MAC_CERT_PASSWORD MAC_INSTALLER_CERT_BASE64 MAC_INSTALLER_CERT_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required secret: $name" >&2
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then exit 1; fi
+        env:
+          MAC_CERT_BASE64: ${{ secrets.MAC_CERT_BASE64 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          MAC_INSTALLER_CERT_BASE64: ${{ secrets.MAC_INSTALLER_CERT_BASE64 }}
+          MAC_INSTALLER_CERT_PASSWORD: ${{ secrets.MAC_INSTALLER_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+
+      - name: Check Windows signing secrets
+        run: |
+          missing=0
+          for name in AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required secret: $name" >&2
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then exit 1; fi
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+
+  build-mac:
+    name: Build macOS Enterprise
+    runs-on: macos-15
+    needs: validate
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Import macOS signing certificates
+        env:
+          MAC_CERT_BASE64: ${{ secrets.MAC_CERT_BASE64 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          MAC_INSTALLER_CERT_BASE64: ${{ secrets.MAC_INSTALLER_CERT_BASE64 }}
+          MAC_INSTALLER_CERT_PASSWORD: ${{ secrets.MAC_INSTALLER_CERT_PASSWORD }}
+        run: |
+          APP_CERT_PATH="$RUNNER_TEMP/memorylane-app-signing.p12"
+          INSTALLER_CERT_PATH="$RUNNER_TEMP/memorylane-installer-signing.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/memorylane-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+
+          echo -n "$MAC_CERT_BASE64" | base64 --decode > "$APP_CERT_PATH"
+          echo -n "$MAC_INSTALLER_CERT_BASE64" | base64 --decode > "$INSTALLER_CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          security import "$APP_CERT_PATH" -k "$KEYCHAIN_PATH" -P "$MAC_CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security import "$INSTALLER_CERT_PATH" -k "$KEYCHAIN_PATH" -P "$MAC_INSTALLER_CERT_PASSWORD" \
+            -T /usr/bin/productbuild -T /usr/bin/productsign -T /usr/bin/pkgbuild -T /usr/bin/security
+
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "CSC_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Build signed macOS enterprise artifacts
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: npm run make:enterprise:mac
+
+      - name: Upload macOS enterprise release files
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-enterprise-mac-${{ env.RELEASE_TAG }}
+          retention-days: 3
+          if-no-files-found: error
+          path: |
+            dist/enterprise/MemoryLane Enterprise-arm64-mac.pkg
+
+  build-win:
+    name: Build Windows Enterprise
+    runs-on: windows-2025
+    needs: validate
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build signed Windows enterprise artifacts
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+        run: npm run make:enterprise:win
+
+      - name: Upload Windows enterprise release files
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-enterprise-win-${{ env.RELEASE_TAG }}
+          retention-days: 3
+          if-no-files-found: error
+          path: |
+            dist/enterprise/MemoryLane Enterprise-Setup.msi
+
+  publish:
+    name: Publish GitHub release
+    runs-on: ubuntu-24.04
+    needs:
+      - build-mac
+      - build-win
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Download macOS enterprise artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: release-enterprise-mac-${{ env.RELEASE_TAG }}
+          path: release-assets
+
+      - name: Download Windows enterprise artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: release-enterprise-win-${{ env.RELEASE_TAG }}
+          path: release-assets
+
+      - name: Show release files
+        run: find release-assets -type f | sort
+
+      - name: Verify release files
+        run: |
+          test -f "release-assets/MemoryLane Enterprise-arm64-mac.pkg"
+          test -f "release-assets/MemoryLane Enterprise-Setup.msi"
+
+      - name: Compute artifact checksums and release body
+        id: notes
+        run: |
+          BUILT_SHA="$(git rev-parse HEAD)"
+          MAC_SHA="$(sha256sum "release-assets/MemoryLane Enterprise-arm64-mac.pkg" | awk '{print $1}')"
+          WIN_SHA="$(sha256sum "release-assets/MemoryLane Enterprise-Setup.msi" | awk '{print $1}')"
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+          {
+            echo 'body<<EOF'
+            echo 'Custom enterprise build.'
+            echo
+            echo "Source commit: \`${BUILT_SHA}\`"
+            echo "CI run: ${RUN_URL}"
+            echo
+            echo '## SHA-256'
+            echo
+            echo '```'
+            echo "${MAC_SHA}  MemoryLane Enterprise-arm64-mac.pkg"
+            echo "${WIN_SHA}  MemoryLane Enterprise-Setup.msi"
+            echo '```'
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ inputs.ref }}
+          name: ${{ env.RELEASE_TAG }}
+          body: ${{ steps.notes.outputs.body }}
+          draft: ${{ inputs.draft }}
+          prerelease: true
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/MemoryLane Enterprise-arm64-mac.pkg
+            release-assets/MemoryLane Enterprise-Setup.msi
