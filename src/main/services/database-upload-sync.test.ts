@@ -41,7 +41,7 @@ describe('DatabaseUploadSync', () => {
       isActivated: () => true,
       isSyncEnabled: () => true,
       getStripOptions: () => ({ detailLevel: 'summary' as const }),
-      backendUrl: 'http://localhost:8000/',
+      getBackendUrl: () => 'http://localhost:8000/',
     })
 
     sync.start()
@@ -74,7 +74,7 @@ describe('DatabaseUploadSync', () => {
       isActivated: () => false,
       isSyncEnabled: () => true,
       getStripOptions: () => ({ detailLevel: 'summary' as const }),
-      backendUrl: 'http://localhost:8000/',
+      getBackendUrl: () => 'http://localhost:8000/',
     })
 
     sync.start()
@@ -100,7 +100,7 @@ describe('DatabaseUploadSync', () => {
       isActivated: () => true,
       isSyncEnabled: () => true,
       getStripOptions: () => ({ detailLevel: 'summary' as const }),
-      backendUrl: 'http://localhost:8000/',
+      getBackendUrl: () => 'http://localhost:8000/',
     })
 
     sync.start()
@@ -125,7 +125,7 @@ describe('DatabaseUploadSync', () => {
       isActivated: () => true,
       isSyncEnabled: () => true,
       getStripOptions: () => ({ detailLevel: 'summary' as const }),
-      backendUrl: 'http://localhost:8000/',
+      getBackendUrl: () => 'http://localhost:8000/',
     })
 
     sync.start()
@@ -153,7 +153,7 @@ describe('DatabaseUploadSync', () => {
       isActivated: () => true,
       isSyncEnabled: () => true,
       getStripOptions: () => ({ detailLevel: 'summary' as const }),
-      backendUrl: 'http://localhost:8000/',
+      getBackendUrl: () => 'http://localhost:8000/',
       intervalMs: 1000,
     })
 
@@ -181,7 +181,7 @@ describe('DatabaseUploadSync', () => {
       isActivated: () => true,
       isSyncEnabled: () => false,
       getStripOptions: () => ({ detailLevel: 'summary' as const }),
-      backendUrl: 'http://localhost:8000/',
+      getBackendUrl: () => 'http://localhost:8000/',
     })
 
     sync.start()
@@ -205,7 +205,7 @@ describe('DatabaseUploadSync', () => {
       isActivated: () => true,
       isSyncEnabled: () => false,
       getStripOptions: () => ({ detailLevel: 'summary' as const }),
-      backendUrl: 'http://localhost:8000/',
+      getBackendUrl: () => 'http://localhost:8000/',
     })
 
     const result = await sync.triggerUpload()
@@ -236,7 +236,7 @@ describe('DatabaseUploadSync', () => {
       isActivated: () => true,
       isSyncEnabled: () => syncOn,
       getStripOptions: () => ({ detailLevel: 'summary' as const }),
-      backendUrl: 'http://localhost:8000/',
+      getBackendUrl: () => 'http://localhost:8000/',
       intervalMs: 1000,
     })
 
@@ -281,7 +281,7 @@ describe('DatabaseUploadSync', () => {
       isActivated: () => true,
       isSyncEnabled: () => syncOn,
       getStripOptions: () => ({ detailLevel: 'summary' as const }),
-      backendUrl: 'http://localhost:8000/',
+      getBackendUrl: () => 'http://localhost:8000/',
       intervalMs: 1000,
     })
 

@@ -4,6 +4,7 @@ import { app } from 'electron'
 import log from './logger'
 import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
 import { DeviceIdentity } from './settings/device-identity'
+import type { EnterpriseLicenseConfig } from './settings/enterprise-license-config'
 import { createAccessProvider, type AccessProvider } from './access'
 import type { AppEdition } from '../shared/edition'
 import { StorageService } from './storage'
@@ -54,6 +55,7 @@ export async function createMainRuntime(params: {
   excludedUrlPatterns?: string[]
   excludePrivateBrowsing?: boolean
   deviceIdentity?: DeviceIdentity
+  licenseConfig?: EnterpriseLicenseConfig
   edition: AppEdition
   vendorCredentials: VendorCredentialsManager
   getActiveVendor: () => Vendor
@@ -171,7 +173,7 @@ export async function createMainRuntime(params: {
   interactionMonitor.onInteraction(interactionHandler)
 
   const deviceIdentity = params.deviceIdentity ?? new DeviceIdentity()
-  const accessProvider = createAccessProvider(params.edition, deviceIdentity)
+  const accessProvider = createAccessProvider(params.edition, deviceIdentity, params.licenseConfig)
 
   let disposePromise: Promise<void> | null = null
 
