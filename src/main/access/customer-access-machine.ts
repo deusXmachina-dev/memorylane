@@ -1,4 +1,5 @@
 import type { AccessState } from '../../shared/types'
+import type { ManagedInferenceConfig } from './enterprise-access-machine'
 
 export type CustomerAccessEvent =
   | { type: 'checkout_started' }
@@ -10,7 +11,7 @@ export type CustomerAccessEvent =
 export interface CustomerAccessTransition {
   state: AccessState
   payload?: {
-    key?: string
+    config?: ManagedInferenceConfig
     invalidate?: boolean
   }
 }
@@ -36,7 +37,7 @@ export function transitionCustomerAccess(
           error: null,
         },
         payload: {
-          key: event.key,
+          config: { provider: 'openrouter', apiKey: event.key },
         },
       }
     case 'key_missing':

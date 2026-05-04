@@ -9,6 +9,7 @@ import { migration as migration0007 } from './0007_user_context'
 import { migration as migration0008 } from './0008_pattern_detection_runs'
 import { migration as migration0009 } from './0009_pattern_duration_estimate'
 import { migration as migration0010 } from './0010_pattern_completed_at_column'
+import { migration as migration0011 } from './0011_activities_summary_model_column'
 
 export const migrations: Migration[] = [
   migration0001,
@@ -21,4 +22,5 @@ export const migrations: Migration[] = [
   migration0008,
   migration0009,
   migration0010,
+  migration0011,
 ]

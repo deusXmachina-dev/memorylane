@@ -8,34 +8,6 @@ export type ChatContentItem =
   | { type: 'input_video'; videoUrl: { url: string } }
   | { type: 'image_url'; imageUrl: { url: string; detail: 'high' } }
 
-export interface ChatRequest {
-  model: string
-  messages: Array<{
-    role: 'user'
-    content: ChatContentItem[]
-  }>
-}
-
-export interface SemanticChatClient {
-  chat: {
-    send(request: ChatRequest): Promise<unknown>
-  }
-}
-
-export interface ChatResponseLike {
-  choices?: Array<{
-    message?: {
-      content?: unknown
-    }
-  }>
-  usage?: {
-    promptTokens?: number
-    completionTokens?: number
-    prompt_tokens?: number
-    completion_tokens?: number
-  }
-}
-
 export interface UsageTrackerLike {
   recordUsage(usage: { prompt_tokens: number; completion_tokens: number; cost?: number }): void
 }
@@ -56,12 +28,6 @@ export interface VideoAssetData {
   mimeType: string
 }
 
-export interface SemanticEndpointConfig {
-  serverURL: string
-  model: string
-  apiKey?: string
-}
-
 export interface ActivitySemanticServiceConfig {
   videoModels?: string[]
   snapshotModels?: string[]
@@ -69,9 +35,12 @@ export interface ActivitySemanticServiceConfig {
   maxVideoBytes?: number
   requestTimeoutMs?: number
   usageTracker?: UsageTrackerLike
-  client?: SemanticChatClient
-  endpointConfig?: SemanticEndpointConfig
   debugDumper?: SemanticDebugDumper
+  /**
+   * Optional fetch override used by the raw-HTTP video pipeline. Mostly for
+   * tests; production uses globalThis.fetch.
+   */
+  fetchImpl?: typeof globalThis.fetch
 }
 
 export interface SemanticAttempt {
@@ -97,6 +66,14 @@ export interface SemanticRunDiagnostics {
   videoMimeType: string | null
 }
 
+export interface SemanticDumpRequest {
+  model: string
+  messages: Array<{
+    role: 'user'
+    content: ChatContentItem[]
+  }>
+}
+
 export interface SemanticRoundTripDump {
   activityId: string
   mode: SemanticMode
@@ -104,7 +81,7 @@ export interface SemanticRoundTripDump {
   startedAt: number
   durationMs: number
   success: boolean
-  request: ChatRequest
+  request: SemanticDumpRequest
   requestJson: string
   responseJson?: string
   summary?: string

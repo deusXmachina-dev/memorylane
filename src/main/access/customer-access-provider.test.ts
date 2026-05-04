@@ -54,6 +54,8 @@ describe('CustomerAccessProvider', () => {
     expect(updates[0]?.status).toBe('awaiting_checkout')
     expect(updates[1]?.status).toBe('polling')
     expect(updates.at(-1)?.status).toBe('idle')
-    expect(updates.at(-1)?.payload).toEqual({ key: 'sk-or-customer' })
+    expect(updates.at(-1)?.payload).toEqual({
+      config: { provider: 'openrouter', apiKey: 'sk-or-customer' },
+    })
   })
 })

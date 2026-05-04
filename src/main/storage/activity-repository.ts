@@ -23,8 +23,8 @@ export class ActivityRepository {
     const insert = this.db.transaction(() => {
       this.db
         .prepare(
-          `INSERT INTO activities (id, start_timestamp, end_timestamp, app_name, window_title, tld, summary, ocr_text, vector)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO activities (id, start_timestamp, end_timestamp, app_name, window_title, tld, summary, summary_model, ocr_text, vector)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           activity.id,
@@ -34,6 +34,7 @@ export class ActivityRepository {
           activity.windowTitle,
           activity.tld,
           activity.summary,
+          activity.summaryModel,
           activity.ocrText,
           blob,
         )
@@ -165,7 +166,7 @@ export class ActivityRepository {
     const placeholders = ids.map(() => '?').join(', ')
     const rows = this.db
       .prepare(
-        `SELECT id, start_timestamp, end_timestamp, app_name, window_title, tld, summary, ocr_text, vector
+        `SELECT id, start_timestamp, end_timestamp, app_name, window_title, tld, summary, summary_model, ocr_text, vector
        FROM activities
        WHERE id IN (${placeholders})`,
       )
@@ -272,6 +273,7 @@ export class ActivityRepository {
       windowTitle: row.window_title as string,
       tld: (row.tld as string) ?? null,
       summary: row.summary as string,
+      summaryModel: (row.summary_model as string) ?? '',
       ocrText: row.ocr_text as string,
       vector: row.vector ? blobToVector(row.vector as Buffer) : [],
     }

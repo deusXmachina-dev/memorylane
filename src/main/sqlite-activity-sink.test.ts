@@ -39,6 +39,7 @@ function makeExtracted(activityId: string): ExtractedActivity {
     windowTitle: 'main.ts',
     tld: undefined,
     summary: 'Edited source file',
+    summaryModel: 'test-model-id',
     ocrText: 'function test() {}',
     vector: [0.1, 0.2, 0.3],
   }
@@ -63,6 +64,7 @@ describe('SqliteActivitySink', () => {
       windowTitle: 'main.ts',
       tld: null,
       summary: 'Edited source file',
+      summaryModel: 'test-model-id',
       ocrText: 'function test() {}',
       vector: [0.1, 0.2, 0.3],
     })
@@ -139,6 +141,7 @@ describe('SqliteActivitySink', () => {
           windowTitle: 'main.ts',
           tld: null,
           summary: 'Edited source file',
+          summaryModel: 'test-model-id',
           ocrText: 'function test() {}',
         }),
       )

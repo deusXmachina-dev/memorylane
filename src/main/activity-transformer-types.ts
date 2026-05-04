@@ -23,8 +23,13 @@ export interface ActivityOcrService {
   extractText(imagePath: string): Promise<string>
 }
 
+export interface SemanticSummary {
+  summary: string
+  model: string
+}
+
 export interface ActivitySemanticService {
-  summarizeFromVideo(input: { activity: Activity; videoPath?: string }): Promise<string>
+  summarizeFromVideo(input: { activity: Activity; videoPath?: string }): Promise<SemanticSummary>
 }
 
 export interface ActivityEmbeddingService {

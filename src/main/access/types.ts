@@ -5,10 +5,11 @@ import type {
   PendingConsent,
   SubscriptionPlan,
 } from '../../shared/types'
+import type { ManagedInferenceConfig } from './enterprise-access-machine'
 
 export interface AccessUpdatePayload {
   error?: string
-  key?: string
+  config?: ManagedInferenceConfig
   invalidate?: boolean
 }
 

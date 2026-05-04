@@ -38,10 +38,12 @@ describe('enterprise access machine', () => {
 
     const completed = transitionEnterpriseAccess(waiting.state, {
       type: 'activation_completed',
-      key: 'sk-or-managed',
+      config: { provider: 'openrouter', apiKey: 'sk-or-managed' },
     })
     expect(completed.state.enterpriseActivationStatus).toBe('activated')
-    expect(completed.payload).toEqual({ key: 'sk-or-managed' })
+    expect(completed.payload).toEqual({
+      config: { provider: 'openrouter', apiKey: 'sk-or-managed' },
+    })
   })
 
   it('parks in awaiting_consent on consent_required', () => {

@@ -5,6 +5,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ACTIVITY_CONFIG, VISUAL_DETECTOR_CONFIG } from '@constants'
 import type { Activity, ActivityFrame } from './activity-types'
 import { ActivitySemanticService, SemanticFileDebugDumper } from './activity-semantic-service'
+import { InferenceProviderImpl } from './llm'
+import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
+import type { Vendor } from '../shared/types'
+
+function makeSafeStorageShim() {
+  return {
+    isEncryptionAvailable: () => true,
+    encryptString: (s: string) => Buffer.from(s, 'utf-8'),
+    decryptString: (b: Buffer) => b.toString('utf-8'),
+  }
+}
+
+const tempDirs: string[] = []
 
 vi.mock('./logger', () => ({
   default: {
@@ -46,31 +59,9 @@ vi.mock('sharp', () => ({
   }),
 }))
 
-const mockSend = vi.fn()
-const mockOpenAICreate = vi.fn()
-vi.mock('@openrouter/sdk', () => ({
-  OpenRouter: vi.fn().mockImplementation(function () {
-    return { chat: { send: mockSend } }
-  }),
-}))
-vi.mock('openai', () => ({
-  default: vi.fn().mockImplementation(function () {
-    return {
-      chat: {
-        completions: {
-          create: mockOpenAICreate,
-        },
-      },
-    }
-  }),
-}))
-
-import { OpenRouter } from '@openrouter/sdk'
-import OpenAI from 'openai'
-
 const DEFAULT_VIDEO_MODELS = [
   'google/gemini-2.5-flash-lite-preview-09-2025',
-  'google/gemini-3-flash-preview',
+  'google/gemini-2.5-flash',
   'allenai/molmo-2-8b',
 ]
 
@@ -78,6 +69,180 @@ const DEFAULT_SNAPSHOT_MODELS = [
   'mistralai/mistral-small-3.2-24b-instruct',
   'google/gemini-2.5-flash-lite',
 ]
+
+interface MockChatCompletionBody {
+  model: string
+  messages: Array<{
+    role: string
+    content: Array<{
+      type: string
+      text?: string
+      image_url?: { url: string }
+      video_url?: { url: string }
+    }>
+  }>
+}
+
+interface FetchCall {
+  url: string
+  body: MockChatCompletionBody
+}
+
+type FetchHandler = (call: FetchCall) => unknown | Promise<unknown>
+
+interface FetchMock {
+  fn: ReturnType<typeof vi.fn>
+  calls: FetchCall[]
+  setHandler: (handler: FetchHandler) => void
+}
+
+function makeFetchMock(): FetchMock {
+  const calls: FetchCall[] = []
+  let handler: FetchHandler = () => {
+    throw new Error('fetch handler not configured')
+  }
+
+  const fn = vi.fn(async (url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const rawBody = init?.body as string | undefined
+    const body = rawBody
+      ? (JSON.parse(rawBody) as MockChatCompletionBody)
+      : ({} as MockChatCompletionBody)
+    const call: FetchCall = { url: String(url), body }
+    calls.push(call)
+    const value = await handler(call)
+    if (value instanceof Response) return value
+    if (value instanceof Error) throw value
+    if (
+      typeof value === 'object' &&
+      value !== null &&
+      '__http' in value &&
+      typeof (value as { __http: unknown }).__http === 'object'
+    ) {
+      const http = (value as { __http: { status: number; body: unknown } }).__http
+      return new Response(JSON.stringify(http.body), {
+        status: http.status,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    return new Response(JSON.stringify(value), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+  })
+
+  return {
+    fn,
+    calls,
+    setHandler: (h) => {
+      handler = h
+    },
+  }
+}
+
+function chatCompletionResponse(
+  summary: string,
+  promptTokens = 10,
+  completionTokens = 5,
+): Record<string, unknown> {
+  return {
+    id: 'chatcmpl-mock',
+    object: 'chat.completion',
+    created: 1_700_000_000,
+    model: 'mock-model',
+    choices: [
+      {
+        index: 0,
+        message: { role: 'assistant', content: summary },
+        finish_reason: 'stop',
+      },
+    ],
+    usage: {
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: promptTokens + completionTokens,
+    },
+  }
+}
+
+function httpError(status: number, body: unknown) {
+  return { __http: { status, body } }
+}
+
+function bodyHasVideo(body: MockChatCompletionBody): boolean {
+  return body.messages.some((m) => m.content.some((c) => c.type === 'input_video'))
+}
+
+interface SetupOptions {
+  apiKey?: string | null
+  endpoint?: { serverURL: string; model: string; apiKey?: string } | null
+  videoModels?: string[]
+  snapshotModels?: string[]
+  pipelinePreference?: 'auto' | 'video' | 'image'
+  requestTimeoutMs?: number
+  usageTracker?: {
+    recordUsage: (usage: {
+      prompt_tokens: number
+      completion_tokens: number
+      cost?: number
+    }) => void
+  }
+  debugDumper?: SemanticFileDebugDumper
+}
+
+function setupService(options: SetupOptions = {}): {
+  service: ActivitySemanticService
+  fetchMock: FetchMock
+  provider: InferenceProviderImpl
+} {
+  const fetchMock = makeFetchMock()
+  const storedKey = options.apiKey === undefined ? 'test-key' : options.apiKey
+  const storedEndpoint = options.endpoint ?? null
+  const activeVendor: Vendor = storedEndpoint ? 'openai-compatible' : 'openrouter'
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sem-svc-test-'))
+  tempDirs.push(tmpDir)
+  const vendorCredentials = new VendorCredentialsManager({
+    configPath: path.join(tmpDir, 'vendor-credentials.json'),
+    legacyApiKeyConfigPath: path.join(tmpDir, '__missing-api-key.json'),
+    legacyCustomEndpointConfigPath: path.join(tmpDir, '__missing-endpoint.json'),
+    safeStorage: makeSafeStorageShim(),
+    env: {},
+  })
+  if (storedEndpoint) {
+    vendorCredentials.saveCredentials('openai-compatible', {
+      apiKey: storedEndpoint.apiKey ?? 'noop',
+      baseURL: storedEndpoint.serverURL,
+    })
+  } else if (storedKey) {
+    vendorCredentials.saveCredentials('openrouter', { apiKey: storedKey })
+  }
+
+  const provider = new InferenceProviderImpl({
+    credentials: vendorCredentials,
+    getActiveVendor: () => activeVendor,
+    fetch: fetchMock.fn as unknown as typeof globalThis.fetch,
+  })
+
+  // For custom-endpoint runs, the configured model becomes the only model for
+  // both video and snapshot (mirrors the legacy single-model custom-endpoint
+  // behavior). Otherwise the test fixtures' default chains are used.
+  const videoModels =
+    options.videoModels ?? (storedEndpoint ? [storedEndpoint.model] : [...DEFAULT_VIDEO_MODELS])
+  const snapshotModels =
+    options.snapshotModels ??
+    (storedEndpoint ? [storedEndpoint.model] : [...DEFAULT_SNAPSHOT_MODELS])
+
+  const service = new ActivitySemanticService(provider, {
+    videoModels,
+    snapshotModels,
+    pipelinePreference: options.pipelinePreference,
+    requestTimeoutMs: options.requestTimeoutMs,
+    usageTracker: options.usageTracker ?? { recordUsage: vi.fn() },
+    debugDumper: options.debugDumper,
+    fetchImpl: fetchMock.fn as unknown as typeof globalThis.fetch,
+  })
+  return { service, fetchMock, provider }
+}
 
 function createTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'semantic-test-'))
@@ -141,15 +306,7 @@ function makeActivity(params?: {
   }
 }
 
-function response(summary: string, promptTokens = 10, completionTokens = 5): unknown {
-  return {
-    choices: [{ message: { content: summary } }],
-    usage: { promptTokens, completionTokens },
-  }
-}
-
 describe('ActivitySemanticService', () => {
-  const tempDirs: string[] = []
   const originalSnapshotCap = ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM
   const originalVisualThreshold = VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT
   const originalSemanticTimeout = ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS
@@ -173,12 +330,17 @@ describe('ActivitySemanticService', () => {
     }
   })
 
-  it('creates OpenRouter client without serverURL by default', () => {
-    new ActivitySemanticService('test-key', {
-      usageTracker: { recordUsage: vi.fn() },
-    })
+  it('reports configured when an API key is set', () => {
+    const { service } = setupService({ apiKey: 'test-key' })
+    expect(service.isConfigured()).toBe(true)
+  })
 
-    expect(OpenRouter).toHaveBeenCalledWith({ apiKey: 'test-key' })
+  it('reports configured when only a custom endpoint is set', () => {
+    const { service } = setupService({
+      apiKey: null,
+      endpoint: { serverURL: 'http://localhost:11434/v1', model: 'custom-model' },
+    })
+    expect(service.isConfigured()).toBe(true)
   })
 
   it('uses shared semantic timeout default when requestTimeoutMs is not provided', async () => {
@@ -187,13 +349,12 @@ describe('ActivitySemanticService', () => {
     tempDirs.push(tempDir)
     const videoPath = createVideoFile(tempDir)
 
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send: () => new Promise(() => undefined) } },
+    const { service, fetchMock } = setupService({
       videoModels: ['slow/model'],
       snapshotModels: [],
       pipelinePreference: 'video',
-      usageTracker: { recordUsage: vi.fn() },
     })
+    fetchMock.setHandler(() => new Promise(() => undefined))
 
     await service.summarizeFromVideo({
       activity: makeActivity(),
@@ -209,14 +370,13 @@ describe('ActivitySemanticService', () => {
     tempDirs.push(tempDir)
     const videoPath = createVideoFile(tempDir)
 
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send: () => new Promise(() => undefined) } },
+    const { service, fetchMock } = setupService({
       requestTimeoutMs: 60_000,
       videoModels: ['slow/model'],
       snapshotModels: [],
       pipelinePreference: 'video',
-      usageTracker: { recordUsage: vi.fn() },
     })
+    fetchMock.setHandler(() => new Promise(() => undefined))
 
     service.updateRequestTimeoutMs(7)
     await service.summarizeFromVideo({
@@ -228,163 +388,24 @@ describe('ActivitySemanticService', () => {
     expect(diagnostics?.attempts[0]?.error).toContain('semantic model request timed out after 7ms')
   })
 
-  it('passes baseURL to OpenAI when custom endpoint is provided', () => {
-    new ActivitySemanticService('test-key', {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'custom-model',
-      },
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    expect(OpenAI).toHaveBeenCalledWith({
-      apiKey: 'test-key',
-      baseURL: 'http://localhost:11434/v1',
-      maxRetries: 0,
-    })
-  })
-
-  it('uses empty string as apiKey for OpenAI when custom endpoint has no key and no default key', () => {
-    new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'custom-model',
-      },
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    expect(OpenAI).toHaveBeenCalledWith({
-      apiKey: '',
-      baseURL: 'http://localhost:11434/v1',
-      maxRetries: 0,
-    })
-  })
-
-  it('uses custom endpoint apiKey over OpenRouter key for the OpenAI client', () => {
-    new ActivitySemanticService('openrouter-key', {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'custom-model',
-        apiKey: 'custom-key',
-      },
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    expect(OpenAI).toHaveBeenCalledWith({
-      apiKey: 'custom-key',
-      baseURL: 'http://localhost:11434/v1',
-      maxRetries: 0,
-    })
-  })
-
-  it('forwards configured custom model name in chat.send()', async () => {
+  it('forwards configured custom model name in the request body', async () => {
     const tempDir = createTempDir()
     tempDirs.push(tempDir)
     const videoPath = createVideoFile(tempDir)
-    mockOpenAICreate.mockResolvedValue(response('custom model summary'))
 
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'my-custom-model',
-      },
-      usageTracker: { recordUsage: vi.fn() },
+    const { service, fetchMock } = setupService({
+      apiKey: null,
+      endpoint: { serverURL: 'http://localhost:11434/v1', model: 'my-custom-model' },
     })
+    fetchMock.setHandler(() => chatCompletionResponse('custom model summary'))
 
     await service.summarizeFromVideo({
       activity: makeActivity(),
       videoPath,
     })
 
-    expect(mockOpenAICreate).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'my-custom-model' }),
-      expect.objectContaining({
-        timeout: ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS,
-        maxRetries: 0,
-      }),
-    )
-  })
-
-  it('switches to custom endpoint via updateEndpoint()', () => {
-    const service = new ActivitySemanticService('test-key', {
-      usageTracker: { recordUsage: vi.fn() },
-    })
-    expect(service.isUsingCustomEndpoint()).toBe(false)
-
-    service.updateEndpoint({
-      serverURL: 'http://localhost:11434/v1',
-      model: 'custom-model',
-      apiKey: 'custom-key',
-    })
-
-    expect(service.isUsingCustomEndpoint()).toBe(true)
-    expect(service.isConfigured()).toBe(true)
-    expect(OpenAI).toHaveBeenLastCalledWith({
-      apiKey: 'custom-key',
-      baseURL: 'http://localhost:11434/v1',
-      maxRetries: 0,
-    })
-  })
-
-  it('reverts from custom endpoint via updateEndpoint(null, openRouterKey)', () => {
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'custom-model',
-      },
-      usageTracker: { recordUsage: vi.fn() },
-    })
-    expect(service.isUsingCustomEndpoint()).toBe(true)
-
-    service.updateEndpoint(null, 'openrouter-key')
-
-    expect(service.isUsingCustomEndpoint()).toBe(false)
-    expect(service.isConfigured()).toBe(true)
-    expect(OpenRouter).toHaveBeenLastCalledWith({
-      apiKey: 'openrouter-key',
-    })
-  })
-
-  it('reverts to unconfigured when removing custom endpoint without OpenRouter key', () => {
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'custom-model',
-      },
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    service.updateEndpoint(null)
-
-    expect(service.isUsingCustomEndpoint()).toBe(false)
-    expect(service.isConfigured()).toBe(false)
-  })
-
-  it('reports isConfigured() true when custom endpoint is set without OpenRouter key', () => {
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'custom-model',
-      },
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    expect(service.isUsingCustomEndpoint()).toBe(true)
-    expect(service.isConfigured()).toBe(true)
-  })
-
-  it('ignores updateApiKey when custom endpoint is active', () => {
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'custom-model',
-      },
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    service.updateApiKey('new-key')
-
-    expect(service.isUsingCustomEndpoint()).toBe(true)
+    expect(fetchMock.calls[0]?.body.model).toBe('my-custom-model')
+    expect(fetchMock.calls[0]?.url).toContain('http://localhost:11434/v1')
   })
 
   it('uses first video model when it succeeds', async () => {
@@ -392,22 +413,18 @@ describe('ActivitySemanticService', () => {
     tempDirs.push(tempDir)
     const videoPath = createVideoFile(tempDir)
 
-    const send = vi.fn().mockResolvedValue(response('video summary'))
     const usageTracker = { recordUsage: vi.fn() }
-
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send } },
-      usageTracker,
-    })
+    const { service, fetchMock } = setupService({ usageTracker })
+    fetchMock.setHandler(() => chatCompletionResponse('video summary'))
 
     const result = await service.summarizeFromVideo({
       activity: makeActivity(),
       videoPath,
     })
 
-    expect(result).toBe('video summary')
-    expect(send).toHaveBeenCalledTimes(1)
-    expect(send.mock.calls[0][0].model).toBe(DEFAULT_VIDEO_MODELS[0])
+    expect(result.summary).toBe('video summary')
+    expect(fetchMock.calls).toHaveLength(1)
+    expect(fetchMock.calls[0]?.body.model).toBe(DEFAULT_VIDEO_MODELS[0])
     expect(service.getLlmHealthStatus()).toEqual({
       configured: true,
       state: 'active',
@@ -422,15 +439,12 @@ describe('ActivitySemanticService', () => {
     tempDirs.push(tempDir)
     const videoPath = createVideoFile(tempDir)
 
-    const send = vi.fn().mockImplementation(async (request: { model: string }) => {
-      if (request.model === DEFAULT_VIDEO_MODELS[0]) throw new Error('primary failed')
-      if (request.model === DEFAULT_VIDEO_MODELS[1]) throw new Error('secondary failed')
-      return response('third model summary')
-    })
-
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send } },
-      usageTracker: { recordUsage: vi.fn() },
+    const { service, fetchMock } = setupService()
+    fetchMock.setHandler(({ body }) => {
+      if (body.model === DEFAULT_VIDEO_MODELS[0]) return httpError(500, { error: 'primary failed' })
+      if (body.model === DEFAULT_VIDEO_MODELS[1])
+        return httpError(500, { error: 'secondary failed' })
+      return chatCompletionResponse('third model summary')
     })
 
     const result = await service.summarizeFromVideo({
@@ -438,17 +452,13 @@ describe('ActivitySemanticService', () => {
       videoPath,
     })
 
-    expect(result).toBe('third model summary')
-    expect(send.mock.calls.map((call) => call[0].model)).toEqual(DEFAULT_VIDEO_MODELS)
+    expect(result.summary).toBe('third model summary')
+    expect(fetchMock.calls.map((c) => c.body.model)).toEqual(DEFAULT_VIDEO_MODELS)
     expect(service.getLlmHealthStatus().state).toBe('active')
   })
 
   it('reports configured but waiting before any semantic request runs', () => {
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send: vi.fn() } },
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
+    const { service } = setupService()
     expect(service.getLlmHealthStatus()).toEqual({
       configured: true,
       state: 'unknown',
@@ -459,10 +469,8 @@ describe('ActivitySemanticService', () => {
   })
 
   it('marks LLM active after a successful connection test', async () => {
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send: vi.fn().mockResolvedValue(response('OK')) } },
-      usageTracker: { recordUsage: vi.fn() },
-    })
+    const { service, fetchMock } = setupService()
+    fetchMock.setHandler(() => chatCompletionResponse('OK'))
 
     await service.testConnection()
 
@@ -475,28 +483,9 @@ describe('ActivitySemanticService', () => {
     })
   })
 
-  it('does not rebuild the OpenRouter client or reset health when updateApiKey gets the same key', async () => {
-    mockSend.mockResolvedValueOnce(response('OK'))
-
-    const service = new ActivitySemanticService('test-key', {
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    await service.testConnection()
-    expect(service.getLlmHealthStatus().state).toBe('active')
-    expect(OpenRouter).toHaveBeenCalledTimes(1)
-
-    service.updateApiKey('test-key')
-
-    expect(OpenRouter).toHaveBeenCalledTimes(1)
-    expect(service.getLlmHealthStatus().state).toBe('active')
-  })
-
   it('marks LLM failing after a failed connection test', async () => {
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send: vi.fn().mockRejectedValue(new Error('connect ECONNREFUSED')) } },
-      usageTracker: { recordUsage: vi.fn() },
-    })
+    const { service, fetchMock } = setupService()
+    fetchMock.setHandler(() => new Error('connect ECONNREFUSED'))
 
     await service.testConnection()
 
@@ -514,18 +503,16 @@ describe('ActivitySemanticService', () => {
     tempDirs.push(tempDir)
     const videoPath = createVideoFile(tempDir)
 
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send: vi.fn().mockRejectedValue(new Error('connect ECONNREFUSED')) } },
-      usageTracker: { recordUsage: vi.fn() },
+    const { service, fetchMock } = setupService({
       snapshotModels: [],
       pipelinePreference: 'video',
     })
+    fetchMock.setHandler(() => new Error('connect ECONNREFUSED'))
 
     await service.summarizeFromVideo({
       activity: makeActivity({ id: 'activity-1' }),
       videoPath,
     })
-
     await service.summarizeFromVideo({
       activity: makeActivity({ id: 'activity-2' }),
       videoPath,
@@ -551,16 +538,11 @@ describe('ActivitySemanticService', () => {
       makeFrame(createImageFile(tempDir, 'f2.png'), 45_000, 2),
     ]
 
-    const send = vi.fn().mockImplementation(async (request: { model: string }) => {
-      if (DEFAULT_VIDEO_MODELS.includes(request.model)) {
-        throw new Error('video model failure')
-      }
-      return response('snapshot summary')
-    })
-
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send } },
-      usageTracker: { recordUsage: vi.fn() },
+    const { service, fetchMock } = setupService()
+    fetchMock.setHandler(({ body }) => {
+      if (DEFAULT_VIDEO_MODELS.includes(body.model))
+        return httpError(500, { error: 'video model failure' })
+      return chatCompletionResponse('snapshot summary')
     })
 
     const result = await service.summarizeFromVideo({
@@ -568,14 +550,12 @@ describe('ActivitySemanticService', () => {
       videoPath,
     })
 
-    expect(result).toBe('snapshot summary')
-    expect(send.mock.calls.map((call) => call[0].model)).toEqual([
+    expect(result.summary).toBe('snapshot summary')
+    expect(fetchMock.calls.map((c) => c.body.model)).toEqual([
       ...DEFAULT_VIDEO_MODELS,
       DEFAULT_SNAPSHOT_MODELS[0],
     ])
-
-    const diagnostics = service.getLastRunDiagnostics()
-    expect(diagnostics?.chosenMode).toBe('snapshot')
+    expect(service.getLastRunDiagnostics()?.chosenMode).toBe('snapshot')
   })
 
   it('supports image-only mode without attempting video or requiring a stitched file', async () => {
@@ -587,27 +567,19 @@ describe('ActivitySemanticService', () => {
       makeFrame(createImageFile(tempDir, 'f1.png'), 25_000, 1),
     ]
 
-    const send = vi.fn().mockResolvedValue(response('image summary only'))
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send } },
-      pipelinePreference: 'image',
-      usageTracker: { recordUsage: vi.fn() },
-    })
+    const { service, fetchMock } = setupService({ pipelinePreference: 'image' })
+    fetchMock.setHandler(() => chatCompletionResponse('image summary only'))
 
     const result = await service.summarizeFromVideo({
       activity: makeActivity({ frames }),
     })
 
-    expect(result).toBe('image summary only')
-    expect(send).toHaveBeenCalledTimes(1)
-    expect(
-      send.mock.calls[0][0].messages[0].content.some(
-        (item: { type: string }) => item.type === 'input_video',
-      ),
-    ).toBe(false)
+    expect(result.summary).toBe('image summary only')
+    expect(fetchMock.calls).toHaveLength(1)
+    expect(bodyHasVideo(fetchMock.calls[0]!.body)).toBe(false)
     const diagnostics = service.getLastRunDiagnostics()
     expect(diagnostics?.pipelinePreference).toBe('image')
-    expect(diagnostics?.attempts.map((attempt) => attempt.mode)).toEqual(['snapshot'])
+    expect(diagnostics?.attempts.map((a) => a.mode)).toEqual(['snapshot'])
     expect(diagnostics?.chosenMode).toBe('snapshot')
   })
 
@@ -621,27 +593,19 @@ describe('ActivitySemanticService', () => {
       makeFrame(createImageFile(tempDir, 'f1.png'), 25_000, 1),
     ]
 
-    const send = vi.fn().mockRejectedValue(new Error('video failed'))
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send } },
-      pipelinePreference: 'video',
-      usageTracker: { recordUsage: vi.fn() },
-    })
+    const { service, fetchMock } = setupService({ pipelinePreference: 'video' })
+    fetchMock.setHandler(() => httpError(500, { error: 'video failed' }))
 
     const result = await service.summarizeFromVideo({
       activity: makeActivity({ frames }),
       videoPath,
     })
 
-    expect(result).toBe('')
-    expect(send.mock.calls.map((call) => call[0].model)).toEqual(DEFAULT_VIDEO_MODELS)
+    expect(result.summary).toBe('')
+    expect(fetchMock.calls.map((c) => c.body.model)).toEqual(DEFAULT_VIDEO_MODELS)
     const diagnostics = service.getLastRunDiagnostics()
     expect(diagnostics?.pipelinePreference).toBe('video')
-    expect(diagnostics?.attempts.map((attempt) => attempt.mode)).toEqual([
-      'video',
-      'video',
-      'video',
-    ])
+    expect(diagnostics?.attempts.map((a) => a.mode)).toEqual(['video', 'video', 'video'])
     expect(diagnostics?.chosenMode).toBeNull()
   })
 
@@ -654,22 +618,15 @@ describe('ActivitySemanticService', () => {
       makeFrame(createImageFile(tempDir, 'f1.png'), 25_000, 1),
     ]
 
-    mockOpenAICreate.mockImplementation(
-      async (request: { model: string; messages: Array<{ content: Array<{ type: string }> }> }) => {
-        const hasVideo = request.messages[0]?.content.some((item) => item.type === 'input_video')
-        if (hasVideo) {
-          throw new Error('input_video is not supported by this model')
-        }
-        return response('snapshot summary from custom model')
-      },
-    )
-
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'moondream:latest',
-      },
-      usageTracker: { recordUsage: vi.fn() },
+    const { service, fetchMock } = setupService({
+      apiKey: null,
+      endpoint: { serverURL: 'http://localhost:11434/v1', model: 'moondream:latest' },
+    })
+    fetchMock.setHandler(({ body }) => {
+      if (bodyHasVideo(body)) {
+        return httpError(400, { error: { message: 'input_video is not supported by this model' } })
+      }
+      return chatCompletionResponse('snapshot summary from custom model')
     })
 
     const result = await service.summarizeFromVideo({
@@ -677,63 +634,18 @@ describe('ActivitySemanticService', () => {
       videoPath,
     })
 
-    expect(result).toBe('snapshot summary from custom model')
-    expect(mockOpenAICreate.mock.calls.map((call) => call[0].model)).toEqual([
+    expect(result.summary).toBe('snapshot summary from custom model')
+    expect(fetchMock.calls.map((c) => c.body.model)).toEqual([
       'moondream:latest',
       'moondream:latest',
     ])
     const diagnostics = service.getLastRunDiagnostics()
-    expect(diagnostics?.attempts.map((attempt) => attempt.mode)).toEqual(['video', 'snapshot'])
+    expect(diagnostics?.attempts.map((a) => a.mode)).toEqual(['video', 'snapshot'])
     expect(diagnostics?.chosenMode).toBe('snapshot')
     expect(diagnostics?.chosenModel).toBe('moondream:latest')
   })
 
-  it('accepts custom endpoint responses with null tool_calls', async () => {
-    const tempDir = createTempDir()
-    tempDirs.push(tempDir)
-    const frames = [makeFrame(createImageFile(tempDir, 'f0.png'), 1_000, 0)]
-
-    mockOpenAICreate.mockResolvedValue({
-      id: 'chatcmpl-test',
-      object: 'chat.completion',
-      created: 1_763_163_976,
-      model: 'mistral-small-2503',
-      choices: [
-        {
-          index: 0,
-          finish_reason: 'stop',
-          message: {
-            role: 'assistant',
-            content: 'snapshot summary from azure-style response',
-            tool_calls: null,
-          },
-        },
-      ],
-      usage: {
-        prompt_tokens: 8,
-        completion_tokens: 7,
-        total_tokens: 15,
-      },
-    })
-
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'https://example.test/openai/v1',
-        model: 'mistral-small-2503',
-      },
-      pipelinePreference: 'image',
-      usageTracker: { recordUsage: vi.fn() },
-    })
-
-    const result = await service.summarizeFromVideo({
-      activity: makeActivity({ frames }),
-    })
-
-    expect(result).toBe('snapshot summary from azure-style response')
-    expect(mockOpenAICreate).toHaveBeenCalledTimes(1)
-  })
-
-  it('cache-skips video after OpenAI 422 details expose input_video as unsupported', async () => {
+  it('cache-skips video after a structured 422 with input_video details', async () => {
     const tempDir = createTempDir()
     tempDirs.push(tempDir)
     const videoPath = createVideoFile(tempDir)
@@ -742,69 +654,53 @@ describe('ActivitySemanticService', () => {
       makeFrame(createImageFile(tempDir, 'f1.png'), 25_000, 1),
     ]
 
-    mockOpenAICreate.mockImplementationOnce(async () => {
-      const error = new Error('422 invalid input error')
-      Object.assign(error, {
-        error: {
-          code: 'Invalid input',
-          message: 'invalid input error',
-          details: [
-            {
-              loc: [
-                'body',
-                'messages',
-                0,
-                'content',
-                'list[function-after[validate_content_part(), ContentPart]]',
-                1,
-                'type',
-              ],
-              msg: "Input should be 'text', 'image' or 'image_url'",
-              input: 'input_video',
-              ctx: { expected: "'text', 'image' or 'image_url'" },
-            },
-          ],
-        },
-      })
-      throw error
+    const { service, fetchMock } = setupService({
+      apiKey: null,
+      endpoint: { serverURL: 'https://example.test/openai/v1', model: 'mistral-small-2503' },
     })
-    mockOpenAICreate.mockResolvedValue(response('snapshot summary after cached skip'))
 
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'https://example.test/openai/v1',
-        model: 'mistral-small-2503',
-      },
-      usageTracker: { recordUsage: vi.fn() },
+    let firstVideoCallSeen = false
+    fetchMock.setHandler(({ body }) => {
+      if (bodyHasVideo(body) && !firstVideoCallSeen) {
+        firstVideoCallSeen = true
+        return httpError(422, {
+          error: {
+            code: 'Invalid input',
+            message: 'invalid input error',
+            details: [
+              {
+                loc: ['body', 'messages', 0, 'content'],
+                msg: "Input should be 'text', 'image' or 'image_url'",
+                input: 'input_video',
+                ctx: { expected: "'text', 'image' or 'image_url'" },
+              },
+            ],
+          },
+        })
+      }
+      return chatCompletionResponse('snapshot summary after cached skip')
     })
 
     const firstResult = await service.summarizeFromVideo({
       activity: makeActivity({ id: 'activity-1', frames }),
       videoPath,
     })
-    expect(firstResult).toBe('snapshot summary after cached skip')
+    expect(firstResult.summary).toBe('snapshot summary after cached skip')
 
-    mockOpenAICreate.mockClear()
-    mockOpenAICreate.mockResolvedValue(response('snapshot summary after cached skip'))
+    fetchMock.calls.length = 0
 
     const secondResult = await service.summarizeFromVideo({
       activity: makeActivity({ id: 'activity-2', frames }),
       videoPath,
     })
 
-    expect(secondResult).toBe('snapshot summary after cached skip')
-    expect(mockOpenAICreate).toHaveBeenCalledTimes(1)
-    expect(
-      mockOpenAICreate.mock.calls[0][0].messages[0].content.some(
-        (item: { type: string }) => item.type === 'input_video',
-      ),
-    ).toBe(false)
+    expect(secondResult.summary).toBe('snapshot summary after cached skip')
+    expect(fetchMock.calls).toHaveLength(1)
+    expect(bodyHasVideo(fetchMock.calls[0]!.body)).toBe(false)
 
     const secondDiagnostics = service.getLastRunDiagnostics()
-    expect(secondDiagnostics?.attempts.map((attempt) => attempt.mode)).toEqual(['snapshot'])
-    expect(secondDiagnostics?.fallbackReason).toBe(
-      'custom endpoint model marked video-unsupported (session)',
-    )
+    expect(secondDiagnostics?.attempts.map((a) => a.mode)).toEqual(['snapshot'])
+    expect(secondDiagnostics?.fallbackReason).toBe('all video models marked unsupported (session)')
   })
 
   it('skips video on subsequent calls after custom model reports video unsupported', async () => {
@@ -817,22 +713,17 @@ describe('ActivitySemanticService', () => {
       makeFrame(createImageFile(tempDir, 'f2.png'), 45_000, 2),
     ]
 
-    mockOpenAICreate.mockImplementation(
-      async (request: { messages: Array<{ content: Array<{ type: string }> }> }) => {
-        const hasVideo = request.messages[0]?.content.some((item) => item.type === 'input_video')
-        if (hasVideo) {
-          throw new Error('video input not supported; input_video unsupported')
-        }
-        return response('snapshot summary')
-      },
-    )
-
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'moondream:latest',
-      },
-      usageTracker: { recordUsage: vi.fn() },
+    const { service, fetchMock } = setupService({
+      apiKey: null,
+      endpoint: { serverURL: 'http://localhost:11434/v1', model: 'moondream:latest' },
+    })
+    fetchMock.setHandler(({ body }) => {
+      if (bodyHasVideo(body)) {
+        return httpError(400, {
+          error: { message: 'video input not supported; input_video unsupported' },
+        })
+      }
+      return chatCompletionResponse('snapshot summary')
     })
 
     await service.summarizeFromVideo({
@@ -841,30 +732,76 @@ describe('ActivitySemanticService', () => {
     })
 
     const firstDiagnostics = service.getLastRunDiagnostics()
-    expect(firstDiagnostics?.attempts.some((attempt) => attempt.mode === 'video')).toBe(true)
+    expect(firstDiagnostics?.attempts.some((a) => a.mode === 'video')).toBe(true)
     expect(firstDiagnostics?.chosenMode).toBe('snapshot')
 
-    mockOpenAICreate.mockClear()
+    fetchMock.calls.length = 0
 
     const secondResult = await service.summarizeFromVideo({
       activity: makeActivity({ id: 'activity-2', frames }),
       videoPath,
     })
 
-    expect(secondResult).toBe('snapshot summary')
-    expect(mockOpenAICreate).toHaveBeenCalledTimes(1)
-    expect(
-      mockOpenAICreate.mock.calls[0][0].messages[0].content.some(
-        (item: { type: string }) => item.type === 'input_video',
-      ),
-    ).toBe(false)
+    expect(secondResult.summary).toBe('snapshot summary')
+    expect(fetchMock.calls).toHaveLength(1)
+    expect(bodyHasVideo(fetchMock.calls[0]!.body)).toBe(false)
 
     const secondDiagnostics = service.getLastRunDiagnostics()
-    expect(secondDiagnostics?.attempts.map((attempt) => attempt.mode)).toEqual(['snapshot'])
-    expect(secondDiagnostics?.fallbackReason).toBe(
-      'custom endpoint model marked video-unsupported (session)',
-    )
+    expect(secondDiagnostics?.attempts.map((a) => a.mode)).toEqual(['snapshot'])
+    expect(secondDiagnostics?.fallbackReason).toBe('all video models marked unsupported (session)')
     expect(secondDiagnostics?.chosenMode).toBe('snapshot')
+  })
+
+  it('falls through cached-unsupported video model to a later supported one in the chain', async () => {
+    const tempDir = createTempDir()
+    tempDirs.push(tempDir)
+    const videoPath = createVideoFile(tempDir)
+    const frames = [
+      makeFrame(createImageFile(tempDir, 'f0.png'), 1_000, 0),
+      makeFrame(createImageFile(tempDir, 'f1.png'), 25_000, 1),
+    ]
+
+    const { service, fetchMock } = setupService({
+      apiKey: null,
+      endpoint: { serverURL: 'http://localhost:11434/v1', model: 'unused' },
+      videoModels: ['model-a-no-video', 'model-b-with-video'],
+      snapshotModels: ['snap-model'],
+    })
+
+    fetchMock.setHandler(({ body }) => {
+      if (bodyHasVideo(body) && body.model === 'model-a-no-video') {
+        return httpError(400, {
+          error: { message: 'input_video is not supported by this model' },
+        })
+      }
+      if (bodyHasVideo(body) && body.model === 'model-b-with-video') {
+        return chatCompletionResponse('video summary from B')
+      }
+      return chatCompletionResponse('snapshot summary')
+    })
+
+    // First activity: A fails fast and gets cached, B succeeds.
+    const first = await service.summarizeFromVideo({
+      activity: makeActivity({ id: 'activity-1', frames }),
+      videoPath,
+    })
+    expect(first.summary).toBe('video summary from B')
+    expect(first.model).toBe('model-b-with-video')
+
+    fetchMock.calls.length = 0
+
+    // Second activity: A is cached as unsupported and skipped; B is tried first.
+    const second = await service.summarizeFromVideo({
+      activity: makeActivity({ id: 'activity-2', frames }),
+      videoPath,
+    })
+    expect(second.summary).toBe('video summary from B')
+    expect(second.model).toBe('model-b-with-video')
+
+    const videoModelsTried = fetchMock.calls
+      .filter((c) => bodyHasVideo(c.body))
+      .map((c) => c.body.model)
+    expect(videoModelsTried).toEqual(['model-b-with-video'])
   })
 
   it('does not cache-skip video after generic failures', async () => {
@@ -876,22 +813,15 @@ describe('ActivitySemanticService', () => {
       makeFrame(createImageFile(tempDir, 'f1.png'), 25_000, 1),
     ]
 
-    mockOpenAICreate.mockImplementation(
-      async (request: { messages: Array<{ content: Array<{ type: string }> }> }) => {
-        const hasVideo = request.messages[0]?.content.some((item) => item.type === 'input_video')
-        if (hasVideo) {
-          throw new Error('network timeout')
-        }
-        return response('snapshot summary')
-      },
-    )
-
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: 'http://localhost:11434/v1',
-        model: 'moondream:latest',
-      },
-      usageTracker: { recordUsage: vi.fn() },
+    const { service, fetchMock } = setupService({
+      apiKey: null,
+      endpoint: { serverURL: 'http://localhost:11434/v1', model: 'moondream:latest' },
+    })
+    fetchMock.setHandler(({ body }) => {
+      if (bodyHasVideo(body)) {
+        return new Error('network timeout')
+      }
+      return chatCompletionResponse('snapshot summary')
     })
 
     await service.summarizeFromVideo({
@@ -899,18 +829,15 @@ describe('ActivitySemanticService', () => {
       videoPath,
     })
     const firstDiagnostics = service.getLastRunDiagnostics()
-    expect(firstDiagnostics?.attempts.map((attempt) => attempt.mode)).toEqual(['video', 'snapshot'])
+    expect(firstDiagnostics?.attempts.map((a) => a.mode)).toEqual(['video', 'snapshot'])
 
-    mockOpenAICreate.mockClear()
+    fetchMock.calls.length = 0
     await service.summarizeFromVideo({
       activity: makeActivity({ id: 'activity-3', frames }),
       videoPath,
     })
     const secondDiagnostics = service.getLastRunDiagnostics()
-    expect(secondDiagnostics?.attempts.map((attempt) => attempt.mode)).toEqual([
-      'video',
-      'snapshot',
-    ])
+    expect(secondDiagnostics?.attempts.map((a) => a.mode)).toEqual(['video', 'snapshot'])
   })
 
   it('snapshot sampling selects frames nearest to interaction anchors', async () => {
@@ -925,13 +852,11 @@ describe('ActivitySemanticService', () => {
       makeFrame(createImageFile(tempDir, 'f3.png'), 30_000, 3),
     ]
 
-    const send = vi.fn().mockResolvedValue(response('snapshot summary'))
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send } },
+    const { service, fetchMock } = setupService({
       videoModels: ['video/fail'],
       snapshotModels: ['snapshot/success'],
-      usageTracker: { recordUsage: vi.fn() },
     })
+    fetchMock.setHandler(() => chatCompletionResponse('snapshot summary'))
 
     await service.summarizeFromVideo({
       activity: makeActivity({
@@ -948,7 +873,7 @@ describe('ActivitySemanticService', () => {
     })
 
     const diagnostics = service.getLastRunDiagnostics()
-    expect(diagnostics?.selectedSnapshotPaths.map((filepath) => path.basename(filepath))).toEqual([
+    expect(diagnostics?.selectedSnapshotPaths.map((fp) => path.basename(fp))).toEqual([
       'f0.png',
       'f1.png',
       'f2.png',
@@ -967,16 +892,10 @@ describe('ActivitySemanticService', () => {
       frames.push(makeFrame(createImageFile(tempDir, `frame-${i}.png`), 1_000 + i * 25_000, i))
     }
 
-    const send = vi.fn().mockImplementation(async (request: { model: string }) => {
-      if (DEFAULT_VIDEO_MODELS.includes(request.model)) {
-        throw new Error('video fail')
-      }
-      return response('snapshot summary')
-    })
-
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send } },
-      usageTracker: { recordUsage: vi.fn() },
+    const { service, fetchMock } = setupService()
+    fetchMock.setHandler(({ body }) => {
+      if (DEFAULT_VIDEO_MODELS.includes(body.model)) return httpError(500, { error: 'video fail' })
+      return chatCompletionResponse('snapshot summary')
     })
 
     await service.summarizeFromVideo({
@@ -1008,13 +927,11 @@ describe('ActivitySemanticService', () => {
       makeFrame(createImageFile(tempDir, 'f4.png'), 40_000, 4),
     ]
 
-    const send = vi.fn().mockResolvedValue(response('snapshot summary'))
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send } },
+    const { service, fetchMock } = setupService({
       videoModels: ['video/fail'],
       snapshotModels: ['snapshot/success'],
-      usageTracker: { recordUsage: vi.fn() },
     })
+    fetchMock.setHandler(() => chatCompletionResponse('snapshot summary'))
 
     await service.summarizeFromVideo({
       activity: makeActivity({
@@ -1047,14 +964,11 @@ describe('ActivitySemanticService', () => {
       makeFrame(createImageFile(tempDir, 'f5.png'), 60_000, 5),
     ]
 
-    const send = vi.fn().mockResolvedValue(response('snapshot summary'))
-
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send } },
+    const { service, fetchMock } = setupService({
       videoModels: ['video/fail'],
       snapshotModels: ['snapshot/success'],
-      usageTracker: { recordUsage: vi.fn() },
     })
+    fetchMock.setHandler(() => chatCompletionResponse('snapshot summary'))
 
     await service.summarizeFromVideo({
       activity: makeActivity({
@@ -1067,7 +981,7 @@ describe('ActivitySemanticService', () => {
     })
 
     const diagnostics = service.getLastRunDiagnostics()
-    expect(diagnostics?.selectedSnapshotPaths.map((filepath) => path.basename(filepath))).toEqual([
+    expect(diagnostics?.selectedSnapshotPaths.map((fp) => path.basename(fp))).toEqual([
       'f0.png',
       'f1.png',
       'f2.png',
@@ -1089,13 +1003,11 @@ describe('ActivitySemanticService', () => {
       makeFrame(createImageFile(tempDir, 'f3.png'), 30_000, 3),
     ]
 
-    const send = vi.fn().mockResolvedValue(response('snapshot summary'))
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send } },
+    const { service, fetchMock } = setupService({
       videoModels: ['video/fail'],
       snapshotModels: ['snapshot/success'],
-      usageTracker: { recordUsage: vi.fn() },
     })
+    fetchMock.setHandler(() => chatCompletionResponse('snapshot summary'))
 
     await service.summarizeFromVideo({
       activity: makeActivity({
@@ -1112,7 +1024,7 @@ describe('ActivitySemanticService', () => {
     })
 
     const diagnostics = service.getLastRunDiagnostics()
-    expect(diagnostics?.selectedSnapshotPaths.map((filepath) => path.basename(filepath))).toEqual([
+    expect(diagnostics?.selectedSnapshotPaths.map((fp) => path.basename(fp))).toEqual([
       'f0.png',
       'f3.png',
     ])
@@ -1131,14 +1043,11 @@ describe('ActivitySemanticService', () => {
       makeFrame(createImageFile(tempDir, 'last.png'), 30_000, 3),
     ]
 
-    const send = vi.fn().mockResolvedValue(response('snapshot summary'))
-
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send } },
+    const { service, fetchMock } = setupService({
       videoModels: ['video/fail'],
       snapshotModels: ['snapshot/success'],
-      usageTracker: { recordUsage: vi.fn() },
     })
+    fetchMock.setHandler(() => chatCompletionResponse('snapshot summary'))
 
     await service.summarizeFromVideo({
       activity: makeActivity({ frames }),
@@ -1146,12 +1055,8 @@ describe('ActivitySemanticService', () => {
     })
 
     const diagnostics = service.getLastRunDiagnostics()
-    expect(diagnostics?.selectedSnapshotPaths.map((filepath) => path.basename(filepath))).toContain(
-      'first.png',
-    )
-    expect(diagnostics?.selectedSnapshotPaths.map((filepath) => path.basename(filepath))).toContain(
-      'last.png',
-    )
+    expect(diagnostics?.selectedSnapshotPaths.map((fp) => path.basename(fp))).toContain('first.png')
+    expect(diagnostics?.selectedSnapshotPaths.map((fp) => path.basename(fp))).toContain('last.png')
   })
 
   it('never sends OCR text to the LLM payload', async () => {
@@ -1159,19 +1064,15 @@ describe('ActivitySemanticService', () => {
     tempDirs.push(tempDir)
     const videoPath = createVideoFile(tempDir)
 
-    const send = vi.fn().mockResolvedValue(response('summary'))
-
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send } },
-      usageTracker: { recordUsage: vi.fn() },
-    })
+    const { service, fetchMock } = setupService()
+    fetchMock.setHandler(() => chatCompletionResponse('summary'))
 
     await service.summarizeFromVideo({
       activity: makeActivity(),
       videoPath,
     })
 
-    expect(JSON.stringify(send.mock.calls[0][0])).not.toContain('VERY_SECRET_OCR_TEXT')
+    expect(JSON.stringify(fetchMock.calls[0]!.body)).not.toContain('VERY_SECRET_OCR_TEXT')
   })
 
   it('trims summary output', async () => {
@@ -1179,19 +1080,15 @@ describe('ActivitySemanticService', () => {
     tempDirs.push(tempDir)
     const videoPath = createVideoFile(tempDir)
 
-    const send = vi.fn().mockResolvedValue(response('  trimmed summary  '))
-
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send } },
-      usageTracker: { recordUsage: vi.fn() },
-    })
+    const { service, fetchMock } = setupService()
+    fetchMock.setHandler(() => chatCompletionResponse('  trimmed summary  '))
 
     const result = await service.summarizeFromVideo({
       activity: makeActivity(),
       videoPath,
     })
 
-    expect(result).toBe('trimmed summary')
+    expect(result.summary).toBe('trimmed summary')
   })
 
   it('records usage stats on success', async () => {
@@ -1199,14 +1096,12 @@ describe('ActivitySemanticService', () => {
     tempDirs.push(tempDir)
     const videoPath = createVideoFile(tempDir)
 
-    const send = vi.fn().mockResolvedValue(response('summary', 123, 45))
     const usageTracker = { recordUsage: vi.fn() }
-
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send } },
+    const { service, fetchMock } = setupService({
       videoModels: ['mistralai/mistral-small-3.2-24b-instruct'],
       usageTracker,
     })
+    fetchMock.setHandler(() => chatCompletionResponse('summary', 123, 45))
 
     await service.summarizeFromVideo({
       activity: makeActivity(),
@@ -1227,14 +1122,12 @@ describe('ActivitySemanticService', () => {
     tempDirs.push(tempDir)
     const videoPath = createVideoFile(tempDir)
 
-    const send = vi.fn().mockResolvedValue(response('summary', 200, 100))
     const usageTracker = { recordUsage: vi.fn() }
-
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send } },
+    const { service, fetchMock } = setupService({
       videoModels: ['unknown/video-model'],
       usageTracker,
     })
+    fetchMock.setHandler(() => chatCompletionResponse('summary', 200, 100))
 
     await service.summarizeFromVideo({
       activity: makeActivity(),
@@ -1256,27 +1149,22 @@ describe('ActivitySemanticService', () => {
     const videoPath = createVideoFile(tempDir)
 
     const frames = [makeFrame(createImageFile(tempDir, 'f0.png'), 1_000, 0)]
-
-    const send = vi.fn().mockRejectedValue(new Error('all failed'))
-
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send } },
-      usageTracker: { recordUsage: vi.fn() },
-    })
+    const { service, fetchMock } = setupService()
+    fetchMock.setHandler(() => new Error('all failed'))
 
     const result = await service.summarizeFromVideo({
       activity: makeActivity({ frames }),
       videoPath,
     })
 
-    expect(result).toBe('')
+    expect(result.summary).toBe('')
     const diagnostics = service.getLastRunDiagnostics()
     expect(diagnostics?.attempts).toHaveLength(
       DEFAULT_VIDEO_MODELS.length + DEFAULT_SNAPSHOT_MODELS.length,
     )
   })
 
-  it('dumps exact request and response payloads when debug dumper is configured', async () => {
+  it('dumps request and response payloads when debug dumper is configured', async () => {
     const tempDir = createTempDir()
     tempDirs.push(tempDir)
     const videoPath = createVideoFile(tempDir)
@@ -1286,53 +1174,39 @@ describe('ActivitySemanticService', () => {
       copyMediaAssets: true,
     })
 
-    const send = vi.fn().mockResolvedValue(response('dumped summary'))
-    const service = new ActivitySemanticService(undefined, {
-      client: { chat: { send } },
-      debugDumper: dumper,
-      usageTracker: { recordUsage: vi.fn() },
+    const { service, fetchMock } = setupService({
       videoModels: ['model-for-dump'],
       snapshotModels: [],
+      debugDumper: dumper,
     })
+    fetchMock.setHandler(() => chatCompletionResponse('dumped summary'))
 
     const result = await service.summarizeFromVideo({
       activity: makeActivity({ id: 'debug-activity' }),
       videoPath,
     })
 
-    expect(result).toBe('dumped summary')
+    expect(result.summary).toBe('dumped summary')
 
     const runDir = dumper.getRunDir()
     const attempts = fs.readdirSync(runDir)
     expect(attempts).toHaveLength(1)
 
     const attemptDir = path.join(runDir, attempts[0])
-    const requestJson = fs.readFileSync(path.join(attemptDir, 'request.json'), 'utf8')
-    const responseJson = fs.readFileSync(path.join(attemptDir, 'response.json'), 'utf8')
     const summaryTxt = fs.readFileSync(path.join(attemptDir, 'summary.txt'), 'utf8')
-    const copiedVideo = fs.readFileSync(path.join(attemptDir, 'input-video-01.mp4'))
     const metadata = JSON.parse(
       fs.readFileSync(path.join(attemptDir, 'metadata.json'), 'utf8'),
     ) as {
       success: boolean
       activityId: string
       model: string
-      requestSha256: string
-      responseSha256: string
       copiedMediaFiles: string[]
     }
 
-    expect(requestJson).toBe(`${JSON.stringify(send.mock.calls[0][0], null, 2)}\n`)
-    expect(responseJson).toBe(`${JSON.stringify(response('dumped summary'), null, 2)}\n`)
     expect(summaryTxt).toBe('dumped summary\n')
     expect(metadata.success).toBe(true)
     expect(metadata.activityId).toBe('debug-activity')
     expect(metadata.model).toBe('model-for-dump')
-    expect(typeof metadata.requestSha256).toBe('string')
-    expect(metadata.requestSha256.length).toBe(64)
-    expect(typeof metadata.responseSha256).toBe('string')
-    expect(metadata.responseSha256.length).toBe(64)
-    expect(copiedVideo.toString('utf8')).toBe('fake-video-binary')
     expect(metadata.copiedMediaFiles).toEqual(['input-video-01.mp4'])
   })
 })

@@ -2,8 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { app } from 'electron'
 import log from './logger'
-import { ApiKeyManager } from './settings/api-key-manager'
-import { CustomEndpointManager } from './settings/custom-endpoint-manager'
+import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
 import { DeviceIdentity } from './settings/device-identity'
 import { createAccessProvider, type AccessProvider } from './access'
 import type { AppEdition } from '../shared/edition'
@@ -18,6 +17,9 @@ import { SqliteActivitySink } from './sqlite-activity-sink'
 import { FfmpegVideoStitcher } from './video/video-stitcher'
 import { ActivitySemanticService, SemanticFileDebugDumper } from './activity-semantic-service'
 import type { SemanticPipelinePreference } from './activity-semantic-service'
+import { InferenceProviderImpl, type InferenceProvider } from './llm'
+import type { Vendor } from '../shared/types'
+import { VENDOR_PRESETS, buildModelChain } from '../shared/vendor-defaults'
 import { createCaptureBlacklistCoordinator } from './capture-blacklist-coordinator'
 import {
   createCaptureController,
@@ -29,8 +31,8 @@ export interface MainRuntime {
   capture: RuntimeCapture
   storage: StorageService
   usageTracker: UsageTracker
-  apiKeyManager: ApiKeyManager
-  customEndpointManager: CustomEndpointManager
+  vendorCredentials: VendorCredentialsManager
+  inferenceProvider: InferenceProvider
   semanticService: ActivitySemanticService
   accessProvider: AccessProvider
   updateExclusions(exclusions: {
@@ -53,13 +55,20 @@ export async function createMainRuntime(params: {
   excludePrivateBrowsing?: boolean
   deviceIdentity?: DeviceIdentity
   edition: AppEdition
+  vendorCredentials: VendorCredentialsManager
+  getActiveVendor: () => Vendor
+  initialVideoModel?: string
+  initialSnapshotModel?: string
 }): Promise<MainRuntime> {
   const onCaptureStateChanged = params.onCaptureStateChanged ?? (() => undefined)
 
   const interactionMonitor = await import('./recorder/interaction-monitor')
 
-  const apiKeyManager = new ApiKeyManager()
-  const customEndpointManager = new CustomEndpointManager()
+  const vendorCredentials = params.vendorCredentials
+  const inferenceProvider = new InferenceProviderImpl({
+    credentials: vendorCredentials,
+    getActiveVendor: params.getActiveVendor,
+  })
   const dev = !app.isPackaged
   const userDataPath = app.getPath('userData')
   const dbFile = dev ? 'memorylane-dev.db' : 'memorylane.db'
@@ -77,19 +86,19 @@ export async function createMainRuntime(params: {
         })
       : undefined
 
-  const savedEndpoint = customEndpointManager.getEndpoint()
-  const semanticService = new ActivitySemanticService(apiKeyManager.getApiKey() || undefined, {
+  const presets = VENDOR_PRESETS[params.getActiveVendor()]
+  const initialVideoModels = buildModelChain(params.initialVideoModel ?? '', presets.semanticVideo)
+  const initialSnapshotModels = buildModelChain(
+    params.initialSnapshotModel ?? '',
+    presets.semanticSnapshot,
+  )
+  const semanticService = new ActivitySemanticService(inferenceProvider, {
     usageTracker,
     debugDumper,
     pipelinePreference: params.semanticPipelinePreference,
     requestTimeoutMs: params.semanticRequestTimeoutMs,
-    endpointConfig: savedEndpoint
-      ? {
-          serverURL: savedEndpoint.serverURL,
-          model: savedEndpoint.model,
-          apiKey: savedEndpoint.apiKey,
-        }
-      : undefined,
+    videoModels: initialVideoModels,
+    snapshotModels: initialSnapshotModels,
   })
 
   semanticService.setUserContext(() => storage.userContext.get()?.shortSummary ?? null)
@@ -170,8 +179,8 @@ export async function createMainRuntime(params: {
     capture,
     storage,
     usageTracker,
-    apiKeyManager,
-    customEndpointManager,
+    vendorCredentials,
+    inferenceProvider,
     semanticService,
     accessProvider,
     updateExclusions(exclusions): void {
@@ -193,6 +202,12 @@ export async function createMainRuntime(params: {
           interactionMonitor.clearInteractionCallback(interactionHandler)
         } catch (error) {
           log.warn('[Runtime] Failed to clear interaction callback:', error)
+        }
+
+        try {
+          semanticService.dispose()
+        } catch (error) {
+          log.warn('[Runtime] Failed to dispose semantic service:', error)
         }
 
         try {

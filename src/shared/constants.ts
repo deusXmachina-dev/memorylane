@@ -64,7 +64,7 @@ export const SCREEN_CAPTURER_CONFIG = {
 
 // User Context Builder Configuration
 export const USER_CONTEXT_CONFIG = {
-  MODEL: 'google/gemini-3-flash-preview',
+  MODEL: 'google/gemini-2.5-flash',
   LOOKBACK_DAYS: 7, // Analyze past week of activities
   MIN_ACTIVITIES: 50, // Minimum total activities in DB before first run
   SETTLE_DELAY_MS: 30 * 1000, // 30s after unlock — runs before pattern detection (60s)
@@ -72,7 +72,7 @@ export const USER_CONTEXT_CONFIG = {
 
 // Pattern Detection Configuration
 export const PATTERN_DETECTION_CONFIG = {
-  MODEL: 'google/gemini-3-flash-preview',
+  MODEL: 'google/gemini-2.5-flash',
   LOOKBACK_DAYS: 1, // Days back from today to analyze (1 = yesterday)
   MIN_ACTIVITIES: 200, // Minimum total activities in DB before first run
   SETTLE_DELAY_MS: 60 * 1000, // 1 min after unlock before running

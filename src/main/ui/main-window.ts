@@ -15,7 +15,6 @@ import {
   shell,
 } from 'electron'
 import path from 'node:path'
-import { DEFAULT_VIDEO_MODELS, DEFAULT_SNAPSHOT_MODELS } from '../semantic/constants'
 import { syncAutoStartSetting } from '../auto-start'
 import { DEFAULT_EDITION, type AppEditionConfig } from '../../shared/edition'
 import log from '../logger'
@@ -23,13 +22,14 @@ import { updateTrayMenu } from './tray'
 import { exportDatabaseZip } from './database-export'
 import { integrations } from '../integrations'
 import { listInstalledApps } from '../apps/installed-apps'
-import type { ApiKeyManager } from '../settings/api-key-manager'
-import type { CustomEndpointManager } from '../settings/custom-endpoint-manager'
+import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
+import { VENDORS } from '../../shared/types'
+import { VENDOR_PRESETS, buildModelChain, getVendorDefaults } from '../../shared/vendor-defaults'
+import { applyVendorSwitch } from './vendor-switch'
 import type { AccessProvider } from '../access'
 import type {
   AccessState,
   ConsentOutcome,
-  CustomEndpointConfig,
   LlmHealthStatus,
   MainWindowStatus,
   MainWindowStats,
@@ -38,19 +38,24 @@ import type {
   ObservationState,
   SemanticPipelineMode,
   SubscriptionPlan,
+  Vendor,
+  VendorCredentials,
+  VendorStatus,
 } from '../../shared/types'
 import type { CaptureSettingsManager } from '../settings/capture-settings-manager'
 import type { StorageService } from '../storage'
 import type { UsageTracker } from '../services/usage-tracker'
 
 interface SemanticService {
-  updateApiKey(apiKey: string | null): void
-  updateEndpoint(config: CustomEndpointConfig | null, openRouterKey?: string | null): void
   updatePipelinePreference(preference: SemanticPipelineMode): void
   updateRequestTimeoutMs(timeoutMs: number): void
   updateModels(videoModels: string[], snapshotModels: string[]): void
   getLlmHealthStatus(): LlmHealthStatus
   testConnection(): Promise<void>
+}
+
+interface InferenceProviderLike {
+  notifyConfigChanged(): void
 }
 
 interface PatternDetectorService {
@@ -72,8 +77,8 @@ interface MainWindowDependencies {
   }
   storage: StorageService
   usageTracker: UsageTracker
-  apiKeyManager: ApiKeyManager
-  customEndpointManager: CustomEndpointManager
+  vendorCredentials: VendorCredentialsManager
+  inferenceProvider: InferenceProviderLike
   semanticService: SemanticService
   accessProvider: AccessProvider
   captureSettingsManager: CaptureSettingsManager
@@ -106,6 +111,49 @@ let isQuitting = false
 app.on('before-quit', () => {
   isQuitting = true
 })
+
+/**
+ * In managed mode the renderer only exposes the vendor's preset grid, so a
+ * non-preset model id lingering in the remembered selection is stale and
+ * unreachable from the UI. Reset such slots to the vendor's preset default.
+ * Returns true if any field was rewritten.
+ */
+function reconcileManagedModelSelections(
+  captureSettings: CaptureSettingsManager,
+  vendor: Vendor,
+): boolean {
+  const presets = VENDOR_PRESETS[vendor]
+  const settings = captureSettings.get()
+  const defaults = getVendorDefaults(vendor)
+  const updates: Partial<{
+    semanticVideoModel: string
+    semanticSnapshotModel: string
+    patternDetectionModel: string
+  }> = {}
+  const isValid = (id: string, list: { id: string }[]): boolean =>
+    list.length === 0 || list.some((p) => p.id === id)
+  if (settings.semanticVideoModel && !isValid(settings.semanticVideoModel, presets.semanticVideo)) {
+    updates.semanticVideoModel = defaults.semanticVideoModel
+  }
+  if (
+    settings.semanticSnapshotModel &&
+    !isValid(settings.semanticSnapshotModel, presets.semanticSnapshot)
+  ) {
+    updates.semanticSnapshotModel = defaults.semanticSnapshotModel
+  }
+  if (
+    settings.patternDetectionModel &&
+    !isValid(settings.patternDetectionModel, presets.patternDetection)
+  ) {
+    updates.patternDetectionModel = defaults.patternDetectionModel
+  }
+  if (Object.keys(updates).length === 0) return false
+  log.info(
+    `[MainWindow] Reconciling stale managed-mode model picks for ${vendor}: ${Object.keys(updates).join(', ')}`,
+  )
+  captureSettings.save(updates)
+  return true
+}
 
 function buildStatus(): MainWindowStatus {
   return {
@@ -350,22 +398,53 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     return buildStatus()
   })
 
-  // API key management
-  ipcMain.handle('main-window:getKeyStatus', () => {
-    if (!deps) {
-      return { hasKey: false, source: 'none', maskedKey: null }
+  // Vendor credentials & active-vendor management
+  function emptyStatuses(): Record<Vendor, VendorStatus> {
+    const out = {} as Record<Vendor, VendorStatus>
+    for (const v of VENDORS) {
+      out[v] = { hasKey: false, source: 'none', maskedKey: null, baseURL: null }
     }
-    return deps.apiKeyManager.getKeyStatus()
+    return out
+  }
+
+  ipcMain.handle('main-window:getCredentialStatuses', () => {
+    if (!deps) return emptyStatuses()
+    return deps.vendorCredentials.getAllStatuses()
   })
 
-  ipcMain.handle('main-window:saveApiKey', (_event: IpcMainInvokeEvent, key: string) => {
+  ipcMain.handle(
+    'main-window:saveCredentials',
+    (_event: IpcMainInvokeEvent, vendor: Vendor, creds: VendorCredentials) => {
+      if (!deps) {
+        return { success: false, error: 'Dependencies not initialized' }
+      }
+      if (!(VENDORS as readonly string[]).includes(vendor)) {
+        return { success: false, error: `Unknown vendor: ${vendor}` }
+      }
+      try {
+        deps.vendorCredentials.saveCredentials(vendor, creds)
+        deps.inferenceProvider.notifyConfigChanged()
+        if (vendor === deps.captureSettingsManager.get().activeVendor) {
+          void deps.semanticService.testConnection()
+        }
+        return { success: true }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        return { success: false, error: message }
+      }
+    },
+  )
+
+  ipcMain.handle('main-window:deleteCredentials', (_event: IpcMainInvokeEvent, vendor: Vendor) => {
     if (!deps) {
       return { success: false, error: 'Dependencies not initialized' }
     }
+    if (!(VENDORS as readonly string[]).includes(vendor)) {
+      return { success: false, error: `Unknown vendor: ${vendor}` }
+    }
     try {
-      deps.apiKeyManager.saveApiKey(key)
-      deps.semanticService.updateApiKey(key)
-      void deps.semanticService.testConnection()
+      deps.vendorCredentials.deleteCredentials(vendor)
+      deps.inferenceProvider.notifyConfigChanged()
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -373,13 +452,16 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
   })
 
-  ipcMain.handle('main-window:deleteApiKey', () => {
+  ipcMain.handle('main-window:setActiveVendor', (_event: IpcMainInvokeEvent, vendor: Vendor) => {
     if (!deps) {
       return { success: false, error: 'Dependencies not initialized' }
     }
+    if (!(VENDORS as readonly string[]).includes(vendor)) {
+      return { success: false, error: `Unknown vendor: ${vendor}` }
+    }
     try {
-      deps.apiKeyManager.deleteApiKey()
-      deps.semanticService.updateApiKey(null)
+      deps.captureSettingsManager.setActiveVendor(vendor)
+      applyVendorSwitch(deps, deps.captureSettingsManager.get())
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -400,14 +482,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     return status
   })
 
-  // Custom endpoint management
-  ipcMain.handle('main-window:getCustomEndpoint', () => {
-    if (!deps) {
-      return { enabled: false, serverURL: null, model: null, hasApiKey: false }
-    }
-    return deps.customEndpointManager.getStatus()
-  })
-
   ipcMain.handle('main-window:getLlmHealth', () => {
     if (!deps) {
       return {
@@ -426,49 +500,43 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     await deps.semanticService.testConnection()
   })
 
-  ipcMain.handle(
-    'main-window:saveCustomEndpoint',
-    (_event: IpcMainInvokeEvent, config: CustomEndpointConfig) => {
-      if (!deps) {
-        return { success: false, error: 'Dependencies not initialized' }
-      }
-      try {
-        deps.customEndpointManager.saveEndpoint(config)
-        deps.semanticService.updateEndpoint(deps.customEndpointManager.getEndpoint())
-        void deps.semanticService.testConnection()
-        return { success: true }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error'
-        return { success: false, error: message }
-      }
-    },
-  )
-
-  ipcMain.handle('main-window:deleteCustomEndpoint', () => {
-    if (!deps) {
-      return { success: false, error: 'Dependencies not initialized' }
-    }
-    try {
-      deps.customEndpointManager.deleteEndpoint()
-      const openRouterKey = deps.apiKeyManager.getApiKey()
-      deps.semanticService.updateEndpoint(null, openRouterKey)
-      return { success: true }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      return { success: false, error: message }
-    }
-  })
-
-  // Subscription / managed key
+  // Subscription / managed key — provider chosen by backend (openrouter | vertex).
   deps.accessProvider.setUpdateCallback((state, payload) => {
-    if (payload?.key && deps) {
-      deps.apiKeyManager.saveApiKey(payload.key, 'managed')
-      deps.semanticService.updateApiKey(payload.key)
+    if (payload?.config && deps) {
+      const cfg = payload.config
+      const vendor: Vendor = cfg.provider === 'vertex' ? 'google' : 'openrouter'
+      deps.vendorCredentials.saveManagedCredentials(vendor, {
+        apiKey: cfg.apiKey,
+        ...(cfg.project !== undefined ? { project: cfg.project } : {}),
+        ...(cfg.location !== undefined ? { location: cfg.location } : {}),
+      })
+      // Auto-switch active vendor — managed config is authoritative.
+      const settings = deps.captureSettingsManager.get()
+      const switching = settings.activeVendor !== vendor
+      if (switching) {
+        log.info(`[MainWindow] Switching active vendor to ${vendor} (managed)`)
+        deps.captureSettingsManager.setActiveVendor(vendor)
+      }
+      // In managed mode the UI only offers the vendor's preset grid, so any
+      // non-preset model lingering in the remembered selection (e.g. from a
+      // prior BYOK session with a freetext model id) is unreachable and stale.
+      // Reset such slots to the vendor's preset default; valid preset picks
+      // are preserved.
+      const reconciled = reconcileManagedModelSelections(deps.captureSettingsManager, vendor)
+      if (switching || reconciled) {
+        applyVendorSwitch(deps, deps.captureSettingsManager.get())
+      } else {
+        deps.inferenceProvider.notifyConfigChanged()
+      }
     }
-    if (payload?.invalidate && deps && deps.apiKeyManager.getKeySource() === 'managed') {
-      log.info('[MainWindow] Invalidating stale managed key')
-      deps.apiKeyManager.deleteApiKey()
-      deps.semanticService.updateApiKey(null)
+    if (payload?.invalidate && deps) {
+      for (const v of ['openrouter', 'google'] as const) {
+        if (deps.vendorCredentials.getStatus(v).source === 'managed') {
+          log.info(`[MainWindow] Invalidating stale managed key for ${v}`)
+          deps.vendorCredentials.deleteCredentials(v)
+        }
+      }
+      deps.inferenceProvider.notifyConfigChanged()
     }
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('main-window:accessStateChanged', state)
@@ -732,11 +800,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   })
 }
 
-function buildModelChain(userPick: string, defaults: readonly string[]): string[] {
-  if (!userPick) return [...defaults]
-  return [userPick, ...defaults.filter((m) => m !== userPick)]
-}
-
 function applyModelSettings(
   d: MainWindowDependencies,
   updated: CaptureSettings,
@@ -744,11 +807,13 @@ function applyModelSettings(
 ): void {
   if (
     updated.semanticVideoModel !== previous.semanticVideoModel ||
-    updated.semanticSnapshotModel !== previous.semanticSnapshotModel
+    updated.semanticSnapshotModel !== previous.semanticSnapshotModel ||
+    updated.activeVendor !== previous.activeVendor
   ) {
+    const presets = VENDOR_PRESETS[updated.activeVendor]
     d.semanticService.updateModels(
-      buildModelChain(updated.semanticVideoModel, DEFAULT_VIDEO_MODELS),
-      buildModelChain(updated.semanticSnapshotModel, DEFAULT_SNAPSHOT_MODELS),
+      buildModelChain(updated.semanticVideoModel, presets.semanticVideo),
+      buildModelChain(updated.semanticSnapshotModel, presets.semanticSnapshot),
     )
   }
   if (updated.patternDetectionModel !== previous.patternDetectionModel) {

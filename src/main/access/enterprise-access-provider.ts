@@ -8,8 +8,11 @@ import { BaseAccessProvider } from './base-access-provider'
 import {
   transitionEnterpriseAccess,
   type EnterpriseAccessTransition,
-} from './enterprise-access-machine'
+ ManagedInferenceConfig } from './enterprise-access-machine'
 import { createInitialAccessState } from './types'
+
+const TOKEN_REFRESH_LEAD_MS = 60_000
+const TOKEN_REFRESH_MIN_MS = 30_000
 
 interface PendingConsentState {
   tenantToken: string
@@ -61,6 +64,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
   private timeoutTimer: ReturnType<typeof setTimeout> | null = null
   private refreshTimer: ReturnType<typeof setInterval> | null = null
   private consentTimeoutTimer: ReturnType<typeof setTimeout> | null = null
+  private tokenRefreshTimer: ReturnType<typeof setTimeout> | null = null
   private pendingConsent: PendingConsentState | null = null
 
   constructor(deviceIdentity: DeviceIdentity) {
@@ -77,24 +81,27 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       const activated = await this.fetchEnterpriseStatus(deviceId)
       if (!activated) {
         log.info('[EnterpriseAccess] Device is not activated')
+        this.clearTokenRefresh()
         this.applyTransition(
           transitionEnterpriseAccess(this.accessState, { type: 'activation_inactive' }),
         )
         return
       }
 
-      const key = await this.fetchEnterpriseKey(deviceId)
-      if (key) {
-        log.info('[EnterpriseAccess] Received enterprise managed key')
+      const config = await this.fetchInferenceConfig(deviceId)
+      if (config) {
+        log.info(`[EnterpriseAccess] Received managed inference config (${config.provider})`)
+        this.scheduleTokenRefresh(deviceId, config)
         this.applyTransition(
           transitionEnterpriseAccess(this.accessState, {
             type: 'activation_completed',
-            key,
+            config,
           }),
         )
         return
       }
 
+      this.clearTokenRefresh()
       this.applyTransition(
         transitionEnterpriseAccess(this.accessState, {
           type: 'activation_confirmed_without_key',
@@ -324,6 +331,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       this.refreshTimer = null
     }
     this.clearTimers()
+    this.clearTokenRefresh()
   }
 
   private async fetchAndVerifyConsentDocument(
@@ -387,8 +395,8 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
         return
       }
 
-      const key = await this.fetchEnterpriseKey(deviceId)
-      if (!key) {
+      const config = await this.fetchInferenceConfig(deviceId)
+      if (!config) {
         this.applyTransition(
           transitionEnterpriseAccess(this.accessState, {
             type: 'activation_confirmed_without_key',
@@ -398,10 +406,11 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       }
 
       this.clearTimers()
+      this.scheduleTokenRefresh(deviceId, config)
       this.applyTransition(
         transitionEnterpriseAccess(this.accessState, {
           type: 'activation_completed',
-          key,
+          config,
         }),
       )
     } catch (error) {
@@ -428,26 +437,81 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     return data.activated
   }
 
-  private async fetchEnterpriseKey(deviceId: string): Promise<string | null> {
-    const url = enterpriseUrl('license/key')
+  private async fetchInferenceConfig(deviceId: string): Promise<ManagedInferenceConfig | null> {
+    const url = enterpriseUrl('license/inference-config')
 
     const response = await fetch(url.toString(), { headers: bearer(deviceId) })
     if (response.status === 401) {
       return null
     }
     if (!response.ok) {
-      throw new Error(`License key request failed (${response.status})`)
+      throw new Error(`Inference config request failed (${response.status})`)
     }
 
-    const data = (await response.json()) as { key?: string | null }
-    if (!('key' in data)) {
-      throw new Error('License key response is missing the key field')
-    }
-    if (typeof data.key !== 'string' && data.key !== null) {
-      throw new Error('License key response must contain a string or null key')
+    const data = (await response.json()) as {
+      provider?: 'openrouter' | 'vertex' | null
+      apiKey?: string | null
+      project?: string | null
+      location?: string | null
+      expiresAt?: number | null
     }
 
-    return data.key
+    if (data.provider == null || data.apiKey == null) {
+      return null
+    }
+    if (data.provider !== 'openrouter' && data.provider !== 'vertex') {
+      throw new Error(`Inference config has unknown provider: ${String(data.provider)}`)
+    }
+    if (typeof data.apiKey !== 'string' || data.apiKey.length === 0) {
+      throw new Error('Inference config apiKey must be a non-empty string')
+    }
+
+    if (data.provider === 'vertex') {
+      if (typeof data.project !== 'string' || data.project.length === 0) {
+        throw new Error('Vertex inference config is missing project')
+      }
+      if (typeof data.location !== 'string' || data.location.length === 0) {
+        throw new Error('Vertex inference config is missing location')
+      }
+      const config: ManagedInferenceConfig = {
+        provider: 'vertex',
+        apiKey: data.apiKey,
+        project: data.project,
+        location: data.location,
+      }
+      if (typeof data.expiresAt === 'number' && Number.isFinite(data.expiresAt)) {
+        config.expiresAt = data.expiresAt
+      }
+      return config
+    }
+
+    return { provider: 'openrouter', apiKey: data.apiKey }
+  }
+
+  private scheduleTokenRefresh(deviceId: string, config: ManagedInferenceConfig): void {
+    this.clearTokenRefresh()
+    if (config.provider !== 'vertex' || config.expiresAt === undefined) {
+      return
+    }
+    const msUntilRefresh = Math.max(
+      TOKEN_REFRESH_MIN_MS,
+      config.expiresAt * 1000 - Date.now() - TOKEN_REFRESH_LEAD_MS,
+    )
+    log.info(
+      `[EnterpriseAccess] Vertex token refresh scheduled in ${Math.round(msUntilRefresh / 1000)}s`,
+    )
+    this.tokenRefreshTimer = setTimeout(() => {
+      this.tokenRefreshTimer = null
+      void this.refreshAccessState()
+    }, msUntilRefresh)
+    this.tokenRefreshTimer.unref?.()
+  }
+
+  private clearTokenRefresh(): void {
+    if (this.tokenRefreshTimer !== null) {
+      clearTimeout(this.tokenRefreshTimer)
+      this.tokenRefreshTimer = null
+    }
   }
 
   private async readErrorMessage(response: Response, fallback: string): Promise<string> {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import type { AppEditionConfig } from '@/shared/edition'
-import type { CaptureSettings, CustomEndpointStatus, KeyStatus, SemanticPipelineMode } from '@types'
+import type { CaptureSettings, SemanticPipelineMode, Vendor, VendorStatus } from '@types'
 import { AiModelsSection } from './components/advanced-settings/AiModelsSection'
 import { CapturePrivacySection } from './components/advanced-settings/CapturePrivacySection'
 import { ConnectionsDataSection } from './components/advanced-settings/ConnectionsDataSection'
@@ -14,24 +14,23 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
   const hotkeyPlatform = useMemo(() => detectHotkeyPlatform(), [])
   const [editionConfig, setEditionConfig] = useState<AppEditionConfig | null>(null)
   const [form, setForm] = useState<CaptureSettings | null>(null)
-  const [endpointStatus, setEndpointStatus] = useState<CustomEndpointStatus | null>(null)
-  const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null)
+  const [credentialStatuses, setCredentialStatuses] = useState<Record<Vendor, VendorStatus> | null>(
+    null,
+  )
   const [aiModelsOpen, setAiModelsOpen] = useState(false)
   const [capturePrivacyOpen, setCapturePrivacyOpen] = useState(false)
   const [connectionsDataOpen, setConnectionsDataOpen] = useState(false)
   const [recordingHotkey, setRecordingHotkey] = useState(false)
 
   const load = useCallback(async () => {
-    const [config, captureSettings, endpoint, key] = await Promise.all([
+    const [config, captureSettings, statuses] = await Promise.all([
       api.getEditionConfig(),
       api.getCaptureSettings(),
-      api.getCustomEndpoint(),
-      api.getKeyStatus(),
+      api.getCredentialStatuses(),
     ])
     setEditionConfig(config)
     setForm(captureSettings)
-    setEndpointStatus(endpoint)
-    setKeyStatus(key)
+    setCredentialStatuses(statuses)
   }, [api])
 
   useEffect(() => {
@@ -175,14 +174,18 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
     [save],
   )
 
-  const refreshKeyStatus = useCallback(async (): Promise<void> => {
-    const status = await api.getKeyStatus()
-    setKeyStatus(status)
+  const refreshCredentials = useCallback(async (): Promise<void> => {
+    const statuses = await api.getCredentialStatuses()
+    setCredentialStatuses(statuses)
   }, [api])
 
-  const refreshEndpointStatus = useCallback(async (): Promise<void> => {
-    const status = await api.getCustomEndpoint()
-    setEndpointStatus(status)
+  const refreshActiveVendor = useCallback(async (): Promise<void> => {
+    const [statuses, settings] = await Promise.all([
+      api.getCredentialStatuses(),
+      api.getCaptureSettings(),
+    ])
+    setCredentialStatuses(statuses)
+    setForm(settings)
   }, [api])
 
   const handleReset = useCallback(async (): Promise<void> => {
@@ -270,10 +273,10 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
                 open={aiModelsOpen}
                 onToggle={() => setAiModelsOpen((v) => !v)}
                 form={form}
-                keyStatus={keyStatus}
-                endpointStatus={endpointStatus}
-                onKeyStatusChanged={() => void refreshKeyStatus()}
-                onEndpointStatusChanged={() => void refreshEndpointStatus()}
+                isEnterprise={editionConfig?.edition === 'enterprise'}
+                credentialStatuses={credentialStatuses}
+                onCredentialsChanged={() => void refreshCredentials()}
+                onActiveVendorChanged={() => void refreshActiveVendor()}
                 onSemanticPipelineModeChange={setSemanticPipelineMode}
                 onSettingChange={setNumericSetting}
                 onSettingCommit={commitNumericSetting}

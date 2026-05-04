@@ -6,6 +6,7 @@ export interface StoredActivity {
   windowTitle: string
   tld: string | null
   summary: string
+  summaryModel: string
   ocrText: string
   vector: number[]
 }

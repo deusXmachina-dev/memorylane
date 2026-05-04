@@ -2,7 +2,7 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ConsentOutcome } from '../shared/types'
+import type { ConsentOutcome, Vendor, VendorCredentials } from '../shared/types'
 
 console.log('[Preload] Script loading...')
 
@@ -25,20 +25,18 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   onStatusChanged: (callback: (status: unknown) => void) => {
     ipcRenderer.on('main-window:statusChanged', (_event, status) => callback(status))
   },
-  // API key management
-  getKeyStatus: () => ipcRenderer.invoke('main-window:getKeyStatus'),
-  saveApiKey: (key: string) => ipcRenderer.invoke('main-window:saveApiKey', key),
-  deleteApiKey: () => ipcRenderer.invoke('main-window:deleteApiKey'),
+  // Vendor credentials & active-vendor management
+  getCredentialStatuses: () => ipcRenderer.invoke('main-window:getCredentialStatuses'),
+  saveCredentials: (vendor: Vendor, creds: VendorCredentials) =>
+    ipcRenderer.invoke('main-window:saveCredentials', vendor, creds),
+  deleteCredentials: (vendor: Vendor) =>
+    ipcRenderer.invoke('main-window:deleteCredentials', vendor),
+  setActiveVendor: (vendor: Vendor) => ipcRenderer.invoke('main-window:setActiveVendor', vendor),
   // Integrations
   addToClaude: () => ipcRenderer.invoke('main-window:addToClaude'),
   addToCursor: () => ipcRenderer.invoke('main-window:addToCursor'),
   addToClaudeCode: () => ipcRenderer.invoke('main-window:addToClaudeCode'),
   getMcpStatus: () => ipcRenderer.invoke('main-window:getMcpStatus'),
-  // Custom endpoint
-  getCustomEndpoint: () => ipcRenderer.invoke('main-window:getCustomEndpoint'),
-  saveCustomEndpoint: (config: { serverURL: string; model: string; apiKey?: string }) =>
-    ipcRenderer.invoke('main-window:saveCustomEndpoint', config),
-  deleteCustomEndpoint: () => ipcRenderer.invoke('main-window:deleteCustomEndpoint'),
   getLlmHealth: () => ipcRenderer.invoke('main-window:getLlmHealth'),
   testLlmConnection: () => ipcRenderer.invoke('main-window:testLlmConnection'),
   // Subscription

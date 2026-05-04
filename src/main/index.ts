@@ -26,6 +26,7 @@ import { startPowerMonitoring, shouldPause } from './power-monitor'
 import { CaptureStateManager } from './settings/capture-state-manager'
 import { CaptureSettingsManager } from './settings/capture-settings-manager'
 import { DeviceIdentity } from './settings/device-identity'
+import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
 import { PatternDetector } from './services/pattern-detector'
 import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
@@ -133,7 +134,28 @@ app.on('ready', async () => {
     return
   }
 
+  const vendorCredentialsManager = new VendorCredentialsManager()
   const captureSettingsManager = new CaptureSettingsManager()
+  // First-launch migration from legacy custom-endpoint config.
+  if (vendorCredentialsManager.migration.hadCustomEndpoint) {
+    if (captureSettingsManager.get().activeVendor === 'openrouter') {
+      captureSettingsManager.setActiveVendor('openai-compatible')
+      log.info('[Main] migrated activeVendor to openai-compatible from legacy custom-endpoint')
+    }
+    const carriedModel = vendorCredentialsManager.migration.customEndpointModel
+    if (carriedModel && captureSettingsManager.get().activeVendor === 'openai-compatible') {
+      // Pre-PR custom endpoints stored a single model id used wherever the
+      // custom endpoint was hit. Restore it into every slot so the user's
+      // prior choice survives — they can re-pick per slot afterwards.
+      captureSettingsManager.save({
+        semanticSnapshotModel: carriedModel,
+        patternDetectionModel: carriedModel,
+      })
+      log.info(
+        `[Main] restored legacy custom-endpoint model into snapshot+pattern slots: ${carriedModel}`,
+      )
+    }
+  }
   const captureStateManager = new CaptureStateManager()
   const deviceIdentity = new DeviceIdentity()
   captureSettingsManager.applyToConstants()
@@ -162,6 +184,10 @@ app.on('ready', async () => {
     excludedUrlPatterns: initialCaptureSettings.excludedUrlPatterns,
     excludePrivateBrowsing: initialCaptureSettings.excludePrivateBrowsing,
     deviceIdentity,
+    vendorCredentials: vendorCredentialsManager,
+    getActiveVendor: () => captureSettingsManager.get().activeVendor,
+    initialVideoModel: initialCaptureSettings.semanticVideoModel,
+    initialSnapshotModel: initialCaptureSettings.semanticSnapshotModel,
   })
 
   rawDatabaseExportSync = new RawDatabaseExportSync({
@@ -186,8 +212,8 @@ app.on('ready', async () => {
     databaseUploadSync.start()
   }
 
-  userContextBuilder = new UserContextBuilder(runtime.storage, runtime.apiKeyManager)
-  patternDetector = new PatternDetector(runtime.storage, runtime.apiKeyManager)
+  userContextBuilder = new UserContextBuilder(runtime.storage, runtime.inferenceProvider)
+  patternDetector = new PatternDetector(runtime.storage, runtime.inferenceProvider)
   patternDetector.setEnabled(captureSettingsManager.get().patternDetectionEnabled)
   const captureCoordinator = createCaptureCoordinator({
     capture: runtime.capture,
@@ -248,8 +274,8 @@ app.on('ready', async () => {
     capture: captureCoordinator.controls,
     storage: runtime.storage,
     usageTracker: runtime.usageTracker,
-    apiKeyManager: runtime.apiKeyManager,
-    customEndpointManager: runtime.customEndpointManager,
+    vendorCredentials: runtime.vendorCredentials,
+    inferenceProvider: runtime.inferenceProvider,
     semanticService: runtime.semanticService,
     accessProvider: runtime.accessProvider,
     captureSettingsManager,

@@ -14,11 +14,12 @@ import { AdvancedSettingsPage } from './AdvancedSettingsPage'
 import type { AppEditionConfig } from '@/shared/edition'
 import type {
   AccessState,
-  CustomEndpointStatus,
-  KeyStatus,
+  CaptureSettings,
   MainWindowStats,
   McpRegistrationStatus,
   PatternInfo,
+  Vendor,
+  VendorStatus,
 } from '@types'
 
 export function MainWindowApp(): React.JSX.Element {
@@ -26,8 +27,10 @@ export function MainWindowApp(): React.JSX.Element {
   const [page, setPage] = useState<'home' | 'settings'>('home')
   const [editionConfig, setEditionConfig] = useState<AppEditionConfig | null>(null)
   const [accessState, setAccessState] = useState<AccessState | null>(null)
-  const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null)
-  const [endpointStatus, setEndpointStatus] = useState<CustomEndpointStatus | null>(null)
+  const [credentialStatuses, setCredentialStatuses] = useState<Record<Vendor, VendorStatus> | null>(
+    null,
+  )
+  const [activeVendor, setActiveVendor] = useState<Vendor>('openrouter')
   const [capturing, setCapturing] = useState(false)
   const [captureHotkeyLabel, setCaptureHotkeyLabel] = useState('')
   const [toggling, setToggling] = useState(false)
@@ -55,21 +58,16 @@ export function MainWindowApp(): React.JSX.Element {
     }
   }, [api])
 
-  const loadKeyStatus = useCallback(async () => {
+  const loadCredentials = useCallback(async () => {
     try {
-      const status = await api.getKeyStatus()
-      setKeyStatus(status)
+      const [statuses, settings] = await Promise.all([
+        api.getCredentialStatuses(),
+        api.getCaptureSettings() as Promise<CaptureSettings>,
+      ])
+      setCredentialStatuses(statuses)
+      setActiveVendor(settings.activeVendor)
     } catch {
-      // Silently handle error - key status will remain null
-    }
-  }, [api])
-
-  const loadEndpointStatus = useCallback(async () => {
-    try {
-      const status = await api.getCustomEndpoint()
-      setEndpointStatus(status)
-    } catch {
-      // Silently handle error
+      // Silently handle error - credential statuses will remain null
     }
   }, [api])
 
@@ -101,29 +99,15 @@ export function MainWindowApp(): React.JSX.Element {
   const loadAll = useCallback(async () => {
     await loadEditionConfig()
     await loadAccessState()
-    await Promise.all([
-      loadKeyStatus(),
-      loadEndpointStatus(),
-      loadStats(),
-      loadMcpStatus(),
-      loadPatterns(),
-    ])
-  }, [
-    loadAccessState,
-    loadEditionConfig,
-    loadEndpointStatus,
-    loadKeyStatus,
-    loadStats,
-    loadMcpStatus,
-    loadPatterns,
-  ])
+    await Promise.all([loadCredentials(), loadStats(), loadMcpStatus(), loadPatterns()])
+  }, [loadAccessState, loadEditionConfig, loadCredentials, loadStats, loadMcpStatus, loadPatterns])
 
   const isEnterprise = editionConfig?.edition === 'enterprise'
-  const hasKey = keyStatus?.hasKey ?? false
-  const hasCustomEndpoint = endpointStatus?.enabled ?? false
+  const activeVendorStatus = credentialStatuses?.[activeVendor] ?? null
+  const hasActiveKey = activeVendorStatus?.hasKey ?? false
   const isConfigured = isEnterprise
-    ? accessState?.isEnterpriseActivated === true && hasKey
-    : hasKey || hasCustomEndpoint
+    ? accessState?.isEnterpriseActivated === true && hasActiveKey
+    : hasActiveKey
   const { llmHealth } = useLlmHealth({
     api,
     enabled: page === 'home' && isConfigured,
@@ -159,16 +143,16 @@ export function MainWindowApp(): React.JSX.Element {
 
   useEffect(() => {
     api.onSubscriptionUpdate(() => {
-      void loadKeyStatus()
+      void loadCredentials()
     })
-  }, [api, loadKeyStatus])
+  }, [api, loadCredentials])
 
   useEffect(() => {
     api.onAccessStateChanged((state) => {
       setAccessState(state)
-      void loadKeyStatus()
+      void loadCredentials()
     })
-  }, [api, loadKeyStatus])
+  }, [api, loadCredentials])
 
   useEffect(() => {
     const handleFocus = (): void => {
@@ -216,7 +200,7 @@ export function MainWindowApp(): React.JSX.Element {
           isEnterprise ? (
             <EnterpriseActivationCard api={api} accessState={accessState} />
           ) : (
-            <PlanPicker api={api} onKeySet={() => void loadKeyStatus()} />
+            <PlanPicker api={api} onKeySet={() => void loadCredentials()} />
           )
         ) : step === 'connect' ? (
           <ConnectStep

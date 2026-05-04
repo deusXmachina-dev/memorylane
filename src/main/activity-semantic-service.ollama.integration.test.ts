@@ -4,6 +4,7 @@ import sharp from 'sharp'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { Activity, ActivityFrame } from './activity-types'
 import { ActivitySemanticService, SemanticFileDebugDumper } from './activity-semantic-service'
+import { InferenceProviderImpl } from './llm'
 import { FfmpegVideoStitcher } from './video/video-stitcher'
 
 const RUN_INTEGRATION = process.env.RUN_SEMANTIC_OLLAMA_INTEGRATION === '1'
@@ -124,24 +125,30 @@ describeIntegration('semantic service ollama custom endpoint integration', () =>
       copyMediaAssets: true,
     })
 
-    const service = new ActivitySemanticService(undefined, {
-      endpointConfig: {
-        serverURL: OLLAMA_BASE_URL,
-        model: OLLAMA_MODEL,
-        apiKey: OLLAMA_API_KEY,
-      },
+    const provider = new InferenceProviderImpl({
+      credentials: {
+        getCredentials: () => ({
+          apiKey: OLLAMA_API_KEY ?? '',
+          baseURL: OLLAMA_BASE_URL,
+        }),
+      } as unknown as import('./settings/vendor-credentials-manager').VendorCredentialsManager,
+      getActiveVendor: () => 'openai-compatible',
+    })
+    const service = new ActivitySemanticService(provider, {
       usageTracker: { recordUsage: () => undefined },
       debugDumper,
       requestTimeoutMs: 120_000,
+      videoModels: [OLLAMA_MODEL],
+      snapshotModels: [OLLAMA_MODEL],
     })
 
-    const firstSummary = await service.summarizeFromVideo({
+    const { summary: firstSummary } = await service.summarizeFromVideo({
       activity: makeActivity('ollama-custom-endpoint-1', frames),
       videoPath,
     })
     const firstDiagnostics = service.getLastRunDiagnostics()
 
-    const secondSummary = await service.summarizeFromVideo({
+    const { summary: secondSummary } = await service.summarizeFromVideo({
       activity: makeActivity('ollama-custom-endpoint-2', frames),
       videoPath,
     })
@@ -184,8 +191,6 @@ describeIntegration('semantic service ollama custom endpoint integration', () =>
     expect(
       secondDiagnostics?.attempts.some((attempt) => attempt.mode === 'snapshot' && attempt.success),
     ).toBe(true)
-    expect(secondDiagnostics?.fallbackReason).toBe(
-      'custom endpoint model marked video-unsupported (session)',
-    )
+    expect(secondDiagnostics?.fallbackReason).toBe('all video models marked unsupported (session)')
   }, 240_000)
 })

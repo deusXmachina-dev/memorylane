@@ -172,8 +172,17 @@ describe('EnterpriseAccessProvider', () => {
       { ok: true, json: async () => ({ ok: true }) } as unknown as Response,
       // GET /license/status (poll #1: activated)
       { ok: true, json: async () => ({ activated: true }) } as unknown as Response,
-      // GET /license/key
-      { ok: true, json: async () => ({ key: 'sk-or-enterprise' }) } as unknown as Response,
+      // GET /license/inference-config
+      {
+        ok: true,
+        json: async () => ({
+          provider: 'openrouter',
+          apiKey: 'sk-or-enterprise',
+          project: null,
+          location: null,
+          expiresAt: null,
+        }),
+      } as unknown as Response,
     ]
     globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
 
@@ -190,7 +199,71 @@ describe('EnterpriseAccessProvider', () => {
     await vi.advanceTimersByTimeAsync(ENTERPRISE_BACKEND_CONFIG.POLL_INTERVAL_MS)
 
     expect(updates.at(-1)?.status).toBe('activated')
-    expect(updates.at(-1)?.payload).toEqual({ key: 'sk-or-enterprise' })
+    expect(updates.at(-1)?.payload).toEqual({
+      config: { provider: 'openrouter', apiKey: 'sk-or-enterprise' },
+    })
+  })
+
+  it('completes activation with a Vertex inference config and schedules a token refresh', async () => {
+    const expiresAtSec = Math.floor(Date.now() / 1000) + 3600
+    const responses = [
+      descriptorResponse(),
+      pdfResponse(),
+      { ok: true, json: async () => ({ ok: true }) } as unknown as Response,
+      { ok: true, json: async () => ({ activated: true }) } as unknown as Response,
+      {
+        ok: true,
+        json: async () => ({
+          provider: 'vertex',
+          apiKey: 'ya29.fake-token',
+          project: 'demo-project-42',
+          location: 'us-central1',
+          expiresAt: expiresAtSec,
+        }),
+      } as unknown as Response,
+      // Refetch ~60s before expiresAt — second inference-config call.
+      { ok: true, json: async () => ({ activated: true }) } as unknown as Response,
+      {
+        ok: true,
+        json: async () => ({
+          provider: 'vertex',
+          apiKey: 'ya29.refreshed-token',
+          project: 'demo-project-42',
+          location: 'us-central1',
+          expiresAt: expiresAtSec + 3600,
+        }),
+      } as unknown as Response,
+    ]
+    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const updates: Array<{ status: string | null; payload?: unknown }> = []
+    provider.setUpdateCallback((state, payload) => {
+      updates.push({ status: state.enterpriseActivationStatus, payload })
+    })
+
+    await provider.activateEnterpriseLicense(ACTIVATION_CODE)
+    await provider.submitConsentDecision('accepted')
+    await vi.advanceTimersByTimeAsync(ENTERPRISE_BACKEND_CONFIG.POLL_INTERVAL_MS)
+
+    expect(updates.at(-1)?.status).toBe('activated')
+    expect(updates.at(-1)?.payload).toEqual({
+      config: {
+        provider: 'vertex',
+        apiKey: 'ya29.fake-token',
+        project: 'demo-project-42',
+        location: 'us-central1',
+        expiresAt: expiresAtSec,
+      },
+    })
+
+    // Token-refresh fires ~60s before expiresAt: advance the full 1h.
+    await vi.advanceTimersByTimeAsync(3600 * 1000)
+
+    expect(updates.at(-1)?.status).toBe('activated')
+    expect(
+      (updates.at(-1)?.payload as { config?: { apiKey: string } } | undefined)?.config?.apiKey,
+    ).toBe('ya29.refreshed-token')
   })
 
   it('sends tenant_token, device_id, email, document_version and outcome on /activate', async () => {
@@ -199,7 +272,16 @@ describe('EnterpriseAccessProvider', () => {
       pdfResponse(),
       { ok: true, json: async () => ({ ok: true }) } as unknown as Response,
       { ok: true, json: async () => ({ activated: true }) } as unknown as Response,
-      { ok: true, json: async () => ({ key: 'sk-or-enterprise' }) } as unknown as Response,
+      {
+        ok: true,
+        json: async () => ({
+          provider: 'openrouter',
+          apiKey: 'sk-or-enterprise',
+          project: null,
+          location: null,
+          expiresAt: null,
+        }),
+      } as unknown as Response,
     ]
     const fetchMock = vi.fn(async () => responses.shift() as Response) as unknown as typeof fetch
     globalThis.fetch = fetchMock
@@ -223,13 +305,22 @@ describe('EnterpriseAccessProvider', () => {
     })
   })
 
-  it('sends Bearer auth and no query params on activation, status, and key endpoints', async () => {
+  it('sends Bearer auth and no query params on activation, status, and inference-config endpoints', async () => {
     const responses = [
       descriptorResponse(),
       pdfResponse(),
       { ok: true, json: async () => ({ ok: true }) } as unknown as Response,
       { ok: true, json: async () => ({ activated: true }) } as unknown as Response,
-      { ok: true, json: async () => ({ key: 'sk-or-enterprise' }) } as unknown as Response,
+      {
+        ok: true,
+        json: async () => ({
+          provider: 'openrouter',
+          apiKey: 'sk-or-enterprise',
+          project: null,
+          location: null,
+          expiresAt: null,
+        }),
+      } as unknown as Response,
     ]
     const fetchMock = vi.fn(async () => responses.shift() as Response) as unknown as typeof fetch
     globalThis.fetch = fetchMock
@@ -255,9 +346,11 @@ describe('EnterpriseAccessProvider', () => {
       'Bearer device-123',
     )
 
-    const keyCall = calls.find((c) => String(c[0]).includes('/license/key'))!
-    expect(String(keyCall[0])).not.toContain('device_id=')
-    expect((keyCall[1]?.headers as Record<string, string>).Authorization).toBe('Bearer device-123')
+    const configCall = calls.find((c) => String(c[0]).includes('/license/inference-config'))!
+    expect(String(configCall[0])).not.toContain('device_id=')
+    expect((configCall[1]?.headers as Record<string, string>).Authorization).toBe(
+      'Bearer device-123',
+    )
   })
 
   it('returns to inactive when consent is declined', async () => {
@@ -292,7 +385,16 @@ describe('EnterpriseAccessProvider', () => {
       } as unknown as Response,
       // poll resolves anyway
       { ok: true, json: async () => ({ activated: true }) } as unknown as Response,
-      { ok: true, json: async () => ({ key: 'sk-or-enterprise' }) } as unknown as Response,
+      {
+        ok: true,
+        json: async () => ({
+          provider: 'openrouter',
+          apiKey: 'sk-or-enterprise',
+          project: null,
+          location: null,
+          expiresAt: null,
+        }),
+      } as unknown as Response,
     ]
     globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
 

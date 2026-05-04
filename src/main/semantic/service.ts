@@ -1,38 +1,31 @@
-import { OpenRouter } from '@openrouter/sdk'
 import { ACTIVITY_CONFIG, VISUAL_DETECTOR_CONFIG } from '@constants'
 import log from '../logger'
 import { UsageTracker } from '../services/usage-tracker'
 import type { Activity } from '../activity-types'
 import type { ActivitySemanticService as SemanticServiceContract } from '../activity-transformer-types'
-import { DEFAULT_SNAPSHOT_MODELS, DEFAULT_VIDEO_MODELS } from './constants'
-import { createCustomEndpointClient } from './custom-endpoint-client'
+import type { InferenceProvider } from '../llm'
 import {
-  customEndpointVideoUnsupportedCacheKey,
-  getEffectiveSemanticModels,
-  isLikelyCustomEndpointVideoUnsupportedError,
-  normalizeCustomEndpointModel,
+  isLikelyVideoUnsupportedError,
+  videoUnsupportedCacheKey,
 } from './custom-endpoint-video-fallback'
+import { invokeViaGenerateText, invokeRawVideoCompletion } from './invoke'
 import { tryLoadVideoAsDataUrl, encodeSnapshots } from './media'
 import { trySemanticModelChain } from './model-chain'
 import { buildSemanticPrompt } from './prompt'
-import { describeSemanticError, extractSemanticSummary } from './response-utils'
+import { describeSemanticError } from './response-utils'
 import { selectSnapshotFrames } from './sampling'
 import { recordSemanticUsageSafe } from './usage-recording'
 import type {
   ChatContentItem,
-  ChatRequest,
-  ChatResponseLike,
   LlmHealthStatus,
-  SemanticMode,
   SemanticPipelinePreference,
-  SemanticChatClient,
   ActivitySemanticServiceConfig,
-  SemanticEndpointConfig,
+  SemanticRoundTripDump,
   SemanticRunDiagnostics,
 } from './types'
 
 export class ActivitySemanticService implements SemanticServiceContract {
-  private client: SemanticChatClient | null = null
+  private readonly provider: InferenceProvider
   private videoModels: string[]
   private snapshotModels: string[]
   private readonly maxVideoBytes: number
@@ -40,12 +33,9 @@ export class ActivitySemanticService implements SemanticServiceContract {
   private pipelinePreference: SemanticPipelinePreference
   private readonly usageTracker: ActivitySemanticServiceConfig['usageTracker']
   private readonly debugDumper: ActivitySemanticServiceConfig['debugDumper']
-  private readonly usesInjectedClient: boolean
-  private openRouterApiKey: string | null
-  private isCustomEndpoint = false
-  private customEndpointServerURL: string | null = null
-  private customEndpointModel: string | null = null
-  private readonly videoUnsupportedCustomModels = new Set<string>()
+  private readonly fetchImpl: typeof globalThis.fetch | undefined
+  private readonly videoUnsupportedKeys = new Set<string>()
+  private readonly unsubscribeProvider: () => void
 
   private userContextGetter: (() => string | null) | null = null
   private lastRunDiagnostics: SemanticRunDiagnostics | null = null
@@ -62,41 +52,30 @@ export class ActivitySemanticService implements SemanticServiceContract {
   }
   private connectionTestPromise: Promise<void> | null = null
 
-  constructor(apiKey?: string, config?: ActivitySemanticServiceConfig) {
-    this.videoModels = config?.videoModels?.length
-      ? [...config.videoModels]
-      : [...DEFAULT_VIDEO_MODELS]
-    this.snapshotModels = config?.snapshotModels?.length
-      ? [...config.snapshotModels]
-      : [...DEFAULT_SNAPSHOT_MODELS]
+  constructor(provider: InferenceProvider, config?: ActivitySemanticServiceConfig) {
+    this.provider = provider
+    this.videoModels = config?.videoModels ? [...config.videoModels] : []
+    this.snapshotModels = config?.snapshotModels ? [...config.snapshotModels] : []
     this.maxVideoBytes = config?.maxVideoBytes ?? 25 * 1024 * 1024
     this.requestTimeoutMs = config?.requestTimeoutMs ?? ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS
     this.pipelinePreference = this.normalizePipelinePreference(config?.pipelinePreference)
     this.usageTracker = config?.usageTracker ?? new UsageTracker()
     this.debugDumper = config?.debugDumper
+    this.fetchImpl = config?.fetchImpl
 
     if (!Number.isFinite(this.maxVideoBytes) || this.maxVideoBytes <= 0) {
       throw new Error('maxVideoBytes must be > 0')
     }
     this.assertValidRequestTimeoutMs(this.requestTimeoutMs)
 
-    this.openRouterApiKey = apiKey && apiKey.trim().length > 0 ? apiKey : null
-    this.usesInjectedClient = Boolean(config?.client)
-
-    if (config?.client) {
-      this.client = config.client
-      return
-    }
-
-    this.configureClient(config?.endpointConfig ?? null)
+    this.unsubscribeProvider = this.provider.onConfigChanged(() => {
+      this.videoUnsupportedKeys.clear()
+      this.resetLlmHealth()
+    })
   }
 
   isConfigured(): boolean {
-    return this.client !== null
-  }
-
-  isUsingCustomEndpoint(): boolean {
-    return this.isCustomEndpoint
+    return this.provider.isConfigured()
   }
 
   setUserContext(getter: (() => string | null) | null): void {
@@ -145,7 +124,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
   }
 
   async testConnection(): Promise<void> {
-    if (!this.client) {
+    if (!this.provider.isConfigured()) {
       this.resetLlmHealth()
       return
     }
@@ -161,88 +140,9 @@ export class ActivitySemanticService implements SemanticServiceContract {
     return this.connectionTestPromise
   }
 
-  updateApiKey(apiKey: string | null): void {
-    if (this.usesInjectedClient) {
-      log.info('[ActivitySemanticService] Ignoring API key update: injected client active')
-      return
-    }
-    if (this.isCustomEndpoint) {
-      log.info('[ActivitySemanticService] Ignoring API key update: custom endpoint active')
-      return
-    }
-
-    const normalizedKey = apiKey && apiKey.trim().length > 0 ? apiKey : null
-
-    if (
-      normalizedKey === this.openRouterApiKey &&
-      (normalizedKey === null || this.client !== null)
-    ) {
-      return
-    }
-
-    this.openRouterApiKey = normalizedKey
-
-    if (normalizedKey) {
-      delete process.env.OPENROUTER_API_KEY
-      this.client = new OpenRouter({ apiKey: normalizedKey }) as unknown as SemanticChatClient
-      this.resetLlmHealth()
-      return
-    }
-
-    this.client = null
-    this.resetLlmHealth()
-  }
-
-  updateEndpoint(config: SemanticEndpointConfig | null, openRouterKey?: string | null): void {
-    if (this.usesInjectedClient) {
-      log.info('[ActivitySemanticService] Ignoring endpoint update: injected client active')
-      return
-    }
-
-    if (config) {
-      this.isCustomEndpoint = true
-      this.customEndpointServerURL = config.serverURL
-      this.customEndpointModel = normalizeCustomEndpointModel(config.model)
-      const effectiveKey = config.apiKey ?? ''
-      this.client = createCustomEndpointClient({
-        apiKey: effectiveKey,
-        serverURL: config.serverURL,
-        getTimeoutMs: () => this.requestTimeoutMs,
-      })
-      this.resetLlmHealth()
-      return
-    }
-
-    this.isCustomEndpoint = false
-    this.customEndpointServerURL = null
-    this.customEndpointModel = null
-    const normalizedOpenRouterKey =
-      openRouterKey && openRouterKey.trim().length > 0 ? openRouterKey : null
-    if (normalizedOpenRouterKey) {
-      this.openRouterApiKey = normalizedOpenRouterKey
-      this.client = new OpenRouter({
-        apiKey: normalizedOpenRouterKey,
-      }) as unknown as SemanticChatClient
-      this.resetLlmHealth()
-      return
-    }
-
-    if (this.openRouterApiKey) {
-      this.client = new OpenRouter({
-        apiKey: this.openRouterApiKey,
-      }) as unknown as SemanticChatClient
-      this.resetLlmHealth()
-      return
-    }
-
-    this.client = null
-    this.resetLlmHealth()
-  }
-
   updateModels(videoModels: string[], snapshotModels: string[]): void {
-    this.videoModels = videoModels.length > 0 ? [...videoModels] : [...DEFAULT_VIDEO_MODELS]
-    this.snapshotModels =
-      snapshotModels.length > 0 ? [...snapshotModels] : [...DEFAULT_SNAPSHOT_MODELS]
+    this.videoModels = [...videoModels]
+    this.snapshotModels = [...snapshotModels]
     log.info(
       '[ActivitySemanticService] Models updated',
       JSON.stringify({ videoModels: this.videoModels, snapshotModels: this.snapshotModels }),
@@ -262,7 +162,14 @@ export class ActivitySemanticService implements SemanticServiceContract {
     return this.pipelinePreference
   }
 
-  async summarizeFromVideo(input: { activity: Activity; videoPath?: string }): Promise<string> {
+  dispose(): void {
+    this.unsubscribeProvider()
+  }
+
+  async summarizeFromVideo(input: {
+    activity: Activity
+    videoPath?: string
+  }): Promise<{ summary: string; model: string }> {
     this.assertInput(input)
 
     const diagnostics: SemanticRunDiagnostics = {
@@ -279,9 +186,9 @@ export class ActivitySemanticService implements SemanticServiceContract {
     }
     this.lastRunDiagnostics = diagnostics
 
-    if (!this.client) {
+    if (!this.provider.isConfigured()) {
       diagnostics.fallbackReason = 'semantic service is not configured'
-      return ''
+      return { summary: '', model: '' }
     }
 
     const videoPrompt = buildSemanticPrompt(
@@ -291,18 +198,19 @@ export class ActivitySemanticService implements SemanticServiceContract {
     )
     diagnostics.promptChars = videoPrompt.length
 
-    const shouldAttemptVideo = this.pipelinePreference !== 'image'
+    const shouldAttemptVideo = this.pipelinePreference !== 'image' && this.videoModels.length > 0
     const shouldAttemptSnapshots = this.pipelinePreference !== 'video'
 
     if (shouldAttemptVideo) {
-      if (this.shouldSkipCustomEndpointVideo()) {
-        diagnostics.fallbackReason = 'custom endpoint model marked video-unsupported (session)'
+      const effectiveVideoModels = this.filterCachedSupportedVideoModels()
+      if (effectiveVideoModels.length === 0) {
+        diagnostics.fallbackReason = 'all video models marked unsupported (session)'
         log.info(
-          '[ActivitySemanticService] Skipping video summarization for custom endpoint model',
+          '[ActivitySemanticService] Skipping video summarization; all configured video models are cached as unsupported on this route',
           JSON.stringify({
             activityId: input.activity.id,
-            serverURL: this.customEndpointServerURL,
-            model: this.customEndpointModel,
+            vendor: this.provider.getActiveVendor(),
+            models: this.videoModels,
           }),
         )
       } else if (typeof input.videoPath === 'string' && input.videoPath.trim().length > 0) {
@@ -312,16 +220,30 @@ export class ActivitySemanticService implements SemanticServiceContract {
           diagnostics.videoMimeType = videoAsset.mimeType
 
           const videoResult = await trySemanticModelChain({
-            client: this.client,
             requestTimeoutMs: this.requestTimeoutMs,
             mode: 'video',
-            models: this.getEffectiveVideoModels(),
+            models: effectiveVideoModels,
             prompt: videoPrompt,
             diagnostics,
             buildContent: () => [
               { type: 'text', text: videoPrompt },
               { type: 'input_video', videoUrl: { url: videoAsset.dataUrl } },
             ],
+            invoke: async ({ model, content, signal }) => {
+              const route = this.provider.getRouteSnapshot()
+              if (route) {
+                return invokeRawVideoCompletion({
+                  route,
+                  model,
+                  content,
+                  signal,
+                  fetchImpl: this.fetchImpl,
+                })
+              }
+              // Native vendors (openai, anthropic, google) handle file parts
+              // through the AI SDK directly.
+              return invokeViaGenerateText({ provider: this.provider, model, content, signal })
+            },
             onRecordUsage: ({ model, promptTokens, completionTokens }) => {
               recordSemanticUsageSafe({
                 usageTracker: this.usageTracker,
@@ -332,8 +254,8 @@ export class ActivitySemanticService implements SemanticServiceContract {
             },
             onDumpRoundTrip: (roundTrip) => this.dumpRoundTripSafe(roundTrip),
             onAttemptFailed: ({ mode, model, error }) => {
-              if (mode === 'video' && this.isLikelyVideoUnsupportedError(error)) {
-                this.markCustomEndpointVideoUnsupported(model, error)
+              if (mode === 'video' && this.shouldMarkUnsupported(error)) {
+                this.markVideoUnsupported(model, error)
               }
             },
           })
@@ -342,7 +264,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
             diagnostics.chosenMode = 'video'
             diagnostics.chosenModel = videoResult.model
             this.recordLlmSuccess()
-            return videoResult.summary
+            return { summary: videoResult.summary, model: videoResult.model }
           }
 
           diagnostics.fallbackReason = 'all video models failed'
@@ -352,16 +274,21 @@ export class ActivitySemanticService implements SemanticServiceContract {
       } else {
         diagnostics.fallbackReason = 'video unavailable'
       }
-    } else {
+    } else if (this.pipelinePreference === 'image') {
       diagnostics.fallbackReason = 'video pipeline disabled by preference'
+    } else if (this.videoModels.length === 0) {
+      diagnostics.fallbackReason = 'no video model configured for active vendor'
     }
 
-    if (!shouldAttemptSnapshots) {
+    if (!shouldAttemptSnapshots || this.snapshotModels.length === 0) {
       if (!diagnostics.fallbackReason) {
-        diagnostics.fallbackReason = 'snapshot pipeline disabled by preference'
+        diagnostics.fallbackReason =
+          this.snapshotModels.length === 0
+            ? 'no snapshot model configured for active vendor'
+            : 'snapshot pipeline disabled by preference'
       }
       this.updateLlmHealthFromDiagnostics(diagnostics)
-      return ''
+      return { summary: '', model: '' }
     }
 
     const snapshotCap = this.resolveSnapshotCap()
@@ -379,7 +306,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
 
     if (selectedSnapshots.length === 0) {
       this.updateLlmHealthFromDiagnostics(diagnostics)
-      return ''
+      return { summary: '', model: '' }
     }
 
     const encodedSnapshots = await encodeSnapshots({
@@ -393,7 +320,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
     })
     if (encodedSnapshots.length === 0) {
       this.updateLlmHealthFromDiagnostics(diagnostics)
-      return ''
+      return { summary: '', model: '' }
     }
 
     const snapshotPrompt = buildSemanticPrompt(
@@ -402,10 +329,9 @@ export class ActivitySemanticService implements SemanticServiceContract {
       this.userContextGetter?.() ?? undefined,
     )
     const snapshotResult = await trySemanticModelChain({
-      client: this.client,
       requestTimeoutMs: this.requestTimeoutMs,
       mode: 'snapshot',
-      models: this.getEffectiveSnapshotModels(),
+      models: this.snapshotModels,
       prompt: snapshotPrompt,
       diagnostics,
       buildContent: () => {
@@ -418,6 +344,8 @@ export class ActivitySemanticService implements SemanticServiceContract {
         }
         return content
       },
+      invoke: ({ model, content, signal }) =>
+        invokeViaGenerateText({ provider: this.provider, model, content, signal }),
       onRecordUsage: ({ model, promptTokens, completionTokens }) => {
         recordSemanticUsageSafe({
           usageTracker: this.usageTracker,
@@ -433,7 +361,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
       diagnostics.chosenMode = 'snapshot'
       diagnostics.chosenModel = snapshotResult.model
       this.recordLlmSuccess()
-      return snapshotResult.summary
+      return { summary: snapshotResult.summary, model: snapshotResult.model }
     }
 
     if (!diagnostics.fallbackReason) {
@@ -442,7 +370,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
 
     this.updateLlmHealthFromDiagnostics(diagnostics)
 
-    return ''
+    return { summary: '', model: '' }
   }
 
   getLastRunDiagnostics(): SemanticRunDiagnostics | null {
@@ -463,56 +391,40 @@ export class ActivitySemanticService implements SemanticServiceContract {
     }
   }
 
-  private getEffectiveVideoModels(): string[] {
-    return getEffectiveSemanticModels({
-      isCustomEndpoint: this.isCustomEndpoint,
-      customEndpointModel: this.customEndpointModel,
-      defaultModels: this.videoModels,
+  private currentRouteCacheKey(model: string): string | null {
+    const route = this.provider.getRouteSnapshot()
+    if (!route) return null
+    return videoUnsupportedCacheKey({
+      vendor: route.vendor,
+      baseURL: route.baseURL,
+      model,
     })
   }
 
-  private getEffectiveSnapshotModels(): string[] {
-    return getEffectiveSemanticModels({
-      isCustomEndpoint: this.isCustomEndpoint,
-      customEndpointModel: this.customEndpointModel,
-      defaultModels: this.snapshotModels,
+  private filterCachedSupportedVideoModels(): string[] {
+    return this.videoModels.filter((model) => {
+      const key = this.currentRouteCacheKey(model)
+      return key === null || !this.videoUnsupportedKeys.has(key)
     })
   }
 
-  private customEndpointCacheKey(): string | null {
-    return customEndpointVideoUnsupportedCacheKey({
-      isCustomEndpoint: this.isCustomEndpoint,
-      serverURL: this.customEndpointServerURL,
-      model: this.customEndpointModel,
-    })
-  }
-
-  private shouldSkipCustomEndpointVideo(): boolean {
-    const key = this.customEndpointCacheKey()
-    return key !== null && this.videoUnsupportedCustomModels.has(key)
-  }
-
-  private markCustomEndpointVideoUnsupported(model: string, reason: string): void {
-    if (!this.isCustomEndpoint) return
-    if (!this.customEndpointModel || this.customEndpointModel !== model) return
-
-    const key = this.customEndpointCacheKey()
-    if (!key || this.videoUnsupportedCustomModels.has(key)) return
-
-    this.videoUnsupportedCustomModels.add(key)
+  private markVideoUnsupported(model: string, reason: string): void {
+    const key = this.currentRouteCacheKey(model)
+    if (!key || this.videoUnsupportedKeys.has(key)) return
+    this.videoUnsupportedKeys.add(key)
     log.info(
-      '[ActivitySemanticService] Marked custom endpoint model as video-unsupported for session',
+      '[ActivitySemanticService] Marked model as video-unsupported for session',
       JSON.stringify({
-        serverURL: this.customEndpointServerURL,
+        vendor: this.provider.getActiveVendor(),
         model,
         reason,
       }),
     )
   }
 
-  private isLikelyVideoUnsupportedError(message: string): boolean {
-    if (!this.isCustomEndpoint) return false
-    return isLikelyCustomEndpointVideoUnsupportedError(message)
+  private shouldMarkUnsupported(message: string): boolean {
+    if (this.provider.getActiveVendor() !== 'openai-compatible') return false
+    return isLikelyVideoUnsupportedError(message)
   }
 
   private normalizePipelinePreference(
@@ -538,19 +450,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
     }
   }
 
-  private dumpRoundTripSafe(input: {
-    activityId: string
-    mode: SemanticMode
-    model: string
-    startedAt: number
-    durationMs: number
-    success: boolean
-    request: ChatRequest
-    requestJson: string
-    responseJson?: string
-    summary?: string
-    error?: string
-  }): void {
+  private dumpRoundTripSafe(input: SemanticRoundTripDump): void {
     try {
       this.debugDumper?.dumpRoundTrip(input)
     } catch (error) {
@@ -599,29 +499,16 @@ export class ActivitySemanticService implements SemanticServiceContract {
 
   private async runConnectionTest(): Promise<void> {
     const model = this.getProbeModel()
-    if (!model || !this.client) {
+    if (!model || !this.provider.isConfigured()) {
       this.resetLlmHealth()
       return
     }
 
     const startedAt = Date.now()
-    const request: ChatRequest = {
-      model,
-      messages: [
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'Reply with OK.' }],
-        },
-      ],
-    }
+    const content: ChatContentItem[] = [{ type: 'text', text: 'Reply with OK.' }]
 
     try {
-      const response = (await this.withTimeout(
-        this.client.chat.send(request),
-        this.requestTimeoutMs,
-        `semantic model request timed out after ${this.requestTimeoutMs}ms`,
-      )) as ChatResponseLike
-      const summary = extractSemanticSummary(response)
+      const summary = await this.runProbe(model, content)
       if (summary.length === 0) {
         throw new Error('empty summary')
       }
@@ -642,63 +529,25 @@ export class ActivitySemanticService implements SemanticServiceContract {
     }
   }
 
-  private getProbeModel(): string | null {
-    const models = this.getEffectiveSnapshotModels()
-    return models[0] ?? null
-  }
-
-  private async withTimeout<T>(
-    promise: Promise<T>,
-    timeoutMs: number,
-    message: string,
-  ): Promise<T> {
-    let timeoutHandle: NodeJS.Timeout | null = null
-
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutHandle = setTimeout(() => {
-        reject(new Error(message))
-      }, timeoutMs)
-    })
-
+  private async runProbe(model: string, content: ChatContentItem[]): Promise<string> {
+    const controller = new AbortController()
+    const timeoutHandle = setTimeout(() => {
+      controller.abort()
+    }, this.requestTimeoutMs)
     try {
-      return await Promise.race([promise, timeoutPromise])
+      const outcome = await invokeViaGenerateText({
+        provider: this.provider,
+        model,
+        content,
+        signal: controller.signal,
+      })
+      return outcome.summary.trim()
     } finally {
-      if (timeoutHandle) {
-        clearTimeout(timeoutHandle)
-      }
+      clearTimeout(timeoutHandle)
     }
   }
 
-  private configureClient(endpointConfig: SemanticEndpointConfig | null): void {
-    if (endpointConfig) {
-      const effectiveKey = endpointConfig.apiKey ?? this.openRouterApiKey ?? ''
-      this.isCustomEndpoint = true
-      this.customEndpointServerURL = endpointConfig.serverURL
-      this.customEndpointModel = normalizeCustomEndpointModel(endpointConfig.model)
-      this.client = createCustomEndpointClient({
-        apiKey: effectiveKey,
-        serverURL: endpointConfig.serverURL,
-        getTimeoutMs: () => this.requestTimeoutMs,
-      })
-      this.resetLlmHealth()
-      return
-    }
-
-    this.isCustomEndpoint = false
-    this.customEndpointServerURL = null
-    this.customEndpointModel = null
-    if (this.openRouterApiKey) {
-      this.client = new OpenRouter({
-        apiKey: this.openRouterApiKey,
-      }) as unknown as SemanticChatClient
-      this.resetLlmHealth()
-      return
-    }
-
-    this.client = null
-    this.resetLlmHealth()
-    log.warn(
-      '[ActivitySemanticService] No API key/client configured - semantic summarization disabled',
-    )
+  private getProbeModel(): string | null {
+    return this.snapshotModels[0] ?? null
   }
 }

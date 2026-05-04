@@ -42,7 +42,7 @@ export class DefaultActivityTransformer implements ActivityTransformer {
       this.extractOcrText(activity),
     ])
 
-    const summary = await this.semantic.summarizeFromVideo({
+    const { summary, model: summaryModel } = await this.semantic.summarizeFromVideo({
       activity,
       videoPath: videoAsset?.videoPath,
     })
@@ -64,6 +64,7 @@ export class DefaultActivityTransformer implements ActivityTransformer {
       windowTitle: activity.context.windowTitle ?? '',
       tld: activity.context.tld,
       summary,
+      summaryModel,
       ocrText,
       vector,
     }

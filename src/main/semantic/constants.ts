@@ -1,16 +1,5 @@
 export const LLM_IMAGE_MAX_WIDTH = 1920
 
-export const DEFAULT_VIDEO_MODELS = [
-  'google/gemini-2.5-flash-lite-preview-09-2025',
-  'google/gemini-3-flash-preview',
-  'allenai/molmo-2-8b',
-] as const
-
-export const DEFAULT_SNAPSHOT_MODELS = [
-  'mistralai/mistral-small-3.2-24b-instruct',
-  'google/gemini-2.5-flash-lite',
-] as const
-
 export const MODEL_PRICING_USD_PER_MILLION: Record<
   string,
   { input_tokens_per_million: number; completion_tokens_per_million: number }
@@ -19,9 +8,9 @@ export const MODEL_PRICING_USD_PER_MILLION: Record<
     input_tokens_per_million: 0.1,
     completion_tokens_per_million: 0.4,
   },
-  'google/gemini-3-flash-preview': {
-    input_tokens_per_million: 0.5,
-    completion_tokens_per_million: 3,
+  'google/gemini-2.5-flash': {
+    input_tokens_per_million: 0.3,
+    completion_tokens_per_million: 2.5,
   },
   'allenai/molmo-2-8b': {
     input_tokens_per_million: 0.2,

@@ -1,18 +1,29 @@
 import type { AccessState } from '../../shared/types'
 
+export interface ManagedInferenceConfig {
+  provider: 'openrouter' | 'vertex'
+  apiKey: string
+  /** Vertex only. */
+  project?: string
+  /** Vertex only. */
+  location?: string
+  /** Vertex only — unix seconds. Token expiry; consumer should refetch before. */
+  expiresAt?: number
+}
+
 export type EnterpriseAccessEvent =
   | { type: 'activation_started' }
   | { type: 'activation_inactive' }
   | { type: 'consent_required' }
   | { type: 'consent_decision_accepted' }
   | { type: 'activation_confirmed_without_key' }
-  | { type: 'activation_completed'; key: string }
+  | { type: 'activation_completed'; config: ManagedInferenceConfig }
   | { type: 'activation_failed'; error: string }
 
 export interface EnterpriseAccessTransition {
   state: AccessState
   payload?: {
-    key?: string
+    config?: ManagedInferenceConfig
     invalidate?: boolean
   }
 }
@@ -79,7 +90,7 @@ export function transitionEnterpriseAccess(
           error: null,
         },
         payload: {
-          key: event.key,
+          config: event.config,
         },
       }
     case 'activation_failed':

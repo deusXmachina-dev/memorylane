@@ -61,24 +61,29 @@ export interface SearchOptions extends SearchFilters {
   limit?: number | undefined
 }
 
-export interface KeyStatus {
+export type Vendor = 'openrouter' | 'google' | 'openai-compatible'
+
+export const VENDORS: readonly Vendor[] = ['openrouter', 'google', 'openai-compatible'] as const
+
+export interface VendorCredentials {
+  apiKey: string
+  /** Optional override of the SDK default base URL. Required for openai-compatible. */
+  baseURL?: string
+  /** Google Vertex managed mode only: GCP project id. */
+  project?: string
+  /** Google Vertex managed mode only: GCP region (e.g. us-central1). */
+  location?: string
+}
+
+export interface VendorStatus {
   hasKey: boolean
   source: 'stored' | 'managed' | 'env' | 'none'
   maskedKey: string | null
+  baseURL: string | null
 }
 
-export interface CustomEndpointConfig {
-  serverURL: string // e.g. "http://localhost:11434/v1"
-  model: string // e.g. "llama3.2-vision"
-  apiKey?: string // optional - many local servers don't need one
-}
-
-export interface CustomEndpointStatus {
-  enabled: boolean
-  serverURL: string | null
-  model: string | null
-  hasApiKey: boolean
-}
+/** Alias retained for renderer call sites; identical shape to VendorStatus. */
+export type KeyStatus = VendorStatus
 
 export type LlmHealthState = 'not_configured' | 'unknown' | 'active' | 'failing'
 
@@ -143,9 +148,10 @@ export interface DirectorySelectionResult {
 }
 
 export interface SettingsAPI {
-  getKeyStatus: () => Promise<KeyStatus>
-  saveApiKey: (key: string) => Promise<SaveResult>
-  deleteApiKey: () => Promise<SaveResult>
+  getCredentialStatuses: () => Promise<Record<Vendor, VendorStatus>>
+  saveCredentials: (vendor: Vendor, creds: VendorCredentials) => Promise<SaveResult>
+  deleteCredentials: (vendor: Vendor) => Promise<SaveResult>
+  setActiveVendor: (vendor: Vendor) => Promise<SaveResult>
   close: () => void
   openExternal: (url: string) => Promise<void>
   addToClaude: () => Promise<boolean>
@@ -197,11 +203,20 @@ export interface CaptureSettings {
   excludedApps: string[]
   excludedWindowTitlePatterns: string[]
   excludedUrlPatterns: string[]
+  activeVendor: Vendor
   semanticVideoModel: string
   semanticSnapshotModel: string
   patternDetectionModel: string
+  modelsByVendor: Partial<Record<Vendor, VendorModelSelection>>
   patternDetectionEnabled: boolean
   uploadDetailLevel: 'off' | 'summary' | 'detailed'
+}
+
+export interface VendorModelSelection {
+  semanticVideoModel: string
+  semanticSnapshotModel: string
+  patternDetectionModel: string
+  semanticPipelineMode: SemanticPipelineMode
 }
 
 export interface InstalledApp {
@@ -251,17 +266,14 @@ export interface MainWindowAPI {
   toggleCapture: () => Promise<MainWindowStatus>
   onStatusChanged: (callback: (status: MainWindowStatus) => void) => void
   // Settings methods (merged from settingsAPI)
-  getKeyStatus: () => Promise<KeyStatus>
-  saveApiKey: (key: string) => Promise<SaveResult>
-  deleteApiKey: () => Promise<SaveResult>
+  getCredentialStatuses: () => Promise<Record<Vendor, VendorStatus>>
+  saveCredentials: (vendor: Vendor, creds: VendorCredentials) => Promise<SaveResult>
+  deleteCredentials: (vendor: Vendor) => Promise<SaveResult>
+  setActiveVendor: (vendor: Vendor) => Promise<SaveResult>
   addToClaude: () => Promise<boolean>
   addToCursor: () => Promise<boolean>
   addToClaudeCode: () => Promise<boolean>
   getMcpStatus: () => Promise<McpRegistrationStatus>
-  // Custom endpoint
-  getCustomEndpoint: () => Promise<CustomEndpointStatus>
-  saveCustomEndpoint: (config: CustomEndpointConfig) => Promise<SaveResult>
-  deleteCustomEndpoint: () => Promise<SaveResult>
   getLlmHealth: () => Promise<LlmHealthStatus>
   testLlmConnection: () => Promise<void>
   // Subscription
