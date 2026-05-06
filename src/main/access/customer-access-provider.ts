@@ -182,18 +182,25 @@ export class CustomerAccessProvider extends BaseAccessProvider {
 
   private async fetchCustomerKey(deviceId: string): Promise<string | null> {
     const url = new URL('/v2/subscription/key', MANAGED_KEY_CONFIG.BACKEND_URL)
+    const deviceIdHint = `${deviceId.slice(0, 4)}…${deviceId.slice(-4)}`
 
     const response = await fetch(url.toString(), {
       headers: { Authorization: `Bearer ${deviceId}` },
     })
     if (!response.ok) {
-      if (response.status >= 500) {
-        log.warn(`[CustomerAccess] Customer key server error: ${response.status}`)
-      }
+      const bodyExcerpt = await response.text().catch(() => '')
+      log.warn(
+        `[CustomerAccess] /v2/subscription/key returned ${response.status} for device ${deviceIdHint}: ${bodyExcerpt.slice(0, 200)}`,
+      )
       return null
     }
 
     const data = (await response.json()) as { key?: string | null }
+    if (data.key == null) {
+      log.info(
+        `[CustomerAccess] /v2/subscription/key returned no key yet for device ${deviceIdHint}`,
+      )
+    }
     return data.key ?? null
   }
 
