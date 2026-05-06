@@ -1,4 +1,5 @@
 import * as fs from 'fs'
+import * as os from 'os'
 import * as path from 'path'
 import log from '../logger'
 import type {
@@ -27,8 +28,82 @@ function normalizeVendor(value: unknown): Vendor {
     : 'openrouter'
 }
 
+/**
+ * Resolve the list of safe roots a database export directory may live under.
+ * Wrapped in try/catch because `electron.app.getPath` throws when called before
+ * the app is ready, and `app` is unavailable entirely under
+ * `ELECTRON_RUN_AS_NODE` (tests). Falls back to `os.homedir()` so the
+ * containment check still has at least one root in those contexts.
+ */
+function getSafeRoots(): string[] {
+  const roots: string[] = []
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const electron = require('electron') as typeof import('electron')
+    if (electron && electron.app && typeof electron.app.getPath === 'function') {
+      for (const name of ['home', 'documents', 'desktop', 'userData'] as const) {
+        try {
+          roots.push(electron.app.getPath(name))
+        } catch {
+          // Some paths may be unavailable on some platforms; ignore.
+        }
+      }
+    }
+  } catch {
+    // Electron unavailable — fall through to os.homedir() below.
+  }
+  if (roots.length === 0) {
+    try {
+      roots.push(os.homedir())
+    } catch {
+      // os.homedir() can throw in extreme contexts; we then fail closed.
+    }
+  }
+  return roots
+}
+
+function isContainedIn(child: string, parent: string): boolean {
+  const rel = path.relative(parent, child)
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
+}
+
+type ExportDirResult = { ok: true; value: string } | { ok: false; reason: string }
+
+/**
+ * Single source of truth for databaseExportDirectory validation rules. Both
+ * the forgiving load/merge path (`normalizeDatabaseExportDirectory`) and the
+ * strict IPC entry point (`setDatabaseExportDirectory` on the manager) feed
+ * through here.
+ */
+function validateExportDir(value: unknown): ExportDirResult {
+  if (value === null || value === undefined) return { ok: true, value: '' }
+  if (typeof value !== 'string') return { ok: false, reason: 'Path must be a string' }
+  if (!/\S/.test(value)) return { ok: true, value: '' }
+  if (!path.isAbsolute(value)) return { ok: false, reason: 'Path must be absolute' }
+  if (value.split(path.sep).includes('..')) return { ok: false, reason: 'Invalid path' }
+  let resolved: string
+  try {
+    resolved = fs.realpathSync(value)
+  } catch {
+    // Path may not yet exist (e.g. user typed a path that hasn't been created);
+    // fall back to path.resolve for the containment check.
+    resolved = path.resolve(value)
+  }
+  const safeRoots = getSafeRoots()
+  if (safeRoots.length === 0) {
+    return { ok: false, reason: 'Safe roots unavailable (app not ready)' }
+  }
+  if (!safeRoots.some((root) => isContainedIn(resolved, root))) {
+    return { ok: false, reason: 'Path is outside allowed locations' }
+  }
+  return { ok: true, value: resolved }
+}
+
 function normalizeDatabaseExportDirectory(value: string | null | undefined): string {
-  return typeof value === 'string' && /\S/.test(value) ? value : ''
+  const result = validateExportDir(value)
+  if (result.ok) return result.value
+  log.warn(`[CaptureSettings] Rejecting databaseExportDirectory (${result.reason}): ${value}`)
+  return ''
 }
 
 const OPENROUTER_DEFAULTS = getVendorDefaults('openrouter')
@@ -255,6 +330,18 @@ export class CaptureSettingsManager {
       log.error('[CaptureSettings] Failed to save settings:', error)
       throw error
     }
+  }
+
+  /**
+   * Strict setter for databaseExportDirectory. Throws on invalid input so the
+   * caller (IPC handler) can surface a clear error. Empty string clears.
+   */
+  public setDatabaseExportDirectory(value: unknown): void {
+    const result = validateExportDir(value)
+    if (!result.ok) {
+      throw new Error(result.reason)
+    }
+    this.save({ databaseExportDirectory: result.value })
   }
 
   /**

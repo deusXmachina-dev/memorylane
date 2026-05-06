@@ -166,12 +166,21 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
   const commitDatabaseExportDirectory = useCallback(
     (databaseExportDirectory: string): void => {
       setForm((prev) => (prev ? { ...prev, databaseExportDirectory } : prev))
-      save(
-        { databaseExportDirectory },
-        databaseExportDirectory ? 'Raw DB export folder saved' : 'Raw DB export disabled',
-      )
+      void api.setDatabaseExportDirectory(databaseExportDirectory).then((result) => {
+        if (!result.success) {
+          toast.error(result.error ?? 'Failed to save folder', {
+            id: 'auto-save-error',
+            duration: 3000,
+          })
+          return
+        }
+        toast.success(
+          databaseExportDirectory ? 'Raw DB export folder saved' : 'Raw DB export disabled',
+          { id: 'auto-save', duration: 1500 },
+        )
+      })
     },
-    [save],
+    [api],
   )
 
   const refreshCredentials = useCallback(async (): Promise<void> => {

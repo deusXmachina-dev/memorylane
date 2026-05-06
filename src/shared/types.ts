@@ -301,6 +301,7 @@ export interface MainWindowAPI {
   // Stats
   getStats: () => Promise<MainWindowStats>
   chooseDatabaseExportDirectory: (initialPath?: string) => Promise<DirectorySelectionResult>
+  setDatabaseExportDirectory: (directoryPath: string) => Promise<SaveResult>
   // Database export
   exportDatabaseZip: () => Promise<DatabaseExportResult>
   syncDatabaseToRemote: () => Promise<{ success: boolean; error?: string }>

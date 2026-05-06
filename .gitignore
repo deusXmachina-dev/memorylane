@@ -154,3 +154,6 @@ benchmarks/
 # CLI package build output
 packages/cli/dist/
 packages/cli/node_modules/
+
+# deepsec
+.deepsec/

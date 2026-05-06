@@ -54,6 +54,7 @@ export class CustomerAccessProvider extends BaseAccessProvider {
 
     const deviceId = this.deviceIdentity.getDeviceId()
     const url = new URL('/subscription/checkout', MANAGED_KEY_CONFIG.BACKEND_URL)
+    // SECURITY: device_id stays in URL because shell.openExternal cannot send headers; backend must set Referrer-Policy: no-referrer. Longer-term: switch to a one-time signed token from a Bearer-authed endpoint.
     url.searchParams.set('device_id', deviceId)
     url.searchParams.set('plan', plan)
 
@@ -66,6 +67,7 @@ export class CustomerAccessProvider extends BaseAccessProvider {
   public async openSubscriptionPortal(): Promise<void> {
     const deviceId = this.deviceIdentity.getDeviceId()
     const url = new URL('/subscription/portal', MANAGED_KEY_CONFIG.BACKEND_URL)
+    // SECURITY: device_id stays in URL because shell.openExternal cannot send headers; backend must set Referrer-Policy: no-referrer. Longer-term: switch to a one-time signed token from a Bearer-authed endpoint.
     url.searchParams.set('device_id', deviceId)
 
     await shell.openExternal(url.toString())
@@ -145,9 +147,10 @@ export class CustomerAccessProvider extends BaseAccessProvider {
 
   private async fetchCustomerKey(deviceId: string): Promise<string | null> {
     const url = new URL('/subscription/key', MANAGED_KEY_CONFIG.BACKEND_URL)
-    url.searchParams.set('device_id', deviceId)
 
-    const response = await fetch(url.toString())
+    const response = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${deviceId}` },
+    })
     if (!response.ok) {
       if (response.status >= 500) {
         log.warn(`[CustomerAccess] Customer key server error: ${response.status}`)

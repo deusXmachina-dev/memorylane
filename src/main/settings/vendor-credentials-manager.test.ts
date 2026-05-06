@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { VendorCredentialsManager } from './vendor-credentials-manager'
+import { VendorCredentialsManager, validateVendorBaseURL } from './vendor-credentials-manager'
 
 vi.mock('../logger', () => ({
   default: {
@@ -262,6 +262,79 @@ describe('VendorCredentialsManager', () => {
     expect(m.migration.ran).toBe(false)
     // The v2 entry should win — and our shim uses base64 round-trip for "encryption"
     expect(m.getCredentials('openrouter')).toEqual({ apiKey: 'already-here' })
+  })
+
+  describe('validateVendorBaseURL', () => {
+    it('accepts https URLs to any host', () => {
+      expect(validateVendorBaseURL('https://api.openai.com/v1')).toBe('https://api.openai.com/v1')
+      expect(validateVendorBaseURL('https://example.com/path')).toBe('https://example.com/path')
+    })
+
+    it('accepts http URLs only for loopback hosts', () => {
+      expect(validateVendorBaseURL('http://localhost:11434/v1')).toBe('http://localhost:11434/v1')
+      expect(validateVendorBaseURL('http://127.0.0.1:11434/v1')).toBe('http://127.0.0.1:11434/v1')
+    })
+
+    it('returns empty string for empty / whitespace / undefined input', () => {
+      expect(validateVendorBaseURL('')).toBe('')
+      expect(validateVendorBaseURL('   ')).toBe('')
+      expect(validateVendorBaseURL(undefined)).toBe('')
+      expect(validateVendorBaseURL(null)).toBe('')
+    })
+
+    it('rejects http URLs to non-loopback hosts', () => {
+      expect(() => validateVendorBaseURL('http://10.0.0.1/')).toThrow(/localhost/)
+      expect(() => validateVendorBaseURL('http://evil.example.com/v1')).toThrow(/localhost/)
+    })
+
+    it('rejects file:, ftp:, and other schemes', () => {
+      expect(() => validateVendorBaseURL('file:///etc/passwd')).toThrow(/scheme/)
+      expect(() => validateVendorBaseURL('ftp://example.com/')).toThrow(/scheme/)
+    })
+
+    it('rejects URLs with embedded credentials', () => {
+      expect(() => validateVendorBaseURL('https://attacker:pw@evil.example.com/')).toThrow(
+        /credentials/,
+      )
+      expect(() => validateVendorBaseURL('https://user@evil.example.com/')).toThrow(/credentials/)
+    })
+
+    it('rejects malformed URLs', () => {
+      expect(() => validateVendorBaseURL('not-a-url')).toThrow(/valid URL/)
+      expect(() => validateVendorBaseURL('://broken')).toThrow(/valid URL/)
+    })
+
+    it('rejects overlong values', () => {
+      const longUrl = 'https://example.com/' + 'a'.repeat(2050)
+      expect(() => validateVendorBaseURL(longUrl)).toThrow(/too long/)
+    })
+
+    it('rejects non-string values', () => {
+      expect(() => validateVendorBaseURL(42 as unknown)).toThrow(/string/)
+      expect(() => validateVendorBaseURL({} as unknown)).toThrow(/string/)
+    })
+  })
+
+  it('saveCredentials rejects an SSRF baseURL before persisting', () => {
+    const m = new VendorCredentialsManager({
+      ...paths(),
+      safeStorage: makeSafeStorage(),
+      env: {},
+    })
+    expect(() =>
+      m.saveCredentials('openai-compatible', {
+        apiKey: 'sk-x',
+        baseURL: 'file:///etc/passwd',
+      }),
+    ).toThrow(/scheme/)
+    expect(() =>
+      m.saveCredentials('openai-compatible', {
+        apiKey: 'sk-x',
+        baseURL: 'http://10.0.0.1/v1',
+      }),
+    ).toThrow(/localhost/)
+    // Nothing should have been persisted.
+    expect(m.getCredentials('openai-compatible')).toBeNull()
   })
 
   it('getAllStatuses returns one entry per vendor', () => {

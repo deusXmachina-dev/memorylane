@@ -58,4 +58,26 @@ describe('CustomerAccessProvider', () => {
       config: { provider: 'openrouter', apiKey: 'sk-or-customer' },
     })
   })
+
+  it('sends device_id as a Bearer token (not in the URL) when fetching the customer key', async () => {
+    const responses = [
+      { ok: true, json: async () => ({ key: null }) } as unknown as Response,
+      { ok: true, json: async () => ({ key: 'sk-or-customer' }) } as unknown as Response,
+    ]
+    const fetchMock = vi.fn(async () => responses.shift() as Response) as unknown as typeof fetch
+    globalThis.fetch = fetchMock
+
+    const provider = new CustomerAccessProvider(deviceIdentity)
+    await provider.startCheckout('explorer')
+    await vi.advanceTimersByTimeAsync(MANAGED_KEY_CONFIG.POLL_INTERVAL_MS)
+    await vi.advanceTimersByTimeAsync(MANAGED_KEY_CONFIG.POLL_INTERVAL_MS)
+
+    const calls = (
+      fetchMock as unknown as { mock: { calls: [unknown, RequestInit | undefined][] } }
+    ).mock.calls
+
+    const keyCall = calls.find((c) => String(c[0]).includes('/subscription/key'))!
+    expect(String(keyCall[0])).not.toContain('device_id=')
+    expect((keyCall[1]?.headers as Record<string, string>).Authorization).toBe('Bearer device-123')
+  })
 })
