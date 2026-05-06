@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const { openExternalMock } = vi.hoisted(() => ({
+  openExternalMock: vi.fn(async () => undefined),
+}))
+
 vi.mock('electron', () => ({
   shell: {
-    openExternal: vi.fn(async () => undefined),
+    openExternal: openExternalMock,
   },
 }))
 
@@ -19,6 +23,24 @@ import { CustomerAccessProvider } from './customer-access-provider'
 import { MANAGED_KEY_CONFIG } from '../../shared/constants'
 import type { DeviceIdentity } from '../settings/device-identity'
 
+type FetchCall = [unknown, RequestInit | undefined]
+
+function jsonResponse(body: unknown, ok = true, status = 200): Response {
+  return { ok, status, json: async () => body } as unknown as Response
+}
+
+function makeFetchMock(responses: Response[]): typeof fetch {
+  const queue = [...responses]
+  return vi.fn(async () => queue.shift() as Response) as unknown as typeof fetch
+}
+
+function findCall(fetchMock: typeof fetch, urlPart: string): FetchCall {
+  const calls = (fetchMock as unknown as { mock: { calls: FetchCall[] } }).mock.calls
+  const call = calls.find((c) => String(c[0]).includes(urlPart))
+  if (!call) throw new Error(`No fetch call to ${urlPart}`)
+  return call
+}
+
 describe('CustomerAccessProvider', () => {
   const originalFetch = globalThis.fetch
   const deviceIdentity = {
@@ -27,6 +49,7 @@ describe('CustomerAccessProvider', () => {
 
   beforeEach(() => {
     vi.useFakeTimers()
+    openExternalMock.mockClear()
   })
 
   afterEach(() => {
@@ -35,11 +58,11 @@ describe('CustomerAccessProvider', () => {
   })
 
   it('publishes managed key after checkout polling succeeds', async () => {
-    const responses = [
-      { ok: true, json: async () => ({ key: null }) } as unknown as Response,
-      { ok: true, json: async () => ({ key: 'sk-or-customer' }) } as unknown as Response,
-    ]
-    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
+    globalThis.fetch = makeFetchMock([
+      jsonResponse({ url: 'https://backend.example/checkout?token=signed-jwt' }),
+      jsonResponse({ key: null }),
+      jsonResponse({ key: 'sk-or-customer' }),
+    ])
 
     const provider = new CustomerAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; payload?: unknown }> = []
@@ -60,11 +83,11 @@ describe('CustomerAccessProvider', () => {
   })
 
   it('sends device_id as a Bearer token (not in the URL) when fetching the customer key', async () => {
-    const responses = [
-      { ok: true, json: async () => ({ key: null }) } as unknown as Response,
-      { ok: true, json: async () => ({ key: 'sk-or-customer' }) } as unknown as Response,
-    ]
-    const fetchMock = vi.fn(async () => responses.shift() as Response) as unknown as typeof fetch
+    const fetchMock = makeFetchMock([
+      jsonResponse({ url: 'https://backend.example/checkout?token=t' }),
+      jsonResponse({ key: null }),
+      jsonResponse({ key: 'sk-or-customer' }),
+    ])
     globalThis.fetch = fetchMock
 
     const provider = new CustomerAccessProvider(deviceIdentity)
@@ -72,12 +95,60 @@ describe('CustomerAccessProvider', () => {
     await vi.advanceTimersByTimeAsync(MANAGED_KEY_CONFIG.POLL_INTERVAL_MS)
     await vi.advanceTimersByTimeAsync(MANAGED_KEY_CONFIG.POLL_INTERVAL_MS)
 
-    const calls = (
-      fetchMock as unknown as { mock: { calls: [unknown, RequestInit | undefined][] } }
-    ).mock.calls
-
-    const keyCall = calls.find((c) => String(c[0]).includes('/subscription/key'))!
+    const keyCall = findCall(fetchMock, '/subscription/key')
     expect(String(keyCall[0])).not.toContain('device_id=')
     expect((keyCall[1]?.headers as Record<string, string>).Authorization).toBe('Bearer device-123')
+  })
+
+  it('mints a signed checkout link via Bearer-authed POST and opens the returned URL', async () => {
+    const signedUrl = 'https://backend.example/checkout?token=signed-jwt'
+    const fetchMock = makeFetchMock([jsonResponse({ url: signedUrl }), jsonResponse({ key: null })])
+    globalThis.fetch = fetchMock
+
+    const provider = new CustomerAccessProvider(deviceIdentity)
+    await provider.startCheckout('explorer')
+
+    const linkCall = findCall(fetchMock, '/v2/subscription/checkout-link')
+    expect(linkCall[1]?.method).toBe('POST')
+    expect((linkCall[1]?.headers as Record<string, string>).Authorization).toBe('Bearer device-123')
+    expect(String(linkCall[0])).not.toContain('device_id=')
+    expect(JSON.parse(String(linkCall[1]?.body))).toEqual({ plan: 'explorer' })
+
+    expect(openExternalMock).toHaveBeenCalledWith(signedUrl)
+    const openedUrl = openExternalMock.mock.calls[0]?.[0] as string
+    expect(openedUrl).not.toContain('device_id=')
+  })
+
+  it('does not open the browser or start polling if checkout-link minting fails', async () => {
+    globalThis.fetch = makeFetchMock([jsonResponse({}, false, 500)])
+
+    const provider = new CustomerAccessProvider(deviceIdentity)
+    const updates: Array<{ status: string | null }> = []
+    provider.setUpdateCallback((state) => {
+      updates.push({ status: state.customerSubscriptionStatus })
+    })
+
+    await provider.startCheckout('explorer')
+
+    expect(openExternalMock).not.toHaveBeenCalled()
+    expect(updates.map((u) => u.status)).not.toContain('polling')
+  })
+
+  it('mints a signed portal link via Bearer-authed POST and opens the returned URL', async () => {
+    const signedUrl = 'https://backend.example/portal?token=signed-jwt'
+    const fetchMock = makeFetchMock([jsonResponse({ url: signedUrl })])
+    globalThis.fetch = fetchMock
+
+    const provider = new CustomerAccessProvider(deviceIdentity)
+    await provider.openSubscriptionPortal()
+
+    const linkCall = findCall(fetchMock, '/v2/subscription/portal-link')
+    expect(linkCall[1]?.method).toBe('POST')
+    expect((linkCall[1]?.headers as Record<string, string>).Authorization).toBe('Bearer device-123')
+    expect(String(linkCall[0])).not.toContain('device_id=')
+
+    expect(openExternalMock).toHaveBeenCalledWith(signedUrl)
+    const openedUrl = openExternalMock.mock.calls[0]?.[0] as string
+    expect(openedUrl).not.toContain('device_id=')
   })
 })

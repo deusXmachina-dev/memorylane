@@ -53,25 +53,60 @@ export class CustomerAccessProvider extends BaseAccessProvider {
     }
 
     const deviceId = this.deviceIdentity.getDeviceId()
-    const url = new URL('/subscription/checkout', MANAGED_KEY_CONFIG.BACKEND_URL)
-    // SECURITY: device_id stays in URL because shell.openExternal cannot send headers; backend must set Referrer-Policy: no-referrer. Longer-term: switch to a one-time signed token from a Bearer-authed endpoint.
-    url.searchParams.set('device_id', deviceId)
-    url.searchParams.set('plan', plan)
+    let signedUrl: string
+    try {
+      signedUrl = await this.fetchSignedLink('/v2/subscription/checkout-link', deviceId, { plan })
+    } catch (error) {
+      log.warn('[CustomerAccess] Failed to mint checkout link:', error)
+      this.applyTransition(
+        transitionCustomerAccess(this.accessState, {
+          type: 'poll_timed_out',
+          error: 'Could not start checkout. Please try again.',
+        }),
+      )
+      return
+    }
 
     this.applyTransition(transitionCustomerAccess(this.accessState, { type: 'checkout_started' }))
-    await shell.openExternal(url.toString())
+    await shell.openExternal(signedUrl)
     log.info('[CustomerAccess] Opened checkout in system browser, starting key polling')
     this.startPolling(deviceId)
   }
 
   public async openSubscriptionPortal(): Promise<void> {
     const deviceId = this.deviceIdentity.getDeviceId()
-    const url = new URL('/subscription/portal', MANAGED_KEY_CONFIG.BACKEND_URL)
-    // SECURITY: device_id stays in URL because shell.openExternal cannot send headers; backend must set Referrer-Policy: no-referrer. Longer-term: switch to a one-time signed token from a Bearer-authed endpoint.
-    url.searchParams.set('device_id', deviceId)
-
-    await shell.openExternal(url.toString())
+    const signedUrl = await this.fetchSignedLink('/v2/subscription/portal-link', deviceId)
+    await shell.openExternal(signedUrl)
     log.info('[CustomerAccess] Opened subscription portal in system browser')
+  }
+
+  /**
+   * Exchange the device_id (Bearer-authed) for a single-use signed URL the
+   * system browser can open. Keeps device_id out of URLs entirely — the
+   * returned URL carries a short-lived JWT instead.
+   */
+  private async fetchSignedLink(
+    path: '/v2/subscription/checkout-link' | '/v2/subscription/portal-link',
+    deviceId: string,
+    body?: Record<string, string>,
+  ): Promise<string> {
+    const endpoint = new URL(path, MANAGED_KEY_CONFIG.BACKEND_URL).toString()
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${deviceId}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body ?? {}),
+    })
+    if (!response.ok) {
+      throw new Error(`Backend returned ${response.status} for ${path}`)
+    }
+    const data = (await response.json()) as { url?: string }
+    if (typeof data.url !== 'string' || data.url.length === 0) {
+      throw new Error(`Backend response for ${path} missing url`)
+    }
+    return data.url
   }
 
   public async activateEnterpriseLicense(_activationCode: string): Promise<void> {
