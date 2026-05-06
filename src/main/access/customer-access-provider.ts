@@ -181,7 +181,7 @@ export class CustomerAccessProvider extends BaseAccessProvider {
   }
 
   private async fetchCustomerKey(deviceId: string): Promise<string | null> {
-    const url = new URL('/subscription/key', MANAGED_KEY_CONFIG.BACKEND_URL)
+    const url = new URL('/v2/subscription/key', MANAGED_KEY_CONFIG.BACKEND_URL)
 
     const response = await fetch(url.toString(), {
       headers: { Authorization: `Bearer ${deviceId}` },

@@ -95,7 +95,7 @@ describe('CustomerAccessProvider', () => {
     await vi.advanceTimersByTimeAsync(MANAGED_KEY_CONFIG.POLL_INTERVAL_MS)
     await vi.advanceTimersByTimeAsync(MANAGED_KEY_CONFIG.POLL_INTERVAL_MS)
 
-    const keyCall = findCall(fetchMock, '/subscription/key')
+    const keyCall = findCall(fetchMock, '/v2/subscription/key')
     expect(String(keyCall[0])).not.toContain('device_id=')
     expect((keyCall[1]?.headers as Record<string, string>).Authorization).toBe('Bearer device-123')
   })
