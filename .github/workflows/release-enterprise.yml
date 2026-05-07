@@ -51,35 +51,20 @@ jobs:
       commit_sha: ${{ steps.resolve_sha.outputs.commit_sha }}
 
     steps:
+      - name: Checkout ref
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.ref }}
+
       - name: Resolve ref to SHA
         id: resolve_sha
         env:
           INPUTS_REF: ${{ inputs.ref }}
-          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          # For annotated tags, `git ls-remote` returns two lines: the tag
-          # object SHA and the dereferenced commit (`<ref>^{}`). We want the
-          # commit SHA — `target_commitish` on the GitHub release expects a
-          # commit, not a tag object. Query both `^{}` and the bare ref so a
-          # single ls-remote call covers branches, lightweight tags, and
-          # annotated tags.
-          REMOTE_URL="https://github.com/${REPO}"
-          LS_OUTPUT=$(git ls-remote "$REMOTE_URL" "${INPUTS_REF}^{}" "$INPUTS_REF" || true)
-          # Prefer the dereferenced commit (`^{}` line) if present.
-          SHA=$(printf '%s\n' "$LS_OUTPUT" | awk '/\^\{\}$/ {print $1; exit}')
-          if [ -z "$SHA" ]; then
-            SHA=$(printf '%s\n' "$LS_OUTPUT" | awk 'NF {print $1; exit}')
-          fi
-          if [ -z "$SHA" ]; then
-            # Fallback: assume the ref is already a SHA
-            if printf '%s' "$INPUTS_REF" | grep -Eq '^[0-9a-f]{40}$'; then
-              SHA="$INPUTS_REF"
-            else
-              echo "Could not resolve $INPUTS_REF to a SHA" >&2
-              exit 1
-            fi
-          fi
+          # checkout already dereferenced whatever inputs.ref was (branch,
+          # lightweight tag, annotated tag, or SHA) into HEAD.
+          SHA=$(git rev-parse HEAD)
           echo "commit_sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "Resolved $INPUTS_REF -> $SHA"
 
