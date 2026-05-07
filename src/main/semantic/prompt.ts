@@ -2,20 +2,6 @@ import type { InteractionContext } from '../../shared/types'
 import type { Activity } from '../activity-types'
 import type { SemanticMode } from './types'
 
-function sanitizeUntrusted(value: string | undefined | null, maxLen: number): string {
-  let str = typeof value === 'string' ? value : ''
-  // Strip ASCII control chars (keep \t); flatten \n and \r to a single space
-  // eslint-disable-next-line no-control-regex
-  str = str.replace(/[\x00-\x08\x0B-\x1F\x7F]/g, '')
-  str = str.replace(/[\n\r]/g, ' ')
-  // Neutralise our delimiter closing tags by inserting a zero-width space
-  str = str.replace(/<\/(app|window_title|tld|user_context)>/gi, '<​/$1>')
-  if (str.length > maxLen) {
-    str = str.slice(0, maxLen) + '…'
-  }
-  return str
-}
-
 export function buildSemanticPrompt(
   activity: Activity,
   mode: SemanticMode,
@@ -56,18 +42,18 @@ export function buildSemanticPrompt(
 
   // Context
   prompt += '## Context\n'
-  prompt += `- App: <app>${sanitizeUntrusted(activity.context.appName, 256)}</app>\n`
+  prompt += `- App: ${activity.context.appName}\n`
   if (activity.context.windowTitle) {
-    prompt += `- Window: <window_title>${sanitizeUntrusted(activity.context.windowTitle, 256)}</window_title>\n`
+    prompt += `- Window: ${activity.context.windowTitle}\n`
   }
   if (activity.context.tld) {
-    prompt += `- TLD: <tld>${sanitizeUntrusted(activity.context.tld, 64)}</tld>\n`
+    prompt += `- TLD: ${activity.context.tld}\n`
   }
   prompt += `- Duration: ${durationStr}\n`
   prompt += `- Start: ${new Date(activity.startTimestamp).toISOString()}\n`
   prompt += `- End: ${new Date(activity.endTimestamp).toISOString()}\n`
   if (userContext) {
-    prompt += `- User: <user_context>${sanitizeUntrusted(userContext, 1024)}</user_context>\n`
+    prompt += `- User: ${userContext}\n`
   }
   prompt += `- ${sourceNote}\n\n`
 
