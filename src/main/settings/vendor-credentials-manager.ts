@@ -3,6 +3,7 @@ import * as path from 'path'
 import log from '../logger'
 import type { Vendor, VendorCredentials, VendorStatus } from '../../shared/types'
 import { VENDORS } from '../../shared/types'
+import { registrableDomain } from '../../shared/url-utils'
 
 interface SafeStorageLike {
   isEncryptionAvailable(): boolean
@@ -123,15 +124,21 @@ export class VendorCredentialsManager {
     if (!this.safeStorage.isEncryptionAvailable()) {
       throw new Error('Secure storage is not available on this system')
     }
+    // Validate baseURL before any persistence — it ends up in fetch() with the
+    // api key in Authorization, so an attacker-controlled URL is an exfil sink.
+    let validatedBaseURL: string | undefined
+    if (creds.baseURL !== undefined) {
+      validatedBaseURL = validateVendorBaseURL(creds.baseURL, vendor)
+    }
     const encrypted = this.safeStorage.encryptString(creds.apiKey).toString('base64')
     const existing = this.store.vendors[vendor] ?? {}
     const next: StoredVendorEntry = {
       ...existing,
       apiKey: encrypted,
     }
-    if (creds.baseURL !== undefined) {
-      if (creds.baseURL.length === 0) delete next.baseURL
-      else next.baseURL = creds.baseURL
+    if (validatedBaseURL !== undefined) {
+      if (validatedBaseURL.length === 0) delete next.baseURL
+      else next.baseURL = validatedBaseURL
     }
     // BYOK never carries Vertex managed-mode project/location.
     delete next.project
@@ -379,4 +386,66 @@ export class VendorCredentialsManager {
 function maskKey(key: string): string {
   if (key.length <= 12) return '****'
   return `${key.substring(0, 7)}...${key.substring(key.length - 4)}`
+}
+
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
+
+/**
+ * Native vendors with a known API host. A user-supplied `baseURL` for these
+ * vendors must share this registrable domain — otherwise the override would
+ * let the renderer redirect requests (carrying the api key in `Authorization`)
+ * to an attacker-controlled host. `openai-compatible` is intentionally
+ * absent: it exists to point at arbitrary local servers (Ollama, LM Studio,
+ * vLLM, custom proxies), so we don't pin a domain for it.
+ */
+const VENDOR_EXPECTED_DOMAIN: Partial<Record<Vendor, string>> = {
+  openrouter: 'openrouter.ai',
+  google: 'googleapis.com',
+}
+
+/**
+ * Validate a vendor `baseURL` value supplied by the renderer.
+ *
+ * The result is then forwarded to `fetch()` together with the api key, so an
+ * attacker-controlled URL would let the renderer exfiltrate the key to any
+ * host (SSRF / credential exfiltration). We accept:
+ *   - empty/whitespace input → '' (caller treats this as "use default")
+ *   - https:// URLs (constrained to the vendor's expected registrable domain
+ *     when one is pinned in `VENDOR_EXPECTED_DOMAIN`; arbitrary host otherwise)
+ *   - http:// URLs only when the host is a loopback address (Ollama-style local dev)
+ * and reject everything else (file:, ftp:, embedded credentials, etc.).
+ */
+export function validateVendorBaseURL(value: unknown, vendor?: Vendor): string {
+  if (value === undefined || value === null) return ''
+  if (typeof value !== 'string') {
+    throw new Error('Invalid baseURL: must be a string')
+  }
+  const trimmed = value.trim()
+  if (trimmed.length === 0) return ''
+  if (trimmed.length > 2048) {
+    throw new Error('Invalid baseURL: too long')
+  }
+  let url: URL
+  try {
+    url = new URL(trimmed)
+  } catch {
+    throw new Error('Invalid baseURL: not a valid URL')
+  }
+  if (url.username || url.password) {
+    throw new Error('Invalid baseURL: must not contain embedded credentials')
+  }
+  if (url.protocol === 'https:') {
+    const expected = vendor ? VENDOR_EXPECTED_DOMAIN[vendor] : undefined
+    if (expected && registrableDomain(url.hostname) !== expected) {
+      throw new Error(`Invalid baseURL: host must be on ${expected} for vendor ${vendor}`)
+    }
+    return trimmed
+  }
+  if (url.protocol === 'http:') {
+    if (LOOPBACK_HOSTS.has(url.hostname)) {
+      return trimmed
+    }
+    throw new Error('Invalid baseURL: http is only allowed for localhost')
+  }
+  throw new Error(`Invalid baseURL: unsupported scheme ${url.protocol}`)
 }

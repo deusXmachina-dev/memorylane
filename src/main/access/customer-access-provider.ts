@@ -1,6 +1,7 @@
 import { shell } from 'electron'
 import { MANAGED_KEY_CONFIG } from '../../shared/constants'
 import type { ConsentOutcome, PendingConsent, SubscriptionPlan } from '../../shared/types'
+import { isSameRegistrableDomain } from '../../shared/url-utils'
 import log from '../logger'
 import type { DeviceIdentity } from '../settings/device-identity'
 import { BaseAccessProvider } from './base-access-provider'
@@ -53,23 +54,66 @@ export class CustomerAccessProvider extends BaseAccessProvider {
     }
 
     const deviceId = this.deviceIdentity.getDeviceId()
-    const url = new URL('/subscription/checkout', MANAGED_KEY_CONFIG.BACKEND_URL)
-    url.searchParams.set('device_id', deviceId)
-    url.searchParams.set('plan', plan)
+    let signedUrl: string
+    try {
+      signedUrl = await this.fetchSignedLink('/v2/subscription/checkout-link', deviceId, { plan })
+    } catch (error) {
+      log.warn('[CustomerAccess] Failed to mint checkout link:', error)
+      this.applyTransition(
+        transitionCustomerAccess(this.accessState, {
+          type: 'poll_timed_out',
+          error: 'Could not start checkout. Please try again.',
+        }),
+      )
+      return
+    }
 
     this.applyTransition(transitionCustomerAccess(this.accessState, { type: 'checkout_started' }))
-    await shell.openExternal(url.toString())
+    await shell.openExternal(signedUrl)
     log.info('[CustomerAccess] Opened checkout in system browser, starting key polling')
     this.startPolling(deviceId)
   }
 
   public async openSubscriptionPortal(): Promise<void> {
     const deviceId = this.deviceIdentity.getDeviceId()
-    const url = new URL('/subscription/portal', MANAGED_KEY_CONFIG.BACKEND_URL)
-    url.searchParams.set('device_id', deviceId)
-
-    await shell.openExternal(url.toString())
+    const signedUrl = await this.fetchSignedLink('/v2/subscription/portal-link', deviceId)
+    await shell.openExternal(signedUrl)
     log.info('[CustomerAccess] Opened subscription portal in system browser')
+  }
+
+  /**
+   * Exchange the device_id (Bearer-authed) for a single-use signed URL the
+   * system browser can open. Keeps device_id out of URLs entirely — the
+   * returned URL carries a short-lived JWT instead.
+   */
+  private async fetchSignedLink(
+    path: '/v2/subscription/checkout-link' | '/v2/subscription/portal-link',
+    deviceId: string,
+    body?: Record<string, string>,
+  ): Promise<string> {
+    const endpoint = new URL(path, MANAGED_KEY_CONFIG.BACKEND_URL).toString()
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${deviceId}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body ?? {}),
+    })
+    if (!response.ok) {
+      throw new Error(`Backend returned ${response.status} for ${path}`)
+    }
+    const data = (await response.json()) as { url?: string }
+    if (typeof data.url !== 'string' || data.url.length === 0) {
+      throw new Error(`Backend response for ${path} missing url`)
+    }
+    // Defence-in-depth: if the backend is ever compromised it could return a
+    // phishing URL we'd then hand to `shell.openExternal`. Constrain the
+    // returned URL to the same registrable domain as our backend.
+    if (!isSameRegistrableDomain(data.url, MANAGED_KEY_CONFIG.BACKEND_URL)) {
+      throw new Error(`Backend returned URL outside backend domain for ${path}`)
+    }
+    return data.url
   }
 
   public async activateEnterpriseLicense(_activationCode: string): Promise<void> {
@@ -144,18 +188,26 @@ export class CustomerAccessProvider extends BaseAccessProvider {
   }
 
   private async fetchCustomerKey(deviceId: string): Promise<string | null> {
-    const url = new URL('/subscription/key', MANAGED_KEY_CONFIG.BACKEND_URL)
-    url.searchParams.set('device_id', deviceId)
+    const url = new URL('/v2/subscription/key', MANAGED_KEY_CONFIG.BACKEND_URL)
+    const deviceIdHint = `${deviceId.slice(0, 4)}…${deviceId.slice(-4)}`
 
-    const response = await fetch(url.toString())
+    const response = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${deviceId}` },
+    })
     if (!response.ok) {
-      if (response.status >= 500) {
-        log.warn(`[CustomerAccess] Customer key server error: ${response.status}`)
-      }
+      const bodyExcerpt = await response.text().catch(() => '')
+      log.warn(
+        `[CustomerAccess] /v2/subscription/key returned ${response.status} for device ${deviceIdHint}: ${bodyExcerpt.slice(0, 200)}`,
+      )
       return null
     }
 
     const data = (await response.json()) as { key?: string | null }
+    if (data.key == null) {
+      log.info(
+        `[CustomerAccess] /v2/subscription/key returned no key yet for device ${deviceIdHint}`,
+      )
+    }
     return data.key ?? null
   }
 

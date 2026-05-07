@@ -75,11 +75,20 @@ describe('CaptureSettingsManager', () => {
     })
 
     it('persists database export directory to disk', () => {
-      const manager = new CaptureSettingsManager(configPath)
-      manager.save({ databaseExportDirectory: '/tmp/memorylane-export' })
+      // Path must be inside one of the safe roots (home/documents/desktop/userData)
+      // so the path-traversal check accepts it. Use a real subdirectory of the
+      // tmp dir we already create under os.tmpdir() — but the path-traversal
+      // check rejects /tmp paths, so we use a directory inside the user's home.
+      const safeDir = fs.mkdtempSync(path.join(os.homedir(), 'ml-export-test-'))
+      try {
+        const manager = new CaptureSettingsManager(configPath)
+        manager.save({ databaseExportDirectory: safeDir })
 
-      const reloaded = new CaptureSettingsManager(configPath)
-      expect(reloaded.get().databaseExportDirectory).toBe('/tmp/memorylane-export')
+        const reloaded = new CaptureSettingsManager(configPath)
+        expect(reloaded.get().databaseExportDirectory).toBe(fs.realpathSync(safeDir))
+      } finally {
+        fs.rmSync(safeDir, { recursive: true, force: true })
+      }
     })
 
     it('merges partial saves with existing settings', () => {
@@ -176,6 +185,35 @@ describe('CaptureSettingsManager', () => {
     it('normalizes blank database export directories to disabled', () => {
       fs.writeFileSync(configPath, JSON.stringify({ databaseExportDirectory: '   ' }))
       const manager = new CaptureSettingsManager(configPath)
+      expect(manager.get().databaseExportDirectory).toBe('')
+    })
+
+    it('drops databaseExportDirectory outside the safe roots', () => {
+      const manager = new CaptureSettingsManager(configPath)
+      manager.save({ databaseExportDirectory: '/tmp/evil-export' })
+      expect(manager.get().databaseExportDirectory).toBe('')
+    })
+
+    it('drops databaseExportDirectory containing .. segments', () => {
+      const manager = new CaptureSettingsManager(configPath)
+      manager.save({ databaseExportDirectory: `${os.homedir()}/../etc/evil` })
+      expect(manager.get().databaseExportDirectory).toBe('')
+    })
+
+    it('drops databaseExportDirectory containing .. with backslash separators', () => {
+      // Windows treats both `/` and `\` as path separators. The previous
+      // implementation split on `path.sep` only, which on Windows is `\` and
+      // would miss `..` segments delimited by `/` (and on POSIX would miss
+      // `\..\`). Verify the validator now catches `..` regardless of which
+      // separator the input uses.
+      const manager = new CaptureSettingsManager(configPath)
+      manager.save({ databaseExportDirectory: `${os.homedir()}\\..\\etc\\evil` })
+      expect(manager.get().databaseExportDirectory).toBe('')
+    })
+
+    it('drops non-absolute databaseExportDirectory paths', () => {
+      const manager = new CaptureSettingsManager(configPath)
+      manager.save({ databaseExportDirectory: 'relative/path' })
       expect(manager.get().databaseExportDirectory).toBe('')
     })
 

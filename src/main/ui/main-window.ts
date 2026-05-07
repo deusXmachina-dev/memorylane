@@ -716,12 +716,20 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     (_event: IpcMainInvokeEvent, partial: Partial<CaptureSettings>) => {
       if (!deps) return { success: false, error: 'Dependencies not initialized' }
       const previous = deps.captureSettingsManager.get()
+      // databaseExportDirectory is renderer-untrusted (path-traversal sink).
+      // The only legitimate write path is `main-window:setDatabaseExportDirectory`,
+      // which runs realpath + safe-root containment. Drop it here regardless of
+      // value so a malicious renderer can't bypass that check.
+      const sanitized: Partial<CaptureSettings> = { ...partial }
+      if ('databaseExportDirectory' in sanitized) {
+        delete sanitized.databaseExportDirectory
+      }
       try {
         if (
-          partial.captureHotkeyAccelerator !== undefined &&
-          partial.captureHotkeyAccelerator !== previous.captureHotkeyAccelerator
+          sanitized.captureHotkeyAccelerator !== undefined &&
+          sanitized.captureHotkeyAccelerator !== previous.captureHotkeyAccelerator
         ) {
-          const hotkeyResult = deps.reconfigureCaptureHotkey(partial.captureHotkeyAccelerator)
+          const hotkeyResult = deps.reconfigureCaptureHotkey(sanitized.captureHotkeyAccelerator)
           if (!hotkeyResult.success) {
             return {
               success: false,
@@ -730,7 +738,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
           }
         }
 
-        deps.captureSettingsManager.save(partial)
+        deps.captureSettingsManager.save(sanitized)
         deps.captureSettingsManager.applyToConstants()
         const updated = deps.captureSettingsManager.get()
         syncAutoStartSetting(updated.autoStartEnabled)
@@ -753,11 +761,26 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         return { success: true }
       } catch (error) {
         if (
-          partial.captureHotkeyAccelerator !== undefined &&
-          partial.captureHotkeyAccelerator !== previous.captureHotkeyAccelerator
+          sanitized.captureHotkeyAccelerator !== undefined &&
+          sanitized.captureHotkeyAccelerator !== previous.captureHotkeyAccelerator
         ) {
           deps.reconfigureCaptureHotkey(previous.captureHotkeyAccelerator)
         }
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        return { success: false, error: message }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'main-window:setDatabaseExportDirectory',
+    (_event: IpcMainInvokeEvent, requestedPath: unknown) => {
+      if (!deps) return { success: false, error: 'Dependencies not initialized' }
+      try {
+        deps.captureSettingsManager.setDatabaseExportDirectory(requestedPath)
+        void deps.databaseExportSync.onSettingsChanged()
+        return { success: true }
+      } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'
         return { success: false, error: message }
       }
