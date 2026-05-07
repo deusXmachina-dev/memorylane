@@ -80,7 +80,11 @@ function validateExportDir(value: unknown): ExportDirResult {
   if (typeof value !== 'string') return { ok: false, reason: 'Path must be a string' }
   if (!/\S/.test(value)) return { ok: true, value: '' }
   if (!path.isAbsolute(value)) return { ok: false, reason: 'Path must be absolute' }
-  if (value.split(path.sep).includes('..')) return { ok: false, reason: 'Invalid path' }
+  // Split on both separators so a `..` segment is caught regardless of which
+  // slash the input uses. On POSIX `path.sep` is `/`; on Windows it's `\` but
+  // both `/` and `\` are valid separators, so a single-separator split would
+  // miss `C:/foo/../bar`.
+  if (value.split(/[\\/]/).includes('..')) return { ok: false, reason: 'Invalid path' }
   let resolved: string
   try {
     resolved = fs.realpathSync(value)

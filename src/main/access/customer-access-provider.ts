@@ -1,6 +1,7 @@
 import { shell } from 'electron'
 import { MANAGED_KEY_CONFIG } from '../../shared/constants'
 import type { ConsentOutcome, PendingConsent, SubscriptionPlan } from '../../shared/types'
+import { isSameRegistrableDomain } from '../../shared/url-utils'
 import log from '../logger'
 import type { DeviceIdentity } from '../settings/device-identity'
 import { BaseAccessProvider } from './base-access-provider'
@@ -105,6 +106,12 @@ export class CustomerAccessProvider extends BaseAccessProvider {
     const data = (await response.json()) as { url?: string }
     if (typeof data.url !== 'string' || data.url.length === 0) {
       throw new Error(`Backend response for ${path} missing url`)
+    }
+    // Defence-in-depth: if the backend is ever compromised it could return a
+    // phishing URL we'd then hand to `shell.openExternal`. Constrain the
+    // returned URL to the same registrable domain as our backend.
+    if (!isSameRegistrableDomain(data.url, MANAGED_KEY_CONFIG.BACKEND_URL)) {
+      throw new Error(`Backend returned URL outside backend domain for ${path}`)
     }
     return data.url
   }

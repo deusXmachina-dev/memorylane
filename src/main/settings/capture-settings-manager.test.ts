@@ -200,6 +200,17 @@ describe('CaptureSettingsManager', () => {
       expect(manager.get().databaseExportDirectory).toBe('')
     })
 
+    it('drops databaseExportDirectory containing .. with backslash separators', () => {
+      // Windows treats both `/` and `\` as path separators. The previous
+      // implementation split on `path.sep` only, which on Windows is `\` and
+      // would miss `..` segments delimited by `/` (and on POSIX would miss
+      // `\..\`). Verify the validator now catches `..` regardless of which
+      // separator the input uses.
+      const manager = new CaptureSettingsManager(configPath)
+      manager.save({ databaseExportDirectory: `${os.homedir()}\\..\\etc\\evil` })
+      expect(manager.get().databaseExportDirectory).toBe('')
+    })
+
     it('drops non-absolute databaseExportDirectory paths', () => {
       const manager = new CaptureSettingsManager(configPath)
       manager.save({ databaseExportDirectory: 'relative/path' })

@@ -313,6 +313,59 @@ describe('VendorCredentialsManager', () => {
       expect(() => validateVendorBaseURL(42 as unknown)).toThrow(/string/)
       expect(() => validateVendorBaseURL({} as unknown)).toThrow(/string/)
     })
+
+    describe('per-vendor domain enforcement', () => {
+      it('accepts openrouter baseURLs on openrouter.ai (any subdomain)', () => {
+        expect(validateVendorBaseURL('https://openrouter.ai/api/v1', 'openrouter')).toBe(
+          'https://openrouter.ai/api/v1',
+        )
+        expect(validateVendorBaseURL('https://api.openrouter.ai/v1', 'openrouter')).toBe(
+          'https://api.openrouter.ai/v1',
+        )
+      })
+
+      it('rejects openrouter baseURLs on a different domain', () => {
+        expect(() => validateVendorBaseURL('https://attacker.example/v1', 'openrouter')).toThrow(
+          /openrouter\.ai/,
+        )
+      })
+
+      it('accepts google baseURLs on googleapis.com', () => {
+        expect(
+          validateVendorBaseURL('https://generativelanguage.googleapis.com/v1beta', 'google'),
+        ).toBe('https://generativelanguage.googleapis.com/v1beta')
+      })
+
+      it('rejects google baseURLs on a different domain', () => {
+        expect(() => validateVendorBaseURL('https://attacker.example/', 'google')).toThrow(
+          /googleapis\.com/,
+        )
+      })
+
+      it('does not pin a domain for openai-compatible (arbitrary host allowed)', () => {
+        expect(validateVendorBaseURL('https://anything.example/v1', 'openai-compatible')).toBe(
+          'https://anything.example/v1',
+        )
+        expect(validateVendorBaseURL('http://localhost:11434/v1', 'openai-compatible')).toBe(
+          'http://localhost:11434/v1',
+        )
+      })
+    })
+  })
+
+  it('saveCredentials rejects an out-of-domain baseURL for pinned vendors', () => {
+    const m = new VendorCredentialsManager({
+      ...paths(),
+      safeStorage: makeSafeStorage(),
+      env: {},
+    })
+    expect(() =>
+      m.saveCredentials('openrouter', {
+        apiKey: 'sk-or-x',
+        baseURL: 'https://attacker.example/v1',
+      }),
+    ).toThrow(/openrouter\.ai/)
+    expect(m.getCredentials('openrouter')).toBeNull()
   })
 
   it('saveCredentials rejects an SSRF baseURL before persisting', () => {

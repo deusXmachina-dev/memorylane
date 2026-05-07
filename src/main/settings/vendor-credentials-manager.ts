@@ -3,6 +3,7 @@ import * as path from 'path'
 import log from '../logger'
 import type { Vendor, VendorCredentials, VendorStatus } from '../../shared/types'
 import { VENDORS } from '../../shared/types'
+import { registrableDomain } from '../../shared/url-utils'
 
 interface SafeStorageLike {
   isEncryptionAvailable(): boolean
@@ -127,7 +128,7 @@ export class VendorCredentialsManager {
     // api key in Authorization, so an attacker-controlled URL is an exfil sink.
     let validatedBaseURL: string | undefined
     if (creds.baseURL !== undefined) {
-      validatedBaseURL = validateVendorBaseURL(creds.baseURL)
+      validatedBaseURL = validateVendorBaseURL(creds.baseURL, vendor)
     }
     const encrypted = this.safeStorage.encryptString(creds.apiKey).toString('base64')
     const existing = this.store.vendors[vendor] ?? {}
@@ -390,17 +391,31 @@ function maskKey(key: string): string {
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
 
 /**
+ * Native vendors with a known API host. A user-supplied `baseURL` for these
+ * vendors must share this registrable domain — otherwise the override would
+ * let the renderer redirect requests (carrying the api key in `Authorization`)
+ * to an attacker-controlled host. `openai-compatible` is intentionally
+ * absent: it exists to point at arbitrary local servers (Ollama, LM Studio,
+ * vLLM, custom proxies), so we don't pin a domain for it.
+ */
+const VENDOR_EXPECTED_DOMAIN: Partial<Record<Vendor, string>> = {
+  openrouter: 'openrouter.ai',
+  google: 'googleapis.com',
+}
+
+/**
  * Validate a vendor `baseURL` value supplied by the renderer.
  *
  * The result is then forwarded to `fetch()` together with the api key, so an
  * attacker-controlled URL would let the renderer exfiltrate the key to any
  * host (SSRF / credential exfiltration). We accept:
  *   - empty/whitespace input → '' (caller treats this as "use default")
- *   - https:// URLs to any host
+ *   - https:// URLs (constrained to the vendor's expected registrable domain
+ *     when one is pinned in `VENDOR_EXPECTED_DOMAIN`; arbitrary host otherwise)
  *   - http:// URLs only when the host is a loopback address (Ollama-style local dev)
  * and reject everything else (file:, ftp:, embedded credentials, etc.).
  */
-export function validateVendorBaseURL(value: unknown): string {
+export function validateVendorBaseURL(value: unknown, vendor?: Vendor): string {
   if (value === undefined || value === null) return ''
   if (typeof value !== 'string') {
     throw new Error('Invalid baseURL: must be a string')
@@ -420,6 +435,10 @@ export function validateVendorBaseURL(value: unknown): string {
     throw new Error('Invalid baseURL: must not contain embedded credentials')
   }
   if (url.protocol === 'https:') {
+    const expected = vendor ? VENDOR_EXPECTED_DOMAIN[vendor] : undefined
+    if (expected && registrableDomain(url.hostname) !== expected) {
+      throw new Error(`Invalid baseURL: host must be on ${expected} for vendor ${vendor}`)
+    }
     return trimmed
   }
   if (url.protocol === 'http:') {

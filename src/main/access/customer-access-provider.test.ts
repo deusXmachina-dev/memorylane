@@ -41,6 +41,11 @@ function findCall(fetchMock: typeof fetch, urlPart: string): FetchCall {
   return call
 }
 
+// Signed URLs returned by the backend must share its registrable domain;
+// build them off BACKEND_URL so tests stay in sync if the host changes.
+const BACKEND_HOST = new URL(MANAGED_KEY_CONFIG.BACKEND_URL).hostname
+const inBackendDomain = (suffix: string): string => `https://${BACKEND_HOST}${suffix}`
+
 describe('CustomerAccessProvider', () => {
   const originalFetch = globalThis.fetch
   const deviceIdentity = {
@@ -59,7 +64,7 @@ describe('CustomerAccessProvider', () => {
 
   it('publishes managed key after checkout polling succeeds', async () => {
     globalThis.fetch = makeFetchMock([
-      jsonResponse({ url: 'https://backend.example/checkout?token=signed-jwt' }),
+      jsonResponse({ url: inBackendDomain('/checkout?token=signed-jwt') }),
       jsonResponse({ key: null }),
       jsonResponse({ key: 'sk-or-customer' }),
     ])
@@ -84,7 +89,7 @@ describe('CustomerAccessProvider', () => {
 
   it('sends device_id as a Bearer token (not in the URL) when fetching the customer key', async () => {
     const fetchMock = makeFetchMock([
-      jsonResponse({ url: 'https://backend.example/checkout?token=t' }),
+      jsonResponse({ url: inBackendDomain('/checkout?token=t') }),
       jsonResponse({ key: null }),
       jsonResponse({ key: 'sk-or-customer' }),
     ])
@@ -101,7 +106,7 @@ describe('CustomerAccessProvider', () => {
   })
 
   it('mints a signed checkout link via Bearer-authed POST and opens the returned URL', async () => {
-    const signedUrl = 'https://backend.example/checkout?token=signed-jwt'
+    const signedUrl = inBackendDomain('/checkout?token=signed-jwt')
     const fetchMock = makeFetchMock([jsonResponse({ url: signedUrl }), jsonResponse({ key: null })])
     globalThis.fetch = fetchMock
 
@@ -135,7 +140,7 @@ describe('CustomerAccessProvider', () => {
   })
 
   it('mints a signed portal link via Bearer-authed POST and opens the returned URL', async () => {
-    const signedUrl = 'https://backend.example/portal?token=signed-jwt'
+    const signedUrl = inBackendDomain('/portal?token=signed-jwt')
     const fetchMock = makeFetchMock([jsonResponse({ url: signedUrl })])
     globalThis.fetch = fetchMock
 
@@ -150,5 +155,32 @@ describe('CustomerAccessProvider', () => {
     expect(openExternalMock).toHaveBeenCalledWith(signedUrl)
     const openedUrl = openExternalMock.mock.calls[0]?.[0] as string
     expect(openedUrl).not.toContain('device_id=')
+  })
+
+  it('rejects checkout URLs outside the backend registrable domain', async () => {
+    globalThis.fetch = makeFetchMock([
+      jsonResponse({ url: 'https://attacker.example/phishing?token=x' }),
+    ])
+
+    const provider = new CustomerAccessProvider(deviceIdentity)
+    const updates: Array<{ status: string | null }> = []
+    provider.setUpdateCallback((state) => {
+      updates.push({ status: state.customerSubscriptionStatus })
+    })
+
+    await provider.startCheckout('explorer')
+
+    expect(openExternalMock).not.toHaveBeenCalled()
+    expect(updates.map((u) => u.status)).not.toContain('polling')
+  })
+
+  it('rejects portal URLs outside the backend registrable domain', async () => {
+    globalThis.fetch = makeFetchMock([
+      jsonResponse({ url: 'https://attacker.example/portal?token=x' }),
+    ])
+
+    const provider = new CustomerAccessProvider(deviceIdentity)
+    await expect(provider.openSubscriptionPortal()).rejects.toThrow(/outside backend domain/)
+    expect(openExternalMock).not.toHaveBeenCalled()
   })
 })
