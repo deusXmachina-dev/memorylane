@@ -1,21 +1,13 @@
-# MemoryLane v0.26.0
+# MemoryLane v0.26.1-beta.1
 
-Reworks the LLM client layer behind a single `InferenceProvider`, adds Google Vertex AI for enterprise, remembers model selections per vendor, and bakes per-customer backend URLs into enterprise builds at build time.
+Prerelease covering internal refactors to URL handling, settings validation, and the release workflow. No user-facing feature changes.
 
 ## What's Changed
 
-- **Google Vertex AI support (enterprise)** (#130): the enterprise edition can now route LLM calls through Vertex via the license-issued inference config.
-- **Per-vendor model memory** (#130): swapping vendors no longer resets your model picks — each vendor remembers its own snapshot, video, and pattern-detection model.
-- **Custom endpoint extended to pattern detection and user-context** (#130): an OpenAI-compatible local endpoint (LM Studio / Ollama) now drives all three LLM features, not just semantic summaries.
-- **Unified LLM client provisioning** (#130): internal refactor onto Vercel AI SDK via a shared `InferenceProvider`. Removes the legacy `api-key-manager` / `custom-endpoint-manager` split in favour of a single `vendor-credentials.json`; existing configs migrate automatically on first launch.
-- **`summary_model` activity column** (#130): each activity now records which model produced its summary.
-- **Enterprise: per-customer backend URL** (#134): build a per-customer binary with `MEMORYLANE_BACKEND_URL=...` baked in at build time. Replaces the earlier activation-code-embedded URL.
-- **Enterprise: detailed activity sync by default**: fresh enterprise installs default `uploadDetailLevel` to `detailed` so the backend receives the full feed without manual opt-in.
-- **Electron 40.1.0 → 40.9.2** (#131).
-
-## Fixes
-
-- User-context model now comes from per-vendor settings instead of the legacy global slot (#133).
+- Tightened how custom vendor `baseURL` values and backend-returned URLs are validated.
+- Stricter validation of the database export directory (must be absolute and inside an allowed location).
+- Customer checkout and subscription portal now open via short-lived signed URLs minted from the backend.
+- Release workflow resolves the input ref to an immutable commit SHA once and reuses it across every job; all GitHub Actions are pinned to commit SHAs and tracked by Dependabot.
 
 ## Known Issues & Limitations
 
@@ -32,4 +24,4 @@ Reworks the LLM client layer behind a single `InferenceProvider`, adds Google Ve
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v0.25.0...v0.26.0
+https://github.com/deusXmachina-dev/memorylane/compare/v0.26.0...v0.26.1-beta.1
