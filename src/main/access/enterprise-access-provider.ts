@@ -37,13 +37,19 @@ function normalizeConsentContentType(raw: string | undefined): AllowedConsentCon
     : null
 }
 
-interface ConsentDescriptorPayload {
-  url: string
-  version: number
-  sha256: string
-  title: string
-  content_type: string
-}
+type ConsentDescriptorPayload =
+  | {
+      state?: 'required'
+      url: string
+      version: number
+      sha256: string
+      title: string
+      content_type: string
+    }
+  | {
+      state: 'already_approved'
+      version: 0
+    }
 
 interface ActivateResponse {
   ok?: boolean
@@ -169,8 +175,19 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       throw new Error(errorMessage)
     }
 
-    const descriptor = (await descriptorResponse.json()) as Partial<ConsentDescriptorPayload>
+    const descriptor = (await descriptorResponse.json()) as
+      | (Partial<ConsentDescriptorPayload> & { state?: string })
+      | null
+
+    if (descriptor !== null && descriptor.state === 'already_approved') {
+      log.info('[EnterpriseAccess] Consent pre-approved by backend; skipping consent UI')
+      await this.bindWithExternalConsent(parsed.tenantToken, parsed.email)
+      return
+    }
+
     if (
+      descriptor === null ||
+      (descriptor.state !== undefined && descriptor.state !== 'required') ||
       typeof descriptor.url !== 'string' ||
       typeof descriptor.version !== 'number' ||
       typeof descriptor.sha256 !== 'string' ||
@@ -307,6 +324,48 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     this.applyTransition(
       transitionEnterpriseAccess(this.accessState, { type: 'consent_decision_accepted' }),
     )
+    this.startActivationPolling(deviceId)
+  }
+
+  private async bindWithExternalConsent(tenantToken: string, email: string): Promise<void> {
+    const deviceId = this.deviceIdentity.getDeviceId()
+    const response = await fetch(this.enterpriseUrl('api/license/activate'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...bearer(tenantToken),
+      },
+      body: JSON.stringify({
+        tenant_token: tenantToken,
+        device_id: deviceId,
+        email,
+        outcome: 'accepted',
+      }),
+    })
+
+    if (response.status === 502) {
+      log.warn(
+        '[EnterpriseAccess] External-consent bind reported downstream provisioning failure; polling',
+      )
+      this.startActivationPolling(deviceId)
+      return
+    }
+
+    if (!response.ok) {
+      const errorMessage = await this.readErrorMessage(
+        response,
+        'Activation failed during external-consent bind',
+      )
+      this.applyTransition(
+        transitionEnterpriseAccess(this.accessState, {
+          type: 'activation_failed',
+          error: errorMessage,
+        }),
+      )
+      throw new Error(errorMessage)
+    }
+
+    log.info('[EnterpriseAccess] External-consent bind succeeded; polling for activation state')
     this.startActivationPolling(deviceId)
   }
 
