@@ -37,18 +37,61 @@ function normalizeConsentContentType(raw: string | undefined): AllowedConsentCon
     : null
 }
 
-interface ConsentDescriptorPayload {
-  url: string
-  version: number
-  sha256: string
-  title: string
-  content_type: string
+type ParsedConsentDescriptor =
+  | { kind: 'already_approved' }
+  | {
+      kind: 'required'
+      url: string
+      version: number
+      sha256: string
+      title: string
+      contentType: AllowedConsentContentType
+    }
+
+function parseConsentDescriptor(raw: unknown): ParsedConsentDescriptor {
+  if (raw === null || typeof raw !== 'object') {
+    throw new Error('Consent descriptor is malformed.')
+  }
+  const obj = raw as Record<string, unknown>
+
+  if (obj.state === 'already_approved') {
+    return { kind: 'already_approved' }
+  }
+  if (obj.state !== undefined && obj.state !== 'required') {
+    throw new Error('Consent descriptor is malformed.')
+  }
+  if (
+    typeof obj.url !== 'string' ||
+    typeof obj.version !== 'number' ||
+    typeof obj.sha256 !== 'string' ||
+    typeof obj.title !== 'string'
+  ) {
+    throw new Error('Consent descriptor is malformed.')
+  }
+  const rawContentType = typeof obj.content_type === 'string' ? obj.content_type : undefined
+  const contentType = normalizeConsentContentType(rawContentType)
+  if (contentType === null) {
+    throw new Error(`Unsupported consent document type: ${rawContentType ?? 'unknown'}`)
+  }
+  return {
+    kind: 'required',
+    url: obj.url,
+    version: obj.version,
+    sha256: obj.sha256,
+    title: obj.title,
+    contentType,
+  }
 }
 
 interface ActivateResponse {
   ok?: boolean
   declined?: boolean
 }
+
+type ActivateResult =
+  | { status: 'ok'; data: ActivateResponse }
+  | { status: 'provisioning_pending'; message: string }
+  | { status: 'error'; message: string }
 
 function bearer(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}` }
@@ -169,14 +212,12 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       throw new Error(errorMessage)
     }
 
-    const descriptor = (await descriptorResponse.json()) as Partial<ConsentDescriptorPayload>
-    if (
-      typeof descriptor.url !== 'string' ||
-      typeof descriptor.version !== 'number' ||
-      typeof descriptor.sha256 !== 'string' ||
-      typeof descriptor.title !== 'string'
-    ) {
-      const errorMessage = 'Consent descriptor is malformed.'
+    let descriptor: ParsedConsentDescriptor
+    try {
+      descriptor = parseConsentDescriptor(await descriptorResponse.json())
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Consent descriptor is malformed.'
       this.applyTransition(
         transitionEnterpriseAccess(this.accessState, {
           type: 'activation_failed',
@@ -186,16 +227,10 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       throw new Error(errorMessage)
     }
 
-    const contentType = normalizeConsentContentType(descriptor.content_type)
-    if (contentType === null) {
-      const errorMessage = `Unsupported consent document type: ${descriptor.content_type ?? 'unknown'}`
-      this.applyTransition(
-        transitionEnterpriseAccess(this.accessState, {
-          type: 'activation_failed',
-          error: errorMessage,
-        }),
-      )
-      throw new Error(errorMessage)
+    if (descriptor.kind === 'already_approved') {
+      log.info('[EnterpriseAccess] Consent pre-approved by backend; skipping consent UI')
+      await this.bindWithExternalConsent(parsed.tenantToken, parsed.email)
+      return
     }
 
     let documentBytesBase64: string
@@ -222,7 +257,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       version: descriptor.version,
       sha256: descriptor.sha256,
       title: descriptor.title,
-      contentType,
+      contentType: descriptor.contentType,
       bytesBase64: documentBytesBase64,
     }
     log.info('[EnterpriseAccess] Consent required before activation can complete')
@@ -248,22 +283,19 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     }
 
     const deviceId = this.deviceIdentity.getDeviceId()
-    const response = await fetch(this.enterpriseUrl('api/license/activate'), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...bearer(pending.tenantToken),
-      },
-      body: JSON.stringify({
+    const result = await this.postActivate(
+      {
         tenant_token: pending.tenantToken,
         device_id: deviceId,
         email: pending.email,
         document_version: pending.version,
         outcome,
-      }),
-    })
+      },
+      pending.tenantToken,
+      'Consent request failed',
+    )
 
-    if (response.status === 502 && outcome === 'accepted') {
+    if (result.status === 'provisioning_pending' && outcome === 'accepted') {
       log.warn(
         '[EnterpriseAccess] Consent accepted but downstream key provisioning failed; polling',
       )
@@ -276,22 +308,19 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       return
     }
 
-    if (!response.ok) {
-      const errorMessage = await this.readErrorMessage(response, 'Consent request failed')
+    if (result.status !== 'ok') {
       this.clearConsentTimeout()
       this.pendingConsent = null
       this.applyTransition(
         transitionEnterpriseAccess(this.accessState, {
           type: 'activation_failed',
-          error: errorMessage,
+          error: result.message,
         }),
       )
-      throw new Error(errorMessage)
+      throw new Error(result.message)
     }
 
-    const data = (await response.json()) as ActivateResponse
-
-    if (outcome === 'declined' || data.declined === true) {
+    if (outcome === 'declined' || result.data.declined === true) {
       log.info('[EnterpriseAccess] User declined consent; resetting activation state')
       this.clearConsentTimeout()
       this.pendingConsent = null
@@ -308,6 +337,60 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       transitionEnterpriseAccess(this.accessState, { type: 'consent_decision_accepted' }),
     )
     this.startActivationPolling(deviceId)
+  }
+
+  private async bindWithExternalConsent(tenantToken: string, email: string): Promise<void> {
+    const deviceId = this.deviceIdentity.getDeviceId()
+    const result = await this.postActivate(
+      { tenant_token: tenantToken, device_id: deviceId, email, outcome: 'accepted' },
+      tenantToken,
+      'Activation failed during external-consent bind',
+    )
+
+    if (result.status === 'error') {
+      this.applyTransition(
+        transitionEnterpriseAccess(this.accessState, {
+          type: 'activation_failed',
+          error: result.message,
+        }),
+      )
+      throw new Error(result.message)
+    }
+
+    if (result.status === 'provisioning_pending') {
+      log.warn(
+        '[EnterpriseAccess] External-consent bind reported downstream provisioning failure; polling',
+      )
+    } else {
+      log.info('[EnterpriseAccess] External-consent bind succeeded; polling for activation state')
+    }
+    this.startActivationPolling(deviceId)
+  }
+
+  private async postActivate(
+    body: Record<string, unknown>,
+    tenantToken: string,
+    errorFallback: string,
+  ): Promise<ActivateResult> {
+    const response = await fetch(this.enterpriseUrl('api/license/activate'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...bearer(tenantToken),
+      },
+      body: JSON.stringify(body),
+    })
+
+    if (response.status === 502) {
+      return {
+        status: 'provisioning_pending',
+        message: await this.readErrorMessage(response, errorFallback),
+      }
+    }
+    if (!response.ok) {
+      return { status: 'error', message: await this.readErrorMessage(response, errorFallback) }
+    }
+    return { status: 'ok', data: (await response.json()) as ActivateResponse }
   }
 
   public async startCheckout(): Promise<void> {
