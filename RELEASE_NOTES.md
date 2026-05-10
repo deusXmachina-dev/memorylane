@@ -1,9 +1,10 @@
-# MemoryLane v0.26.1-beta.1
+# MemoryLane v0.26.1
 
-Prerelease covering internal refactors to URL handling, settings validation, and the release workflow. No user-facing feature changes.
+Internal hardening plus a smoother enterprise activation flow when the backend already has consent on file.
 
 ## What's Changed
 
+- Enterprise: skip the in-app consent dialog when the backend reports `already_approved`; the client binds via external consent and proceeds straight to polling.
 - Tightened how custom vendor `baseURL` values and backend-returned URLs are validated.
 - Stricter validation of the database export directory (must be absolute and inside an allowed location).
 - Customer checkout and subscription portal now open via short-lived signed URLs minted from the backend.
@@ -24,4 +25,4 @@ Prerelease covering internal refactors to URL handling, settings validation, and
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v0.26.0...v0.26.1-beta.1
+https://github.com/deusXmachina-dev/memorylane/compare/v0.26.0...v0.26.1
