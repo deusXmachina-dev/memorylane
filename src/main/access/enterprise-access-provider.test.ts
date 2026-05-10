@@ -222,6 +222,63 @@ describe('EnterpriseAccessProvider', () => {
     })
   })
 
+  it('treats 502 on external-consent bind as provisional success and starts polling', async () => {
+    const responses = [
+      // GET /license/consent-document -> already_approved sentinel
+      {
+        ok: true,
+        json: async () => ({ state: 'already_approved' }),
+      } as unknown as Response,
+      // POST /license/activate fails with 502
+      {
+        ok: false,
+        status: 502,
+        json: async () => ({ error: 'upstream' }),
+      } as unknown as Response,
+      // poll resolves anyway
+      { ok: true, json: async () => ({ activated: true }) } as unknown as Response,
+      {
+        ok: true,
+        json: async () => ({
+          provider: 'openrouter',
+          apiKey: 'sk-or-enterprise',
+          project: null,
+          location: null,
+          expiresAt: null,
+        }),
+      } as unknown as Response,
+    ]
+    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const updates: Array<{ status: string | null }> = []
+    provider.setUpdateCallback((state) => {
+      updates.push({ status: state.enterpriseActivationStatus })
+    })
+
+    await provider.activateEnterpriseLicense(ACTIVATION_CODE)
+    await vi.advanceTimersByTimeAsync(ENTERPRISE_BACKEND_CONFIG.POLL_INTERVAL_MS)
+
+    expect(updates.some((u) => u.status === 'awaiting_consent')).toBe(false)
+    expect(updates.at(-1)?.status).toBe('activated')
+  })
+
+  it('rejects descriptors with an unknown state value as malformed', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ state: 'pending_review' }),
+    })) as unknown as typeof fetch
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const updates: Array<{ status: string | null; error: string | null }> = []
+    provider.setUpdateCallback((state) => {
+      updates.push({ status: state.enterpriseActivationStatus, error: state.error })
+    })
+
+    await expect(provider.activateEnterpriseLicense(ACTIVATION_CODE)).rejects.toThrow(/malformed/i)
+    expect(updates.at(-1)?.status).toBe('error')
+  })
+
   it('activates and polls for the key after consent is accepted', async () => {
     const responses = [
       descriptorResponse(),
