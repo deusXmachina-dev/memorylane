@@ -55,23 +55,26 @@ export function FoundBlock({
         <p className="text-[11px] font-medium text-foreground">Found ({items.length})</p>
         <div className="flex items-center gap-3">
           {onAddAll && (
-            <button
+            <Button
               type="button"
+              variant="link"
+              size="xs"
               onClick={onAddAll}
               disabled={allAlreadyExcluded}
-              className="text-[11px] font-medium text-primary underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
             >
               Add all
-            </button>
+            </Button>
           )}
           {onDismiss && (
-            <button
+            <Button
               type="button"
+              variant="link"
+              size="xs"
               onClick={onDismiss}
-              className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              className="text-muted-foreground hover:text-foreground"
             >
               Dismiss
-            </button>
+            </Button>
           )}
         </div>
       </div>

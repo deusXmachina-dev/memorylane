@@ -305,6 +305,7 @@ export interface MainWindowAPI {
   // Database export
   exportDatabaseZip: () => Promise<DatabaseExportResult>
   syncDatabaseToRemote: () => Promise<{ success: boolean; error?: string }>
+  purgeDatabase: (confirmation: string) => Promise<{ success: boolean; error?: string }>
   // Updater
   getUpdateState: () => Promise<UpdateState>
   onUpdateStateChanged: (callback: (state: UpdateState) => void) => void

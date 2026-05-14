@@ -86,6 +86,112 @@ describe('StorageService', () => {
       expect(() => storage.close()).not.toThrow()
     })
 
+    describe('purge', () => {
+      it('removes all activities, vectors, FTS entries, patterns, sightings, and user context', () => {
+        storage = new StorageService(TEST_DB_PATH)
+        applyMigrations(storage.getDatabase())
+
+        storage.activities.add({
+          id: 'act-1',
+          startTimestamp: 1000,
+          endTimestamp: 2000,
+          appName: 'Editor',
+          windowTitle: 'main.ts',
+          tld: null,
+          summary: 'editing code',
+          summaryModel: '',
+          ocrText: 'function hello',
+          vector: v(0.1, 0.2, 0.3),
+        })
+        storage.patterns.addPattern({
+          id: 'pat-1',
+          name: 'Pattern A',
+          description: 'desc',
+          apps: ['Editor'],
+          automationIdea: 'auto',
+          createdAt: 1500,
+          rejectedAt: null,
+          promptCopiedAt: null,
+          approvedAt: null,
+          completedAt: null,
+        })
+        storage.patterns.addSighting({
+          id: 'sight-1',
+          patternId: 'pat-1',
+          detectedAt: 1600,
+          runId: 'run-1',
+          evidence: 'evidence',
+          activityIds: ['act-1'],
+          confidence: 0.9,
+          durationEstimateMin: 5,
+        })
+        storage.patterns.recordRun('run-1', 1)
+        storage.userContext.upsert('short summary', 'detailed summary')
+
+        expect(storage.activities.count()).toBe(1)
+        expect(storage.patterns.getAllPatterns().length).toBe(1)
+        expect(storage.patterns.getSightingsForPattern('pat-1').length).toBe(1)
+        expect(storage.patterns.getLastRunTimestamp()).not.toBeNull()
+        expect(storage.userContext.get()).not.toBeNull()
+
+        storage.purge()
+
+        expect(storage.activities.count()).toBe(0)
+        expect(storage.activities.searchFTS('hello').length).toBe(0)
+        expect(storage.activities.searchVectors(v(0.1, 0.2, 0.3)).length).toBe(0)
+        expect(storage.patterns.getAllPatterns().length).toBe(0)
+        expect(storage.patterns.getSightingsForPattern('pat-1').length).toBe(0)
+        expect(storage.patterns.getLastRunTimestamp()).toBeNull()
+        expect(storage.userContext.get()).toBeNull()
+      })
+
+      it('leaves the schema and migration history intact so the service stays usable', () => {
+        storage = new StorageService(TEST_DB_PATH)
+        applyMigrations(storage.getDatabase())
+        const migrationsBefore = getMigrationStatus(storage.getDatabase()).map((m) => m.name)
+
+        storage.activities.add({
+          id: 'act-pre',
+          startTimestamp: 1000,
+          endTimestamp: 2000,
+          appName: 'App',
+          windowTitle: 'Win',
+          tld: null,
+          summary: 'pre',
+          summaryModel: '',
+          ocrText: 'pre',
+          vector: v(0.5),
+        })
+
+        storage.purge()
+
+        const migrationsAfter = getMigrationStatus(storage.getDatabase()).map((m) => m.name)
+        expect(migrationsAfter).toEqual(migrationsBefore)
+
+        storage.activities.add({
+          id: 'act-post',
+          startTimestamp: 3000,
+          endTimestamp: 4000,
+          appName: 'App',
+          windowTitle: 'Win',
+          tld: null,
+          summary: 'post',
+          summaryModel: '',
+          ocrText: 'post',
+          vector: v(0.6),
+        })
+        expect(storage.activities.count()).toBe(1)
+        expect(storage.activities.searchFTS('post').length).toBe(1)
+      })
+
+      it('throws when the database is closed', () => {
+        storage = new StorageService(TEST_DB_PATH)
+        applyMigrations(storage.getDatabase())
+        storage.close()
+        expect(() => storage.purge()).toThrow(/closed/i)
+      })
+    })
+
     it('should create a readable backup while database is open', async () => {
       storage = new StorageService(TEST_DB_PATH)
       applyMigrations(storage.getDatabase())

@@ -288,6 +288,7 @@ app.on('ready', async () => {
     updateExclusions: (exclusions) => runtime?.updateExclusions(exclusions),
     databaseExportSync: rawDatabaseExportSync,
     databaseUploadSync: databaseUploadSync ?? undefined,
+    purgeAll: () => runtime?.purgeAll() ?? Promise.reject(new Error('Runtime not initialized')),
     observation,
   })
 

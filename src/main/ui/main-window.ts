@@ -17,6 +17,7 @@ import {
 import path from 'node:path'
 import { syncAutoStartSetting } from '../auto-start'
 import { DEFAULT_EDITION, type AppEditionConfig } from '../../shared/edition'
+import { PURGE_CONFIRMATION_PHRASE } from '../../shared/constants'
 import log from '../logger'
 import { updateTrayMenu } from './tray'
 import { exportDatabaseZip } from './database-export'
@@ -103,6 +104,7 @@ interface MainWindowDependencies {
   databaseUploadSync?: {
     triggerUpload: () => Promise<{ success: boolean; error?: string }>
   }
+  purgeAll: () => Promise<void>
   observation: {
     start: (durationMs: number) => ObservationState
     stop: (reason: 'user' | 'timer') => ObservationState
@@ -199,11 +201,14 @@ export function openMainWindow(): void {
   const appRoot = app.getAppPath()
 
   mainWindow = new BrowserWindow({
-    width: 800,
-    height: 720,
-    resizable: false,
+    width: 1200,
+    height: 800,
+    minWidth: 720,
+    minHeight: 560,
+    resizable: true,
     minimizable: true,
-    maximizable: false,
+    maximizable: true,
+    fullscreenable: true,
     title: 'MemoryLane',
     webPreferences: {
       preload: path.join(appRoot, 'out', 'preload', 'index.js'),
@@ -680,6 +685,26 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
     return deps.databaseUploadSync.triggerUpload()
   })
+
+  ipcMain.handle(
+    'main-window:purgeDatabase',
+    async (_event: IpcMainInvokeEvent, confirmation: unknown) => {
+      if (!deps) {
+        return { success: false, error: 'Dependencies not initialized' }
+      }
+      if (confirmation !== PURGE_CONFIRMATION_PHRASE) {
+        return { success: false, error: 'Confirmation phrase did not match' }
+      }
+      try {
+        await deps.purgeAll()
+        return { success: true }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to purge database'
+        log.error('[MainWindow] Purge failed:', error)
+        return { success: false, error: message }
+      }
+    },
+  )
 
   // Observation (build exclusion list from live activity)
   ipcMain.handle('main-window:startObservation', (_event, durationMs: number) => {

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { toast } from 'sonner'
+import { Cpu, Sparkles } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import {
   Select,
@@ -8,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@components/ui/select'
+import { Switch } from '@components/ui/switch'
 import type {
   CaptureSettings,
   MainWindowAPI,
@@ -18,12 +20,14 @@ import type {
 import { VENDORS } from '@types'
 import { VENDOR_PRESETS, getVendorDefaults } from '@/shared/vendor-defaults'
 import { ManageKeySection } from '../ManageKeySection'
-import { SectionToggle } from './SectionToggle'
-import { SubSectionToggle } from './SubSectionToggle'
-import { SliderRow } from './SliderRow'
 import { ModelSelector } from './ModelSelector'
+import { SegmentedControl } from './SegmentedControl'
+import { SettingsDisclosure } from './SettingsDisclosure'
+import { SettingsRow } from './SettingsRow'
+import { SettingsSection } from './SettingsSection'
+import { SliderRow } from './SliderRow'
 import type { NumericCaptureSetting } from './types'
-import { formatMinSec } from './utils'
+import { formatMinSec, formatMs } from './utils'
 
 const VENDOR_LABELS: Record<Vendor, string> = {
   openrouter: 'OpenRouter',
@@ -33,8 +37,6 @@ const VENDOR_LABELS: Record<Vendor, string> = {
 
 interface AiModelsSectionProps {
   api: MainWindowAPI
-  open: boolean
-  onToggle: () => void
   form: CaptureSettings
   isEnterprise: boolean
   credentialStatuses: Record<Vendor, VendorStatus> | null
@@ -48,12 +50,11 @@ interface AiModelsSectionProps {
     value: string,
   ) => void
   onPatternDetectionEnabledChange: (enabled: boolean) => void
+  onReset: () => void
 }
 
 export function AiModelsSection({
   api,
-  open,
-  onToggle,
   form,
   isEnterprise,
   credentialStatuses,
@@ -64,6 +65,7 @@ export function AiModelsSection({
   onSettingCommit,
   onModelChange,
   onPatternDetectionEnabledChange,
+  onReset,
 }: AiModelsSectionProps): React.JSX.Element {
   const activeVendor = form.activeVendor
   const activeStatus = credentialStatuses?.[activeVendor] ?? null
@@ -73,9 +75,7 @@ export function AiModelsSection({
   const vendorDefaults = getVendorDefaults(activeVendor)
   const videoSupported = vendorDefaults.semanticVideoModel.length > 0
   const visibleVendors = isEnterprise ? VENDORS : VENDORS.filter((v) => v !== 'google')
-  const [moreOpen, setMoreOpen] = useState(false)
 
-  // When the active vendor has no video model, lock the pipeline to 'image'.
   useEffect(() => {
     if (!videoSupported && form.semanticPipelineMode !== 'image') {
       onSemanticPipelineModeChange('image')
@@ -94,12 +94,13 @@ export function AiModelsSection({
   }
 
   return (
-    <section>
-      <SectionToggle label="AI Models" open={open} onToggle={onToggle} />
-      {open && (
-        <div className="mt-3 space-y-5">
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Active Vendor</p>
+    <div className="space-y-6">
+      <SettingsSection title="Vendor" icon={<Cpu className="h-4 w-4" />}>
+        <SettingsRow
+          layout="stacked"
+          label="Active vendor"
+          description="Each vendor remembers its own model selections."
+          control={
             <Select
               value={activeVendor}
               onValueChange={(v) => void handleVendorChange(v as Vendor)}
@@ -116,12 +117,10 @@ export function AiModelsSection({
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              Each vendor remembers its own model selections.
-            </p>
-          </div>
-
-          {activeStatus && (
+          }
+        />
+        {activeStatus && (
+          <div className="py-3 first:pt-0 last:pb-0">
             <ManageKeySection
               key={activeVendor}
               api={api}
@@ -129,127 +128,178 @@ export function AiModelsSection({
               status={activeStatus}
               onChanged={onCredentialsChanged}
             />
-          )}
+          </div>
+        )}
+      </SettingsSection>
 
-          {hasLlmAccess && (
-            <div>
-              <div className="space-y-2 mb-4">
-                <p className="text-xs font-medium text-muted-foreground">
-                  Automation Opportunities
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    variant={form.patternDetectionEnabled ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => onPatternDetectionEnabledChange(true)}
-                  >
-                    On
-                  </Button>
-                  <Button
-                    variant={!form.patternDetectionEnabled ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => onPatternDetectionEnabledChange(false)}
-                  >
-                    Off
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Analyzes your daily activity to find automatable workflows.
-                </p>
-              </div>
-              <SubSectionToggle
-                label="More"
-                open={moreOpen}
-                onToggle={() => setMoreOpen((v) => !v)}
+      {hasLlmAccess && (
+        <SettingsSection title="Intelligence" icon={<Sparkles className="h-4 w-4" />}>
+          <SettingsRow
+            label="Automation opportunities"
+            description="Analyzes your daily activity to find automatable workflows."
+            control={
+              <Switch
+                checked={form.patternDetectionEnabled}
+                onCheckedChange={onPatternDetectionEnabledChange}
+                aria-label="Automation opportunities"
               />
-              {moreOpen && (
-                <div className="mt-3 space-y-4">
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">
-                      Semantic Media Pipeline
-                    </p>
-                    <div className="grid grid-cols-3 gap-2">
-                      <Button
-                        variant={form.semanticPipelineMode === 'auto' ? 'default' : 'outline'}
-                        size="sm"
-                        disabled={!videoSupported}
-                        onClick={() => onSemanticPipelineModeChange('auto')}
-                      >
-                        Auto
-                      </Button>
-                      <Button
-                        variant={form.semanticPipelineMode === 'video' ? 'default' : 'outline'}
-                        size="sm"
-                        disabled={!videoSupported}
-                        onClick={() => onSemanticPipelineModeChange('video')}
-                      >
-                        Video only
-                      </Button>
-                      <Button
-                        variant={form.semanticPipelineMode === 'image' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => onSemanticPipelineModeChange('image')}
-                      >
-                        Image only
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {!videoSupported
-                        ? `${VENDOR_LABELS[activeVendor]} has no default video model — using image snapshots only.`
-                        : form.semanticPipelineMode === 'auto'
-                          ? 'Tries video first, then falls back to images when needed.'
-                          : form.semanticPipelineMode === 'video'
-                            ? 'Uses only the video pipeline and never falls back to images.'
-                            : 'Uses only image snapshots and skips video requests.'}
-                    </p>
-                    <SliderRow
-                      label="LLM request timeout"
-                      value={form.semanticRequestTimeoutMs}
-                      min={15_000}
-                      max={300_000}
-                      step={5_000}
-                      format={formatMinSec}
-                      onChange={(v) => onSettingChange('semanticRequestTimeoutMs', v)}
-                      onCommit={(v) => onSettingCommit('semanticRequestTimeoutMs', v)}
-                    />
-                  </div>
-                  <div className="space-y-3">
-                    <p className="text-xs font-medium text-muted-foreground">Model Selection</p>
-                    {form.semanticPipelineMode !== 'image' && (
-                      <ModelSelector
-                        mode={selectorMode}
-                        presets={VENDOR_PRESETS[activeVendor].semanticVideo}
-                        value={form.semanticVideoModel}
-                        defaultValue={vendorDefaults.semanticVideoModel}
-                        onChange={(v) => onModelChange('semanticVideoModel', v)}
-                        label="Video analysis model"
-                      />
-                    )}
-                    {form.semanticPipelineMode !== 'video' && (
-                      <ModelSelector
-                        mode={selectorMode}
-                        presets={VENDOR_PRESETS[activeVendor].semanticSnapshot}
-                        value={form.semanticSnapshotModel}
-                        defaultValue={vendorDefaults.semanticSnapshotModel}
-                        onChange={(v) => onModelChange('semanticSnapshotModel', v)}
-                        label="Snapshot analysis model"
-                      />
-                    )}
-                    <ModelSelector
-                      mode={selectorMode}
-                      presets={VENDOR_PRESETS[activeVendor].patternDetection}
-                      value={form.patternDetectionModel}
-                      defaultValue={vendorDefaults.patternDetectionModel}
-                      onChange={(v) => onModelChange('patternDetectionModel', v)}
-                      label="Automation opportunities model"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+            }
+          />
+          <div className="py-3 first:pt-0 last:pb-0">
+            <SettingsDisclosure label="Advanced options">
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Semantic media pipeline</p>
+                <SegmentedControl
+                  ariaLabel="Semantic media pipeline"
+                  value={form.semanticPipelineMode}
+                  onChange={onSemanticPipelineModeChange}
+                  options={[
+                    { value: 'auto', label: 'Auto', disabled: !videoSupported },
+                    { value: 'video', label: 'Video only', disabled: !videoSupported },
+                    { value: 'image', label: 'Image only' },
+                  ]}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {!videoSupported
+                    ? `${VENDOR_LABELS[activeVendor]} has no default video model — using image snapshots only.`
+                    : form.semanticPipelineMode === 'auto'
+                      ? 'Tries video first, then falls back to images when needed.'
+                      : form.semanticPipelineMode === 'video'
+                        ? 'Uses only the video pipeline and never falls back to images.'
+                        : 'Uses only image snapshots and skips video requests.'}
+                </p>
+                <SliderRow
+                  label="LLM request timeout"
+                  value={form.semanticRequestTimeoutMs}
+                  min={15_000}
+                  max={300_000}
+                  step={5_000}
+                  format={formatMinSec}
+                  onChange={(v) => onSettingChange('semanticRequestTimeoutMs', v)}
+                  onCommit={(v) => onSettingCommit('semanticRequestTimeoutMs', v)}
+                />
+              </div>
+              <div className="space-y-3">
+                <p className="text-xs font-medium text-muted-foreground">Model selection</p>
+                {form.semanticPipelineMode !== 'image' && (
+                  <ModelSelector
+                    mode={selectorMode}
+                    presets={VENDOR_PRESETS[activeVendor].semanticVideo}
+                    value={form.semanticVideoModel}
+                    defaultValue={vendorDefaults.semanticVideoModel}
+                    onChange={(v) => onModelChange('semanticVideoModel', v)}
+                    label="Video analysis model"
+                  />
+                )}
+                {form.semanticPipelineMode !== 'video' && (
+                  <ModelSelector
+                    mode={selectorMode}
+                    presets={VENDOR_PRESETS[activeVendor].semanticSnapshot}
+                    value={form.semanticSnapshotModel}
+                    defaultValue={vendorDefaults.semanticSnapshotModel}
+                    onChange={(v) => onModelChange('semanticSnapshotModel', v)}
+                    label="Snapshot analysis model"
+                  />
+                )}
+                <ModelSelector
+                  mode={selectorMode}
+                  presets={VENDOR_PRESETS[activeVendor].patternDetection}
+                  value={form.patternDetectionModel}
+                  defaultValue={vendorDefaults.patternDetectionModel}
+                  onChange={(v) => onModelChange('patternDetectionModel', v)}
+                  label="Automation opportunities model"
+                />
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Capture sensitivity</p>
+                <SliderRow
+                  label="Visual change sensitivity"
+                  value={form.visualThreshold}
+                  min={1}
+                  max={20}
+                  step={1}
+                  format={(v) =>
+                    `${v}% — ${v <= 5 ? 'more captures' : v >= 15 ? 'fewer captures' : 'balanced'}`
+                  }
+                  onChange={(v) => onSettingChange('visualThreshold', v)}
+                  onCommit={(v) => onSettingCommit('visualThreshold', v)}
+                />
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Interaction timeouts</p>
+                <SliderRow
+                  label="Typing debounce"
+                  value={form.typingDebounceMs}
+                  min={500}
+                  max={10_000}
+                  step={100}
+                  format={formatMs}
+                  onChange={(v) => onSettingChange('typingDebounceMs', v)}
+                  onCommit={(v) => onSettingCommit('typingDebounceMs', v)}
+                />
+                <SliderRow
+                  label="Scroll debounce"
+                  value={form.scrollDebounceMs}
+                  min={200}
+                  max={5_000}
+                  step={100}
+                  format={formatMs}
+                  onChange={(v) => onSettingChange('scrollDebounceMs', v)}
+                  onCommit={(v) => onSettingCommit('scrollDebounceMs', v)}
+                />
+                <SliderRow
+                  label="Click debounce"
+                  value={form.clickDebounceMs}
+                  min={500}
+                  max={10_000}
+                  step={100}
+                  format={formatMs}
+                  onChange={(v) => onSettingChange('clickDebounceMs', v)}
+                  onCommit={(v) => onSettingCommit('clickDebounceMs', v)}
+                />
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Activity windows</p>
+                <SliderRow
+                  label="Minimum activity duration"
+                  value={form.minActivityDurationMs}
+                  min={1_000}
+                  max={30_000}
+                  step={1_000}
+                  format={formatMs}
+                  onChange={(v) => onSettingChange('minActivityDurationMs', v)}
+                  onCommit={(v) => onSettingCommit('minActivityDurationMs', v)}
+                />
+                <SliderRow
+                  label="Maximum activity duration"
+                  value={form.maxActivityDurationMs}
+                  min={60_000}
+                  max={1_800_000}
+                  step={60_000}
+                  format={formatMs}
+                  onChange={(v) => onSettingChange('maxActivityDurationMs', v)}
+                  onCommit={(v) => onSettingCommit('maxActivityDurationMs', v)}
+                />
+                <SliderRow
+                  label="Max screenshots for LLM"
+                  value={form.maxScreenshotsForLlm}
+                  min={1}
+                  max={20}
+                  step={1}
+                  format={(v) => `${v}`}
+                  onChange={(v) => onSettingChange('maxScreenshotsForLlm', v)}
+                  onCommit={(v) => onSettingCommit('maxScreenshotsForLlm', v)}
+                />
+              </div>
+              <div className="flex justify-end">
+                <Button variant="ghost" size="sm" onClick={onReset}>
+                  Reset to defaults
+                </Button>
+              </div>
+            </SettingsDisclosure>
+          </div>
+        </SettingsSection>
       )}
-    </section>
+    </div>
   )
 }

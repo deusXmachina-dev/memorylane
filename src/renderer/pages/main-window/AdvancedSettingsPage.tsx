@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
+import { Button } from '@components/ui/button'
+import { Tabs, TabsList, TabsPanel, TabsTab } from '@components/ui/tabs'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import type { AppEditionConfig } from '@/shared/edition'
 import type { CaptureSettings, SemanticPipelineMode, Vendor, VendorStatus } from '@types'
 import { AiModelsSection } from './components/advanced-settings/AiModelsSection'
 import { CapturePrivacySection } from './components/advanced-settings/CapturePrivacySection'
-import { ConnectionsDataSection } from './components/advanced-settings/ConnectionsDataSection'
+import { DataTabPanel } from './components/advanced-settings/DataTabPanel'
+import { IntegrationsTabPanel } from './components/advanced-settings/IntegrationsTabPanel'
 import type { NumericCaptureSetting } from './components/advanced-settings/types'
 import { detectHotkeyPlatform, toRecordedAccelerator } from './hotkey-utils'
 
@@ -17,9 +20,6 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
   const [credentialStatuses, setCredentialStatuses] = useState<Record<Vendor, VendorStatus> | null>(
     null,
   )
-  const [aiModelsOpen, setAiModelsOpen] = useState(false)
-  const [capturePrivacyOpen, setCapturePrivacyOpen] = useState(false)
-  const [connectionsDataOpen, setConnectionsDataOpen] = useState(false)
   const [recordingHotkey, setRecordingHotkey] = useState(false)
 
   const load = useCallback(async () => {
@@ -246,69 +246,79 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
     }
   }, [api, load, recordingHotkey, setCaptureHotkeyAccelerator])
 
+  const showAiModels = editionConfig?.edition !== 'enterprise'
+
   return (
-    <div className="p-6 max-w-xl mx-auto space-y-4 overflow-y-auto max-h-screen">
-      <button
-        onClick={onBack}
-        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-      >
-        &larr; Back
-      </button>
+    <div className="h-screen overflow-y-auto">
+      <div className="p-6 max-w-3xl mx-auto space-y-4">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onBack}
+          className="-ml-2 text-xs text-muted-foreground hover:text-foreground"
+        >
+          &larr; Back
+        </Button>
 
-      {form && (
-        <>
-          <CapturePrivacySection
-            open={capturePrivacyOpen}
-            onToggle={() => setCapturePrivacyOpen((v) => !v)}
-            form={form}
-            hotkeyPlatform={hotkeyPlatform}
-            recordingHotkey={recordingHotkey}
-            onToggleRecordingHotkey={() => setRecordingHotkey((current) => !current)}
-            onAutoStartEnabledChange={setAutoStartEnabled}
-            onSettingChange={setNumericSetting}
-            onSettingCommit={commitNumericSetting}
-            onExcludePrivateBrowsingChange={commitExcludePrivateBrowsing}
-            onExcludedRulesCommit={commitExcludedRules}
-            onObserved={() => void load()}
-            onReset={() => void handleReset()}
-          />
+        <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
 
-          <div className="border-t border-border" />
+        {form && (
+          <Tabs defaultValue="privacy">
+            <TabsList>
+              <TabsTab value="privacy">Privacy</TabsTab>
+              <TabsTab value="data">Data</TabsTab>
+              {showAiModels && <TabsTab value="ai-models">AI models</TabsTab>}
+              <TabsTab value="integrations">Integrations</TabsTab>
+            </TabsList>
 
-          {editionConfig?.edition !== 'enterprise' && (
-            <>
-              <AiModelsSection
-                api={api}
-                open={aiModelsOpen}
-                onToggle={() => setAiModelsOpen((v) => !v)}
+            <TabsPanel value="privacy" className="pt-2">
+              <CapturePrivacySection
                 form={form}
-                isEnterprise={editionConfig?.edition === 'enterprise'}
-                credentialStatuses={credentialStatuses}
-                onCredentialsChanged={() => void refreshCredentials()}
-                onActiveVendorChanged={() => void refreshActiveVendor()}
-                onSemanticPipelineModeChange={setSemanticPipelineMode}
-                onSettingChange={setNumericSetting}
-                onSettingCommit={commitNumericSetting}
-                onModelChange={commitModelChange}
-                onPatternDetectionEnabledChange={setPatternDetectionEnabled}
+                hotkeyPlatform={hotkeyPlatform}
+                onToggleRecordingHotkey={() => setRecordingHotkey((current) => !current)}
+                onAutoStartEnabledChange={setAutoStartEnabled}
+                onExcludePrivateBrowsingChange={commitExcludePrivateBrowsing}
+                onExcludedRulesCommit={commitExcludedRules}
+                onObserved={() => void load()}
               />
+            </TabsPanel>
 
-              <div className="border-t border-border" />
-            </>
-          )}
+            <TabsPanel value="data" className="pt-2">
+              <DataTabPanel
+                api={api}
+                editionConfig={editionConfig}
+                databaseExportDirectory={form.databaseExportDirectory}
+                onDatabaseExportDirectoryChange={commitDatabaseExportDirectory}
+                uploadDetailLevel={form.uploadDetailLevel}
+                onUploadDetailLevelChange={setUploadDetailLevel}
+              />
+            </TabsPanel>
 
-          <ConnectionsDataSection
-            api={api}
-            editionConfig={editionConfig}
-            open={connectionsDataOpen}
-            onToggle={() => setConnectionsDataOpen((v) => !v)}
-            databaseExportDirectory={form.databaseExportDirectory}
-            onDatabaseExportDirectoryChange={commitDatabaseExportDirectory}
-            uploadDetailLevel={form.uploadDetailLevel}
-            onUploadDetailLevelChange={setUploadDetailLevel}
-          />
-        </>
-      )}
+            {showAiModels && (
+              <TabsPanel value="ai-models" className="pt-2">
+                <AiModelsSection
+                  api={api}
+                  form={form}
+                  isEnterprise={editionConfig?.edition === 'enterprise'}
+                  credentialStatuses={credentialStatuses}
+                  onCredentialsChanged={() => void refreshCredentials()}
+                  onActiveVendorChanged={() => void refreshActiveVendor()}
+                  onSemanticPipelineModeChange={setSemanticPipelineMode}
+                  onSettingChange={setNumericSetting}
+                  onSettingCommit={commitNumericSetting}
+                  onModelChange={commitModelChange}
+                  onPatternDetectionEnabledChange={setPatternDetectionEnabled}
+                  onReset={() => void handleReset()}
+                />
+              </TabsPanel>
+            )}
+
+            <TabsPanel value="integrations" className="pt-2">
+              <IntegrationsTabPanel api={api} />
+            </TabsPanel>
+          </Tabs>
+        )}
+      </div>
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Label } from '@components/ui/label'
+import { SegmentedControl } from './SegmentedControl'
 
 export interface ModelPreset {
   id: string
@@ -32,18 +32,13 @@ export function ModelSelector({
     return (
       <div className="space-y-1.5">
         <Label className="text-xs text-muted-foreground">{label}</Label>
-        <div className="flex flex-wrap gap-1.5">
-          {presets.map((preset) => (
-            <Button
-              key={preset.id}
-              variant={effectiveValue === preset.id ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => onChange(preset.id === defaultValue ? '' : preset.id)}
-            >
-              {preset.label}
-            </Button>
-          ))}
-        </div>
+        <SegmentedControl
+          ariaLabel={label}
+          layout="wrap"
+          value={effectiveValue}
+          onChange={(id) => onChange(id === defaultValue ? '' : id)}
+          options={presets.map((preset) => ({ value: preset.id, label: preset.label }))}
+        />
       </div>
     )
   }

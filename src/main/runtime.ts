@@ -41,6 +41,7 @@ export interface MainRuntime {
     urlPatterns: string[]
     excludePrivateBrowsing: boolean
   }): void
+  purgeAll(): Promise<void>
   dispose(): Promise<void>
 }
 
@@ -185,6 +186,51 @@ export async function createMainRuntime(params: {
     accessProvider,
     updateExclusions(exclusions): void {
       blacklistCoordinator.updateExclusions(exclusions)
+    },
+    async purgeAll(): Promise<void> {
+      const wasCapturing = capture.isCapturingNow()
+
+      // Stop accepting new work synchronously, then drain in-flight work.
+      // If quiescing fails the DB may still be receiving writes, so abort
+      // rather than racing storage.purge() against active writers.
+      capture.stopCapture()
+      try {
+        await capture.forceClose()
+        await capture.waitForIdle()
+      } catch (error) {
+        log.error('[Runtime] Failed to quiesce capture; aborting purge:', error)
+        if (wasCapturing) {
+          try {
+            capture.startCapture()
+          } catch (resumeError) {
+            log.warn('[Runtime] Failed to resume capture after aborted purge:', resumeError)
+          }
+        }
+        throw new Error('Failed to stop capture before purge')
+      }
+
+      storage.purge()
+
+      try {
+        if (fs.existsSync(outputDir)) {
+          for (const entry of fs.readdirSync(outputDir)) {
+            fs.rmSync(path.join(outputDir, entry), { recursive: true, force: true })
+          }
+        }
+        fs.mkdirSync(outputDir, { recursive: true })
+      } catch (error) {
+        log.warn('[Runtime] Failed to clear screenshots directory during purge:', error)
+      }
+
+      if (wasCapturing) {
+        try {
+          capture.startCapture()
+        } catch (error) {
+          log.warn('[Runtime] Failed to resume capture after purge:', error)
+        }
+      }
+
+      log.info('[Runtime] Purge complete')
     },
     async dispose(): Promise<void> {
       if (disposePromise) return disposePromise
