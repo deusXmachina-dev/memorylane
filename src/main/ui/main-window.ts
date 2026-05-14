@@ -103,6 +103,7 @@ interface MainWindowDependencies {
   databaseUploadSync?: {
     triggerUpload: () => Promise<{ success: boolean; error?: string }>
   }
+  purgeAll: () => Promise<void>
   observation: {
     start: (durationMs: number) => ObservationState
     stop: (reason: 'user' | 'timer') => ObservationState
@@ -683,6 +684,26 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
     return deps.databaseUploadSync.triggerUpload()
   })
+
+  ipcMain.handle(
+    'main-window:purgeDatabase',
+    async (_event: IpcMainInvokeEvent, confirmation: unknown) => {
+      if (!deps) {
+        return { success: false, error: 'Dependencies not initialized' }
+      }
+      if (confirmation !== 'delete-memorylane') {
+        return { success: false, error: 'Confirmation phrase did not match' }
+      }
+      try {
+        await deps.purgeAll()
+        return { success: true }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to purge database'
+        log.error('[MainWindow] Purge failed:', error)
+        return { success: false, error: message }
+      }
+    },
+  )
 
   // Observation (build exclusion list from live activity)
   ipcMain.handle('main-window:startObservation', (_event, durationMs: number) => {

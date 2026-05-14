@@ -1,14 +1,17 @@
 import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
-import { Database, Share2 } from 'lucide-react'
+import { AlertTriangle, Database, Share2 } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
+import { Label } from '@components/ui/label'
 import type { AppEditionConfig } from '@/shared/edition'
 import type { MainWindowAPI } from '@types'
 import { DatabaseExportSection } from '../DatabaseExportSection'
 import { DatabaseSyncSection } from '../DatabaseSyncSection'
 import { SettingsRow } from './SettingsRow'
 import { SettingsSection } from './SettingsSection'
+
+const PURGE_CONFIRMATION_PHRASE = 'delete-memorylane'
 
 interface DataTabPanelProps {
   api: MainWindowAPI
@@ -28,6 +31,9 @@ export function DataTabPanel({
   onUploadDetailLevelChange,
 }: DataTabPanelProps): React.JSX.Element {
   const [isChoosingDirectory, setIsChoosingDirectory] = useState(false)
+  const [isPurgeExpanded, setIsPurgeExpanded] = useState(false)
+  const [purgeConfirmation, setPurgeConfirmation] = useState('')
+  const [isPurging, setIsPurging] = useState(false)
 
   const handleChooseDirectory = useCallback(async () => {
     setIsChoosingDirectory(true)
@@ -51,7 +57,32 @@ export function DataTabPanel({
     }
   }, [api, databaseExportDirectory, onDatabaseExportDirectoryChange])
 
+  const resetPurgeState = useCallback(() => {
+    setIsPurgeExpanded(false)
+    setPurgeConfirmation('')
+  }, [])
+
+  const handlePurge = useCallback(async () => {
+    if (purgeConfirmation !== PURGE_CONFIRMATION_PHRASE) return
+    setIsPurging(true)
+    try {
+      const result = await api.purgeDatabase(purgeConfirmation)
+      if (result.success) {
+        toast.success('Database purged.')
+        resetPurgeState()
+      } else {
+        toast.error(result.error ?? 'Failed to purge database')
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to purge database'
+      toast.error(message)
+    } finally {
+      setIsPurging(false)
+    }
+  }, [api, purgeConfirmation, resetPurgeState])
+
   const isEnterprise = editionConfig?.edition === 'enterprise'
+  const canConfirmPurge = purgeConfirmation === PURGE_CONFIRMATION_PHRASE && !isPurging
 
   return (
     <div className="space-y-6">
@@ -149,6 +180,78 @@ export function DataTabPanel({
           )}
         </SettingsSection>
       )}
+
+      <section className="space-y-2">
+        <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-destructive">
+          <AlertTriangle className="h-4 w-4" />
+          Danger zone
+        </div>
+        <div className="rounded-md border border-destructive/40 p-3">
+          {!isPurgeExpanded ? (
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-0.5 min-w-0">
+                <p className="text-sm font-medium text-foreground">Purge database</p>
+                <p className="text-xs text-muted-foreground">
+                  Permanently delete all activities, patterns, embeddings, and screenshots. This
+                  cannot be undone.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={() => setIsPurgeExpanded(true)}
+              >
+                Purge database…
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="space-y-0.5">
+                <p className="text-sm font-medium text-foreground">Purge database</p>
+                <p className="text-xs text-muted-foreground">
+                  This will erase the entire MemoryLane database and all captured screenshots on
+                  this Mac. This action cannot be undone.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="purge-confirmation" className="text-xs text-foreground">
+                  Type <code className="font-mono">{PURGE_CONFIRMATION_PHRASE}</code> to confirm
+                </Label>
+                <Input
+                  id="purge-confirmation"
+                  value={purgeConfirmation}
+                  onChange={(event) => setPurgeConfirmation(event.target.value)}
+                  placeholder={PURGE_CONFIRMATION_PHRASE}
+                  autoComplete="off"
+                  autoFocus
+                  disabled={isPurging}
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={resetPurgeState}
+                  disabled={isPurging}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  disabled={!canConfirmPurge}
+                  onClick={() => void handlePurge()}
+                >
+                  {isPurging ? 'Purging…' : 'I understand, purge everything'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   )
 }

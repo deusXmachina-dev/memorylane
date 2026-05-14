@@ -145,4 +145,28 @@ export class StorageService {
       this.db = null
     }
   }
+
+  /**
+   * Permanently deletes all user data while preserving the schema and
+   * migration history. The database file, repository instances, and any
+   * cached references remain valid after this call.
+   */
+  public purge(): void {
+    if (!this.db) {
+      throw new Error('Database is closed')
+    }
+    const db = this.db
+    const purgeAll = db.transaction(() => {
+      db.exec('DELETE FROM activities_vec')
+      db.exec('DELETE FROM activities')
+      db.exec(`INSERT INTO activities_fts(activities_fts) VALUES('rebuild')`)
+      db.exec('DELETE FROM pattern_sightings')
+      db.exec('DELETE FROM patterns')
+      db.exec('DELETE FROM pattern_detection_runs')
+      db.exec('DELETE FROM user_context')
+    })
+    purgeAll()
+    db.exec('VACUUM')
+    log.info('Storage purged: all activities, patterns, and user context removed')
+  }
 }

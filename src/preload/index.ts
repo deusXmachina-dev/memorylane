@@ -76,6 +76,8 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   // Database export
   exportDatabaseZip: () => ipcRenderer.invoke('main-window:exportDatabaseZip'),
   syncDatabaseToRemote: () => ipcRenderer.invoke('main-window:syncDatabaseToRemote'),
+  purgeDatabase: (confirmation: string) =>
+    ipcRenderer.invoke('main-window:purgeDatabase', confirmation),
   // Shell
   openExternal: (url: string) => ipcRenderer.invoke('main-window:openExternal', url),
   // Observation (build exclusion list from live activity)

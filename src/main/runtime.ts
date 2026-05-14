@@ -41,6 +41,7 @@ export interface MainRuntime {
     urlPatterns: string[]
     excludePrivateBrowsing: boolean
   }): void
+  purgeAll(): Promise<void>
   dispose(): Promise<void>
 }
 
@@ -185,6 +186,39 @@ export async function createMainRuntime(params: {
     accessProvider,
     updateExclusions(exclusions): void {
       blacklistCoordinator.updateExclusions(exclusions)
+    },
+    async purgeAll(): Promise<void> {
+      const wasCapturing = capture.isCapturingNow()
+      try {
+        await capture.forceClose()
+        capture.stopCapture()
+        await capture.waitForIdle()
+      } catch (error) {
+        log.warn('[Runtime] Error while stopping capture before purge:', error)
+      }
+
+      storage.purge()
+
+      try {
+        if (fs.existsSync(outputDir)) {
+          for (const entry of fs.readdirSync(outputDir)) {
+            fs.rmSync(path.join(outputDir, entry), { recursive: true, force: true })
+          }
+        }
+        fs.mkdirSync(outputDir, { recursive: true })
+      } catch (error) {
+        log.warn('[Runtime] Failed to clear screenshots directory during purge:', error)
+      }
+
+      if (wasCapturing) {
+        try {
+          capture.startCapture()
+        } catch (error) {
+          log.warn('[Runtime] Failed to resume capture after purge:', error)
+        }
+      }
+
+      log.info('[Runtime] Purge complete')
     },
     async dispose(): Promise<void> {
       if (disposePromise) return disposePromise
