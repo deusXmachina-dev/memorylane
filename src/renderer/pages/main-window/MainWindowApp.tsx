@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Toaster } from '@components/ui/sonner'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { useLlmHealth } from '@/renderer/hooks/use-llm-health'
-import { Logo } from './components/Logo'
+import { TitleBar } from './components/TitleBar'
 import { EnterpriseActivationCard } from './components/EnterpriseActivationCard'
 import { PlanPicker } from './components/PlanPicker'
 import { CaptureControlSection } from './components/CaptureControlSection'
@@ -179,13 +179,16 @@ export function MainWindowApp(): React.JSX.Element {
 
   if (page === 'settings') {
     return (
-      <div className="h-screen overflow-hidden antialiased select-none">
-        <AdvancedSettingsPage
-          onBack={() => {
-            setPage('home')
-            void loadAll()
-          }}
-        />
+      <div className="flex flex-col h-screen overflow-hidden antialiased select-none">
+        <TitleBar />
+        <div className="flex-1 overflow-hidden">
+          <AdvancedSettingsPage
+            onBack={() => {
+              setPage('home')
+              void loadAll()
+            }}
+          />
+        </div>
         <Toaster />
       </div>
     )
@@ -193,9 +196,8 @@ export function MainWindowApp(): React.JSX.Element {
 
   return (
     <div className="min-h-screen antialiased select-none">
+      <TitleBar onSettingsClick={() => setPage('settings')} />
       <div className="p-6 max-w-xl mx-auto space-y-5">
-        <Logo onSettingsClick={() => setPage('settings')} />
-
         {!initialLoaded ? null : !isConfigured ? (
           isEnterprise ? (
             <EnterpriseActivationCard api={api} accessState={accessState} />

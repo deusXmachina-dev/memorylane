@@ -199,12 +199,22 @@ export function openMainWindow(): void {
   const appRoot = app.getAppPath()
 
   mainWindow = new BrowserWindow({
-    width: 800,
-    height: 720,
-    resizable: false,
+    width: 1200,
+    height: 800,
+    minWidth: 720,
+    minHeight: 560,
+    resizable: true,
     minimizable: true,
-    maximizable: false,
+    maximizable: true,
+    fullscreenable: true,
     title: 'MemoryLane',
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 14, y: 14 },
+    titleBarOverlay: {
+      color: '#00000000',
+      symbolColor: '#9ca3af',
+      height: 44,
+    },
     webPreferences: {
       preload: path.join(appRoot, 'out', 'preload', 'index.js'),
       contextIsolation: true,
