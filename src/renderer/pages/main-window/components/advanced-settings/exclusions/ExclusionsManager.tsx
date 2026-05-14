@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { HelpCircle } from 'lucide-react'
 import { Tabs, TabsList, TabsTab, TabsPanel } from '@components/ui/tabs'
 import type { ObservationState } from '@types'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
@@ -67,7 +68,6 @@ export function ExclusionsManager({
   const lastRun = observation?.lastRun
   const showFoundApps = lastRun !== undefined && lastRun.at > dismissedAppsAt
   const showFoundUrls = lastRun !== undefined && lastRun.at > dismissedUrlsAt
-  const showAnyFound = showFoundApps || showFoundUrls
 
   // Notify the page once per run so settings reload.
   const notifiedAtRef = useRef(0)
@@ -108,16 +108,30 @@ export function ExclusionsManager({
     return null
   }, [observation])
 
-  const showTip = observation?.phase !== 'running' && !showAnyFound
-
   if (layout === 'stacked') {
     return (
       <div className="space-y-5">
         <div className="flex items-start justify-between gap-2">
           <div className="space-y-0.5">
-            <p className="text-sm font-medium text-foreground">Blacklisted apps</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-medium text-foreground">Block apps & websites</p>
+              <span className="group relative inline-flex">
+                <HelpCircle
+                  className="size-3.5 cursor-help text-muted-foreground"
+                  aria-label="About privacy filtering"
+                />
+                <span
+                  role="tooltip"
+                  className="pointer-events-none absolute top-full left-0 z-10 mt-1 w-72 rounded-md border border-border bg-popover px-2.5 py-2 text-[11px] leading-snug text-popover-foreground opacity-0 shadow-md transition-opacity group-hover:opacity-100"
+                >
+                  Privacy filtering is best-effort. Because MemoryLane captures the whole screen, a
+                  blocked app or site may still appear in screenshots if it&apos;s visible in the
+                  background, during a window switch, or briefly during transitions.
+                </span>
+              </span>
+            </div>
             <p className="text-xs text-muted-foreground">
-              These apps are skipped entirely — never captured, never analysed.
+              Skip these entirely — never captured, never analysed.
             </p>
           </div>
           <ObserveButton
@@ -127,14 +141,11 @@ export function ExclusionsManager({
             onStop={handleStop}
           />
         </div>
-        {showTip && (
-          <p className="-mt-3 text-[11px] text-muted-foreground">
-            Tip: hit <span className="font-medium">Auto-fill from activity</span> and use the apps
-            and sites you want blocked. We&apos;ll list them here so you can pick what to block (no
-            screenshots taken).
-          </p>
-        )}
         {banner}
+
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium text-foreground">Blacklisted apps</p>
+        </div>
         <AppExclusionList
           excludedApps={excludedApps}
           onChange={onAppsChange}
@@ -171,13 +182,6 @@ export function ExclusionsManager({
             onStop={handleStop}
           />
         </div>
-        {showTip && (
-          <p className="mt-2 text-[11px] text-muted-foreground">
-            Tip: hit <span className="font-medium">Auto-fill from activity</span> and use the apps
-            and sites you want blocked. We&apos;ll list them here so you can pick what to block (no
-            screenshots taken).
-          </p>
-        )}
         {banner}
         <TabsPanel value="apps" className="pt-2" keepMounted>
           <AppExclusionList

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Plus, Search, type LucideIcon } from 'lucide-react'
+import { Plus, Search, X, type LucideIcon } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { ScrollArea } from '@components/ui/scroll-area'
@@ -137,8 +137,18 @@ export function ExclusionPicker({
             }
           }}
           placeholder={placeholder}
-          className="pl-7 text-xs"
+          className="pl-7 pr-7 text-xs"
         />
+        {query.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setQuery('')}
+            aria-label="Clear search"
+            className="absolute top-1/2 right-2 flex size-4 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground"
+          >
+            <X className="size-3.5" />
+          </button>
+        )}
       </div>
 
       <div className="rounded-lg border border-border">
