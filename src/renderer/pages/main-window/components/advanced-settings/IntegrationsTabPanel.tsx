@@ -7,8 +7,8 @@ interface IntegrationsTabPanelProps {
 
 export function IntegrationsTabPanel({ api }: IntegrationsTabPanelProps): React.JSX.Element {
   return (
-    <section>
+    <div className="space-y-6">
       <IntegrationsSection api={api} />
-    </section>
+    </div>
   )
 }

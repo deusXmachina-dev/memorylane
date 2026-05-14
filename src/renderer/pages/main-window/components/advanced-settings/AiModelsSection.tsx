@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { toast } from 'sonner'
+import { Cpu, Sparkles } from 'lucide-react'
 import { Button } from '@components/ui/button'
-import { Label } from '@components/ui/label'
 import {
   Select,
   SelectContent,
@@ -21,8 +21,10 @@ import { VENDORS } from '@types'
 import { VENDOR_PRESETS, getVendorDefaults } from '@/shared/vendor-defaults'
 import { ManageKeySection } from '../ManageKeySection'
 import { ModelSelector } from './ModelSelector'
+import { SettingsDisclosure } from './SettingsDisclosure'
+import { SettingsRow } from './SettingsRow'
+import { SettingsSection } from './SettingsSection'
 import { SliderRow } from './SliderRow'
-import { SubSectionToggle } from './SubSectionToggle'
 import type { NumericCaptureSetting } from './types'
 import { formatMinSec } from './utils'
 
@@ -70,7 +72,6 @@ export function AiModelsSection({
   const vendorDefaults = getVendorDefaults(activeVendor)
   const videoSupported = vendorDefaults.semanticVideoModel.length > 0
   const visibleVendors = isEnterprise ? VENDORS : VENDORS.filter((v) => v !== 'google')
-  const [moreOpen, setMoreOpen] = useState(false)
 
   useEffect(() => {
     if (!videoSupported && form.semanticPipelineMode !== 'image') {
@@ -90,60 +91,61 @@ export function AiModelsSection({
   }
 
   return (
-    <section className="space-y-5">
-      <div className="space-y-2">
-        <p className="text-xs font-medium text-muted-foreground">Active Vendor</p>
-        <Select value={activeVendor} onValueChange={(v) => void handleVendorChange(v as Vendor)}>
-          <SelectTrigger className="w-full">
-            <SelectValue>{(v) => VENDOR_LABELS[v as Vendor] ?? v}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {visibleVendors.map((v) => (
-              <SelectItem key={v} value={v}>
-                {VENDOR_LABELS[v]}
-                {credentialStatuses?.[v]?.hasKey ? ' — key set' : ''}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">
-          Each vendor remembers its own model selections.
-        </p>
-      </div>
-
-      {activeStatus && (
-        <ManageKeySection
-          key={activeVendor}
-          api={api}
-          vendor={activeVendor}
-          status={activeStatus}
-          onChanged={onCredentialsChanged}
+    <div className="space-y-6">
+      <SettingsSection title="Vendor" icon={<Cpu className="h-4 w-4" />}>
+        <SettingsRow
+          layout="stacked"
+          label="Active vendor"
+          description="Each vendor remembers its own model selections."
+          control={
+            <Select
+              value={activeVendor}
+              onValueChange={(v) => void handleVendorChange(v as Vendor)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue>{(v) => VENDOR_LABELS[v as Vendor] ?? v}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {visibleVendors.map((v) => (
+                  <SelectItem key={v} value={v}>
+                    {VENDOR_LABELS[v]}
+                    {credentialStatuses?.[v]?.hasKey ? ' — key set' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          }
         />
-      )}
-
-      {hasLlmAccess && (
-        <>
-          <div className="flex items-center justify-between gap-4">
-            <div className="space-y-0.5">
-              <Label className="text-sm font-medium text-foreground">
-                Automation opportunities
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Analyzes your daily activity to find automatable workflows.
-              </p>
-            </div>
-            <Switch
-              checked={form.patternDetectionEnabled}
-              onCheckedChange={onPatternDetectionEnabledChange}
-              aria-label="Automation opportunities"
+        {activeStatus && (
+          <div className="py-3 first:pt-0 last:pb-0">
+            <ManageKeySection
+              key={activeVendor}
+              api={api}
+              vendor={activeVendor}
+              status={activeStatus}
+              onChanged={onCredentialsChanged}
             />
           </div>
+        )}
+      </SettingsSection>
 
-          <SubSectionToggle label="More" open={moreOpen} onToggle={() => setMoreOpen((v) => !v)} />
-          {moreOpen && (
-            <div className="space-y-4">
+      {hasLlmAccess && (
+        <SettingsSection title="Intelligence" icon={<Sparkles className="h-4 w-4" />}>
+          <SettingsRow
+            label="Automation opportunities"
+            description="Analyzes your daily activity to find automatable workflows."
+            control={
+              <Switch
+                checked={form.patternDetectionEnabled}
+                onCheckedChange={onPatternDetectionEnabledChange}
+                aria-label="Automation opportunities"
+              />
+            }
+          />
+          <div className="py-3 first:pt-0 last:pb-0">
+            <SettingsDisclosure label="Advanced options">
               <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">Semantic Media Pipeline</p>
+                <p className="text-xs font-medium text-muted-foreground">Semantic media pipeline</p>
                 <div className="grid grid-cols-3 gap-2">
                   <Button
                     variant={form.semanticPipelineMode === 'auto' ? 'default' : 'outline'}
@@ -190,7 +192,7 @@ export function AiModelsSection({
                 />
               </div>
               <div className="space-y-3">
-                <p className="text-xs font-medium text-muted-foreground">Model Selection</p>
+                <p className="text-xs font-medium text-muted-foreground">Model selection</p>
                 {form.semanticPipelineMode !== 'image' && (
                   <ModelSelector
                     mode={selectorMode}
@@ -220,10 +222,10 @@ export function AiModelsSection({
                   label="Automation opportunities model"
                 />
               </div>
-            </div>
-          )}
-        </>
+            </SettingsDisclosure>
+          </div>
+        </SettingsSection>
       )}
-    </section>
+    </div>
   )
 }

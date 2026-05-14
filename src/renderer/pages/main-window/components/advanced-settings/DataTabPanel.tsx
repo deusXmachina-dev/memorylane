@@ -1,12 +1,14 @@
 import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
+import { Database, Share2 } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
-import { Label } from '@components/ui/label'
 import type { AppEditionConfig } from '@/shared/edition'
 import type { MainWindowAPI } from '@types'
 import { DatabaseExportSection } from '../DatabaseExportSection'
 import { DatabaseSyncSection } from '../DatabaseSyncSection'
+import { SettingsRow } from './SettingsRow'
+import { SettingsSection } from './SettingsSection'
 
 interface DataTabPanelProps {
   api: MainWindowAPI
@@ -52,91 +54,101 @@ export function DataTabPanel({
   const isEnterprise = editionConfig?.edition === 'enterprise'
 
   return (
-    <section className="space-y-5">
-      <div className="space-y-2">
-        <Label className="text-xs text-muted-foreground">Manual Export</Label>
-        <div className="flex gap-2">
-          <DatabaseExportSection api={api} />
-        </div>
-      </div>
+    <div className="space-y-6">
+      <SettingsSection title="Export" icon={<Database className="h-4 w-4" />}>
+        <SettingsRow
+          label="Manual export"
+          description="Download a ZIP of the full database."
+          control={<DatabaseExportSection api={api} />}
+        />
+        <SettingsRow
+          layout="stacked"
+          label="Folder for periodic export"
+          description={
+            databaseExportDirectory
+              ? 'The raw database is mirrored to this folder on a schedule.'
+              : 'Choose a folder to mirror the raw database to on a schedule.'
+          }
+          control={
+            <div className="flex items-center gap-2">
+              <Input
+                value={databaseExportDirectory}
+                readOnly
+                placeholder="Not configured"
+                aria-label="Raw DB export folder"
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleChooseDirectory()}
+                disabled={isChoosingDirectory}
+              >
+                {isChoosingDirectory
+                  ? 'Choosing...'
+                  : databaseExportDirectory
+                    ? 'Change'
+                    : 'Choose'}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!databaseExportDirectory}
+                onClick={() => onDatabaseExportDirectoryChange('')}
+              >
+                Clear
+              </Button>
+            </div>
+          }
+        />
+      </SettingsSection>
 
       {isEnterprise && (
-        <>
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Share with remote</p>
-            <div className="grid grid-cols-3 gap-2">
-              <Button
-                variant={uploadDetailLevel === 'off' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => onUploadDetailLevelChange('off')}
-              >
-                Off
-              </Button>
-              <Button
-                variant={uploadDetailLevel === 'summary' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => onUploadDetailLevelChange('summary')}
-              >
-                Summary
-              </Button>
-              <Button
-                variant={uploadDetailLevel === 'detailed' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => onUploadDetailLevelChange('detailed')}
-              >
-                Detailed
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Off disables sharing. Summary strips OCR text and full-text search index. Both Summary
-              and Detailed strip personal context; pattern detection runs locally either way.
-            </p>
-          </div>
-
+        <SettingsSection
+          title="Share with remote"
+          icon={<Share2 className="h-4 w-4" />}
+          description="Off disables sharing. Summary strips OCR text and full-text search index. Both Summary and Detailed strip personal context; pattern detection runs locally either way."
+        >
+          <SettingsRow
+            layout="stacked"
+            label="Detail level"
+            control={
+              <div className="grid grid-cols-3 gap-2">
+                <Button
+                  variant={uploadDetailLevel === 'off' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => onUploadDetailLevelChange('off')}
+                >
+                  Off
+                </Button>
+                <Button
+                  variant={uploadDetailLevel === 'summary' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => onUploadDetailLevelChange('summary')}
+                >
+                  Summary
+                </Button>
+                <Button
+                  variant={uploadDetailLevel === 'detailed' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => onUploadDetailLevelChange('detailed')}
+                >
+                  Detailed
+                </Button>
+              </div>
+            }
+          />
           {uploadDetailLevel !== 'off' && (
-            <div className="space-y-2">
-              <DatabaseSyncSection api={api} />
-            </div>
+            <SettingsRow
+              label="Sync now"
+              description="Push the current database to remote."
+              control={<DatabaseSyncSection api={api} />}
+            />
           )}
-        </>
+        </SettingsSection>
       )}
-
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-3">
-          <Label className="text-xs text-muted-foreground">Folder for periodic export</Label>
-          <div className="flex shrink-0 gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void handleChooseDirectory()}
-              disabled={isChoosingDirectory}
-            >
-              {isChoosingDirectory
-                ? 'Choosing...'
-                : databaseExportDirectory
-                  ? 'Change Folder'
-                  : 'Choose Folder'}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!databaseExportDirectory}
-              onClick={() => onDatabaseExportDirectoryChange('')}
-            >
-              Clear
-            </Button>
-          </div>
-        </div>
-
-        <Input
-          value={databaseExportDirectory}
-          readOnly
-          placeholder="Not configured"
-          aria-label="Raw DB export folder"
-        />
-      </div>
-    </section>
+    </div>
   )
 }

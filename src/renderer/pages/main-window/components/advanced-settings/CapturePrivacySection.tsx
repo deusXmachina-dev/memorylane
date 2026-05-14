@@ -1,9 +1,9 @@
 import { ShieldCheck } from 'lucide-react'
-import { Card, CardContent } from '@components/ui/card'
-import { Label } from '@components/ui/label'
 import { Switch } from '@components/ui/switch'
 import type { CaptureSettings } from '@types'
 import { ExclusionsManager } from './exclusions/ExclusionsManager'
+import { SettingsRow } from './SettingsRow'
+import { SettingsSection } from './SettingsSection'
 
 interface CapturePrivacySectionProps {
   form: CaptureSettings
@@ -41,14 +41,9 @@ export function CapturePrivacySection({
   }
 
   return (
-    <section className="space-y-4">
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        <ShieldCheck className="h-4 w-4" />
-        Privacy rules
-      </div>
-
-      <Card>
-        <CardContent className="space-y-5">
+    <div className="space-y-6">
+      <SettingsSection title="Privacy rules" icon={<ShieldCheck className="h-4 w-4" />}>
+        <div className="py-3 first:pt-0 last:pb-0">
           <ExclusionsManager
             layout="stacked"
             excludedApps={form.excludedApps}
@@ -57,42 +52,32 @@ export function CapturePrivacySection({
             onUrlsChange={commitUrlsChange}
             onObserved={onObserved}
           />
+        </div>
 
-          <div className="border-t border-border" />
-
-          <div className="flex items-center justify-between gap-4">
-            <div className="space-y-0.5">
-              <Label className="text-sm font-medium text-foreground">
-                Exclude private / incognito browsing
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Any private browser window is skipped automatically.
-              </p>
-            </div>
+        <SettingsRow
+          label="Exclude private / incognito browsing"
+          description="Any private browser window is skipped automatically."
+          control={
             <Switch
               checked={form.excludePrivateBrowsing}
               onCheckedChange={onExcludePrivateBrowsingChange}
               aria-label="Exclude private browsing"
             />
-          </div>
+          }
+        />
 
-          <div className="border-t border-border" />
-
-          <div className="flex items-center justify-between gap-4">
-            <div className="space-y-0.5">
-              <Label className="text-sm font-medium text-foreground">Launch at login</Label>
-              <p className="text-xs text-muted-foreground">
-                Start MemoryLane quietly when your Mac boots.
-              </p>
-            </div>
+        <SettingsRow
+          label="Launch at login"
+          description="Start MemoryLane quietly when your Mac boots."
+          control={
             <Switch
               checked={form.autoStartEnabled}
               onCheckedChange={onAutoStartEnabledChange}
               aria-label="Launch at login"
             />
-          </div>
-        </CardContent>
-      </Card>
-    </section>
+          }
+        />
+      </SettingsSection>
+    </div>
   )
 }

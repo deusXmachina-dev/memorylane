@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { Check, Plug, RefreshCw } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import { Label } from '@components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@components/ui/card'
+import { SettingsSection } from '../components/advanced-settings/SettingsSection'
 import type { MainWindowAPI, McpRegistrationStatus } from '@types'
 
 interface IntegrationsSectionProps {
@@ -59,14 +59,12 @@ export function IntegrationsSection({ api }: IntegrationsSectionProps): React.JS
   )
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Integrations</CardTitle>
-        <CardDescription className="text-xs">
-          Register MemoryLane as an MCP server for AI assistants.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex gap-2">
+    <SettingsSection
+      title="Integrations"
+      icon={<Plug className="h-4 w-4" />}
+      description="Register MemoryLane as an MCP server for AI assistants."
+    >
+      <div className="flex gap-2 py-3 first:pt-0 last:pb-0">
         {PROVIDERS.map((provider) => {
           const entryStatus = status?.[provider.name] ?? 'not-registered'
           const isStale = entryStatus === 'stale'
@@ -110,7 +108,7 @@ export function IntegrationsSection({ api }: IntegrationsSectionProps): React.JS
             </div>
           )
         })}
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsSection>
   )
 }
