@@ -150,23 +150,63 @@ export class StorageService {
    * Permanently deletes all user data while preserving the schema and
    * migration history. The database file, repository instances, and any
    * cached references remain valid after this call.
+   *
+   * Table discovery is dynamic so that any future migration which adds
+   * a user-data table is purged automatically.
    */
   public purge(): void {
     if (!this.db) {
       throw new Error('Database is closed')
     }
     const db = this.db
+
+    type TableRow = { name: string; sql: string | null }
+    const rows = db
+      .prepare(
+        `SELECT name, sql FROM sqlite_master
+         WHERE type = 'table'
+           AND name NOT LIKE 'sqlite_%'
+           AND name != 'schema_migrations'
+           AND sql IS NOT NULL`,
+      )
+      .all() as TableRow[]
+
+    // First pass: discover virtual tables so we can exclude their
+    // shadow/companion tables (FTS5 -> *_data/_idx/_content/_docsize/_config,
+    // vec0 -> *_chunks/_rowids/_vector_chunks*, etc.).
+    const ftsTables: string[] = []
+    const otherVirtualTables: string[] = []
+    for (const row of rows) {
+      const sql = row.sql ?? ''
+      if (!/CREATE\s+VIRTUAL\s+TABLE/i.test(sql)) continue
+      if (/USING\s+fts5/i.test(sql)) ftsTables.push(row.name)
+      else otherVirtualTables.push(row.name)
+    }
+    const virtualPrefixes = [...ftsTables, ...otherVirtualTables].map((n) => `${n}_`)
+
+    const regularTables: string[] = []
+    for (const row of rows) {
+      const sql = row.sql ?? ''
+      if (/CREATE\s+VIRTUAL\s+TABLE/i.test(sql)) continue
+      if (virtualPrefixes.some((p) => row.name.startsWith(p))) continue
+      regularTables.push(row.name)
+    }
+
     const purgeAll = db.transaction(() => {
-      db.exec('DELETE FROM activities_vec')
-      db.exec('DELETE FROM activities')
-      db.exec(`INSERT INTO activities_fts(activities_fts) VALUES('rebuild')`)
-      db.exec('DELETE FROM pattern_sightings')
-      db.exec('DELETE FROM patterns')
-      db.exec('DELETE FROM pattern_detection_runs')
-      db.exec('DELETE FROM user_context')
+      // Defer FK checks so deletion order across parent/child tables
+      // doesn't matter — at commit time every table is empty.
+      db.exec('PRAGMA defer_foreign_keys = ON')
+      for (const t of otherVirtualTables) db.exec(`DELETE FROM "${t}"`)
+      for (const t of regularTables) db.exec(`DELETE FROM "${t}"`)
+      // FTS5 virtual tables don't accept DELETE; rebuild from the
+      // (now-empty) content table instead.
+      for (const t of ftsTables) db.exec(`INSERT INTO "${t}"("${t}") VALUES('rebuild')`)
     })
     purgeAll()
     db.exec('VACUUM')
-    log.info('Storage purged: all activities, patterns, and user context removed')
+    log.info(
+      `Storage purged: ${regularTables.length} table(s), ` +
+        `${ftsTables.length} FTS index(es), ${otherVirtualTables.length} vec table(s)`,
+    )
   }
 }

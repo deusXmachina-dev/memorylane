@@ -91,6 +91,10 @@ export const MANAGED_KEY_CONFIG = {
 
 declare const __MEMORYLANE_BACKEND_URL__: string
 
+// Confirmation phrase required to purge all local data.
+// Shared between the main IPC handler and the renderer confirmation UI.
+export const PURGE_CONFIRMATION_PHRASE = 'delete-memorylane'
+
 export const ENTERPRISE_BACKEND_CONFIG = {
   BACKEND_URL: __MEMORYLANE_BACKEND_URL__,
   POLL_INTERVAL_MS: 2_000,

@@ -17,6 +17,7 @@ import {
 import path from 'node:path'
 import { syncAutoStartSetting } from '../auto-start'
 import { DEFAULT_EDITION, type AppEditionConfig } from '../../shared/edition'
+import { PURGE_CONFIRMATION_PHRASE } from '../../shared/constants'
 import log from '../logger'
 import { updateTrayMenu } from './tray'
 import { exportDatabaseZip } from './database-export'
@@ -691,7 +692,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       if (!deps) {
         return { success: false, error: 'Dependencies not initialized' }
       }
-      if (confirmation !== 'delete-memorylane') {
+      if (confirmation !== PURGE_CONFIRMATION_PHRASE) {
         return { success: false, error: 'Confirmation phrase did not match' }
       }
       try {

@@ -189,12 +189,24 @@ export async function createMainRuntime(params: {
     },
     async purgeAll(): Promise<void> {
       const wasCapturing = capture.isCapturingNow()
+
+      // Stop accepting new work synchronously, then drain in-flight work.
+      // If quiescing fails the DB may still be receiving writes, so abort
+      // rather than racing storage.purge() against active writers.
+      capture.stopCapture()
       try {
         await capture.forceClose()
-        capture.stopCapture()
         await capture.waitForIdle()
       } catch (error) {
-        log.warn('[Runtime] Error while stopping capture before purge:', error)
+        log.error('[Runtime] Failed to quiesce capture; aborting purge:', error)
+        if (wasCapturing) {
+          try {
+            capture.startCapture()
+          } catch (resumeError) {
+            log.warn('[Runtime] Failed to resume capture after aborted purge:', resumeError)
+          }
+        }
+        throw new Error('Failed to stop capture before purge')
       }
 
       storage.purge()

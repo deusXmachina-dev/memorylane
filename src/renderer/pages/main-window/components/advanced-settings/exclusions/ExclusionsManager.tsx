@@ -115,14 +115,19 @@ export function ExclusionsManager({
           <div className="space-y-0.5">
             <div className="flex items-center gap-1.5">
               <p className="text-sm font-medium text-foreground">Block apps & websites</p>
-              <span className="group relative inline-flex">
+              <span
+                tabIndex={0}
+                role="button"
+                aria-label="About privacy filtering"
+                className="group relative inline-flex rounded outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
                 <HelpCircle
+                  aria-hidden="true"
                   className="size-3.5 cursor-help text-muted-foreground"
-                  aria-label="About privacy filtering"
                 />
                 <span
                   role="tooltip"
-                  className="pointer-events-none absolute top-full left-0 z-10 mt-1 w-72 rounded-md border border-border bg-popover px-2.5 py-2 text-[11px] leading-snug text-popover-foreground opacity-0 shadow-md transition-opacity group-hover:opacity-100"
+                  className="pointer-events-none absolute top-full left-0 z-10 mt-1 w-72 rounded-md border border-border bg-popover px-2.5 py-2 text-[11px] leading-snug text-popover-foreground opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                 >
                   Privacy filtering is best-effort. Because MemoryLane captures the whole screen, a
                   blocked app or site may still appear in screenshots if it&apos;s visible in the

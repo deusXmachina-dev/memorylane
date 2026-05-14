@@ -5,14 +5,13 @@ import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Label } from '@components/ui/label'
 import type { AppEditionConfig } from '@/shared/edition'
+import { PURGE_CONFIRMATION_PHRASE } from '@/shared/constants'
 import type { MainWindowAPI } from '@types'
 import { DatabaseExportSection } from '../DatabaseExportSection'
 import { DatabaseSyncSection } from '../DatabaseSyncSection'
 import { SegmentedControl } from './SegmentedControl'
 import { SettingsRow } from './SettingsRow'
 import { SettingsSection } from './SettingsSection'
-
-const PURGE_CONFIRMATION_PHRASE = 'delete-memorylane'
 
 interface DataTabPanelProps {
   api: MainWindowAPI
@@ -175,7 +174,7 @@ export function DataTabPanel({
         {!isPurgeExpanded ? (
           <SettingsRow
             label="Purge database"
-            description="Permanently delete all activities, patterns, embeddings, and screenshots. This cannot be undone."
+            description="Permanently delete all activities, patterns, embeddings, and screenshots. Capture resumes afterwards if it was running. This cannot be undone."
             control={
               <Button
                 type="button"
