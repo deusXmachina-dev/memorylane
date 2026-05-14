@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Toaster } from '@components/ui/sonner'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { useLlmHealth } from '@/renderer/hooks/use-llm-health'
-import { TitleBar } from './components/TitleBar'
+import { Button } from '@components/ui/button'
 import { EnterpriseActivationCard } from './components/EnterpriseActivationCard'
 import { PlanPicker } from './components/PlanPicker'
 import { CaptureControlSection } from './components/CaptureControlSection'
@@ -179,24 +179,38 @@ export function MainWindowApp(): React.JSX.Element {
 
   if (page === 'settings') {
     return (
-      <div className="flex flex-col h-screen overflow-hidden antialiased select-none">
-        <TitleBar />
-        <div className="flex-1 overflow-hidden">
-          <AdvancedSettingsPage
-            onBack={() => {
-              setPage('home')
-              void loadAll()
-            }}
-          />
-        </div>
+      <div className="h-screen overflow-hidden antialiased select-none">
+        <AdvancedSettingsPage
+          onBack={() => {
+            setPage('home')
+            void loadAll()
+          }}
+        />
         <Toaster />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen antialiased select-none">
-      <TitleBar onSettingsClick={() => setPage('settings')} />
+    <div className="min-h-screen antialiased select-none relative">
+      <div className="absolute top-3 right-3 z-10">
+        <Button variant="ghost" size="sm" onClick={() => setPage('settings')} aria-label="Settings">
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z"
+            />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </Button>
+      </div>
       <div className="p-6 max-w-xl mx-auto space-y-5">
         {!initialLoaded ? null : !isConfigured ? (
           isEnterprise ? (

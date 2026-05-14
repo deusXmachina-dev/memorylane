@@ -208,13 +208,6 @@ export function openMainWindow(): void {
     maximizable: true,
     fullscreenable: true,
     title: 'MemoryLane',
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 14, y: 14 },
-    titleBarOverlay: {
-      color: '#00000000',
-      symbolColor: '#9ca3af',
-      height: 44,
-    },
     webPreferences: {
       preload: path.join(appRoot, 'out', 'preload', 'index.js'),
       contextIsolation: true,
