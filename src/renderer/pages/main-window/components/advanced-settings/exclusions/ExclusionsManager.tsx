@@ -35,6 +35,7 @@ interface ExclusionsManagerProps {
   onAppsChange: (next: string[]) => void
   onUrlsChange: (next: string[]) => void
   onObserved: () => void
+  layout?: 'tabbed' | 'stacked'
 }
 
 export function ExclusionsManager({
@@ -43,6 +44,7 @@ export function ExclusionsManager({
   onAppsChange,
   onUrlsChange,
   onObserved,
+  layout = 'tabbed',
 }: ExclusionsManagerProps): React.JSX.Element {
   const api = useMainWindowAPI()
   const [observation, setObservation] = useState<ObservationState | null>(null)
@@ -107,6 +109,52 @@ export function ExclusionsManager({
   }, [observation])
 
   const showTip = observation?.phase !== 'running' && !showAnyFound
+
+  if (layout === 'stacked') {
+    return (
+      <div className="space-y-5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="space-y-0.5">
+            <p className="text-sm font-medium text-foreground">Blacklisted apps</p>
+            <p className="text-xs text-muted-foreground">
+              These apps are skipped entirely — never captured, never analysed.
+            </p>
+          </div>
+          <ObserveButton
+            state={observation}
+            durationMs={DEFAULT_DURATION_MS}
+            onStart={handleStart}
+            onStop={handleStop}
+          />
+        </div>
+        {showTip && (
+          <p className="-mt-3 text-[11px] text-muted-foreground">
+            Tip: hit <span className="font-medium">Auto-fill from activity</span> and use the apps
+            and sites you want blocked. We&apos;ll list them here so you can pick what to block (no
+            screenshots taken).
+          </p>
+        )}
+        {banner}
+        <AppExclusionList
+          excludedApps={excludedApps}
+          onChange={onAppsChange}
+          found={foundApps}
+          onDismissFound={dismissFoundApps}
+        />
+
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium text-foreground">Blacklisted websites</p>
+          <p className="text-xs text-muted-foreground">URL patterns that will never be captured.</p>
+        </div>
+        <WebsiteExclusionList
+          excludedUrlPatterns={excludedUrlPatterns}
+          onChange={onUrlsChange}
+          found={foundUrls}
+          onDismissFound={dismissFoundUrls}
+        />
+      </div>
+    )
+  }
 
   return (
     <div>
