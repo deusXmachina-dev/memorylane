@@ -80,7 +80,13 @@ export function IntegrationsSection({ api }: IntegrationsSectionProps): React.JS
     <SettingsSection
       title="Integrations"
       icon={<Plug className="h-4 w-4" />}
-      description="Register MemoryLane as an MCP server. Quit and relaunch the assistant after connecting so it picks up MemoryLane."
+      description={
+        <>
+          Register MemoryLane as an MCP server.{' '}
+          <span className="font-medium text-foreground">Quit and relaunch the assistant</span> after
+          connecting.
+        </>
+      }
     >
       {PROVIDERS.map((provider) => {
         const entryStatus = status?.[provider.name] ?? 'not-registered'
