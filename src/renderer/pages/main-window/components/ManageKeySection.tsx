@@ -183,14 +183,16 @@ export function ManageKeySection({
               onKeyDown={handleKeyDown}
               className="pr-9 font-mono text-sm"
             />
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon-xs"
               aria-label={passwordVisible ? 'Hide key' : 'Show key'}
               onClick={() => setPasswordVisible((v) => !v)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
-              {passwordVisible ? <EyeSlash size={16} /> : <Eye size={16} />}
-            </button>
+              {passwordVisible ? <EyeSlash /> : <Eye />}
+            </Button>
           </div>
 
           {meta.needsBaseURL === 'optional' && !advancedOpen && (

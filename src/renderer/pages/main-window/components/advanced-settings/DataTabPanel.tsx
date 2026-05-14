@@ -8,6 +8,7 @@ import type { AppEditionConfig } from '@/shared/edition'
 import type { MainWindowAPI } from '@types'
 import { DatabaseExportSection } from '../DatabaseExportSection'
 import { DatabaseSyncSection } from '../DatabaseSyncSection'
+import { SegmentedControl } from './SegmentedControl'
 import { SettingsRow } from './SettingsRow'
 import { SettingsSection } from './SettingsSection'
 
@@ -92,48 +93,50 @@ export function DataTabPanel({
           description="Download a ZIP of the full database."
           control={<DatabaseExportSection api={api} />}
         />
-        <SettingsRow
-          layout="stacked"
-          label="Folder for periodic export"
-          description={
-            databaseExportDirectory
-              ? 'The raw database is mirrored to this folder on a schedule.'
-              : 'Choose a folder to mirror the raw database to on a schedule.'
-          }
-          control={
-            <div className="flex items-center gap-2">
-              <Input
-                value={databaseExportDirectory}
-                readOnly
-                placeholder="Not configured"
-                aria-label="Raw DB export folder"
-                className="flex-1"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void handleChooseDirectory()}
-                disabled={isChoosingDirectory}
-              >
-                {isChoosingDirectory
-                  ? 'Choosing...'
-                  : databaseExportDirectory
-                    ? 'Change'
-                    : 'Choose'}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={!databaseExportDirectory}
-                onClick={() => onDatabaseExportDirectoryChange('')}
-              >
-                Clear
-              </Button>
-            </div>
-          }
-        />
+        {!isEnterprise && (
+          <SettingsRow
+            layout="stacked"
+            label="Folder for periodic export"
+            description={
+              databaseExportDirectory
+                ? 'The raw database is mirrored to this folder on a schedule.'
+                : 'Choose a folder to mirror the raw database to on a schedule.'
+            }
+            control={
+              <div className="flex items-center gap-2">
+                <Input
+                  value={databaseExportDirectory}
+                  readOnly
+                  placeholder="Not configured"
+                  aria-label="Raw DB export folder"
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleChooseDirectory()}
+                  disabled={isChoosingDirectory}
+                >
+                  {isChoosingDirectory
+                    ? 'Choosing...'
+                    : databaseExportDirectory
+                      ? 'Change'
+                      : 'Choose'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!databaseExportDirectory}
+                  onClick={() => onDatabaseExportDirectoryChange('')}
+                >
+                  Clear
+                </Button>
+              </div>
+            }
+          />
+        )}
       </SettingsSection>
 
       {isEnterprise && (
@@ -146,29 +149,16 @@ export function DataTabPanel({
             layout="stacked"
             label="Detail level"
             control={
-              <div className="grid grid-cols-3 gap-2">
-                <Button
-                  variant={uploadDetailLevel === 'off' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => onUploadDetailLevelChange('off')}
-                >
-                  Off
-                </Button>
-                <Button
-                  variant={uploadDetailLevel === 'summary' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => onUploadDetailLevelChange('summary')}
-                >
-                  Summary
-                </Button>
-                <Button
-                  variant={uploadDetailLevel === 'detailed' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => onUploadDetailLevelChange('detailed')}
-                >
-                  Detailed
-                </Button>
-              </div>
+              <SegmentedControl
+                ariaLabel="Detail level"
+                value={uploadDetailLevel}
+                onChange={onUploadDetailLevelChange}
+                options={[
+                  { value: 'off', label: 'Off' },
+                  { value: 'summary', label: 'Summary' },
+                  { value: 'detailed', label: 'Detailed' },
+                ]}
+              />
             }
           />
           {uploadDetailLevel !== 'off' && (
@@ -181,21 +171,12 @@ export function DataTabPanel({
         </SettingsSection>
       )}
 
-      <section className="space-y-2">
-        <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-destructive">
-          <AlertTriangle className="h-4 w-4" />
-          Danger zone
-        </div>
-        <div className="rounded-md border border-destructive/40 p-3">
-          {!isPurgeExpanded ? (
-            <div className="flex items-center justify-between gap-4">
-              <div className="space-y-0.5 min-w-0">
-                <p className="text-sm font-medium text-foreground">Purge database</p>
-                <p className="text-xs text-muted-foreground">
-                  Permanently delete all activities, patterns, embeddings, and screenshots. This
-                  cannot be undone.
-                </p>
-              </div>
+      <SettingsSection title="Danger zone" icon={<AlertTriangle className="h-4 w-4" />}>
+        {!isPurgeExpanded ? (
+          <SettingsRow
+            label="Purge database"
+            description="Permanently delete all activities, patterns, embeddings, and screenshots. This cannot be undone."
+            control={
               <Button
                 type="button"
                 variant="destructive"
@@ -204,54 +185,54 @@ export function DataTabPanel({
               >
                 Purge database…
               </Button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="space-y-0.5">
-                <p className="text-sm font-medium text-foreground">Purge database</p>
-                <p className="text-xs text-muted-foreground">
-                  This will erase the entire MemoryLane database and all captured screenshots on
-                  this Mac. This action cannot be undone.
-                </p>
+            }
+          />
+        ) : (
+          <SettingsRow
+            layout="stacked"
+            label="Purge database"
+            description="This will erase the entire MemoryLane database. This action cannot be undone."
+            control={
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="purge-confirmation" className="text-xs text-foreground">
+                    Type <code className="font-mono">{PURGE_CONFIRMATION_PHRASE}</code> to confirm
+                  </Label>
+                  <Input
+                    id="purge-confirmation"
+                    value={purgeConfirmation}
+                    onChange={(event) => setPurgeConfirmation(event.target.value)}
+                    placeholder={PURGE_CONFIRMATION_PHRASE}
+                    autoComplete="off"
+                    autoFocus
+                    disabled={isPurging}
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={resetPurgeState}
+                    disabled={isPurging}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    disabled={!canConfirmPurge}
+                    onClick={() => void handlePurge()}
+                  >
+                    {isPurging ? 'Purging…' : 'I understand, purge everything'}
+                  </Button>
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="purge-confirmation" className="text-xs text-foreground">
-                  Type <code className="font-mono">{PURGE_CONFIRMATION_PHRASE}</code> to confirm
-                </Label>
-                <Input
-                  id="purge-confirmation"
-                  value={purgeConfirmation}
-                  onChange={(event) => setPurgeConfirmation(event.target.value)}
-                  placeholder={PURGE_CONFIRMATION_PHRASE}
-                  autoComplete="off"
-                  autoFocus
-                  disabled={isPurging}
-                />
-              </div>
-              <div className="flex items-center justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={resetPurgeState}
-                  disabled={isPurging}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  disabled={!canConfirmPurge}
-                  onClick={() => void handlePurge()}
-                >
-                  {isPurging ? 'Purging…' : 'I understand, purge everything'}
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
+            }
+          />
+        )}
+      </SettingsSection>
     </div>
   )
 }

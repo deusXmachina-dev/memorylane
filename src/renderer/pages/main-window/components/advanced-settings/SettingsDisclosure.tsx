@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
+import { Button } from '@components/ui/button'
 
 interface SettingsDisclosureProps {
   label: string
@@ -15,15 +16,17 @@ export function SettingsDisclosure({
   const [open, setOpen] = useState(defaultOpen)
   return (
     <div className="space-y-3">
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="sm"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
         aria-expanded={open}
+        className="-ml-2 text-xs text-muted-foreground hover:text-foreground"
       >
-        <ChevronRight className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-90' : ''}`} />
+        <ChevronRight className={`transition-transform ${open ? 'rotate-90' : ''}`} />
         {label}
-      </button>
+      </Button>
       {open && <div className="space-y-4">{children}</div>}
     </div>
   )

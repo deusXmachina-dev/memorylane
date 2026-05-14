@@ -140,14 +140,16 @@ export function ExclusionPicker({
           className="pl-7 pr-7 text-xs"
         />
         {query.length > 0 && (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon-xs"
             onClick={() => setQuery('')}
             aria-label="Clear search"
-            className="absolute top-1/2 right-2 flex size-4 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground"
+            className="absolute top-1/2 right-1 -translate-y-1/2 text-muted-foreground hover:text-foreground"
           >
-            <X className="size-3.5" />
-          </button>
+            <X />
+          </Button>
         )}
       </div>
 

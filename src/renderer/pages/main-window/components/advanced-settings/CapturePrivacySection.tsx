@@ -1,12 +1,16 @@
-import { ShieldCheck } from 'lucide-react'
+import { Keyboard, ShieldCheck } from 'lucide-react'
+import { Input } from '@components/ui/input'
 import { Switch } from '@components/ui/switch'
 import type { CaptureSettings } from '@types'
+import { formatHotkeyForDisplay, type HotkeyPlatform } from '../../hotkey-utils'
 import { ExclusionsManager } from './exclusions/ExclusionsManager'
 import { SettingsRow } from './SettingsRow'
 import { SettingsSection } from './SettingsSection'
 
 interface CapturePrivacySectionProps {
   form: CaptureSettings
+  hotkeyPlatform: HotkeyPlatform
+  onToggleRecordingHotkey: () => void
   onAutoStartEnabledChange: (enabled: boolean) => void
   onExcludePrivateBrowsingChange: (enabled: boolean) => void
   onExcludedRulesCommit: (rules: {
@@ -19,6 +23,8 @@ interface CapturePrivacySectionProps {
 
 export function CapturePrivacySection({
   form,
+  hotkeyPlatform,
+  onToggleRecordingHotkey,
   onAutoStartEnabledChange,
   onExcludePrivateBrowsingChange,
   onExcludedRulesCommit,
@@ -74,6 +80,22 @@ export function CapturePrivacySection({
               checked={form.autoStartEnabled}
               onCheckedChange={onAutoStartEnabledChange}
               aria-label="Launch at login"
+            />
+          }
+        />
+      </SettingsSection>
+
+      <SettingsSection title="Shortcut" icon={<Keyboard className="h-4 w-4" />}>
+        <SettingsRow
+          layout="stacked"
+          label="Start / stop shortcut"
+          description="Click the field, then press your shortcut. Esc cancels."
+          control={
+            <Input
+              value={formatHotkeyForDisplay(form.captureHotkeyAccelerator, hotkeyPlatform)}
+              readOnly
+              className="w-full cursor-pointer"
+              onClick={onToggleRecordingHotkey}
             />
           }
         />

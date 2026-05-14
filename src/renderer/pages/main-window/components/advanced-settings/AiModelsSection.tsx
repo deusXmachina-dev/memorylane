@@ -21,12 +21,13 @@ import { VENDORS } from '@types'
 import { VENDOR_PRESETS, getVendorDefaults } from '@/shared/vendor-defaults'
 import { ManageKeySection } from '../ManageKeySection'
 import { ModelSelector } from './ModelSelector'
+import { SegmentedControl } from './SegmentedControl'
 import { SettingsDisclosure } from './SettingsDisclosure'
 import { SettingsRow } from './SettingsRow'
 import { SettingsSection } from './SettingsSection'
 import { SliderRow } from './SliderRow'
 import type { NumericCaptureSetting } from './types'
-import { formatMinSec } from './utils'
+import { formatMinSec, formatMs } from './utils'
 
 const VENDOR_LABELS: Record<Vendor, string> = {
   openrouter: 'OpenRouter',
@@ -49,6 +50,7 @@ interface AiModelsSectionProps {
     value: string,
   ) => void
   onPatternDetectionEnabledChange: (enabled: boolean) => void
+  onReset: () => void
 }
 
 export function AiModelsSection({
@@ -63,6 +65,7 @@ export function AiModelsSection({
   onSettingCommit,
   onModelChange,
   onPatternDetectionEnabledChange,
+  onReset,
 }: AiModelsSectionProps): React.JSX.Element {
   const activeVendor = form.activeVendor
   const activeStatus = credentialStatuses?.[activeVendor] ?? null
@@ -146,31 +149,16 @@ export function AiModelsSection({
             <SettingsDisclosure label="Advanced options">
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground">Semantic media pipeline</p>
-                <div className="grid grid-cols-3 gap-2">
-                  <Button
-                    variant={form.semanticPipelineMode === 'auto' ? 'default' : 'outline'}
-                    size="sm"
-                    disabled={!videoSupported}
-                    onClick={() => onSemanticPipelineModeChange('auto')}
-                  >
-                    Auto
-                  </Button>
-                  <Button
-                    variant={form.semanticPipelineMode === 'video' ? 'default' : 'outline'}
-                    size="sm"
-                    disabled={!videoSupported}
-                    onClick={() => onSemanticPipelineModeChange('video')}
-                  >
-                    Video only
-                  </Button>
-                  <Button
-                    variant={form.semanticPipelineMode === 'image' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => onSemanticPipelineModeChange('image')}
-                  >
-                    Image only
-                  </Button>
-                </div>
+                <SegmentedControl
+                  ariaLabel="Semantic media pipeline"
+                  value={form.semanticPipelineMode}
+                  onChange={onSemanticPipelineModeChange}
+                  options={[
+                    { value: 'auto', label: 'Auto', disabled: !videoSupported },
+                    { value: 'video', label: 'Video only', disabled: !videoSupported },
+                    { value: 'image', label: 'Image only' },
+                  ]}
+                />
                 <p className="text-xs text-muted-foreground">
                   {!videoSupported
                     ? `${VENDOR_LABELS[activeVendor]} has no default video model — using image snapshots only.`
@@ -221,6 +209,92 @@ export function AiModelsSection({
                   onChange={(v) => onModelChange('patternDetectionModel', v)}
                   label="Automation opportunities model"
                 />
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Capture sensitivity</p>
+                <SliderRow
+                  label="Visual change sensitivity"
+                  value={form.visualThreshold}
+                  min={1}
+                  max={20}
+                  step={1}
+                  format={(v) =>
+                    `${v}% — ${v <= 5 ? 'more captures' : v >= 15 ? 'fewer captures' : 'balanced'}`
+                  }
+                  onChange={(v) => onSettingChange('visualThreshold', v)}
+                  onCommit={(v) => onSettingCommit('visualThreshold', v)}
+                />
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Interaction timeouts</p>
+                <SliderRow
+                  label="Typing debounce"
+                  value={form.typingDebounceMs}
+                  min={500}
+                  max={10_000}
+                  step={100}
+                  format={formatMs}
+                  onChange={(v) => onSettingChange('typingDebounceMs', v)}
+                  onCommit={(v) => onSettingCommit('typingDebounceMs', v)}
+                />
+                <SliderRow
+                  label="Scroll debounce"
+                  value={form.scrollDebounceMs}
+                  min={200}
+                  max={5_000}
+                  step={100}
+                  format={formatMs}
+                  onChange={(v) => onSettingChange('scrollDebounceMs', v)}
+                  onCommit={(v) => onSettingCommit('scrollDebounceMs', v)}
+                />
+                <SliderRow
+                  label="Click debounce"
+                  value={form.clickDebounceMs}
+                  min={500}
+                  max={10_000}
+                  step={100}
+                  format={formatMs}
+                  onChange={(v) => onSettingChange('clickDebounceMs', v)}
+                  onCommit={(v) => onSettingCommit('clickDebounceMs', v)}
+                />
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Activity windows</p>
+                <SliderRow
+                  label="Minimum activity duration"
+                  value={form.minActivityDurationMs}
+                  min={1_000}
+                  max={30_000}
+                  step={1_000}
+                  format={formatMs}
+                  onChange={(v) => onSettingChange('minActivityDurationMs', v)}
+                  onCommit={(v) => onSettingCommit('minActivityDurationMs', v)}
+                />
+                <SliderRow
+                  label="Maximum activity duration"
+                  value={form.maxActivityDurationMs}
+                  min={60_000}
+                  max={1_800_000}
+                  step={60_000}
+                  format={formatMs}
+                  onChange={(v) => onSettingChange('maxActivityDurationMs', v)}
+                  onCommit={(v) => onSettingCommit('maxActivityDurationMs', v)}
+                />
+                <SliderRow
+                  label="Max screenshots for LLM"
+                  value={form.maxScreenshotsForLlm}
+                  min={1}
+                  max={20}
+                  step={1}
+                  format={(v) => `${v}`}
+                  onChange={(v) => onSettingChange('maxScreenshotsForLlm', v)}
+                  onCommit={(v) => onSettingCommit('maxScreenshotsForLlm', v)}
+                />
+              </div>
+              <div className="flex justify-end">
+                <Button variant="ghost" size="sm" onClick={onReset}>
+                  Reset to defaults
+                </Button>
               </div>
             </SettingsDisclosure>
           </div>

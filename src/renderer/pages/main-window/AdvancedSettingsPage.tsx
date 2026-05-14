@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
+import { Button } from '@components/ui/button'
 import { Tabs, TabsList, TabsPanel, TabsTab } from '@components/ui/tabs'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import type { AppEditionConfig } from '@/shared/edition'
 import type { CaptureSettings, SemanticPipelineMode, Vendor, VendorStatus } from '@types'
-import { AdvancedTabPanel } from './components/advanced-settings/AdvancedTabPanel'
 import { AiModelsSection } from './components/advanced-settings/AiModelsSection'
 import { CapturePrivacySection } from './components/advanced-settings/CapturePrivacySection'
 import { DataTabPanel } from './components/advanced-settings/DataTabPanel'
@@ -21,7 +21,6 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
     null,
   )
   const [recordingHotkey, setRecordingHotkey] = useState(false)
-  const [showAdvanced, setShowAdvanced] = useState(false)
 
   const load = useCallback(async () => {
     const [config, captureSettings, statuses] = await Promise.all([
@@ -252,56 +251,31 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
   return (
     <div className="h-screen overflow-y-auto">
       <div className="p-6 max-w-3xl mx-auto space-y-4">
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={onBack}
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          className="-ml-2 text-xs text-muted-foreground hover:text-foreground"
         >
           &larr; Back
-        </button>
+        </Button>
 
         <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
 
-        {form && showAdvanced && (
-          <div className="space-y-3">
-            <button
-              type="button"
-              onClick={() => setShowAdvanced(false)}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              &larr; Settings
-            </button>
-            <AdvancedTabPanel
-              form={form}
-              hotkeyPlatform={hotkeyPlatform}
-              onToggleRecordingHotkey={() => setRecordingHotkey((current) => !current)}
-              onSettingChange={setNumericSetting}
-              onSettingCommit={commitNumericSetting}
-              onReset={() => void handleReset()}
-            />
-          </div>
-        )}
-
-        {form && !showAdvanced && (
+        {form && (
           <Tabs defaultValue="privacy">
-            <div className="flex items-center justify-between gap-3">
-              <TabsList>
-                <TabsTab value="privacy">Privacy</TabsTab>
-                <TabsTab value="data">Data</TabsTab>
-                {showAiModels && <TabsTab value="ai-models">AI models</TabsTab>}
-                <TabsTab value="integrations">Integrations</TabsTab>
-              </TabsList>
-              <button
-                type="button"
-                onClick={() => setShowAdvanced(true)}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Advanced &rarr;
-              </button>
-            </div>
+            <TabsList>
+              <TabsTab value="privacy">Privacy</TabsTab>
+              <TabsTab value="data">Data</TabsTab>
+              {showAiModels && <TabsTab value="ai-models">AI models</TabsTab>}
+              <TabsTab value="integrations">Integrations</TabsTab>
+            </TabsList>
 
             <TabsPanel value="privacy" className="pt-2">
               <CapturePrivacySection
                 form={form}
+                hotkeyPlatform={hotkeyPlatform}
+                onToggleRecordingHotkey={() => setRecordingHotkey((current) => !current)}
                 onAutoStartEnabledChange={setAutoStartEnabled}
                 onExcludePrivateBrowsingChange={commitExcludePrivateBrowsing}
                 onExcludedRulesCommit={commitExcludedRules}
@@ -334,6 +308,7 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
                   onSettingCommit={commitNumericSetting}
                   onModelChange={commitModelChange}
                   onPatternDetectionEnabledChange={setPatternDetectionEnabled}
+                  onReset={() => void handleReset()}
                 />
               </TabsPanel>
             )}
