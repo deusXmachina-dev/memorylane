@@ -42,7 +42,7 @@ const REASSURANCE: ReassurancePoint[] = [
   },
   {
     title: 'Stored on device',
-    body: 'Activity and patterns stay local. Screenshots only leave the device for the AI provider you pick.',
+    body: 'Activity stays local. Screenshots analyzed with zero data retention.',
   },
   {
     title: 'Pause anytime',
