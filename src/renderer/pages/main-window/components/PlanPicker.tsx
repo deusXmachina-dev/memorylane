@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@components/ui/card'
+import { OnboardingStep } from './OnboardingStep'
 import type { MainWindowAPI, SubscriptionPlan, SubscriptionStatus } from '@types'
 
 export interface PlanConfig {
@@ -161,13 +162,11 @@ export function PlanPicker({
   }, [api, onKeySet])
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Pick a plan</h1>
-        <p className="text-sm text-muted-foreground">
-          Same captures, different support level. You can change later.
-        </p>
-      </div>
+    <OnboardingStep>
+      <OnboardingStep.Header
+        title="Pick a plan"
+        subtitle="Same captures, different support level. You can change later."
+      />
 
       <div className="grid grid-cols-2 gap-4">
         {PLANS.map((plan) => (
@@ -187,6 +186,6 @@ export function PlanPicker({
         </button>
         .
       </p>
-    </div>
+    </OnboardingStep>
   )
 }

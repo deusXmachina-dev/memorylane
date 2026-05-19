@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { Button } from '@components/ui/button'
+import { OnboardingStep } from './OnboardingStep'
 
 interface WelcomeStepProps {
   onContinue: () => void
@@ -22,11 +23,11 @@ const POINTS = [
 
 export function WelcomeStep({ onContinue }: WelcomeStepProps): React.JSX.Element {
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Welcome to MemoryLane</h1>
-        <p className="text-sm text-muted-foreground">A quick setup before you start capturing.</p>
-      </div>
+    <OnboardingStep>
+      <OnboardingStep.Header
+        title="Welcome to MemoryLane"
+        subtitle="A quick setup before you start capturing."
+      />
 
       <ul className="space-y-4">
         {POINTS.map((p) => (
@@ -45,6 +46,6 @@ export function WelcomeStep({ onContinue }: WelcomeStepProps): React.JSX.Element
           Get started
         </Button>
       </div>
-    </div>
+    </OnboardingStep>
   )
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Settings } from 'lucide-react'
 import { Toaster } from '@components/ui/sonner'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { useLlmHealth } from '@/renderer/hooks/use-llm-health'
@@ -11,7 +12,11 @@ import { CaptureStep } from './components/CaptureStep'
 import { StatusLine } from './components/StatusLine'
 import { PatternsSection } from './components/PatternsSection'
 import { AdvancedSettingsPage } from './AdvancedSettingsPage'
-import { OnboardingLayout, type OnboardingStepInfo } from './components/OnboardingLayout'
+import {
+  OnboardingLayout,
+  type OnboardingStepId,
+  type OnboardingStepInfo,
+} from './components/OnboardingLayout'
 import { WelcomeStep } from './components/WelcomeStep'
 import { PermissionsStep } from './components/PermissionsStep'
 import type { AppEditionConfig } from '@/shared/edition'
@@ -21,16 +26,41 @@ import type {
   MainWindowStats,
   McpRegistrationStatus,
   PatternInfo,
+  PermissionState,
   PermissionStatus,
   Vendor,
   VendorStatus,
 } from '@types'
 
-const WELCOME_SEEN_KEY = 'memorylane:onboarding:welcomeSeen'
-const CONNECT_STEP_DONE_KEY = 'memorylane:onboarding:connectStepDone'
-const CAPTURE_STEP_DONE_KEY = 'memorylane:onboarding:captureStepDone'
+const LAST_COMPLETED_STEP_INDEX_KEY = 'memorylane:onboarding:lastCompletedStepIndex'
 
-function readFlag(key: string): boolean {
+// Legacy keys, read once on startup to migrate users who already completed
+// onboarding under the old three-flag model. Removed after migration so the
+// new index becomes the sole source of truth.
+const LEGACY_WELCOME_SEEN_KEY = 'memorylane:onboarding:welcomeSeen'
+const LEGACY_CONNECT_STEP_DONE_KEY = 'memorylane:onboarding:connectStepDone'
+const LEGACY_CAPTURE_STEP_DONE_KEY = 'memorylane:onboarding:captureStepDone'
+
+function readIntFlag(key: string, fallback: number): number {
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (raw === null) return fallback
+    const parsed = Number.parseInt(raw, 10)
+    return Number.isFinite(parsed) ? parsed : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function writeIntFlag(key: string, value: number): void {
+  try {
+    window.localStorage.setItem(key, String(value))
+  } catch {
+    // best-effort
+  }
+}
+
+function readLegacyBool(key: string): boolean {
   try {
     return window.localStorage.getItem(key) === '1'
   } catch {
@@ -38,13 +68,42 @@ function readFlag(key: string): boolean {
   }
 }
 
-function writeFlag(key: string, value: boolean): void {
+function removeKey(key: string): void {
   try {
-    if (value) window.localStorage.setItem(key, '1')
-    else window.localStorage.removeItem(key)
+    window.localStorage.removeItem(key)
   } catch {
     // best-effort
   }
+}
+
+/**
+ * Read the persisted last-completed step index, migrating from the old
+ * three-flag scheme (welcomeSeen / connectStepDone / captureStepDone) if any
+ * of those keys are present. Indexes refer to the consumer step list — the
+ * highest possible legacy completion is `capture`, so the migrated value is
+ * the consumer "capture" index. On enterprise, that overshoots the shorter
+ * step list, which is fine: `computedStep` clamps to dashboard.
+ */
+function readOrMigrateLastCompletedIndex(): number {
+  const stored = readIntFlag(LAST_COMPLETED_STEP_INDEX_KEY, -1)
+  if (stored >= 0) return stored
+
+  const hadWelcome = readLegacyBool(LEGACY_WELCOME_SEEN_KEY)
+  const hadConnect = readLegacyBool(LEGACY_CONNECT_STEP_DONE_KEY)
+  const hadCapture = readLegacyBool(LEGACY_CAPTURE_STEP_DONE_KEY)
+  if (!hadWelcome && !hadConnect && !hadCapture) return -1
+
+  // Consumer indices: welcome=0, permissions=1, plan=2, connect=3, capture=4.
+  let migrated = -1
+  if (hadWelcome) migrated = Math.max(migrated, 0)
+  if (hadConnect) migrated = Math.max(migrated, 3)
+  if (hadCapture) migrated = Math.max(migrated, 4)
+
+  writeIntFlag(LAST_COMPLETED_STEP_INDEX_KEY, migrated)
+  removeKey(LEGACY_WELCOME_SEEN_KEY)
+  removeKey(LEGACY_CONNECT_STEP_DONE_KEY)
+  removeKey(LEGACY_CAPTURE_STEP_DONE_KEY)
+  return migrated
 }
 
 export function MainWindowApp(): React.JSX.Element {
@@ -66,14 +125,24 @@ export function MainWindowApp(): React.JSX.Element {
   const [mcpStatus, setMcpStatus] = useState<McpRegistrationStatus | null>(null)
   const [patterns, setPatterns] = useState<PatternInfo[] | null>(null)
   const [initialLoaded, setInitialLoaded] = useState(false)
-  const [connectStepDone, setConnectStepDone] = useState<boolean>(() =>
-    readFlag(CONNECT_STEP_DONE_KEY),
-  )
-  const [captureStepDone, setCaptureStepDone] = useState<boolean>(() =>
-    readFlag(CAPTURE_STEP_DONE_KEY),
+  const [lastCompletedStepIndex, setLastCompletedStepIndex] = useState<number>(() =>
+    readOrMigrateLastCompletedIndex(),
   )
   const [permissionStatus, setPermissionStatus] = useState<PermissionStatus | null>(null)
-  const [welcomeSeen, setWelcomeSeen] = useState<boolean>(() => readFlag(WELCOME_SEEN_KEY))
+  // Captured once on the first non-null permission status so we can detect a
+  // mid-session screen-recording grant — macOS won't let the running process
+  // actually capture until it restarts, so we gate onboarding on a manual
+  // restart in that case.
+  const [initialScreenRecording, setInitialScreenRecording] = useState<PermissionState | null>(null)
+  const [viewStepOverride, setViewStepOverride] = useState<OnboardingStepId | null>(null)
+
+  const markStepCompleted = useCallback((idx: number) => {
+    setLastCompletedStepIndex((prev) => {
+      const next = Math.max(prev, idx)
+      if (next !== prev) writeIntFlag(LAST_COMPLETED_STEP_INDEX_KEY, next)
+      return next
+    })
+  }, [])
 
   const loadEditionConfig = useCallback(async () => {
     try {
@@ -170,11 +239,17 @@ export function MainWindowApp(): React.JSX.Element {
     enabled: page === 'home' && isConfigured,
   })
 
+  const permissionRestartPending =
+    initialScreenRecording !== null &&
+    initialScreenRecording !== 'granted' &&
+    permissionStatus?.screenRecording === 'granted'
+
   const permissionsResolved =
     permissionStatus === null
       ? true // until we know, don't gate — avoids a flicker through the permissions step
       : permissionStatus.accessibility === 'granted' &&
-        permissionStatus.screenRecording === 'granted'
+        permissionStatus.screenRecording === 'granted' &&
+        !permissionRestartPending
 
   type StepId =
     | 'welcome'
@@ -184,19 +259,6 @@ export function MainWindowApp(): React.JSX.Element {
     | 'connect'
     | 'capture'
     | 'dashboard'
-  const step: StepId = !welcomeSeen
-    ? 'welcome'
-    : !permissionsResolved
-      ? 'permissions'
-      : !isConfigured
-        ? isEnterprise
-          ? 'activation'
-          : 'plan'
-        : !isEnterprise && !connectStepDone
-          ? 'connect'
-          : !captureStepDone
-            ? 'capture'
-            : 'dashboard'
 
   const onboardingSteps: OnboardingStepInfo[] = isEnterprise
     ? [
@@ -212,6 +274,102 @@ export function MainWindowApp(): React.JSX.Element {
         { id: 'connect', label: 'Connect' },
         { id: 'capture', label: 'Capture' },
       ]
+
+  // Per-step completion. Requirement-driven steps (permissions, plan,
+  // activation) auto-complete when their underlying state is satisfied —
+  // they can be revoked outside the app, so we always check live state.
+  // User-action steps (welcome, connect, capture) require an explicit
+  // click-through tracked by `lastCompletedStepIndex`.
+  const isStepComplete = (id: OnboardingStepId, idx: number): boolean => {
+    switch (id) {
+      case 'permissions':
+        return permissionsResolved
+      case 'plan':
+      case 'activation':
+        return isConfigured
+      default:
+        return lastCompletedStepIndex >= idx
+    }
+  }
+
+  // First incomplete step; -1 (→ dashboard) when everything is done.
+  const computedStepIndex = onboardingSteps.findIndex((s, idx) => !isStepComplete(s.id, idx))
+  const computedStep: StepId =
+    computedStepIndex === -1 ? 'dashboard' : (onboardingSteps[computedStepIndex].id as StepId)
+
+  // Resolve the displayed step. The override lets the user navigate backward through
+  // already-visited steps without mutating the underlying state (permissions/API key
+  // can't be reasonably "undone"). Clear the override if it ever points past where the
+  // state machine currently is, or to a step not in the current edition's list.
+  const overrideIndex = viewStepOverride
+    ? onboardingSteps.findIndex((s) => s.id === viewStepOverride)
+    : -1
+  const computedIndex = computedStep === 'dashboard' ? onboardingSteps.length : computedStepIndex
+  // Once the user reaches the dashboard, ignore any override and never display an
+  // onboarding step (arrows are onboarding-only).
+  const overrideValid =
+    computedStep !== 'dashboard' && overrideIndex !== -1 && overrideIndex < computedIndex
+  const displayStep: StepId = overrideValid ? (viewStepOverride as StepId) : computedStep
+  const displayIndex = overrideValid ? overrideIndex : computedIndex
+
+  useEffect(() => {
+    if (viewStepOverride && !overrideValid) {
+      setViewStepOverride(null)
+    }
+  }, [viewStepOverride, overrideValid])
+
+  // Back: allowed for any non-first onboarding step. The override only changes which
+  // step's UI is rendered — it never mutates real state (granted permissions and saved
+  // API keys are preserved), so there's no reason to lock the user out of revisiting.
+  const canGoBack = displayIndex > 0 && displayStep !== 'dashboard'
+
+  // Forward: enabled when the displayed step's continue would succeed.
+  const canGoForward = ((): boolean => {
+    if (displayStep === 'dashboard') return false
+    switch (displayStep) {
+      case 'welcome':
+        return true
+      case 'permissions':
+        return permissionsResolved
+      case 'plan':
+      case 'activation':
+        return isConfigured
+      case 'connect':
+      case 'capture':
+        return true
+      default:
+        return false
+    }
+  })()
+
+  const handleBack = useCallback(() => {
+    if (displayIndex <= 0) return
+    setViewStepOverride(onboardingSteps[displayIndex - 1].id)
+  }, [displayIndex, onboardingSteps])
+
+  const handleForward = useCallback(() => {
+    // If the user is viewing an earlier step via override, just step the override forward.
+    if (overrideValid && overrideIndex + 1 < computedIndex) {
+      setViewStepOverride(onboardingSteps[overrideIndex + 1].id)
+      return
+    }
+    // Otherwise we're at the leading edge — perform the step's continue action.
+    // welcome / connect / capture mark themselves completed; permissions /
+    // plan / activation auto-advance via underlying state, so no marking
+    // needed (and `markStepCompleted` for them would be a no-op for resume).
+    if (displayStep === 'welcome' || displayStep === 'connect' || displayStep === 'capture') {
+      markStepCompleted(displayIndex)
+    }
+    setViewStepOverride(null)
+  }, [
+    overrideValid,
+    overrideIndex,
+    computedIndex,
+    onboardingSteps,
+    displayStep,
+    displayIndex,
+    markStepCompleted,
+  ])
 
   useEffect(() => {
     void api.getStatus().then((status) => {
@@ -248,6 +406,12 @@ export function MainWindowApp(): React.JSX.Element {
     })
     return () => unsubscribe()
   }, [api])
+
+  useEffect(() => {
+    if (permissionStatus !== null && initialScreenRecording === null) {
+      setInitialScreenRecording(permissionStatus.screenRecording)
+    }
+  }, [permissionStatus, initialScreenRecording])
 
   useEffect(() => {
     const handleFocus = (): void => {
@@ -290,7 +454,7 @@ export function MainWindowApp(): React.JSX.Element {
 
   return (
     <div className="min-h-screen antialiased select-none relative">
-      {step === 'dashboard' && (
+      {computedStep === 'dashboard' && (
         <div className="absolute top-3 right-3 z-10">
           <Button
             variant="ghost"
@@ -298,25 +462,12 @@ export function MainWindowApp(): React.JSX.Element {
             onClick={() => setPage('settings')}
             aria-label="Settings"
           >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z"
-              />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
+            <Settings className="size-4" />
           </Button>
         </div>
       )}
       <div className="p-6 max-w-xl mx-auto space-y-5">
-        {!initialLoaded ? null : step === 'dashboard' ? (
+        {!initialLoaded ? null : displayStep === 'dashboard' ? (
           <>
             <StatusLine
               capturing={capturing}
@@ -338,17 +489,24 @@ export function MainWindowApp(): React.JSX.Element {
             />
           </>
         ) : (
-          <OnboardingLayout steps={onboardingSteps} currentStep={step}>
-            {step === 'welcome' ? (
+          <OnboardingLayout
+            steps={onboardingSteps}
+            currentStep={displayStep as OnboardingStepId}
+            onBack={handleBack}
+            onForward={handleForward}
+            canGoBack={canGoBack}
+            canGoForward={canGoForward}
+          >
+            {displayStep === 'welcome' ? (
               <WelcomeStep
                 onContinue={() => {
-                  writeFlag(WELCOME_SEEN_KEY, true)
-                  setWelcomeSeen(true)
+                  markStepCompleted(onboardingSteps.findIndex((s) => s.id === 'welcome'))
+                  setViewStepOverride(null)
                 }}
               />
-            ) : step === 'permissions' ? (
-              <PermissionsStep api={api} onAllGranted={() => void loadPermissionStatus()} />
-            ) : step === 'plan' ? (
+            ) : displayStep === 'permissions' ? (
+              <PermissionsStep api={api} />
+            ) : displayStep === 'plan' ? (
               <PlanPicker
                 api={api}
                 onKeySet={() => void loadCredentials()}
@@ -357,16 +515,16 @@ export function MainWindowApp(): React.JSX.Element {
                   setPage('settings')
                 }}
               />
-            ) : step === 'activation' ? (
+            ) : displayStep === 'activation' ? (
               <EnterpriseActivationCard api={api} accessState={accessState} />
-            ) : step === 'connect' ? (
+            ) : displayStep === 'connect' ? (
               <ConnectStep
                 api={api}
                 mcpStatus={mcpStatus}
                 onStatusChange={() => void loadMcpStatus()}
                 onContinue={() => {
-                  writeFlag(CONNECT_STEP_DONE_KEY, true)
-                  setConnectStepDone(true)
+                  markStepCompleted(onboardingSteps.findIndex((s) => s.id === 'connect'))
+                  setViewStepOverride(null)
                 }}
               />
             ) : (
@@ -378,8 +536,8 @@ export function MainWindowApp(): React.JSX.Element {
                 onToggle={() => void handleToggle()}
                 activityCount={stats?.activityCount ?? null}
                 onContinue={() => {
-                  writeFlag(CAPTURE_STEP_DONE_KEY, true)
-                  setCaptureStepDone(true)
+                  markStepCompleted(onboardingSteps.findIndex((s) => s.id === 'capture'))
+                  setViewStepOverride(null)
                 }}
               />
             )}

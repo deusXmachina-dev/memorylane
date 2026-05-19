@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/renderer/lib/utils'
 
 export type OnboardingStepId =
@@ -17,19 +18,32 @@ export interface OnboardingStepInfo {
 interface OnboardingLayoutProps {
   steps: OnboardingStepInfo[]
   currentStep: OnboardingStepId
+  onBack?: () => void
+  onForward?: () => void
+  canGoBack: boolean
+  canGoForward: boolean
   children: React.ReactNode
 }
 
 export function OnboardingLayout({
   steps,
   currentStep,
+  onBack,
+  onForward,
+  canGoBack,
+  canGoForward,
   children,
 }: OnboardingLayoutProps): React.JSX.Element {
   const currentIndex = steps.findIndex((s) => s.id === currentStep)
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center">
+      <div className="flex items-center gap-2">
+        <NavButton
+          direction="back"
+          disabled={!canGoBack}
+          onClick={canGoBack ? onBack : undefined}
+        />
         <ol className="flex flex-1 items-center gap-2">
           {steps.map((step, idx) => {
             const isCurrent = idx === currentIndex
@@ -38,37 +52,16 @@ export function OnboardingLayout({
               <li key={step.id} className="flex flex-1 items-center gap-2 min-w-0">
                 <div
                   className={cn(
-                    'flex size-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-medium',
+                    'flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-medium',
                     isCurrent && 'border-primary bg-primary text-primary-foreground',
                     isDone && 'border-primary/60 bg-primary/20 text-primary',
                     !isCurrent && !isDone && 'border-border text-muted-foreground',
                   )}
                   aria-current={isCurrent ? 'step' : undefined}
+                  aria-label={step.label}
                 >
-                  {isDone ? (
-                    <svg
-                      className="size-3"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={3}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M20 6L9 17l-5-5" />
-                    </svg>
-                  ) : (
-                    idx + 1
-                  )}
+                  {isDone ? <Check className="size-3.5" strokeWidth={3} /> : idx + 1}
                 </div>
-                <span
-                  className={cn(
-                    'truncate text-xs',
-                    isCurrent ? 'text-foreground font-medium' : 'text-muted-foreground',
-                  )}
-                >
-                  {step.label}
-                </span>
                 {idx < steps.length - 1 && (
                   <div className={cn('h-px flex-1', isDone ? 'bg-primary/40' : 'bg-border')} />
                 )}
@@ -76,8 +69,40 @@ export function OnboardingLayout({
             )
           })}
         </ol>
+        <NavButton
+          direction="forward"
+          disabled={!canGoForward}
+          onClick={canGoForward ? onForward : undefined}
+        />
       </div>
       <div>{children}</div>
     </div>
+  )
+}
+
+interface NavButtonProps {
+  direction: 'back' | 'forward'
+  disabled: boolean
+  onClick?: () => void
+}
+
+function NavButton({ direction, disabled, onClick }: NavButtonProps): React.JSX.Element {
+  const Icon = direction === 'back' ? ChevronLeft : ChevronRight
+  const label = direction === 'back' ? 'Previous step' : 'Next step'
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      className={cn(
+        'flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground',
+        'hover:bg-accent hover:text-foreground',
+        'disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground',
+        'transition-colors',
+      )}
+    >
+      <Icon className="size-4" />
+    </button>
   )
 }

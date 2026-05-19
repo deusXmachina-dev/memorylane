@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { SiClaude } from '@icons-pack/react-simple-icons'
 import { Card, CardHeader, CardTitle, CardDescription, CardAction } from '@components/ui/card'
 import { Button } from '@components/ui/button'
+import { OnboardingStep } from './OnboardingStep'
 import type { MainWindowAPI, McpRegistrationStatus } from '@types'
 
 const PROVIDERS: {
@@ -65,13 +66,11 @@ export function ConnectStep({
   )
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1">
-        <h2 className="text-sm font-medium">Pick your AI assistant</h2>
-        <p className="text-xs text-muted-foreground">
-          Connect MemoryLane so your assistant can see patterns and help you act on them.
-        </p>
-      </div>
+    <OnboardingStep>
+      <OnboardingStep.Header
+        title="Pick your AI assistant"
+        subtitle="Connect MemoryLane so your assistant can see patterns and help you act on them."
+      />
 
       <div className="space-y-2">
         {PROVIDERS.map((provider) => {
@@ -122,6 +121,6 @@ export function ConnectStep({
       <Button size="lg" className="w-full" disabled={!anyConnected} onClick={onContinue}>
         Continue
       </Button>
-    </div>
+    </OnboardingStep>
   )
 }

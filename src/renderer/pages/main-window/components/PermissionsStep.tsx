@@ -1,12 +1,13 @@
 import * as React from 'react'
 import { useCallback, useEffect, useState } from 'react'
+import { Check, RotateCcw } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import { cn } from '@/renderer/lib/utils'
-import type { MainWindowAPI, PermissionKind, PermissionStatus } from '@types'
+import { OnboardingStep } from './OnboardingStep'
+import type { MainWindowAPI, PermissionKind, PermissionState, PermissionStatus } from '@types'
 
 interface PermissionsStepProps {
   api: MainWindowAPI
-  onAllGranted: () => void
 }
 
 interface PermissionInfo {
@@ -52,23 +53,6 @@ const REASSURANCE: ReassurancePoint[] = [
   },
 ]
 
-function CheckIcon({ className }: { className?: string }): React.JSX.Element {
-  return (
-    <svg
-      className={cn('size-4 shrink-0', className)}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M20 6L9 17l-5-5" />
-    </svg>
-  )
-}
-
 interface PermissionRowProps {
   info: PermissionInfo
   index: number
@@ -91,7 +75,7 @@ function PermissionRow({ info, index, granted, onGrant }: PermissionRowProps): R
         )}
         aria-hidden
       >
-        {granted ? <CheckIcon className="size-4" /> : index + 1}
+        {granted ? <Check className="size-4" strokeWidth={2.5} /> : index + 1}
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium leading-tight">{info.title}</p>
@@ -108,8 +92,12 @@ function PermissionRow({ info, index, granted, onGrant }: PermissionRowProps): R
   )
 }
 
-export function PermissionsStep({ api, onAllGranted }: PermissionsStepProps): React.JSX.Element {
+export function PermissionsStep({ api }: PermissionsStepProps): React.JSX.Element {
   const [status, setStatus] = useState<PermissionStatus | null>(null)
+  // Captured once on first load so we can tell if screen recording was granted
+  // mid-session. macOS won't actually let the running process capture until it
+  // restarts, so in that case we gate the step on a manual restart.
+  const [initialScreenRecording, setInitialScreenRecording] = useState<PermissionState | null>(null)
 
   useEffect(() => {
     void api.getPermissionStatus().then(setStatus)
@@ -118,14 +106,15 @@ export function PermissionsStep({ api, onAllGranted }: PermissionsStepProps): Re
   }, [api])
 
   useEffect(() => {
-    if (
-      status !== null &&
-      status.accessibility === 'granted' &&
-      status.screenRecording === 'granted'
-    ) {
-      onAllGranted()
+    if (status !== null && initialScreenRecording === null) {
+      setInitialScreenRecording(status.screenRecording)
     }
-  }, [status, onAllGranted])
+  }, [status, initialScreenRecording])
+
+  const needsRestart =
+    initialScreenRecording !== null &&
+    initialScreenRecording !== 'granted' &&
+    status?.screenRecording === 'granted'
 
   const handleGrant = useCallback(
     (kind: PermissionKind) => {
@@ -146,15 +135,47 @@ export function PermissionsStep({ api, onAllGranted }: PermissionsStepProps): Re
 
   const grantedCount =
     (status.accessibility === 'granted' ? 1 : 0) + (status.screenRecording === 'granted' ? 1 : 0)
+  const allGranted = grantedCount === 2
+
+  if (allGranted && needsRestart) {
+    return (
+      <OnboardingStep>
+        <OnboardingStep.Header
+          title="One more thing"
+          subtitle="Both permissions are granted. MemoryLane needs to restart for Screen Recording to take effect."
+        />
+        <div className="pt-2">
+          <Button size="lg" onClick={handleRestart}>
+            Restart & Continue
+          </Button>
+        </div>
+      </OnboardingStep>
+    )
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-2 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">Grant 2 permissions</h1>
-        <p className="text-sm text-muted-foreground">
-          MemoryLane needs both Accessibility and Screen Recording to capture your activity.{' '}
-          <span className="text-foreground">{grantedCount} of 2 granted.</span>
-        </p>
+    <OnboardingStep>
+      <OnboardingStep.Header
+        title="Grant 2 permissions"
+        subtitle={
+          <>
+            MemoryLane needs both Accessibility and Screen Recording to capture your activity.{' '}
+            <span className="text-foreground">{grantedCount} of 2 granted.</span>
+          </>
+        }
+      />
+
+      <div className="flex items-start gap-3 rounded-lg border border-primary/60 bg-primary/10 p-4">
+        <RotateCcw className="mt-0.5 size-5 shrink-0 text-primary" />
+        <div className="min-w-0 flex-1 space-y-0.5">
+          <p className="text-sm font-semibold text-foreground">Already granted?</p>
+          <p className="text-xs text-muted-foreground">
+            MemoryLane must restart before the permissions take effect.
+          </p>
+        </div>
+        <Button size="sm" onClick={handleRestart}>
+          Restart MemoryLane
+        </Button>
       </div>
 
       <div className="space-y-3">
@@ -174,7 +195,7 @@ export function PermissionsStep({ api, onAllGranted }: PermissionsStepProps): Re
           {REASSURANCE.map((p) => (
             <div key={p.title} className="flex gap-2">
               <div className="pt-0.5">
-                <CheckIcon className="text-primary" />
+                <Check className="size-4 shrink-0 text-primary" strokeWidth={2.5} />
               </div>
               <div className="space-y-0.5">
                 <p className="text-sm font-medium leading-tight">{p.title}</p>
@@ -184,18 +205,6 @@ export function PermissionsStep({ api, onAllGranted }: PermissionsStepProps): Re
           ))}
         </div>
       </div>
-
-      <p className="text-center text-xs text-muted-foreground">
-        Already granted?{' '}
-        <button
-          type="button"
-          onClick={handleRestart}
-          className="text-foreground underline-offset-2 hover:underline"
-        >
-          Restart MemoryLane
-        </button>{' '}
-        to apply.
-      </p>
-    </div>
+    </OnboardingStep>
   )
 }

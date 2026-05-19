@@ -1,5 +1,6 @@
 import { Button } from '@components/ui/button'
 import { CaptureControlSection } from './CaptureControlSection'
+import { OnboardingStep } from './OnboardingStep'
 import { PATTERN_DETECTION_CONFIG } from '@constants'
 import type { MainWindowAPI } from '@types'
 
@@ -27,27 +28,26 @@ export function CaptureStep({
   const progressPercent = Math.min(100, Math.round((safeCount / minActivities) * 100))
 
   return (
-    <div className="space-y-3">
-      <div className="space-y-1">
-        <h2 className="text-sm font-medium">
-          {capturing ? 'Analyzing your activity...' : 'Start capturing'}
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          {capturing
+    <OnboardingStep>
+      <OnboardingStep.Header
+        title={capturing ? 'Analyzing your activity...' : 'Start capturing'}
+        subtitle={
+          capturing
             ? 'Keep MemoryLane running. First patterns appear in about a day.'
-            : 'MemoryLane captures your screen activity to find repetitive patterns. First results appear in about a day.'}
-        </p>
-        <div className="space-y-1 pt-1">
-          <div className="h-2 w-full rounded-full bg-muted">
-            <div
-              className="h-2 rounded-full bg-primary transition-all duration-500"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {progressPercent}% &middot; {safeCount} / ~{minActivities} activities
-          </p>
+            : 'MemoryLane captures your screen activity to find repetitive patterns. First results appear in about a day.'
+        }
+      />
+
+      <div className="space-y-1">
+        <div className="h-2 w-full rounded-full bg-muted">
+          <div
+            className="h-2 rounded-full bg-primary transition-all duration-500"
+            style={{ width: `${progressPercent}%` }}
+          />
         </div>
+        <p className="text-xs text-muted-foreground">
+          {progressPercent}% &middot; {safeCount} / ~{minActivities} activities
+        </p>
       </div>
 
       <CaptureControlSection
@@ -82,6 +82,6 @@ export function CaptureStep({
           Go to dashboard
         </Button>
       </div>
-    </div>
+    </OnboardingStep>
   )
 }
