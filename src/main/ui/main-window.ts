@@ -268,6 +268,12 @@ export function openMainWindow(): void {
       mainWindow.hide()
     }
   })
+
+  // Stop the permission poll when no renderer is observing it. Hidden ≈ not
+  // looking; `getPermissionStatus` from a re-shown / re-mounted renderer will
+  // restart it.
+  mainWindow.on('hide', stopPermissionPolling)
+  mainWindow.on('closed', stopPermissionPolling)
 }
 
 /**

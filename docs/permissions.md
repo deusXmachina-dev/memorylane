@@ -98,15 +98,15 @@ The "Restart MemoryLane" link in the UI exists only as an escape hatch for edge 
 
 ## Code references
 
-| Concern                                                                                                                    | File                                                                   |
-| -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Pure status getter, settings opener                                                                                        | `src/main/ui/permissions.ts`                                           |
-| IPC handlers (`getPermissionStatus`, `requestPermission`, `openPermissionSettings`, `restartApp`), polling loop, broadcast | `src/main/ui/main-window.ts`                                           |
-| Preload bridge                                                                                                             | `src/preload/index.ts`                                                 |
-| Shared types (`PermissionKind`, `PermissionState`, `PermissionStatus`)                                                     | `src/shared/types.ts`                                                  |
-| Renderer onboarding UI                                                                                                     | `src/renderer/pages/main-window/components/PermissionsStep.tsx`        |
-| Step routing                                                                                                               | `src/renderer/pages/main-window/MainWindowApp.tsx`                     |
-| Hotkey registration (Accessibility-gated)                                                                                  | `src/main/capture-hotkey-manager.ts`                                   |
-| Input monitoring (Accessibility-gated)                                                                                     | `src/main/recorder/interaction-monitor.ts`                             |
-| Entitlements                                                                                                               | `build/entitlements.mac.plist`, `build/entitlements.mac.inherit.plist` |
-| Info.plist additions                                                                                                       | `electron-builder.config.js → mac.extendInfo`                          |
+| Concern                                                                                                                    | File                                                                       |
+| -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Pure status getter, settings opener                                                                                        | `src/main/ui/permissions.ts`                                               |
+| IPC handlers (`getPermissionStatus`, `requestPermission`, `openPermissionSettings`, `restartApp`), polling loop, broadcast | `src/main/ui/main-window.ts`                                               |
+| Preload bridge                                                                                                             | `src/preload/index.ts`                                                     |
+| Shared types (`PermissionKind`, `PermissionState`, `PermissionStatus`)                                                     | `src/shared/types.ts`                                                      |
+| Renderer onboarding UI                                                                                                     | `src/renderer/pages/main-window/components/onboarding/PermissionsStep.tsx` |
+| Step routing                                                                                                               | `src/renderer/pages/main-window/MainWindowApp.tsx`                         |
+| Hotkey registration (Accessibility-gated)                                                                                  | `src/main/capture-hotkey-manager.ts`                                       |
+| Input monitoring (Accessibility-gated)                                                                                     | `src/main/recorder/interaction-monitor.ts`                                 |
+| Entitlements                                                                                                               | `build/entitlements.mac.plist`, `build/entitlements.mac.inherit.plist`     |
+| Info.plist additions                                                                                                       | `electron-builder.config.js → mac.extendInfo`                              |

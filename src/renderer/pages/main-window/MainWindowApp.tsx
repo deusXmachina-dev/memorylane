@@ -12,11 +12,7 @@ import { ActivationStep } from './components/onboarding/ActivationStep'
 import { BlacklistStep } from './components/onboarding/BlacklistStep'
 import { CaptureStep } from './components/onboarding/CaptureStep'
 import { ConnectStep } from './components/onboarding/ConnectStep'
-import {
-  OnboardingLayout,
-  type OnboardingStepId,
-  type OnboardingStepInfo,
-} from './components/onboarding/OnboardingLayout'
+import { OnboardingLayout, type OnboardingStepId } from './components/onboarding/OnboardingLayout'
 import { PermissionsStep } from './components/onboarding/PermissionsStep'
 import { PlanPicker } from './components/onboarding/PlanPicker'
 import { WelcomeStep } from './components/onboarding/WelcomeStep'
@@ -26,6 +22,7 @@ import {
   readOrMigrateLastCompletedIndex,
   writeIntFlag,
 } from './onboarding-storage'
+import { impliedCompletedIndex, resolveOnboarding } from './onboarding-state'
 import type { AppEditionConfig } from '@/shared/edition'
 import type {
   AccessState,
@@ -145,8 +142,8 @@ export function MainWindowApp(): React.JSX.Element {
   const loadPermissionStatus = useCallback(async () => {
     try {
       updatePermissionStatus(await api.getPermissionStatus())
-    } catch {
-      // Silently handle error
+    } catch (error) {
+      console.warn('[MainWindowApp] Failed to load permission status:', error)
     }
   }, [api, updatePermissionStatus])
 
@@ -187,85 +184,45 @@ export function MainWindowApp(): React.JSX.Element {
     initialScreenRecording !== 'granted' &&
     permissionStatus?.screenRecording === 'granted'
 
-  const permissionsResolved =
-    permissionStatus === null
-      ? true // until we know, don't gate — avoids a flicker through the permissions step
-      : permissionStatus.accessibility === 'granted' &&
-        permissionStatus.screenRecording === 'granted' &&
-        !permissionRestartPending
-
-  type DisplayStep = OnboardingStepId | 'dashboard'
-
-  const onboardingSteps: OnboardingStepInfo[] = useMemo(
-    () =>
-      isEnterprise
-        ? [
-            { id: 'welcome', label: 'Welcome' },
-            { id: 'permissions', label: 'Permissions' },
-            { id: 'activation', label: 'Activate' },
-            { id: 'blacklist', label: 'Privacy' },
-            { id: 'capture', label: 'Capture' },
-          ]
-        : [
-            { id: 'welcome', label: 'Welcome' },
-            { id: 'permissions', label: 'Permissions' },
-            { id: 'plan', label: 'Plan' },
-            { id: 'connect', label: 'Connect' },
-            { id: 'blacklist', label: 'Privacy' },
-            { id: 'capture', label: 'Capture' },
-          ],
-    [isEnterprise],
-  )
-
   const anyMcpConnected = mcpStatus !== null && Object.values(mcpStatus).some(Boolean)
   const screenRecordingGranted = permissionStatus?.screenRecording === 'granted'
   const accessibilityGranted = permissionStatus?.accessibility === 'granted'
   const hasAnyProgress =
     isConfigured || screenRecordingGranted || accessibilityGranted || anyMcpConnected
 
-  // Per-step completion. Requirement-driven steps (permissions, plan,
-  // activation) auto-complete when their underlying state is satisfied —
-  // they can be revoked outside the app, so we always check live state.
-  // User-action steps (connect, blacklist, capture) require an explicit
-  // click-through tracked by `lastCompletedStepIndex`. Welcome is
-  // content-only and auto-completes once any other progress signal exists
-  // so returning users aren't re-walked through it.
-  const isStepComplete = (id: OnboardingStepId, idx: number): boolean => {
-    switch (id) {
-      case 'welcome':
-        return lastCompletedStepIndex >= idx || hasAnyProgress
-      case 'permissions':
-        return permissionsResolved && lastCompletedStepIndex >= idx
-      case 'plan':
-        return isConfigured && lastCompletedStepIndex >= idx
-      case 'activation':
-        return isConfigured
-      default:
-        return lastCompletedStepIndex >= idx
-    }
-  }
-
-  // First incomplete step; -1 (→ dashboard) when everything is done.
-  const computedStepIndex = onboardingSteps.findIndex((s, idx) => !isStepComplete(s.id, idx))
-  const computedStep: DisplayStep =
-    computedStepIndex === -1 ? 'dashboard' : onboardingSteps[computedStepIndex].id
-
-  // Resolve the displayed step. The override lets the user navigate backward through
-  // already-visited steps without mutating the underlying state (permissions/API key
-  // can't be reasonably "undone"). Clear the override if it ever points past where the
-  // state machine currently is, or to a step not in the current edition's list.
-  const overrideIndex = viewStepOverride
-    ? onboardingSteps.findIndex((s) => s.id === viewStepOverride)
-    : -1
-  const computedIndex = computedStep === 'dashboard' ? onboardingSteps.length : computedStepIndex
-  // Once the user reaches the dashboard, ignore any override and never display an
-  // onboarding step (arrows are onboarding-only).
-  const overrideValid =
-    computedStep !== 'dashboard' && overrideIndex !== -1 && overrideIndex < computedIndex
-  const displayStep: DisplayStep = overrideValid
-    ? (viewStepOverride as OnboardingStepId)
-    : computedStep
-  const displayIndex = overrideValid ? overrideIndex : computedIndex
+  const resolution = useMemo(
+    () =>
+      resolveOnboarding({
+        isEnterprise,
+        isConfigured,
+        lastCompletedStepIndex,
+        permissionStatus,
+        permissionRestartPending,
+        hasAnyProgress,
+        anyMcpConnected,
+        viewStepOverride,
+      }),
+    [
+      isEnterprise,
+      isConfigured,
+      lastCompletedStepIndex,
+      permissionStatus,
+      permissionRestartPending,
+      hasAnyProgress,
+      anyMcpConnected,
+      viewStepOverride,
+    ],
+  )
+  const {
+    steps: onboardingSteps,
+    computedStep,
+    computedIndex,
+    displayStep,
+    displayIndex,
+    overrideValid,
+    canGoBack,
+    canGoForward,
+  } = resolution
 
   useEffect(() => {
     if (viewStepOverride && !overrideValid) {
@@ -273,60 +230,27 @@ export function MainWindowApp(): React.JSX.Element {
     }
   }, [viewStepOverride, overrideValid])
 
-  // Back: allowed for any non-first onboarding step. The override only changes which
-  // step's UI is rendered — it never mutates real state (granted permissions and saved
-  // API keys are preserved), so there's no reason to lock the user out of revisiting.
-  const canGoBack = displayIndex > 0 && displayStep !== 'dashboard'
-
-  // Forward: enabled when the displayed step's continue would succeed.
-  const canGoForward = ((): boolean => {
-    if (displayStep === 'dashboard') return false
-    switch (displayStep) {
-      case 'welcome':
-        return true
-      case 'permissions':
-        return permissionsResolved
-      case 'plan':
-      case 'activation':
-        return isConfigured
-      case 'connect':
-      case 'blacklist':
-      case 'capture':
-        return true
-      default:
-        return false
-    }
-  })()
-
   const handleBack = useCallback(() => {
     if (displayIndex <= 0) return
     setViewStepOverride(onboardingSteps[displayIndex - 1].id)
   }, [displayIndex, onboardingSteps])
 
   const handleForward = useCallback(() => {
-    // If the user is viewing an earlier step via override, just step the override forward.
-    if (overrideValid && overrideIndex + 1 < computedIndex) {
-      setViewStepOverride(onboardingSteps[overrideIndex + 1].id)
+    // If the user is viewing an earlier step via override, just step the
+    // override forward (displayIndex === overrideIndex when overrideValid).
+    if (overrideValid && displayIndex + 1 < computedIndex) {
+      setViewStepOverride(onboardingSteps[displayIndex + 1].id)
       return
     }
     // Otherwise we're at the leading edge — perform the step's continue
     // action. Every step except `activation` needs an explicit completion
     // mark so it doesn't re-appear on resume even when its underlying state
-    // is also satisfied (`isStepComplete` requires both for those steps).
-    // `activation` is gated purely on `isConfigured` and has no Continue.
+    // is also satisfied. `activation` is gated purely on `isConfigured`.
     if (displayStep !== 'activation') {
       markStepCompleted(displayIndex)
     }
     setViewStepOverride(null)
-  }, [
-    overrideValid,
-    overrideIndex,
-    computedIndex,
-    onboardingSteps,
-    displayStep,
-    displayIndex,
-    markStepCompleted,
-  ])
+  }, [overrideValid, computedIndex, onboardingSteps, displayStep, displayIndex, markStepCompleted])
 
   useEffect(() => {
     void api.getStatus().then((status) => {
@@ -371,35 +295,28 @@ export function MainWindowApp(): React.JSX.Element {
   // forward so they don't get re-walked through welcome / permissions / etc.
   useEffect(() => {
     if (!initialLoaded) return
-    let implied = -1
-    if (hasAnyProgress) implied = Math.max(implied, 0) // welcome
-    if (permissionStatus !== null && accessibilityGranted && screenRecordingGranted) {
-      const idx = onboardingSteps.findIndex((s) => s.id === 'permissions')
-      if (idx !== -1) implied = Math.max(implied, idx)
-    }
-    if (isConfigured) {
-      const planIdx = onboardingSteps.findIndex((s) => s.id === 'plan')
-      const actIdx = onboardingSteps.findIndex((s) => s.id === 'activation')
-      if (planIdx !== -1) implied = Math.max(implied, planIdx)
-      if (actIdx !== -1) implied = Math.max(implied, actIdx)
-    }
-    if (anyMcpConnected) {
-      const idx = onboardingSteps.findIndex((s) => s.id === 'connect')
-      if (idx !== -1) implied = Math.max(implied, idx)
-    }
+    const implied = impliedCompletedIndex({
+      isEnterprise,
+      isConfigured,
+      lastCompletedStepIndex,
+      permissionStatus,
+      permissionRestartPending,
+      hasAnyProgress,
+      anyMcpConnected,
+      viewStepOverride: null,
+    })
     if (implied > lastCompletedStepIndex) {
       markStepCompleted(implied)
     }
   }, [
     initialLoaded,
-    hasAnyProgress,
+    isEnterprise,
     isConfigured,
     permissionStatus,
-    accessibilityGranted,
-    screenRecordingGranted,
+    permissionRestartPending,
+    hasAnyProgress,
     anyMcpConnected,
     lastCompletedStepIndex,
-    onboardingSteps,
     markStepCompleted,
   ])
 
@@ -459,7 +376,7 @@ export function MainWindowApp(): React.JSX.Element {
         return <WelcomeStep onContinue={advance('welcome')} />
       case 'permissions':
         return permissionStatus === null ? (
-          <div />
+          <p className="text-sm text-muted-foreground">Checking permissions…</p>
         ) : (
           <PermissionsStep
             api={api}
