@@ -7,6 +7,7 @@ import { Button } from '@components/ui/button'
 import { EnterpriseActivationCard } from './components/EnterpriseActivationCard'
 import { PlanPicker } from './components/PlanPicker'
 import { CaptureControlSection } from './components/CaptureControlSection'
+import { BlacklistStep } from './components/BlacklistStep'
 import { ConnectStep } from './components/ConnectStep'
 import { CaptureStep } from './components/CaptureStep'
 import { StatusLine } from './components/StatusLine'
@@ -33,6 +34,10 @@ import type {
 } from '@types'
 
 const LAST_COMPLETED_STEP_INDEX_KEY = 'memorylane:onboarding:lastCompletedStepIndex'
+const ONBOARDING_LAYOUT_VERSION_KEY = 'memorylane:onboarding:layoutVersion'
+// Bump when the step order/inserts change so existing completed-index values
+// can be re-mapped onto the new ordering instead of bouncing users back.
+const ONBOARDING_LAYOUT_VERSION = 2
 
 // Legacy keys, read once on startup to migrate users who already completed
 // onboarding under the old three-flag model. Removed after migration so the
@@ -86,24 +91,40 @@ function removeKey(key: string): void {
  */
 function readOrMigrateLastCompletedIndex(): number {
   const stored = readIntFlag(LAST_COMPLETED_STEP_INDEX_KEY, -1)
-  if (stored >= 0) return stored
+  const layoutVersion = readIntFlag(ONBOARDING_LAYOUT_VERSION_KEY, 1)
 
-  const hadWelcome = readLegacyBool(LEGACY_WELCOME_SEEN_KEY)
-  const hadConnect = readLegacyBool(LEGACY_CONNECT_STEP_DONE_KEY)
-  const hadCapture = readLegacyBool(LEGACY_CAPTURE_STEP_DONE_KEY)
-  if (!hadWelcome && !hadConnect && !hadCapture) return -1
+  let current = stored
+  if (current < 0) {
+    const hadWelcome = readLegacyBool(LEGACY_WELCOME_SEEN_KEY)
+    const hadConnect = readLegacyBool(LEGACY_CONNECT_STEP_DONE_KEY)
+    const hadCapture = readLegacyBool(LEGACY_CAPTURE_STEP_DONE_KEY)
 
-  // Consumer indices: welcome=0, permissions=1, plan=2, connect=3, capture=4.
-  let migrated = -1
-  if (hadWelcome) migrated = Math.max(migrated, 0)
-  if (hadConnect) migrated = Math.max(migrated, 3)
-  if (hadCapture) migrated = Math.max(migrated, 4)
+    if (hadWelcome || hadConnect || hadCapture) {
+      // Legacy consumer indices (pre-blacklist):
+      //   welcome=0, permissions=1, plan=2, connect=3, capture=4.
+      let migrated = -1
+      if (hadWelcome) migrated = Math.max(migrated, 0)
+      if (hadConnect) migrated = Math.max(migrated, 3)
+      if (hadCapture) migrated = Math.max(migrated, 4)
+      current = migrated
+      removeKey(LEGACY_WELCOME_SEEN_KEY)
+      removeKey(LEGACY_CONNECT_STEP_DONE_KEY)
+      removeKey(LEGACY_CAPTURE_STEP_DONE_KEY)
+    }
+  }
 
-  writeIntFlag(LAST_COMPLETED_STEP_INDEX_KEY, migrated)
-  removeKey(LEGACY_WELCOME_SEEN_KEY)
-  removeKey(LEGACY_CONNECT_STEP_DONE_KEY)
-  removeKey(LEGACY_CAPTURE_STEP_DONE_KEY)
-  return migrated
+  // v1 → v2: blacklist step was inserted just before capture. Anything that
+  // used to land on capture (consumer 4, enterprise 3) shifts by one so we
+  // don't drop already-onboarded users back into the new step.
+  if (layoutVersion < 2 && current >= 0) {
+    if (current >= 3) current += 1
+  }
+
+  if (current !== stored) writeIntFlag(LAST_COMPLETED_STEP_INDEX_KEY, current)
+  if (layoutVersion !== ONBOARDING_LAYOUT_VERSION) {
+    writeIntFlag(ONBOARDING_LAYOUT_VERSION_KEY, ONBOARDING_LAYOUT_VERSION)
+  }
+  return current
 }
 
 export function MainWindowApp(): React.JSX.Element {
@@ -257,6 +278,7 @@ export function MainWindowApp(): React.JSX.Element {
     | 'plan'
     | 'activation'
     | 'connect'
+    | 'blacklist'
     | 'capture'
     | 'dashboard'
 
@@ -265,6 +287,7 @@ export function MainWindowApp(): React.JSX.Element {
         { id: 'welcome', label: 'Welcome' },
         { id: 'permissions', label: 'Permissions' },
         { id: 'activation', label: 'Activate' },
+        { id: 'blacklist', label: 'Privacy' },
         { id: 'capture', label: 'Capture' },
       ]
     : [
@@ -272,6 +295,7 @@ export function MainWindowApp(): React.JSX.Element {
         { id: 'permissions', label: 'Permissions' },
         { id: 'plan', label: 'Plan' },
         { id: 'connect', label: 'Connect' },
+        { id: 'blacklist', label: 'Privacy' },
         { id: 'capture', label: 'Capture' },
       ]
 
@@ -336,6 +360,7 @@ export function MainWindowApp(): React.JSX.Element {
       case 'activation':
         return isConfigured
       case 'connect':
+      case 'blacklist':
       case 'capture':
         return true
       default:
@@ -363,6 +388,7 @@ export function MainWindowApp(): React.JSX.Element {
       displayStep === 'permissions' ||
       displayStep === 'plan' ||
       displayStep === 'connect' ||
+      displayStep === 'blacklist' ||
       displayStep === 'capture'
     ) {
       markStepCompleted(displayIndex)
@@ -542,6 +568,14 @@ export function MainWindowApp(): React.JSX.Element {
                 onStatusChange={() => void loadMcpStatus()}
                 onContinue={() => {
                   markStepCompleted(onboardingSteps.findIndex((s) => s.id === 'connect'))
+                  setViewStepOverride(null)
+                }}
+              />
+            ) : displayStep === 'blacklist' ? (
+              <BlacklistStep
+                api={api}
+                onContinue={() => {
+                  markStepCompleted(onboardingSteps.findIndex((s) => s.id === 'blacklist'))
                   setViewStepOverride(null)
                 }}
               />

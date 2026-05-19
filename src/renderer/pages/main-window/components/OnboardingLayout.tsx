@@ -8,6 +8,7 @@ export type OnboardingStepId =
   | 'plan'
   | 'activation'
   | 'connect'
+  | 'blacklist'
   | 'capture'
 
 export interface OnboardingStepInfo {
@@ -49,7 +50,13 @@ export function OnboardingLayout({
             const isCurrent = idx === currentIndex
             const isDone = idx < currentIndex
             return (
-              <li key={step.id} className="flex flex-1 items-center gap-2 min-w-0">
+              <li
+                key={step.id}
+                className={cn(
+                  'flex items-center gap-2 min-w-0',
+                  idx < steps.length - 1 && 'flex-1',
+                )}
+              >
                 <div
                   className={cn(
                     'flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-medium',
