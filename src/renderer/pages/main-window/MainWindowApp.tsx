@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Settings } from 'lucide-react'
 import { Toaster } from '@components/ui/sonner'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
@@ -22,9 +22,9 @@ import { WelcomeStep } from './components/WelcomeStep'
 import { PermissionsStep } from './components/PermissionsStep'
 import {
   LAST_COMPLETED_STEP_INDEX_KEY,
+  localStorageAdapter,
   readOrMigrateLastCompletedIndex,
   writeIntFlag,
-  type OnboardingStorage,
 } from './onboarding-storage'
 import type { AppEditionConfig } from '@/shared/edition'
 import type {
@@ -38,12 +38,6 @@ import type {
   Vendor,
   VendorStatus,
 } from '@types'
-
-const localStorageAdapter: OnboardingStorage = {
-  getItem: (key) => window.localStorage.getItem(key),
-  setItem: (key, value) => window.localStorage.setItem(key, value),
-  removeItem: (key) => window.localStorage.removeItem(key),
-}
 
 export function MainWindowApp(): React.JSX.Element {
   const api = useMainWindowAPI()
@@ -200,32 +194,28 @@ export function MainWindowApp(): React.JSX.Element {
         permissionStatus.screenRecording === 'granted' &&
         !permissionRestartPending
 
-  type StepId =
-    | 'welcome'
-    | 'permissions'
-    | 'plan'
-    | 'activation'
-    | 'connect'
-    | 'blacklist'
-    | 'capture'
-    | 'dashboard'
+  type DisplayStep = OnboardingStepId | 'dashboard'
 
-  const onboardingSteps: OnboardingStepInfo[] = isEnterprise
-    ? [
-        { id: 'welcome', label: 'Welcome' },
-        { id: 'permissions', label: 'Permissions' },
-        { id: 'activation', label: 'Activate' },
-        { id: 'blacklist', label: 'Privacy' },
-        { id: 'capture', label: 'Capture' },
-      ]
-    : [
-        { id: 'welcome', label: 'Welcome' },
-        { id: 'permissions', label: 'Permissions' },
-        { id: 'plan', label: 'Plan' },
-        { id: 'connect', label: 'Connect' },
-        { id: 'blacklist', label: 'Privacy' },
-        { id: 'capture', label: 'Capture' },
-      ]
+  const onboardingSteps: OnboardingStepInfo[] = useMemo(
+    () =>
+      isEnterprise
+        ? [
+            { id: 'welcome', label: 'Welcome' },
+            { id: 'permissions', label: 'Permissions' },
+            { id: 'activation', label: 'Activate' },
+            { id: 'blacklist', label: 'Privacy' },
+            { id: 'capture', label: 'Capture' },
+          ]
+        : [
+            { id: 'welcome', label: 'Welcome' },
+            { id: 'permissions', label: 'Permissions' },
+            { id: 'plan', label: 'Plan' },
+            { id: 'connect', label: 'Connect' },
+            { id: 'blacklist', label: 'Privacy' },
+            { id: 'capture', label: 'Capture' },
+          ],
+    [isEnterprise],
+  )
 
   const anyMcpConnected = mcpStatus !== null && Object.values(mcpStatus).some(Boolean)
   const screenRecordingGranted = permissionStatus?.screenRecording === 'granted'
@@ -257,8 +247,8 @@ export function MainWindowApp(): React.JSX.Element {
 
   // First incomplete step; -1 (→ dashboard) when everything is done.
   const computedStepIndex = onboardingSteps.findIndex((s, idx) => !isStepComplete(s.id, idx))
-  const computedStep: StepId =
-    computedStepIndex === -1 ? 'dashboard' : (onboardingSteps[computedStepIndex].id as StepId)
+  const computedStep: DisplayStep =
+    computedStepIndex === -1 ? 'dashboard' : onboardingSteps[computedStepIndex].id
 
   // Resolve the displayed step. The override lets the user navigate backward through
   // already-visited steps without mutating the underlying state (permissions/API key
@@ -272,7 +262,9 @@ export function MainWindowApp(): React.JSX.Element {
   // onboarding step (arrows are onboarding-only).
   const overrideValid =
     computedStep !== 'dashboard' && overrideIndex !== -1 && overrideIndex < computedIndex
-  const displayStep: StepId = overrideValid ? (viewStepOverride as StepId) : computedStep
+  const displayStep: DisplayStep = overrideValid
+    ? (viewStepOverride as OnboardingStepId)
+    : computedStep
   const displayIndex = overrideValid ? overrideIndex : computedIndex
 
   useEffect(() => {
@@ -341,7 +333,7 @@ export function MainWindowApp(): React.JSX.Element {
       setCapturing(status.capturing)
       setCaptureHotkeyLabel(status.captureHotkeyLabel)
     })
-    api.onStatusChanged((status) => {
+    const unsubscribe = api.onStatusChanged((status) => {
       setCapturing(status.capturing)
       setCaptureHotkeyLabel(status.captureHotkeyLabel)
       void loadStats()
@@ -350,19 +342,22 @@ export function MainWindowApp(): React.JSX.Element {
     void loadAll().then(() => {
       setInitialLoaded(true)
     })
+    return () => unsubscribe()
   }, [api, loadAll, loadStats, loadPatterns])
 
   useEffect(() => {
-    api.onSubscriptionUpdate(() => {
+    const unsubscribe = api.onSubscriptionUpdate(() => {
       void loadCredentials()
     })
+    return () => unsubscribe()
   }, [api, loadCredentials])
 
   useEffect(() => {
-    api.onAccessStateChanged((state) => {
+    const unsubscribe = api.onAccessStateChanged((state) => {
       setAccessState(state)
       void loadCredentials()
     })
+    return () => unsubscribe()
   }, [api, loadCredentials])
 
   useEffect(() => {
@@ -408,9 +403,28 @@ export function MainWindowApp(): React.JSX.Element {
     markStepCompleted,
   ])
 
+  const refreshOnFocus = useCallback(async () => {
+    // Edition config is build-time and never changes; skip it on focus refreshes.
+    await loadAccessState()
+    await Promise.all([
+      loadCredentials(),
+      loadStats(),
+      loadMcpStatus(),
+      loadPatterns(),
+      loadPermissionStatus(),
+    ])
+  }, [
+    loadAccessState,
+    loadCredentials,
+    loadStats,
+    loadMcpStatus,
+    loadPatterns,
+    loadPermissionStatus,
+  ])
+
   useEffect(() => {
     const handleFocus = (): void => {
-      void loadAll()
+      void refreshOnFocus()
       void api.getStatus().then((status) => {
         setCapturing(status.capturing)
         setCaptureHotkeyLabel(status.captureHotkeyLabel)
@@ -418,7 +432,7 @@ export function MainWindowApp(): React.JSX.Element {
     }
     window.addEventListener('focus', handleFocus)
     return () => window.removeEventListener('focus', handleFocus)
-  }, [api, loadAll])
+  }, [api, refreshOnFocus])
 
   const handleToggle = useCallback(async () => {
     setToggling(true)
@@ -430,6 +444,70 @@ export function MainWindowApp(): React.JSX.Element {
       setToggling(false)
     }
   }, [api])
+
+  const advance = useCallback(
+    (id: OnboardingStepId) => () => {
+      markStepCompleted(onboardingSteps.findIndex((s) => s.id === id))
+      setViewStepOverride(null)
+    },
+    [markStepCompleted, onboardingSteps],
+  )
+
+  const renderStep = (id: OnboardingStepId): React.JSX.Element => {
+    switch (id) {
+      case 'welcome':
+        return <WelcomeStep onContinue={advance('welcome')} />
+      case 'permissions':
+        return permissionStatus === null ? (
+          <div />
+        ) : (
+          <PermissionsStep
+            api={api}
+            status={permissionStatus}
+            needsRestart={permissionRestartPending}
+            onContinue={advance('permissions')}
+          />
+        )
+      case 'plan':
+        return (
+          <PlanPicker
+            api={api}
+            onKeySet={() => void loadCredentials()}
+            onUseOwnEndpoint={() => {
+              setSettingsInitialTab('ai-models')
+              setPage('settings')
+            }}
+            isConfigured={isConfigured}
+            onContinue={advance('plan')}
+          />
+        )
+      case 'activation':
+        return <EnterpriseActivationCard api={api} accessState={accessState} />
+      case 'connect':
+        return (
+          <ConnectStep
+            api={api}
+            mcpStatus={mcpStatus}
+            onStatusChange={() => void loadMcpStatus()}
+            onContinue={advance('connect')}
+          />
+        )
+      case 'blacklist':
+        return <BlacklistStep api={api} onContinue={advance('blacklist')} />
+      case 'capture':
+        return (
+          <CaptureStep
+            api={api}
+            capturing={capturing}
+            captureHotkeyLabel={captureHotkeyLabel}
+            toggling={toggling}
+            onToggle={() => void handleToggle()}
+            activityCount={stats?.activityCount ?? null}
+            onContinue={advance('capture')}
+          />
+        )
+    }
+  }
 
   if (page === 'settings') {
     return (
@@ -492,69 +570,7 @@ export function MainWindowApp(): React.JSX.Element {
             canGoBack={canGoBack}
             canGoForward={canGoForward}
           >
-            {displayStep === 'welcome' ? (
-              <WelcomeStep
-                onContinue={() => {
-                  markStepCompleted(onboardingSteps.findIndex((s) => s.id === 'welcome'))
-                  setViewStepOverride(null)
-                }}
-              />
-            ) : displayStep === 'permissions' ? (
-              <PermissionsStep
-                api={api}
-                onContinue={() => {
-                  markStepCompleted(onboardingSteps.findIndex((s) => s.id === 'permissions'))
-                  setViewStepOverride(null)
-                }}
-              />
-            ) : displayStep === 'plan' ? (
-              <PlanPicker
-                api={api}
-                onKeySet={() => void loadCredentials()}
-                onUseOwnEndpoint={() => {
-                  setSettingsInitialTab('ai-models')
-                  setPage('settings')
-                }}
-                isConfigured={isConfigured}
-                onContinue={() => {
-                  markStepCompleted(onboardingSteps.findIndex((s) => s.id === 'plan'))
-                  setViewStepOverride(null)
-                }}
-              />
-            ) : displayStep === 'activation' ? (
-              <EnterpriseActivationCard api={api} accessState={accessState} />
-            ) : displayStep === 'connect' ? (
-              <ConnectStep
-                api={api}
-                mcpStatus={mcpStatus}
-                onStatusChange={() => void loadMcpStatus()}
-                onContinue={() => {
-                  markStepCompleted(onboardingSteps.findIndex((s) => s.id === 'connect'))
-                  setViewStepOverride(null)
-                }}
-              />
-            ) : displayStep === 'blacklist' ? (
-              <BlacklistStep
-                api={api}
-                onContinue={() => {
-                  markStepCompleted(onboardingSteps.findIndex((s) => s.id === 'blacklist'))
-                  setViewStepOverride(null)
-                }}
-              />
-            ) : (
-              <CaptureStep
-                api={api}
-                capturing={capturing}
-                captureHotkeyLabel={captureHotkeyLabel}
-                toggling={toggling}
-                onToggle={() => void handleToggle()}
-                activityCount={stats?.activityCount ?? null}
-                onContinue={() => {
-                  markStepCompleted(onboardingSteps.findIndex((s) => s.id === 'capture'))
-                  setViewStepOverride(null)
-                }}
-              />
-            )}
+            {renderStep(displayStep as OnboardingStepId)}
           </OnboardingLayout>
         )}
       </div>

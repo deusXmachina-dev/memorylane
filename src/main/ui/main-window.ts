@@ -898,6 +898,12 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     log.info(
       `[Permissions] getPermissionStatus → accessibility=${status.accessibility}, screenRecording=${status.screenRecording}`,
     )
+    // Start polling so the renderer is notified when the user grants permissions
+    // outside our flow (e.g., directly in System Settings). Self-stops once both
+    // are granted.
+    if (status.accessibility !== 'granted' || status.screenRecording !== 'granted') {
+      startPermissionPolling()
+    }
     return status
   })
   // The Grant button just opens the relevant System Settings pane and starts

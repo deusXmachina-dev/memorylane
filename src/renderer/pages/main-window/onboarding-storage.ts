@@ -22,6 +22,12 @@ export interface OnboardingStorage {
   removeItem(key: string): void
 }
 
+export const localStorageAdapter: OnboardingStorage = {
+  getItem: (key) => window.localStorage.getItem(key),
+  setItem: (key, value) => window.localStorage.setItem(key, value),
+  removeItem: (key) => window.localStorage.removeItem(key),
+}
+
 function safe<T>(fn: () => T, fallback: T): T {
   try {
     return fn()

@@ -150,7 +150,7 @@ export function PlanPicker({
       statusRef.current = s
     })
 
-    api.onSubscriptionUpdate((update) => {
+    const unsubscribe = api.onSubscriptionUpdate((update) => {
       if (update.status === 'idle' && statusRef.current !== 'idle') {
         toast.success('API key provisioned successfully')
         onKeySet()
@@ -163,6 +163,7 @@ export function PlanPicker({
       setStatus(update.status)
       statusRef.current = update.status
     })
+    return () => unsubscribe()
   }, [api, onKeySet])
 
   return (

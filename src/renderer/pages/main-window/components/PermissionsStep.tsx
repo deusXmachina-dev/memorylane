@@ -1,13 +1,15 @@
 import * as React from 'react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback } from 'react'
 import { Check } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import { OnboardingCard } from './OnboardingCard'
 import { OnboardingStep } from './OnboardingStep'
-import type { MainWindowAPI, PermissionKind, PermissionState, PermissionStatus } from '@types'
+import type { MainWindowAPI, PermissionKind, PermissionStatus } from '@types'
 
 interface PermissionsStepProps {
   api: MainWindowAPI
+  status: PermissionStatus
+  needsRestart: boolean
   onContinue: () => void
 }
 
@@ -87,51 +89,26 @@ function PermissionRow({ info, index, granted, onGrant }: PermissionRowProps): R
   )
 }
 
-export function PermissionsStep({ api, onContinue }: PermissionsStepProps): React.JSX.Element {
-  const [status, setStatus] = useState<PermissionStatus | null>(null)
-  // Captured synchronously on the first non-null status so we can tell if
-  // screen recording was granted mid-session. macOS won't actually let the
-  // running process capture until it restarts, so in that case we gate the
-  // step on a manual restart. Ref (not state) so the value is visible on the
-  // same render that first sets `status`, avoiding a one-frame window where
-  // `needsRestart` would falsely read false.
-  const initialScreenRecordingRef = useRef<PermissionState | null>(null)
-
-  const handleStatus = useCallback((next: PermissionStatus) => {
-    if (initialScreenRecordingRef.current === null) {
-      initialScreenRecordingRef.current = next.screenRecording
-    }
-    setStatus(next)
-  }, [])
-
-  useEffect(() => {
-    void api.getPermissionStatus().then(handleStatus)
-    const unsubscribe = api.onPermissionStatusChanged(handleStatus)
-    return () => unsubscribe()
-  }, [api, handleStatus])
-
-  const initialScreenRecording = initialScreenRecordingRef.current
-  const needsRestart =
-    initialScreenRecording !== null &&
-    initialScreenRecording !== 'granted' &&
-    status?.screenRecording === 'granted'
-
+export function PermissionsStep({
+  api,
+  status,
+  needsRestart,
+  onContinue,
+}: PermissionsStepProps): React.JSX.Element {
   const handleGrant = useCallback(
     (kind: PermissionKind) => {
       // Fire-and-forget: the IPC handler opens System Settings and starts
       // polling. We deliberately don't gate the button on a `pending` state —
       // doing so caused a Grant → Opening… → Grant flicker for the ~150ms
       // round-trip before the row eventually flips to "Granted" via polling.
-      void api.requestPermission(kind).then(handleStatus)
+      void api.requestPermission(kind)
     },
-    [api, handleStatus],
+    [api],
   )
 
   const handleRestart = useCallback(() => {
     void api.restartApp()
   }, [api])
-
-  if (status === null) return <div />
 
   const grantedCount =
     (status.accessibility === 'granted' ? 1 : 0) + (status.screenRecording === 'granted' ? 1 : 0)

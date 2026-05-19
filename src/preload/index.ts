@@ -12,7 +12,11 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   getAccessState: () => ipcRenderer.invoke('main-window:getAccessState'),
   refreshAccessState: () => ipcRenderer.invoke('main-window:refreshAccessState'),
   onAccessStateChanged: (callback: (state: unknown) => void) => {
-    ipcRenderer.on('main-window:accessStateChanged', (_event, state) => callback(state))
+    const handler = (_event: unknown, state: unknown): void => callback(state)
+    ipcRenderer.on('main-window:accessStateChanged', handler)
+    return () => {
+      ipcRenderer.off('main-window:accessStateChanged', handler)
+    }
   },
   activateEnterpriseLicense: (activationCode: string) =>
     ipcRenderer.invoke('main-window:activateEnterpriseLicense', activationCode),
@@ -23,7 +27,11 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   getStatus: () => ipcRenderer.invoke('main-window:getStatus'),
   toggleCapture: () => ipcRenderer.invoke('main-window:toggleCapture'),
   onStatusChanged: (callback: (status: unknown) => void) => {
-    ipcRenderer.on('main-window:statusChanged', (_event, status) => callback(status))
+    const handler = (_event: unknown, status: unknown): void => callback(status)
+    ipcRenderer.on('main-window:statusChanged', handler)
+    return () => {
+      ipcRenderer.off('main-window:statusChanged', handler)
+    }
   },
   // Vendor credentials & active-vendor management
   getCredentialStatuses: () => ipcRenderer.invoke('main-window:getCredentialStatuses'),
@@ -44,7 +52,11 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   openSubscriptionPortal: () => ipcRenderer.invoke('main-window:openSubscriptionPortal'),
   getSubscriptionStatus: () => ipcRenderer.invoke('main-window:getSubscriptionStatus'),
   onSubscriptionUpdate: (callback: (update: unknown) => void) => {
-    ipcRenderer.on('main-window:subscriptionUpdate', (_event, update) => callback(update))
+    const handler = (_event: unknown, update: unknown): void => callback(update)
+    ipcRenderer.on('main-window:subscriptionUpdate', handler)
+    return () => {
+      ipcRenderer.off('main-window:subscriptionUpdate', handler)
+    }
   },
   // Privacy metadata
   listInstalledApps: () => ipcRenderer.invoke('main-window:listInstalledApps'),

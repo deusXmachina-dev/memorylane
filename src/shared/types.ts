@@ -265,13 +265,13 @@ export interface MainWindowAPI {
   getEditionConfig: () => Promise<AppEditionConfig>
   getAccessState: () => Promise<AccessState>
   refreshAccessState: () => Promise<AccessState>
-  onAccessStateChanged: (callback: (state: AccessState) => void) => void
+  onAccessStateChanged: (callback: (state: AccessState) => void) => () => void
   activateEnterpriseLicense: (activationCode: string) => Promise<SaveResult>
   getPendingConsent: () => Promise<PendingConsent | null>
   submitConsentDecision: (outcome: ConsentOutcome) => Promise<SaveResult>
   getStatus: () => Promise<MainWindowStatus>
   toggleCapture: () => Promise<MainWindowStatus>
-  onStatusChanged: (callback: (status: MainWindowStatus) => void) => void
+  onStatusChanged: (callback: (status: MainWindowStatus) => void) => () => void
   // Settings methods (merged from settingsAPI)
   getCredentialStatuses: () => Promise<Record<Vendor, VendorStatus>>
   saveCredentials: (vendor: Vendor, creds: VendorCredentials) => Promise<SaveResult>
@@ -287,7 +287,7 @@ export interface MainWindowAPI {
   startCheckout: (plan: SubscriptionPlan) => Promise<void>
   openSubscriptionPortal: () => Promise<void>
   getSubscriptionStatus: () => Promise<SubscriptionStatus>
-  onSubscriptionUpdate: (callback: (update: SubscriptionUpdate) => void) => void
+  onSubscriptionUpdate: (callback: (update: SubscriptionUpdate) => void) => () => void
   // Privacy metadata
   listInstalledApps: () => Promise<InstalledApp[]>
   listSeenDomains: () => Promise<SeenDomain[]>
