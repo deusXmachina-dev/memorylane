@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Settings } from 'lucide-react'
 import { Toaster } from '@components/ui/sonner'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
@@ -20,6 +20,12 @@ import {
 } from './components/OnboardingLayout'
 import { WelcomeStep } from './components/WelcomeStep'
 import { PermissionsStep } from './components/PermissionsStep'
+import {
+  LAST_COMPLETED_STEP_INDEX_KEY,
+  readOrMigrateLastCompletedIndex,
+  writeIntFlag,
+  type OnboardingStorage,
+} from './onboarding-storage'
 import type { AppEditionConfig } from '@/shared/edition'
 import type {
   AccessState,
@@ -33,98 +39,10 @@ import type {
   VendorStatus,
 } from '@types'
 
-const LAST_COMPLETED_STEP_INDEX_KEY = 'memorylane:onboarding:lastCompletedStepIndex'
-const ONBOARDING_LAYOUT_VERSION_KEY = 'memorylane:onboarding:layoutVersion'
-// Bump when the step order/inserts change so existing completed-index values
-// can be re-mapped onto the new ordering instead of bouncing users back.
-const ONBOARDING_LAYOUT_VERSION = 2
-
-// Legacy keys, read once on startup to migrate users who already completed
-// onboarding under the old three-flag model. Removed after migration so the
-// new index becomes the sole source of truth.
-const LEGACY_WELCOME_SEEN_KEY = 'memorylane:onboarding:welcomeSeen'
-const LEGACY_CONNECT_STEP_DONE_KEY = 'memorylane:onboarding:connectStepDone'
-const LEGACY_CAPTURE_STEP_DONE_KEY = 'memorylane:onboarding:captureStepDone'
-
-function readIntFlag(key: string, fallback: number): number {
-  try {
-    const raw = window.localStorage.getItem(key)
-    if (raw === null) return fallback
-    const parsed = Number.parseInt(raw, 10)
-    return Number.isFinite(parsed) ? parsed : fallback
-  } catch {
-    return fallback
-  }
-}
-
-function writeIntFlag(key: string, value: number): void {
-  try {
-    window.localStorage.setItem(key, String(value))
-  } catch {
-    // best-effort
-  }
-}
-
-function readLegacyBool(key: string): boolean {
-  try {
-    return window.localStorage.getItem(key) === '1'
-  } catch {
-    return false
-  }
-}
-
-function removeKey(key: string): void {
-  try {
-    window.localStorage.removeItem(key)
-  } catch {
-    // best-effort
-  }
-}
-
-/**
- * Read the persisted last-completed step index, migrating from the old
- * three-flag scheme (welcomeSeen / connectStepDone / captureStepDone) if any
- * of those keys are present. Indexes refer to the consumer step list — the
- * highest possible legacy completion is `capture`, so the migrated value is
- * the consumer "capture" index. On enterprise, that overshoots the shorter
- * step list, which is fine: `computedStep` clamps to dashboard.
- */
-function readOrMigrateLastCompletedIndex(): number {
-  const stored = readIntFlag(LAST_COMPLETED_STEP_INDEX_KEY, -1)
-  const layoutVersion = readIntFlag(ONBOARDING_LAYOUT_VERSION_KEY, 1)
-
-  let current = stored
-  if (current < 0) {
-    const hadWelcome = readLegacyBool(LEGACY_WELCOME_SEEN_KEY)
-    const hadConnect = readLegacyBool(LEGACY_CONNECT_STEP_DONE_KEY)
-    const hadCapture = readLegacyBool(LEGACY_CAPTURE_STEP_DONE_KEY)
-
-    if (hadWelcome || hadConnect || hadCapture) {
-      // Legacy consumer indices (pre-blacklist):
-      //   welcome=0, permissions=1, plan=2, connect=3, capture=4.
-      let migrated = -1
-      if (hadWelcome) migrated = Math.max(migrated, 0)
-      if (hadConnect) migrated = Math.max(migrated, 3)
-      if (hadCapture) migrated = Math.max(migrated, 4)
-      current = migrated
-      removeKey(LEGACY_WELCOME_SEEN_KEY)
-      removeKey(LEGACY_CONNECT_STEP_DONE_KEY)
-      removeKey(LEGACY_CAPTURE_STEP_DONE_KEY)
-    }
-  }
-
-  // v1 → v2: blacklist step was inserted just before capture. Anything that
-  // used to land on capture (consumer 4, enterprise 3) shifts by one so we
-  // don't drop already-onboarded users back into the new step.
-  if (layoutVersion < 2 && current >= 0) {
-    if (current >= 3) current += 1
-  }
-
-  if (current !== stored) writeIntFlag(LAST_COMPLETED_STEP_INDEX_KEY, current)
-  if (layoutVersion !== ONBOARDING_LAYOUT_VERSION) {
-    writeIntFlag(ONBOARDING_LAYOUT_VERSION_KEY, ONBOARDING_LAYOUT_VERSION)
-  }
-  return current
+const localStorageAdapter: OnboardingStorage = {
+  getItem: (key) => window.localStorage.getItem(key),
+  setItem: (key, value) => window.localStorage.setItem(key, value),
+  removeItem: (key) => window.localStorage.removeItem(key),
 }
 
 export function MainWindowApp(): React.JSX.Element {
@@ -147,20 +65,29 @@ export function MainWindowApp(): React.JSX.Element {
   const [patterns, setPatterns] = useState<PatternInfo[] | null>(null)
   const [initialLoaded, setInitialLoaded] = useState(false)
   const [lastCompletedStepIndex, setLastCompletedStepIndex] = useState<number>(() =>
-    readOrMigrateLastCompletedIndex(),
+    readOrMigrateLastCompletedIndex(localStorageAdapter),
   )
   const [permissionStatus, setPermissionStatus] = useState<PermissionStatus | null>(null)
-  // Captured once on the first non-null permission status so we can detect a
-  // mid-session screen-recording grant — macOS won't let the running process
-  // actually capture until it restarts, so we gate onboarding on a manual
-  // restart in that case.
-  const [initialScreenRecording, setInitialScreenRecording] = useState<PermissionState | null>(null)
+  // Captured synchronously on the first non-null permission status so we can
+  // detect a mid-session screen-recording grant — macOS won't let the running
+  // process actually capture until it restarts, so we gate onboarding on a
+  // manual restart in that case. A ref (not state) so the value is visible on
+  // the same render that first sets `permissionStatus`, avoiding a one-frame
+  // window where `permissionsResolved` would falsely flip true.
+  const initialScreenRecordingRef = useRef<PermissionState | null>(null)
   const [viewStepOverride, setViewStepOverride] = useState<OnboardingStepId | null>(null)
+
+  const updatePermissionStatus = useCallback((status: PermissionStatus) => {
+    if (initialScreenRecordingRef.current === null) {
+      initialScreenRecordingRef.current = status.screenRecording
+    }
+    setPermissionStatus(status)
+  }, [])
 
   const markStepCompleted = useCallback((idx: number) => {
     setLastCompletedStepIndex((prev) => {
       const next = Math.max(prev, idx)
-      if (next !== prev) writeIntFlag(LAST_COMPLETED_STEP_INDEX_KEY, next)
+      if (next !== prev) writeIntFlag(localStorageAdapter, LAST_COMPLETED_STEP_INDEX_KEY, next)
       return next
     })
   }, [])
@@ -223,11 +150,11 @@ export function MainWindowApp(): React.JSX.Element {
 
   const loadPermissionStatus = useCallback(async () => {
     try {
-      setPermissionStatus(await api.getPermissionStatus())
+      updatePermissionStatus(await api.getPermissionStatus())
     } catch {
       // Silently handle error
     }
-  }, [api])
+  }, [api, updatePermissionStatus])
 
   const loadAll = useCallback(async () => {
     await loadEditionConfig()
@@ -260,6 +187,7 @@ export function MainWindowApp(): React.JSX.Element {
     enabled: page === 'home' && isConfigured,
   })
 
+  const initialScreenRecording = initialScreenRecordingRef.current
   const permissionRestartPending =
     initialScreenRecording !== null &&
     initialScreenRecording !== 'granted' &&
@@ -379,18 +307,12 @@ export function MainWindowApp(): React.JSX.Element {
       setViewStepOverride(onboardingSteps[overrideIndex + 1].id)
       return
     }
-    // Otherwise we're at the leading edge — perform the step's continue action.
-    // welcome / connect / capture mark themselves completed; permissions /
-    // plan / activation auto-advance via underlying state, so no marking
-    // needed (and `markStepCompleted` for them would be a no-op for resume).
-    if (
-      displayStep === 'welcome' ||
-      displayStep === 'permissions' ||
-      displayStep === 'plan' ||
-      displayStep === 'connect' ||
-      displayStep === 'blacklist' ||
-      displayStep === 'capture'
-    ) {
+    // Otherwise we're at the leading edge — perform the step's continue
+    // action. Every step except `activation` needs an explicit completion
+    // mark so it doesn't re-appear on resume even when its underlying state
+    // is also satisfied (`isStepComplete` requires both for those steps).
+    // `activation` is gated purely on `isConfigured` and has no Continue.
+    if (displayStep !== 'activation') {
       markStepCompleted(displayIndex)
     }
     setViewStepOverride(null)
@@ -434,17 +356,9 @@ export function MainWindowApp(): React.JSX.Element {
   }, [api, loadCredentials])
 
   useEffect(() => {
-    const unsubscribe = api.onPermissionStatusChanged((status) => {
-      setPermissionStatus(status)
-    })
+    const unsubscribe = api.onPermissionStatusChanged(updatePermissionStatus)
     return () => unsubscribe()
-  }, [api])
-
-  useEffect(() => {
-    if (permissionStatus !== null && initialScreenRecording === null) {
-      setInitialScreenRecording(permissionStatus.screenRecording)
-    }
-  }, [permissionStatus, initialScreenRecording])
+  }, [api, updatePermissionStatus])
 
   useEffect(() => {
     const handleFocus = (): void => {

@@ -911,9 +911,11 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   // listening for accessibility, capture attempts for screen recording).
   ipcMain.handle('main-window:requestPermission', async (_event, kind: string) => {
     log.info(`[Permissions] requestPermission(${kind})`)
-    if (kind === 'accessibility' || kind === 'screenRecording') {
-      await openPermissionSettings(kind)
+    if (kind !== 'accessibility' && kind !== 'screenRecording') {
+      log.warn(`[Permissions] requestPermission ignored — unknown kind: ${kind}`)
+      return getPermissionStatus()
     }
+    await openPermissionSettings(kind)
     startPermissionPolling()
     return getPermissionStatus()
   })

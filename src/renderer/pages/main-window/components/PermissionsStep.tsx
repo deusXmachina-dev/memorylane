@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import { OnboardingCard } from './OnboardingCard'
@@ -41,8 +41,8 @@ const REASSURANCE: ReassurancePoint[] = [
     body: 'We track typing duration, not what you type.',
   },
   {
-    title: 'Stays on device',
-    body: 'After inference, screenshots and activity stay on your machine.',
+    title: 'Stored on device',
+    body: 'Activity and patterns stay local. Screenshots only leave the device for the AI provider you pick.',
   },
   {
     title: 'Pause anytime',
@@ -89,23 +89,28 @@ function PermissionRow({ info, index, granted, onGrant }: PermissionRowProps): R
 
 export function PermissionsStep({ api, onContinue }: PermissionsStepProps): React.JSX.Element {
   const [status, setStatus] = useState<PermissionStatus | null>(null)
-  // Captured once on first load so we can tell if screen recording was granted
-  // mid-session. macOS won't actually let the running process capture until it
-  // restarts, so in that case we gate the step on a manual restart.
-  const [initialScreenRecording, setInitialScreenRecording] = useState<PermissionState | null>(null)
+  // Captured synchronously on the first non-null status so we can tell if
+  // screen recording was granted mid-session. macOS won't actually let the
+  // running process capture until it restarts, so in that case we gate the
+  // step on a manual restart. Ref (not state) so the value is visible on the
+  // same render that first sets `status`, avoiding a one-frame window where
+  // `needsRestart` would falsely read false.
+  const initialScreenRecordingRef = useRef<PermissionState | null>(null)
 
-  useEffect(() => {
-    void api.getPermissionStatus().then(setStatus)
-    const unsubscribe = api.onPermissionStatusChanged(setStatus)
-    return () => unsubscribe()
-  }, [api])
-
-  useEffect(() => {
-    if (status !== null && initialScreenRecording === null) {
-      setInitialScreenRecording(status.screenRecording)
+  const handleStatus = useCallback((next: PermissionStatus) => {
+    if (initialScreenRecordingRef.current === null) {
+      initialScreenRecordingRef.current = next.screenRecording
     }
-  }, [status, initialScreenRecording])
+    setStatus(next)
+  }, [])
 
+  useEffect(() => {
+    void api.getPermissionStatus().then(handleStatus)
+    const unsubscribe = api.onPermissionStatusChanged(handleStatus)
+    return () => unsubscribe()
+  }, [api, handleStatus])
+
+  const initialScreenRecording = initialScreenRecordingRef.current
   const needsRestart =
     initialScreenRecording !== null &&
     initialScreenRecording !== 'granted' &&
@@ -117,9 +122,9 @@ export function PermissionsStep({ api, onContinue }: PermissionsStepProps): Reac
       // polling. We deliberately don't gate the button on a `pending` state —
       // doing so caused a Grant → Opening… → Grant flicker for the ~150ms
       // round-trip before the row eventually flips to "Granted" via polling.
-      void api.requestPermission(kind).then(setStatus)
+      void api.requestPermission(kind).then(handleStatus)
     },
-    [api],
+    [api, handleStatus],
   )
 
   const handleRestart = useCallback(() => {
@@ -178,7 +183,7 @@ export function PermissionsStep({ api, onContinue }: PermissionsStepProps): Reac
           disabled={!allGranted}
           onClick={needsRestart ? handleRestart : onContinue}
         >
-          {needsRestart ? 'Restart and Continue' : 'Continue'}
+          {needsRestart ? 'Restart MemoryLane' : 'Continue'}
         </Button>
       </div>
     </OnboardingStep>
