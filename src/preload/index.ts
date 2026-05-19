@@ -2,7 +2,7 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ConsentOutcome, Vendor, VendorCredentials } from '../shared/types'
+import type { ConsentOutcome, PermissionKind, Vendor, VendorCredentials } from '../shared/types'
 
 console.log('[Preload] Script loading...')
 
@@ -92,6 +92,21 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
       ipcRenderer.off('main-window:observationUpdate', handler)
     }
   },
+  // Permissions
+  getPermissionStatus: () => ipcRenderer.invoke('main-window:getPermissionStatus'),
+  requestPermission: (kind: PermissionKind) =>
+    ipcRenderer.invoke('main-window:requestPermission', kind),
+  openPermissionSettings: (kind: PermissionKind) =>
+    ipcRenderer.invoke('main-window:openPermissionSettings', kind),
+  onPermissionStatusChanged: (callback: (status: unknown) => void) => {
+    const handler = (_event: unknown, status: unknown): void => callback(status)
+    ipcRenderer.on('main-window:permissionStatusChanged', handler)
+    return () => {
+      ipcRenderer.off('main-window:permissionStatusChanged', handler)
+    }
+  },
+  // App lifecycle
+  restartApp: () => ipcRenderer.invoke('main-window:restartApp'),
 })
 
 console.log('[Preload] mainWindowAPI exposed to renderer')

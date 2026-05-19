@@ -1,3 +1,4 @@
+import { Button } from '@components/ui/button'
 import { CaptureControlSection } from './CaptureControlSection'
 import { PATTERN_DETECTION_CONFIG } from '@constants'
 import type { MainWindowAPI } from '@types'
@@ -9,6 +10,7 @@ interface CaptureStepProps {
   toggling: boolean
   onToggle: () => void
   activityCount: number | null
+  onContinue: () => void
 }
 
 export function CaptureStep({
@@ -18,6 +20,7 @@ export function CaptureStep({
   toggling,
   onToggle,
   activityCount,
+  onContinue,
 }: CaptureStepProps): React.JSX.Element {
   const minActivities = PATTERN_DETECTION_CONFIG.MIN_ACTIVITIES
   const safeCount = activityCount ?? 0
@@ -73,6 +76,12 @@ export function CaptureStep({
           </p>
         </div>
       )}
+
+      <div className="flex justify-end pt-1">
+        <Button variant="outline" size="sm" onClick={onContinue}>
+          Go to dashboard
+        </Button>
+      </div>
     </div>
   )
 }

@@ -237,6 +237,13 @@ export type SemanticPipelineMode = 'auto' | 'video' | 'image'
 
 export type UpdateState = 'idle' | 'downloading' | 'ready'
 
+export type PermissionKind = 'accessibility' | 'screenRecording'
+export type PermissionState = 'granted' | 'denied' | 'unknown'
+export interface PermissionStatus {
+  accessibility: PermissionState
+  screenRecording: PermissionState
+}
+
 export interface PatternInfo {
   id: string
   name: string
@@ -316,4 +323,11 @@ export interface MainWindowAPI {
   stopObservation: () => Promise<ObservationState>
   getObservationState: () => Promise<ObservationState>
   onObservationUpdate: (callback: (state: ObservationState) => void) => () => void
+  // Permissions
+  getPermissionStatus: () => Promise<PermissionStatus>
+  requestPermission: (kind: PermissionKind) => Promise<PermissionStatus>
+  openPermissionSettings: (kind: PermissionKind) => Promise<void>
+  onPermissionStatusChanged: (callback: (status: PermissionStatus) => void) => () => void
+  // App lifecycle
+  restartApp: () => Promise<void>
 }

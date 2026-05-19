@@ -1,147 +1,72 @@
 /**
- * macOS permissions management for Accessibility and Screen Recording
+ * macOS permissions management for Accessibility and Screen Recording.
+ *
+ * Exposes pure status getters and idempotent request triggers so the renderer
+ * can drive the onboarding permission step. The legacy blocking
+ * `ensurePermissions()` flow has been removed — startup no longer waits on a
+ * native prompt, and we no longer auto-relaunch after screen-recording grant.
  */
 
-import path from 'node:path'
-import fs from 'node:fs'
-import { systemPreferences, desktopCapturer, app, dialog, shell } from 'electron'
+import { spawn } from 'node:child_process'
+import { systemPreferences, shell } from 'electron'
 import log from '../logger'
 
+export type PermissionState = 'granted' | 'denied' | 'unknown'
+
+export interface PermissionStatus {
+  accessibility: PermissionState
+  screenRecording: PermissionState
+}
+
 /**
- * Ensure all required permissions are granted before starting the app.
- * Uses a phased approach: Accessibility first, then Screen Recording.
- * Opens the correct System Settings pane for each permission.
- * Handles the Screen Recording restart requirement gracefully.
+ * Read current permission status without prompting the user.
+ * Non-macOS platforms report both as granted.
  */
-export const ensurePermissions = async (): Promise<void> => {
-  // Non-macOS platforms don't need these permission checks
+export function getPermissionStatus(): PermissionStatus {
   if (process.platform !== 'darwin') {
-    return
+    return { accessibility: 'granted', screenRecording: 'granted' }
   }
 
-  // Phase 1: Check and request Accessibility permission
-  await ensureAccessibilityPermission()
+  const accessibility: PermissionState = systemPreferences.isTrustedAccessibilityClient(false)
+    ? 'granted'
+    : 'denied'
 
-  // Phase 2: Check and request Screen Recording permission
-  await ensureScreenRecordingPermission()
+  const mediaStatus = systemPreferences.getMediaAccessStatus('screen')
+  let screenRecording: PermissionState
+  if (mediaStatus === 'granted') screenRecording = 'granted'
+  else if (mediaStatus === 'not-determined' || mediaStatus === 'unknown')
+    screenRecording = 'unknown'
+  else screenRecording = 'denied'
 
-  // Phase 3: Prompt user to allow notifications during screen recording
-  await promptNotificationSettings()
-
-  log.info('[Permissions] All permissions granted')
+  return { accessibility, screenRecording }
 }
 
 /**
- * Ensure Accessibility permission is granted.
- * Opens System Settings to the Accessibility pane if needed.
+ * Open the macOS System Settings pane for the given permission.
+ *
+ * Uses `open(1)` via child_process — more reliable than shell.openExternal
+ * for `x-apple.systempreferences:` URLs, which silently no-op on some recent
+ * macOS versions when System Settings is already running.
  */
-const ensureAccessibilityPermission = async (): Promise<void> => {
-  const hasAccessibility = systemPreferences.isTrustedAccessibilityClient(false)
-
-  if (hasAccessibility) {
-    log.info('[Permissions] Accessibility permission already granted')
-    return
-  }
-
-  log.warn('[Permissions] Accessibility permission missing')
-
-  // Trigger the native system prompt which includes an "Open System Settings" button
-  systemPreferences.isTrustedAccessibilityClient(true)
-
-  // Poll until Accessibility is granted
-  return new Promise<void>((resolve) => {
-    const POLL_INTERVAL_MS = 2000
-
-    const pollId = setInterval(() => {
-      const nowHasAccessibility = systemPreferences.isTrustedAccessibilityClient(false)
-
-      if (nowHasAccessibility) {
-        log.info('[Permissions] Accessibility permission granted')
-        clearInterval(pollId)
-        resolve()
-      } else {
-        log.info('[Permissions] Still waiting for Accessibility permission')
-      }
-    }, POLL_INTERVAL_MS)
-  })
-}
-
-const NOTIFICATION_PROMPT_MARKER = '.notification-settings-prompted'
-
-/**
- * Prompt the user to enable "Allow notifications when mirroring or sharing the display"
- * in macOS System Settings. Only shown once (marker file persists the dismissal).
- */
-const promptNotificationSettings = async (): Promise<void> => {
-  const markerPath = path.join(app.getPath('userData'), NOTIFICATION_PROMPT_MARKER)
-
-  if (fs.existsSync(markerPath)) {
-    log.info('[Permissions] Notification settings prompt already shown, skipping')
-    return
-  }
-
-  log.info('[Permissions] Showing notification settings prompt')
-
-  const { response } = await dialog.showMessageBox({
-    type: 'info',
-    title: 'Allow Notifications',
-    message: 'macOS hides notifications while screen recording is active.',
-    detail:
-      'To keep seeing notifications, enable "Allow notifications when mirroring or sharing the display" in System Settings > Notifications.',
-    buttons: ['Open Settings', 'Skip'],
-    defaultId: 0,
-  })
-
-  if (response === 0) {
-    await shell.openExternal('x-apple.systempreferences:com.apple.Notifications-Settings')
-  }
-
-  fs.writeFileSync(markerPath, '', 'utf-8')
-  log.info('[Permissions] Notification settings prompt completed')
-}
-
-/**
- * Ensure Screen Recording permission is granted.
- * Opens System Settings to the Screen Recording pane if needed.
- * Schedules app relaunch to handle macOS forced restart requirement.
- */
-const ensureScreenRecordingPermission = async (): Promise<void> => {
-  const hasScreenRecording = systemPreferences.getMediaAccessStatus('screen') === 'granted'
-
-  if (hasScreenRecording) {
-    log.info('[Permissions] Screen Recording permission already granted')
-    return
-  }
-
-  log.warn('[Permissions] Screen Recording permission missing')
-
-  // Trigger a trial capture so macOS registers the app in the Screen Recording list.
-  // Without this, the app won't appear in System Settings for the user to toggle.
+export async function openPermissionSettings(
+  kind: 'accessibility' | 'screenRecording',
+): Promise<void> {
+  if (process.platform !== 'darwin') return
+  const url =
+    kind === 'accessibility'
+      ? 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'
+      : 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'
+  log.info(`[Permissions] openPermissionSettings(${kind}) → ${url}`)
   try {
-    await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } })
-  } catch {
-    log.info('[Permissions] Trial capture completed (permission not yet granted)')
+    const child = spawn('open', [url], { detached: true, stdio: 'ignore' })
+    child.on('error', (err) => {
+      log.warn(`[Permissions] open(1) failed: ${err instanceof Error ? err.message : String(err)}`)
+    })
+    child.unref()
+  } catch (err) {
+    log.warn(
+      `[Permissions] spawn open failed (${err instanceof Error ? err.message : String(err)}); falling back to shell.openExternal`,
+    )
+    await shell.openExternal(url)
   }
-
-  // Schedule app relaunch for when macOS forces quit after granting permission
-  app.relaunch()
-  log.info('[Permissions] App relaunch scheduled for after Screen Recording grant')
-
-  // Poll until Screen Recording is granted
-  // This may never complete if macOS forces a quit, but we handle that with relaunch()
-  return new Promise<void>((resolve) => {
-    const POLL_INTERVAL_MS = 2000
-
-    const pollId = setInterval(() => {
-      const nowHasScreenRecording = systemPreferences.getMediaAccessStatus('screen') === 'granted'
-
-      if (nowHasScreenRecording) {
-        log.info('[Permissions] Screen Recording permission granted')
-        clearInterval(pollId)
-        resolve()
-      } else {
-        log.info('[Permissions] Still waiting for Screen Recording permission')
-      }
-    }, POLL_INTERVAL_MS)
-  })
 }
