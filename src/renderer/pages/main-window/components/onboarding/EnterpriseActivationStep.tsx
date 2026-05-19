@@ -6,12 +6,15 @@ import { Input } from '@components/ui/input'
 import { OnboardingStep } from './OnboardingStep'
 import type { AccessState, ConsentOutcome, MainWindowAPI, PendingConsent } from '@types'
 
-interface ActivationStepProps {
+interface EnterpriseActivationStepProps {
   api: MainWindowAPI
   accessState: AccessState | null
 }
 
-export function ActivationStep({ api, accessState }: ActivationStepProps): React.JSX.Element {
+export function EnterpriseActivationStep({
+  api,
+  accessState,
+}: EnterpriseActivationStepProps): React.JSX.Element {
   const status = accessState?.enterpriseActivationStatus ?? 'idle'
 
   if (status === 'awaiting_consent') {
@@ -44,7 +47,10 @@ function ProvisioningView({
   )
 }
 
-function ActivationKeyEntry({ api, accessState }: ActivationStepProps): React.JSX.Element {
+function ActivationKeyEntry({
+  api,
+  accessState,
+}: EnterpriseActivationStepProps): React.JSX.Element {
   const [activationCode, setActivationCode] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -97,7 +103,7 @@ function ActivationKeyEntry({ api, accessState }: ActivationStepProps): React.JS
   )
 }
 
-function ConsentScreen({ api, accessState }: ActivationStepProps): React.JSX.Element {
+function ConsentScreen({ api, accessState }: EnterpriseActivationStepProps): React.JSX.Element {
   const [consent, setConsent] = useState<PendingConsent | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [agreed, setAgreed] = useState(false)

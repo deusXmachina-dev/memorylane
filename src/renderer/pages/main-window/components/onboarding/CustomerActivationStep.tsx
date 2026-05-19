@@ -125,7 +125,7 @@ function EnterpriseCard(): React.JSX.Element {
   )
 }
 
-interface PlanPickerProps {
+interface CustomerActivationStepProps {
   api: MainWindowAPI
   onKeySet: () => void
   onUseOwnEndpoint: () => void
@@ -133,13 +133,13 @@ interface PlanPickerProps {
   onContinue: () => void
 }
 
-export function PlanPicker({
+export function CustomerActivationStep({
   api,
   onKeySet,
   onUseOwnEndpoint,
   isConfigured,
   onContinue,
-}: PlanPickerProps): React.JSX.Element {
+}: CustomerActivationStepProps): React.JSX.Element {
   const [status, setStatus] = useState<SubscriptionStatus>('idle')
   const statusRef = useRef(status)
   statusRef.current = status

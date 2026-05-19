@@ -8,13 +8,13 @@ import { CaptureControlSection } from './components/CaptureControlSection'
 import { StatusLine } from './components/StatusLine'
 import { PatternsSection } from './components/PatternsSection'
 import { AdvancedSettingsPage } from './AdvancedSettingsPage'
-import { ActivationStep } from './components/onboarding/ActivationStep'
 import { BlacklistStep } from './components/onboarding/BlacklistStep'
 import { CaptureStep } from './components/onboarding/CaptureStep'
 import { ConnectStep } from './components/onboarding/ConnectStep'
+import { CustomerActivationStep } from './components/onboarding/CustomerActivationStep'
+import { EnterpriseActivationStep } from './components/onboarding/EnterpriseActivationStep'
 import { OnboardingLayout, type OnboardingStepId } from './components/onboarding/OnboardingLayout'
 import { PermissionsStep } from './components/onboarding/PermissionsStep'
-import { PlanPicker } from './components/onboarding/PlanPicker'
 import { WelcomeStep } from './components/onboarding/WelcomeStep'
 import {
   LAST_COMPLETED_STEP_INDEX_KEY,
@@ -387,7 +387,7 @@ export function MainWindowApp(): React.JSX.Element {
         )
       case 'plan':
         return (
-          <PlanPicker
+          <CustomerActivationStep
             api={api}
             onKeySet={() => void loadCredentials()}
             onUseOwnEndpoint={() => {
@@ -399,7 +399,7 @@ export function MainWindowApp(): React.JSX.Element {
           />
         )
       case 'activation':
-        return <ActivationStep api={api} accessState={accessState} />
+        return <EnterpriseActivationStep api={api} accessState={accessState} />
       case 'connect':
         return (
           <ConnectStep
