@@ -192,11 +192,9 @@ export function PlanPicker({
         .
       </p>
 
-      <div className="pt-2">
-        <Button size="lg" disabled={!isConfigured} onClick={onContinue}>
-          Continue
-        </Button>
-      </div>
+      <OnboardingStep.Button disabled={!isConfigured} onClick={onContinue}>
+        Continue
+      </OnboardingStep.Button>
     </OnboardingStep>
   )
 }

@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
 import { SiClaude } from '@icons-pack/react-simple-icons'
-import { Button } from '@components/ui/button'
 import { OnboardingCard } from './OnboardingCard'
 import { OnboardingStep } from './OnboardingStep'
 import type { MainWindowAPI, McpRegistrationStatus } from '@types'
@@ -100,11 +99,7 @@ export function ConnectStep({
         You may need to restart Claude Code / Cowork after connecting for the MCP to appear.
       </p>
 
-      <div className="pt-2">
-        <Button size="lg" onClick={onContinue}>
-          Continue
-        </Button>
-      </div>
+      <OnboardingStep.Button onClick={onContinue}>Continue</OnboardingStep.Button>
     </OnboardingStep>
   )
 }

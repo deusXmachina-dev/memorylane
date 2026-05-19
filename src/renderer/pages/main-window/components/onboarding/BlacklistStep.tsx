@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Button } from '@components/ui/button'
-import { ExclusionsManager } from './advanced-settings/exclusions/ExclusionsManager'
+import { ExclusionsManager } from '../advanced-settings/exclusions/ExclusionsManager'
 import { OnboardingStep } from './OnboardingStep'
 import type { CaptureSettings, MainWindowAPI } from '@types'
 
@@ -63,11 +62,7 @@ export function BlacklistStep({ api, onContinue }: BlacklistStepProps): React.JS
         onObserved={() => void load()}
       />
 
-      <div className="pt-2">
-        <Button size="lg" onClick={onContinue}>
-          Continue
-        </Button>
-      </div>
+      <OnboardingStep.Button onClick={onContinue}>Continue</OnboardingStep.Button>
     </OnboardingStep>
   )
 }

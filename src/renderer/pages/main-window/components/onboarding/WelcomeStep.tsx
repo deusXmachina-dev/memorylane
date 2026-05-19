@@ -1,5 +1,4 @@
 import * as React from 'react'
-import { Button } from '@components/ui/button'
 import { OnboardingStep } from './OnboardingStep'
 
 interface WelcomeStepProps {
@@ -41,11 +40,7 @@ export function WelcomeStep({ onContinue }: WelcomeStepProps): React.JSX.Element
         ))}
       </ul>
 
-      <div className="pt-2">
-        <Button size="lg" onClick={onContinue}>
-          Get started
-        </Button>
-      </div>
+      <OnboardingStep.Button onClick={onContinue}>Get started</OnboardingStep.Button>
     </OnboardingStep>
   )
 }

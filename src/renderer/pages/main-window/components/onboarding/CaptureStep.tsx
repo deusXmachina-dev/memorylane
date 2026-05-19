@@ -1,5 +1,4 @@
-import { Button } from '@components/ui/button'
-import { CaptureControlSection } from './CaptureControlSection'
+import { CaptureControlSection } from '../CaptureControlSection'
 import { OnboardingStep } from './OnboardingStep'
 import { PATTERN_DETECTION_CONFIG } from '@constants'
 import type { MainWindowAPI } from '@types'
@@ -77,11 +76,9 @@ export function CaptureStep({
         </div>
       )}
 
-      <div className="pt-2">
-        <Button size="lg" disabled={!capturing} onClick={onContinue}>
-          Finish onboarding
-        </Button>
-      </div>
+      <OnboardingStep.Button disabled={!capturing} onClick={onContinue}>
+        Finish onboarding
+      </OnboardingStep.Button>
     </OnboardingStep>
   )
 }

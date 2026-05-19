@@ -4,22 +4,22 @@ import { Toaster } from '@components/ui/sonner'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { useLlmHealth } from '@/renderer/hooks/use-llm-health'
 import { Button } from '@components/ui/button'
-import { EnterpriseActivationCard } from './components/EnterpriseActivationCard'
-import { PlanPicker } from './components/PlanPicker'
 import { CaptureControlSection } from './components/CaptureControlSection'
-import { BlacklistStep } from './components/BlacklistStep'
-import { ConnectStep } from './components/ConnectStep'
-import { CaptureStep } from './components/CaptureStep'
 import { StatusLine } from './components/StatusLine'
 import { PatternsSection } from './components/PatternsSection'
 import { AdvancedSettingsPage } from './AdvancedSettingsPage'
+import { ActivationStep } from './components/onboarding/ActivationStep'
+import { BlacklistStep } from './components/onboarding/BlacklistStep'
+import { CaptureStep } from './components/onboarding/CaptureStep'
+import { ConnectStep } from './components/onboarding/ConnectStep'
 import {
   OnboardingLayout,
   type OnboardingStepId,
   type OnboardingStepInfo,
-} from './components/OnboardingLayout'
-import { WelcomeStep } from './components/WelcomeStep'
-import { PermissionsStep } from './components/PermissionsStep'
+} from './components/onboarding/OnboardingLayout'
+import { PermissionsStep } from './components/onboarding/PermissionsStep'
+import { PlanPicker } from './components/onboarding/PlanPicker'
+import { WelcomeStep } from './components/onboarding/WelcomeStep'
 import {
   LAST_COMPLETED_STEP_INDEX_KEY,
   localStorageAdapter,
@@ -482,7 +482,7 @@ export function MainWindowApp(): React.JSX.Element {
           />
         )
       case 'activation':
-        return <EnterpriseActivationCard api={api} accessState={accessState} />
+        return <ActivationStep api={api} accessState={accessState} />
       case 'connect':
         return (
           <ConnectStep

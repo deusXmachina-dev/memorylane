@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { Button } from '@components/ui/button'
 
 interface OnboardingStepProps {
   children: React.ReactNode
@@ -22,4 +23,20 @@ function Header({ title, subtitle }: HeaderProps): React.JSX.Element {
   )
 }
 
-export const OnboardingStep = Object.assign(OnboardingStepRoot, { Header })
+interface StepButtonProps {
+  onClick: () => void
+  disabled?: boolean
+  children: React.ReactNode
+}
+
+function StepButton({ onClick, disabled, children }: StepButtonProps): React.JSX.Element {
+  return (
+    <div className="pt-2">
+      <Button size="lg" disabled={disabled} onClick={onClick}>
+        {children}
+      </Button>
+    </div>
+  )
+}
+
+export const OnboardingStep = Object.assign(OnboardingStepRoot, { Header, Button: StepButton })

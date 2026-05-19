@@ -154,15 +154,12 @@ export function PermissionsStep({
         </div>
       </div>
 
-      <div className="pt-2">
-        <Button
-          size="lg"
-          disabled={!allGranted}
-          onClick={needsRestart ? handleRestart : onContinue}
-        >
-          {needsRestart ? 'Restart MemoryLane' : 'Continue'}
-        </Button>
-      </div>
+      <OnboardingStep.Button
+        disabled={!allGranted}
+        onClick={needsRestart ? handleRestart : onContinue}
+      >
+        {needsRestart ? 'Restart MemoryLane' : 'Continue'}
+      </OnboardingStep.Button>
     </OnboardingStep>
   )
 }
