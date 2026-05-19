@@ -227,13 +227,23 @@ export function MainWindowApp(): React.JSX.Element {
         { id: 'capture', label: 'Capture' },
       ]
 
+  const anyMcpConnected = mcpStatus !== null && Object.values(mcpStatus).some(Boolean)
+  const screenRecordingGranted = permissionStatus?.screenRecording === 'granted'
+  const accessibilityGranted = permissionStatus?.accessibility === 'granted'
+  const hasAnyProgress =
+    isConfigured || screenRecordingGranted || accessibilityGranted || anyMcpConnected
+
   // Per-step completion. Requirement-driven steps (permissions, plan,
   // activation) auto-complete when their underlying state is satisfied —
   // they can be revoked outside the app, so we always check live state.
-  // User-action steps (welcome, connect, capture) require an explicit
-  // click-through tracked by `lastCompletedStepIndex`.
+  // User-action steps (connect, blacklist, capture) require an explicit
+  // click-through tracked by `lastCompletedStepIndex`. Welcome is
+  // content-only and auto-completes once any other progress signal exists
+  // so returning users aren't re-walked through it.
   const isStepComplete = (id: OnboardingStepId, idx: number): boolean => {
     switch (id) {
+      case 'welcome':
+        return lastCompletedStepIndex >= idx || hasAnyProgress
       case 'permissions':
         return permissionsResolved && lastCompletedStepIndex >= idx
       case 'plan':
@@ -359,6 +369,44 @@ export function MainWindowApp(): React.JSX.Element {
     const unsubscribe = api.onPermissionStatusChanged(updatePermissionStatus)
     return () => unsubscribe()
   }, [api, updatePermissionStatus])
+
+  // Self-heal `lastCompletedStepIndex` from concrete state once everything
+  // has loaded. If a returning user has already granted permissions, set a
+  // key, or connected MCP, those steps are implicitly done — bump the mark
+  // forward so they don't get re-walked through welcome / permissions / etc.
+  useEffect(() => {
+    if (!initialLoaded) return
+    let implied = -1
+    if (hasAnyProgress) implied = Math.max(implied, 0) // welcome
+    if (permissionStatus !== null && accessibilityGranted && screenRecordingGranted) {
+      const idx = onboardingSteps.findIndex((s) => s.id === 'permissions')
+      if (idx !== -1) implied = Math.max(implied, idx)
+    }
+    if (isConfigured) {
+      const planIdx = onboardingSteps.findIndex((s) => s.id === 'plan')
+      const actIdx = onboardingSteps.findIndex((s) => s.id === 'activation')
+      if (planIdx !== -1) implied = Math.max(implied, planIdx)
+      if (actIdx !== -1) implied = Math.max(implied, actIdx)
+    }
+    if (anyMcpConnected) {
+      const idx = onboardingSteps.findIndex((s) => s.id === 'connect')
+      if (idx !== -1) implied = Math.max(implied, idx)
+    }
+    if (implied > lastCompletedStepIndex) {
+      markStepCompleted(implied)
+    }
+  }, [
+    initialLoaded,
+    hasAnyProgress,
+    isConfigured,
+    permissionStatus,
+    accessibilityGranted,
+    screenRecordingGranted,
+    anyMcpConnected,
+    lastCompletedStepIndex,
+    onboardingSteps,
+    markStepCompleted,
+  ])
 
   useEffect(() => {
     const handleFocus = (): void => {
