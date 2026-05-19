@@ -283,8 +283,9 @@ export function MainWindowApp(): React.JSX.Element {
   const isStepComplete = (id: OnboardingStepId, idx: number): boolean => {
     switch (id) {
       case 'permissions':
-        return permissionsResolved
+        return permissionsResolved && lastCompletedStepIndex >= idx
       case 'plan':
+        return isConfigured && lastCompletedStepIndex >= idx
       case 'activation':
         return isConfigured
       default:
@@ -357,7 +358,13 @@ export function MainWindowApp(): React.JSX.Element {
     // welcome / connect / capture mark themselves completed; permissions /
     // plan / activation auto-advance via underlying state, so no marking
     // needed (and `markStepCompleted` for them would be a no-op for resume).
-    if (displayStep === 'welcome' || displayStep === 'connect' || displayStep === 'capture') {
+    if (
+      displayStep === 'welcome' ||
+      displayStep === 'permissions' ||
+      displayStep === 'plan' ||
+      displayStep === 'connect' ||
+      displayStep === 'capture'
+    ) {
       markStepCompleted(displayIndex)
     }
     setViewStepOverride(null)
@@ -505,7 +512,13 @@ export function MainWindowApp(): React.JSX.Element {
                 }}
               />
             ) : displayStep === 'permissions' ? (
-              <PermissionsStep api={api} />
+              <PermissionsStep
+                api={api}
+                onContinue={() => {
+                  markStepCompleted(onboardingSteps.findIndex((s) => s.id === 'permissions'))
+                  setViewStepOverride(null)
+                }}
+              />
             ) : displayStep === 'plan' ? (
               <PlanPicker
                 api={api}
@@ -513,6 +526,11 @@ export function MainWindowApp(): React.JSX.Element {
                 onUseOwnEndpoint={() => {
                   setSettingsInitialTab('ai-models')
                   setPage('settings')
+                }}
+                isConfigured={isConfigured}
+                onContinue={() => {
+                  markStepCompleted(onboardingSteps.findIndex((s) => s.id === 'plan'))
+                  setViewStepOverride(null)
                 }}
               />
             ) : displayStep === 'activation' ? (

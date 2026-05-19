@@ -77,8 +77,8 @@ export function CaptureStep({
         </div>
       )}
 
-      <div className="flex justify-end pt-1">
-        <Button variant="outline" size="sm" onClick={onContinue}>
+      <div className="pt-2">
+        <Button size="lg" disabled={!capturing} onClick={onContinue}>
           Go to dashboard
         </Button>
       </div>

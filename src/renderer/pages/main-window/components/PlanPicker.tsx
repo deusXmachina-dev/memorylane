@@ -129,12 +129,16 @@ interface PlanPickerProps {
   api: MainWindowAPI
   onKeySet: () => void
   onUseOwnEndpoint: () => void
+  isConfigured: boolean
+  onContinue: () => void
 }
 
 export function PlanPicker({
   api,
   onKeySet,
   onUseOwnEndpoint,
+  isConfigured,
+  onContinue,
 }: PlanPickerProps): React.JSX.Element {
   const [status, setStatus] = useState<SubscriptionStatus>('idle')
   const statusRef = useRef(status)
@@ -186,6 +190,12 @@ export function PlanPicker({
         </button>
         .
       </p>
+
+      <div className="pt-2">
+        <Button size="lg" disabled={!isConfigured} onClick={onContinue}>
+          Continue
+        </Button>
+      </div>
     </OnboardingStep>
   )
 }

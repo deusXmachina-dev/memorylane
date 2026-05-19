@@ -1,13 +1,14 @@
 import * as React from 'react'
 import { useCallback, useEffect, useState } from 'react'
-import { Check, RotateCcw } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { Button } from '@components/ui/button'
-import { cn } from '@/renderer/lib/utils'
+import { OnboardingCard } from './OnboardingCard'
 import { OnboardingStep } from './OnboardingStep'
 import type { MainWindowAPI, PermissionKind, PermissionState, PermissionStatus } from '@types'
 
 interface PermissionsStepProps {
   api: MainWindowAPI
+  onContinue: () => void
 }
 
 interface PermissionInfo {
@@ -62,37 +63,31 @@ interface PermissionRowProps {
 
 function PermissionRow({ info, index, granted, onGrant }: PermissionRowProps): React.JSX.Element {
   return (
-    <div
-      className={cn(
-        'flex items-center gap-4 rounded-lg border bg-card p-4 transition-colors',
-        granted ? 'border-primary/40' : 'border-border',
-      )}
-    >
-      <div
-        className={cn(
-          'flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold',
-          granted ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground',
-        )}
-        aria-hidden
-      >
-        {granted ? <Check className="size-4" strokeWidth={2.5} /> : index + 1}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium leading-tight">{info.title}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground leading-snug">{info.description}</p>
-      </div>
-      {granted ? (
-        <span className="text-xs font-medium text-primary">Granted</span>
-      ) : (
-        <Button size="sm" onClick={onGrant}>
-          Grant
-        </Button>
-      )}
-    </div>
+    <OnboardingCard
+      tone={granted ? 'success' : 'default'}
+      icon={
+        granted ? (
+          <Check className="size-4" strokeWidth={2.5} />
+        ) : (
+          <span className="text-sm font-semibold">{index + 1}</span>
+        )
+      }
+      title={info.title}
+      description={info.description}
+      action={
+        granted ? (
+          <span className="text-xs font-medium text-primary">Granted</span>
+        ) : (
+          <Button size="sm" onClick={onGrant}>
+            Grant
+          </Button>
+        )
+      }
+    />
   )
 }
 
-export function PermissionsStep({ api }: PermissionsStepProps): React.JSX.Element {
+export function PermissionsStep({ api, onContinue }: PermissionsStepProps): React.JSX.Element {
   const [status, setStatus] = useState<PermissionStatus | null>(null)
   // Captured once on first load so we can tell if screen recording was granted
   // mid-session. macOS won't actually let the running process capture until it
@@ -137,22 +132,6 @@ export function PermissionsStep({ api }: PermissionsStepProps): React.JSX.Elemen
     (status.accessibility === 'granted' ? 1 : 0) + (status.screenRecording === 'granted' ? 1 : 0)
   const allGranted = grantedCount === 2
 
-  if (allGranted && needsRestart) {
-    return (
-      <OnboardingStep>
-        <OnboardingStep.Header
-          title="One more thing"
-          subtitle="Both permissions are granted. MemoryLane needs to restart for Screen Recording to take effect."
-        />
-        <div className="pt-2">
-          <Button size="lg" onClick={handleRestart}>
-            Restart & Continue
-          </Button>
-        </div>
-      </OnboardingStep>
-    )
-  }
-
   return (
     <OnboardingStep>
       <OnboardingStep.Header
@@ -164,19 +143,6 @@ export function PermissionsStep({ api }: PermissionsStepProps): React.JSX.Elemen
           </>
         }
       />
-
-      <div className="flex items-start gap-3 rounded-lg border border-primary/60 bg-primary/10 p-4">
-        <RotateCcw className="mt-0.5 size-5 shrink-0 text-primary" />
-        <div className="min-w-0 flex-1 space-y-0.5">
-          <p className="text-sm font-semibold text-foreground">Already granted?</p>
-          <p className="text-xs text-muted-foreground">
-            MemoryLane must restart before the permissions take effect.
-          </p>
-        </div>
-        <Button size="sm" onClick={handleRestart}>
-          Restart MemoryLane
-        </Button>
-      </div>
 
       <div className="space-y-3">
         {PERMISSIONS.map((info, idx) => (
@@ -204,6 +170,16 @@ export function PermissionsStep({ api }: PermissionsStepProps): React.JSX.Elemen
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="pt-2">
+        <Button
+          size="lg"
+          disabled={!allGranted}
+          onClick={needsRestart ? handleRestart : onContinue}
+        >
+          {needsRestart ? 'Restart and Continue' : 'Continue'}
+        </Button>
       </div>
     </OnboardingStep>
   )
