@@ -12,7 +12,13 @@ import { IntegrationsTabPanel } from './components/advanced-settings/Integration
 import type { NumericCaptureSetting } from './components/advanced-settings/types'
 import { detectHotkeyPlatform, toRecordedAccelerator } from './hotkey-utils'
 
-export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.JSX.Element {
+export function AdvancedSettingsPage({
+  onBack,
+  initialTab,
+}: {
+  onBack: () => void
+  initialTab?: 'privacy' | 'data' | 'ai-models' | 'integrations'
+}): React.JSX.Element {
   const api = useMainWindowAPI()
   const hotkeyPlatform = useMemo(() => detectHotkeyPlatform(), [])
   const [editionConfig, setEditionConfig] = useState<AppEditionConfig | null>(null)
@@ -263,7 +269,7 @@ export function AdvancedSettingsPage({ onBack }: { onBack: () => void }): React.
         <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
 
         {form && (
-          <Tabs defaultValue="privacy">
+          <Tabs defaultValue={initialTab ?? 'privacy'}>
             <TabsList>
               <TabsTab value="privacy">Privacy</TabsTab>
               <TabsTab value="data">Data</TabsTab>

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@components/ui/card'
+import { OnboardingStep } from './OnboardingStep'
 import type { MainWindowAPI, SubscriptionPlan, SubscriptionStatus } from '@types'
 
 export interface PlanConfig {
@@ -29,6 +30,8 @@ const ENTERPRISE = {
   features: ['Custom integrations', 'Done-for-you setup', 'Dedicated support'],
 }
 
+const BOOK_CALL_URL = 'https://calendar.app.google/2rJgu2Ah3kWaMApG8'
+
 interface PlanCardProps {
   plan: PlanConfig
   api: MainWindowAPI
@@ -47,14 +50,19 @@ function PlanCard({ plan, api, status }: PlanCardProps): React.JSX.Element {
   }, [api, plan.id])
 
   return (
-    <Card className={`flex-1 ${plan.highlighted ? 'border-primary' : ''}`}>
+    <Card className={`flex-1 ${plan.highlighted ? 'border-primary ring-1 ring-primary/40' : ''}`}>
       <CardHeader className="pb-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-base">{plan.name}</CardTitle>
+          {plan.highlighted && (
+            <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary">
+              Recommended
+            </span>
+          )}
         </div>
-        <p className="text-lg font-semibold">{plan.price}</p>
+        <p className="text-2xl font-semibold">{plan.price}</p>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-4">
         <ul className="space-y-1.5">
           {plan.features.map((f) => (
             <li key={f} className="text-xs text-muted-foreground flex items-start gap-1.5">
@@ -91,18 +99,16 @@ function PlanCard({ plan, api, status }: PlanCardProps): React.JSX.Element {
 
 function EnterpriseCard(): React.JSX.Element {
   const handleBookCall = useCallback(() => {
-    window.open('https://calendar.app.google/2rJgu2Ah3kWaMApG8', '_blank')
+    window.open(BOOK_CALL_URL, '_blank')
   }, [])
 
   return (
     <Card className="flex-1">
       <CardHeader className="pb-2">
-        <div className="flex items-center gap-2">
-          <CardTitle className="text-base">{ENTERPRISE.name}</CardTitle>
-        </div>
-        <p className="text-lg font-semibold">{ENTERPRISE.price}</p>
+        <CardTitle className="text-base">{ENTERPRISE.name}</CardTitle>
+        <p className="text-2xl font-semibold">{ENTERPRISE.price}</p>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-4">
         <ul className="space-y-1.5">
           {ENTERPRISE.features.map((f) => (
             <li key={f} className="text-xs text-muted-foreground flex items-start gap-1.5">
@@ -119,12 +125,21 @@ function EnterpriseCard(): React.JSX.Element {
   )
 }
 
-interface PlanPickerProps {
+interface CustomerActivationStepProps {
   api: MainWindowAPI
   onKeySet: () => void
+  onUseOwnEndpoint: () => void
+  isConfigured: boolean
+  onContinue: () => void
 }
 
-export function PlanPicker({ api, onKeySet }: PlanPickerProps): React.JSX.Element {
+export function CustomerActivationStep({
+  api,
+  onKeySet,
+  onUseOwnEndpoint,
+  isConfigured,
+  onContinue,
+}: CustomerActivationStepProps): React.JSX.Element {
   const [status, setStatus] = useState<SubscriptionStatus>('idle')
   const statusRef = useRef(status)
   statusRef.current = status
@@ -135,7 +150,7 @@ export function PlanPicker({ api, onKeySet }: PlanPickerProps): React.JSX.Elemen
       statusRef.current = s
     })
 
-    api.onSubscriptionUpdate((update) => {
+    const unsubscribe = api.onSubscriptionUpdate((update) => {
       if (update.status === 'idle' && statusRef.current !== 'idle') {
         toast.success('API key provisioned successfully')
         onKeySet()
@@ -148,16 +163,38 @@ export function PlanPicker({ api, onKeySet }: PlanPickerProps): React.JSX.Elemen
       setStatus(update.status)
       statusRef.current = update.status
     })
+    return () => unsubscribe()
   }, [api, onKeySet])
 
   return (
-    <div className="space-y-3">
+    <OnboardingStep>
+      <OnboardingStep.Header
+        title="Pick a plan"
+        subtitle="Same captures, different support level. You can change later."
+      />
+
       <div className="grid grid-cols-2 gap-4">
         {PLANS.map((plan) => (
           <PlanCard key={plan.id} plan={plan} api={api} status={status} />
         ))}
         <EnterpriseCard />
       </div>
-    </div>
+
+      <p className="text-xs text-muted-foreground">
+        Have your own endpoint?{' '}
+        <button
+          type="button"
+          onClick={onUseOwnEndpoint}
+          className="text-foreground underline-offset-2 hover:underline"
+        >
+          Use your own API key in settings
+        </button>
+        .
+      </p>
+
+      <OnboardingStep.Button disabled={!isConfigured} onClick={onContinue}>
+        Continue
+      </OnboardingStep.Button>
+    </OnboardingStep>
   )
 }

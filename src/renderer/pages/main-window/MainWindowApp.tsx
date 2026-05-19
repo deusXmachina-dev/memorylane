@@ -1,16 +1,28 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Settings } from 'lucide-react'
 import { Toaster } from '@components/ui/sonner'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { useLlmHealth } from '@/renderer/hooks/use-llm-health'
 import { Button } from '@components/ui/button'
-import { EnterpriseActivationCard } from './components/EnterpriseActivationCard'
-import { PlanPicker } from './components/PlanPicker'
 import { CaptureControlSection } from './components/CaptureControlSection'
-import { ConnectStep } from './components/ConnectStep'
-import { CaptureStep } from './components/CaptureStep'
 import { StatusLine } from './components/StatusLine'
 import { PatternsSection } from './components/PatternsSection'
 import { AdvancedSettingsPage } from './AdvancedSettingsPage'
+import { BlacklistStep } from './components/onboarding/BlacklistStep'
+import { CaptureStep } from './components/onboarding/CaptureStep'
+import { ConnectStep } from './components/onboarding/ConnectStep'
+import { CustomerActivationStep } from './components/onboarding/CustomerActivationStep'
+import { EnterpriseActivationStep } from './components/onboarding/EnterpriseActivationStep'
+import { OnboardingLayout, type OnboardingStepId } from './components/onboarding/OnboardingLayout'
+import { PermissionsStep } from './components/onboarding/PermissionsStep'
+import { WelcomeStep } from './components/onboarding/WelcomeStep'
+import {
+  LAST_COMPLETED_STEP_INDEX_KEY,
+  localStorageAdapter,
+  readOrMigrateLastCompletedIndex,
+  writeIntFlag,
+} from './onboarding-storage'
+import { impliedCompletedIndex, resolveOnboarding } from './onboarding-state'
 import type { AppEditionConfig } from '@/shared/edition'
 import type {
   AccessState,
@@ -18,6 +30,8 @@ import type {
   MainWindowStats,
   McpRegistrationStatus,
   PatternInfo,
+  PermissionState,
+  PermissionStatus,
   Vendor,
   VendorStatus,
 } from '@types'
@@ -25,6 +39,9 @@ import type {
 export function MainWindowApp(): React.JSX.Element {
   const api = useMainWindowAPI()
   const [page, setPage] = useState<'home' | 'settings'>('home')
+  const [settingsInitialTab, setSettingsInitialTab] = useState<
+    'privacy' | 'data' | 'ai-models' | 'integrations' | undefined
+  >(undefined)
   const [editionConfig, setEditionConfig] = useState<AppEditionConfig | null>(null)
   const [accessState, setAccessState] = useState<AccessState | null>(null)
   const [credentialStatuses, setCredentialStatuses] = useState<Record<Vendor, VendorStatus> | null>(
@@ -38,7 +55,33 @@ export function MainWindowApp(): React.JSX.Element {
   const [mcpStatus, setMcpStatus] = useState<McpRegistrationStatus | null>(null)
   const [patterns, setPatterns] = useState<PatternInfo[] | null>(null)
   const [initialLoaded, setInitialLoaded] = useState(false)
-  const [connectStepDone, setConnectStepDone] = useState(false)
+  const [lastCompletedStepIndex, setLastCompletedStepIndex] = useState<number>(() =>
+    readOrMigrateLastCompletedIndex(localStorageAdapter),
+  )
+  const [permissionStatus, setPermissionStatus] = useState<PermissionStatus | null>(null)
+  // Captured synchronously on the first non-null permission status so we can
+  // detect a mid-session screen-recording grant — macOS won't let the running
+  // process actually capture until it restarts, so we gate onboarding on a
+  // manual restart in that case. A ref (not state) so the value is visible on
+  // the same render that first sets `permissionStatus`, avoiding a one-frame
+  // window where `permissionsResolved` would falsely flip true.
+  const initialScreenRecordingRef = useRef<PermissionState | null>(null)
+  const [viewStepOverride, setViewStepOverride] = useState<OnboardingStepId | null>(null)
+
+  const updatePermissionStatus = useCallback((status: PermissionStatus) => {
+    if (initialScreenRecordingRef.current === null) {
+      initialScreenRecordingRef.current = status.screenRecording
+    }
+    setPermissionStatus(status)
+  }, [])
+
+  const markStepCompleted = useCallback((idx: number) => {
+    setLastCompletedStepIndex((prev) => {
+      const next = Math.max(prev, idx)
+      if (next !== prev) writeIntFlag(localStorageAdapter, LAST_COMPLETED_STEP_INDEX_KEY, next)
+      return next
+    })
+  }, [])
 
   const loadEditionConfig = useCallback(async () => {
     try {
@@ -96,11 +139,33 @@ export function MainWindowApp(): React.JSX.Element {
     }
   }, [api])
 
+  const loadPermissionStatus = useCallback(async () => {
+    try {
+      updatePermissionStatus(await api.getPermissionStatus())
+    } catch (error) {
+      console.warn('[MainWindowApp] Failed to load permission status:', error)
+    }
+  }, [api, updatePermissionStatus])
+
   const loadAll = useCallback(async () => {
     await loadEditionConfig()
     await loadAccessState()
-    await Promise.all([loadCredentials(), loadStats(), loadMcpStatus(), loadPatterns()])
-  }, [loadAccessState, loadEditionConfig, loadCredentials, loadStats, loadMcpStatus, loadPatterns])
+    await Promise.all([
+      loadCredentials(),
+      loadStats(),
+      loadMcpStatus(),
+      loadPatterns(),
+      loadPermissionStatus(),
+    ])
+  }, [
+    loadAccessState,
+    loadEditionConfig,
+    loadCredentials,
+    loadStats,
+    loadMcpStatus,
+    loadPatterns,
+    loadPermissionStatus,
+  ])
 
   const isEnterprise = editionConfig?.edition === 'enterprise'
   const activeVendorStatus = credentialStatuses?.[activeVendor] ?? null
@@ -113,21 +178,86 @@ export function MainWindowApp(): React.JSX.Element {
     enabled: page === 'home' && isConfigured,
   })
 
+  const initialScreenRecording = initialScreenRecordingRef.current
+  const permissionRestartPending =
+    initialScreenRecording !== null &&
+    initialScreenRecording !== 'granted' &&
+    permissionStatus?.screenRecording === 'granted'
+
   const anyMcpConnected = mcpStatus !== null && Object.values(mcpStatus).some(Boolean)
-  const hasPatterns = patterns !== null && patterns.length > 0
-  const step =
-    !isEnterprise && (!anyMcpConnected || !connectStepDone)
-      ? 'connect'
-      : !hasPatterns
-        ? 'capture'
-        : 'dashboard'
+  const screenRecordingGranted = permissionStatus?.screenRecording === 'granted'
+  const accessibilityGranted = permissionStatus?.accessibility === 'granted'
+  const hasAnyProgress =
+    isConfigured || screenRecordingGranted || accessibilityGranted || anyMcpConnected
+
+  const resolution = useMemo(
+    () =>
+      resolveOnboarding({
+        isEnterprise,
+        isConfigured,
+        lastCompletedStepIndex,
+        permissionStatus,
+        permissionRestartPending,
+        hasAnyProgress,
+        anyMcpConnected,
+        viewStepOverride,
+      }),
+    [
+      isEnterprise,
+      isConfigured,
+      lastCompletedStepIndex,
+      permissionStatus,
+      permissionRestartPending,
+      hasAnyProgress,
+      anyMcpConnected,
+      viewStepOverride,
+    ],
+  )
+  const {
+    steps: onboardingSteps,
+    computedStep,
+    computedIndex,
+    displayStep,
+    displayIndex,
+    overrideValid,
+    canGoBack,
+    canGoForward,
+  } = resolution
+
+  useEffect(() => {
+    if (viewStepOverride && !overrideValid) {
+      setViewStepOverride(null)
+    }
+  }, [viewStepOverride, overrideValid])
+
+  const handleBack = useCallback(() => {
+    if (displayIndex <= 0) return
+    setViewStepOverride(onboardingSteps[displayIndex - 1].id)
+  }, [displayIndex, onboardingSteps])
+
+  const handleForward = useCallback(() => {
+    // If the user is viewing an earlier step via override, just step the
+    // override forward (displayIndex === overrideIndex when overrideValid).
+    if (overrideValid && displayIndex + 1 < computedIndex) {
+      setViewStepOverride(onboardingSteps[displayIndex + 1].id)
+      return
+    }
+    // Otherwise we're at the leading edge — perform the step's continue
+    // action. Every step except `activation` needs an explicit completion
+    // mark so it doesn't re-appear on resume even when its underlying state
+    // is also satisfied. `activation` is gated purely on `isConfigured`.
+    if (displayStep !== 'activation') {
+      markStepCompleted(displayIndex)
+    }
+    setViewStepOverride(null)
+  }, [overrideValid, computedIndex, onboardingSteps, displayStep, displayIndex, markStepCompleted])
 
   useEffect(() => {
     void api.getStatus().then((status) => {
       setCapturing(status.capturing)
       setCaptureHotkeyLabel(status.captureHotkeyLabel)
     })
-    api.onStatusChanged((status) => {
+    const unsubscribe = api.onStatusChanged((status) => {
       setCapturing(status.capturing)
       setCaptureHotkeyLabel(status.captureHotkeyLabel)
       void loadStats()
@@ -135,28 +265,83 @@ export function MainWindowApp(): React.JSX.Element {
     })
     void loadAll().then(() => {
       setInitialLoaded(true)
-      void api.getMcpStatus().then((s) => {
-        if (s !== null && Object.values(s).some(Boolean)) setConnectStepDone(true)
-      })
     })
+    return () => unsubscribe()
   }, [api, loadAll, loadStats, loadPatterns])
 
   useEffect(() => {
-    api.onSubscriptionUpdate(() => {
+    const unsubscribe = api.onSubscriptionUpdate(() => {
       void loadCredentials()
     })
+    return () => unsubscribe()
   }, [api, loadCredentials])
 
   useEffect(() => {
-    api.onAccessStateChanged((state) => {
+    const unsubscribe = api.onAccessStateChanged((state) => {
       setAccessState(state)
       void loadCredentials()
     })
+    return () => unsubscribe()
   }, [api, loadCredentials])
 
   useEffect(() => {
+    const unsubscribe = api.onPermissionStatusChanged(updatePermissionStatus)
+    return () => unsubscribe()
+  }, [api, updatePermissionStatus])
+
+  // Self-heal `lastCompletedStepIndex` from concrete state once everything
+  // has loaded. If a returning user has already granted permissions, set a
+  // key, or connected MCP, those steps are implicitly done — bump the mark
+  // forward so they don't get re-walked through welcome / permissions / etc.
+  useEffect(() => {
+    if (!initialLoaded) return
+    const implied = impliedCompletedIndex({
+      isEnterprise,
+      isConfigured,
+      lastCompletedStepIndex,
+      permissionStatus,
+      permissionRestartPending,
+      hasAnyProgress,
+      anyMcpConnected,
+      viewStepOverride: null,
+    })
+    if (implied > lastCompletedStepIndex) {
+      markStepCompleted(implied)
+    }
+  }, [
+    initialLoaded,
+    isEnterprise,
+    isConfigured,
+    permissionStatus,
+    permissionRestartPending,
+    hasAnyProgress,
+    anyMcpConnected,
+    lastCompletedStepIndex,
+    markStepCompleted,
+  ])
+
+  const refreshOnFocus = useCallback(async () => {
+    // Edition config is build-time and never changes; skip it on focus refreshes.
+    await loadAccessState()
+    await Promise.all([
+      loadCredentials(),
+      loadStats(),
+      loadMcpStatus(),
+      loadPatterns(),
+      loadPermissionStatus(),
+    ])
+  }, [
+    loadAccessState,
+    loadCredentials,
+    loadStats,
+    loadMcpStatus,
+    loadPatterns,
+    loadPermissionStatus,
+  ])
+
+  useEffect(() => {
     const handleFocus = (): void => {
-      void loadAll()
+      void refreshOnFocus()
       void api.getStatus().then((status) => {
         setCapturing(status.capturing)
         setCaptureHotkeyLabel(status.captureHotkeyLabel)
@@ -164,7 +349,7 @@ export function MainWindowApp(): React.JSX.Element {
     }
     window.addEventListener('focus', handleFocus)
     return () => window.removeEventListener('focus', handleFocus)
-  }, [api, loadAll])
+  }, [api, refreshOnFocus])
 
   const handleToggle = useCallback(async () => {
     setToggling(true)
@@ -177,14 +362,80 @@ export function MainWindowApp(): React.JSX.Element {
     }
   }, [api])
 
+  const advance = useCallback(
+    (id: OnboardingStepId) => () => {
+      markStepCompleted(onboardingSteps.findIndex((s) => s.id === id))
+      setViewStepOverride(null)
+    },
+    [markStepCompleted, onboardingSteps],
+  )
+
+  const renderStep = (id: OnboardingStepId): React.JSX.Element => {
+    switch (id) {
+      case 'welcome':
+        return <WelcomeStep onContinue={advance('welcome')} />
+      case 'permissions':
+        return permissionStatus === null ? (
+          <p className="text-sm text-muted-foreground">Checking permissions…</p>
+        ) : (
+          <PermissionsStep
+            api={api}
+            status={permissionStatus}
+            needsRestart={permissionRestartPending}
+            onContinue={advance('permissions')}
+          />
+        )
+      case 'plan':
+        return (
+          <CustomerActivationStep
+            api={api}
+            onKeySet={() => void loadCredentials()}
+            onUseOwnEndpoint={() => {
+              setSettingsInitialTab('ai-models')
+              setPage('settings')
+            }}
+            isConfigured={isConfigured}
+            onContinue={advance('plan')}
+          />
+        )
+      case 'activation':
+        return <EnterpriseActivationStep api={api} accessState={accessState} />
+      case 'connect':
+        return (
+          <ConnectStep
+            api={api}
+            mcpStatus={mcpStatus}
+            onStatusChange={() => void loadMcpStatus()}
+            onContinue={advance('connect')}
+          />
+        )
+      case 'blacklist':
+        return <BlacklistStep api={api} onContinue={advance('blacklist')} />
+      case 'capture':
+        return (
+          <CaptureStep
+            api={api}
+            capturing={capturing}
+            captureHotkeyLabel={captureHotkeyLabel}
+            toggling={toggling}
+            onToggle={() => void handleToggle()}
+            activityCount={stats?.activityCount ?? null}
+            onContinue={advance('capture')}
+          />
+        )
+    }
+  }
+
   if (page === 'settings') {
     return (
       <div className="h-screen overflow-hidden antialiased select-none">
         <AdvancedSettingsPage
           onBack={() => {
             setPage('home')
+            setSettingsInitialTab(undefined)
             void loadAll()
           }}
+          initialTab={settingsInitialTab}
         />
         <Toaster />
       </div>
@@ -193,48 +444,20 @@ export function MainWindowApp(): React.JSX.Element {
 
   return (
     <div className="min-h-screen antialiased select-none relative">
-      <div className="absolute top-3 right-3 z-10">
-        <Button variant="ghost" size="sm" onClick={() => setPage('settings')} aria-label="Settings">
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
+      {computedStep === 'dashboard' && (
+        <div className="absolute top-3 right-3 z-10">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setPage('settings')}
+            aria-label="Settings"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z"
-            />
-            <circle cx="12" cy="12" r="3" />
-          </svg>
-        </Button>
-      </div>
+            <Settings className="size-4" />
+          </Button>
+        </div>
+      )}
       <div className="p-6 max-w-xl mx-auto space-y-5">
-        {!initialLoaded ? null : !isConfigured ? (
-          isEnterprise ? (
-            <EnterpriseActivationCard api={api} accessState={accessState} />
-          ) : (
-            <PlanPicker api={api} onKeySet={() => void loadCredentials()} />
-          )
-        ) : step === 'connect' ? (
-          <ConnectStep
-            api={api}
-            mcpStatus={mcpStatus}
-            onStatusChange={() => void loadMcpStatus()}
-            onContinue={() => setConnectStepDone(true)}
-          />
-        ) : step === 'capture' ? (
-          <CaptureStep
-            api={api}
-            capturing={capturing}
-            captureHotkeyLabel={captureHotkeyLabel}
-            toggling={toggling}
-            onToggle={() => void handleToggle()}
-            activityCount={stats?.activityCount ?? null}
-          />
-        ) : (
+        {!initialLoaded ? null : displayStep === 'dashboard' ? (
           <>
             <StatusLine
               capturing={capturing}
@@ -255,6 +478,17 @@ export function MainWindowApp(): React.JSX.Element {
               onPatternsChange={() => void loadPatterns()}
             />
           </>
+        ) : (
+          <OnboardingLayout
+            steps={onboardingSteps}
+            currentStep={displayStep as OnboardingStepId}
+            onBack={handleBack}
+            onForward={handleForward}
+            canGoBack={canGoBack}
+            canGoForward={canGoForward}
+          >
+            {renderStep(displayStep as OnboardingStepId)}
+          </OnboardingLayout>
         )}
       </div>
       <Toaster />

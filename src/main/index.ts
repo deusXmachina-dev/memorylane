@@ -116,23 +116,8 @@ app.on('ready', async () => {
   const startHidden = shouldStartHiddenOnLaunch()
   const editionConfig = loadAppEditionConfig()
 
-  try {
-    const { ensurePermissions } = await import('./ui/permissions')
-    await ensurePermissions()
-  } catch (error) {
-    log.error('[Startup] Fatal error during permissions check:', error)
-    const { dialog } = await import('electron')
-    await dialog.showMessageBox({
-      type: 'error',
-      title: 'Startup Error',
-      message: 'Failed to verify permissions',
-      detail:
-        'An unexpected error occurred while checking permissions. ' +
-        'Please try restarting the app. If the problem persists, check the logs.',
-    })
-    app.quit()
-    return
-  }
+  // Permissions are no longer blocking at startup. The renderer drives the
+  // permission grant flow as part of onboarding (PermissionsStep).
 
   const vendorCredentialsManager = new VendorCredentialsManager()
   const captureSettingsManager = new CaptureSettingsManager({ edition: editionConfig.edition })

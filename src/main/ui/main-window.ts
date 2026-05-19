@@ -21,6 +21,7 @@ import { PURGE_CONFIRMATION_PHRASE } from '../../shared/constants'
 import log from '../logger'
 import { updateTrayMenu } from './tray'
 import { exportDatabaseZip } from './database-export'
+import { getPermissionStatus, openPermissionSettings, type PermissionStatus } from './permissions'
 import { integrations } from '../integrations'
 import { listInstalledApps } from '../apps/installed-apps'
 import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
@@ -188,6 +189,43 @@ export function sendObservationUpdate(state: ObservationState): void {
   mainWindow.webContents.send('main-window:observationUpdate', state)
 }
 
+// Permission status broadcaster — the renderer subscribes while on the
+// Permissions onboarding step. We poll macOS for status changes (no native
+// notification exists) and push deltas to the renderer.
+let permissionPollTimer: NodeJS.Timeout | null = null
+let lastPermissionStatus: PermissionStatus | null = null
+const PERMISSION_POLL_MS = 2000
+
+function sendPermissionStatus(status: PermissionStatus): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.webContents.send('main-window:permissionStatusChanged', status)
+}
+
+function startPermissionPolling(): void {
+  if (permissionPollTimer !== null) return
+  permissionPollTimer = setInterval(() => {
+    const status = getPermissionStatus()
+    const prev = lastPermissionStatus
+    const changed =
+      prev === null ||
+      prev.accessibility !== status.accessibility ||
+      prev.screenRecording !== status.screenRecording
+    if (changed) {
+      lastPermissionStatus = status
+      sendPermissionStatus(status)
+    }
+    if (status.accessibility === 'granted' && status.screenRecording === 'granted') {
+      stopPermissionPolling()
+    }
+  }, PERMISSION_POLL_MS)
+}
+
+function stopPermissionPolling(): void {
+  if (permissionPollTimer === null) return
+  clearInterval(permissionPollTimer)
+  permissionPollTimer = null
+}
+
 /**
  * Open (or focus) the main application window
  */
@@ -230,6 +268,12 @@ export function openMainWindow(): void {
       mainWindow.hide()
     }
   })
+
+  // Stop the permission poll when no renderer is observing it. Hidden ≈ not
+  // looking; `getPermissionStatus` from a re-shown / re-mounted renderer will
+  // restart it.
+  mainWindow.on('hide', stopPermissionPolling)
+  mainWindow.on('closed', stopPermissionPolling)
 }
 
 /**
@@ -851,5 +895,52 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       const message = error instanceof Error ? error.message : 'Unknown error'
       return { success: false, error: message }
     }
+  })
+
+  // Permissions
+  ipcMain.handle('main-window:getPermissionStatus', () => {
+    const status = getPermissionStatus()
+    lastPermissionStatus = status
+    log.info(
+      `[Permissions] getPermissionStatus → accessibility=${status.accessibility}, screenRecording=${status.screenRecording}`,
+    )
+    // Start polling so the renderer is notified when the user grants permissions
+    // outside our flow (e.g., directly in System Settings). Self-stops once both
+    // are granted.
+    if (status.accessibility !== 'granted' || status.screenRecording !== 'granted') {
+      startPermissionPolling()
+    }
+    return status
+  })
+  // The Grant button just opens the relevant System Settings pane and starts
+  // polling. We intentionally do NOT fire the native TCC request here:
+  //   - `isTrustedAccessibilityClient(true)` shows a separate native modal in
+  //     addition to System Settings (confusing — two surfaces fighting for the
+  //     user's attention), and in dev gets attributed to the responsible app
+  //     (your IDE), not MemoryLane.
+  //   - `desktopCapturer.getSources()` would also surface that modal once.
+  // The app already shows up in System Settings via other paths (uIOhook
+  // listening for accessibility, capture attempts for screen recording).
+  ipcMain.handle('main-window:requestPermission', async (_event, kind: string) => {
+    log.info(`[Permissions] requestPermission(${kind})`)
+    if (kind !== 'accessibility' && kind !== 'screenRecording') {
+      log.warn(`[Permissions] requestPermission ignored — unknown kind: ${kind}`)
+      return getPermissionStatus()
+    }
+    await openPermissionSettings(kind)
+    startPermissionPolling()
+    return getPermissionStatus()
+  })
+  ipcMain.handle('main-window:openPermissionSettings', async (_event, kind: string) => {
+    if (kind === 'accessibility' || kind === 'screenRecording') {
+      log.info(`[Permissions] openPermissionSettings(${kind})`)
+      await openPermissionSettings(kind)
+      startPermissionPolling()
+    }
+  })
+  ipcMain.handle('main-window:restartApp', () => {
+    log.info('[App] Restart requested from renderer')
+    app.relaunch()
+    app.quit()
   })
 }
