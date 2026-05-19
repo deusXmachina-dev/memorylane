@@ -2,8 +2,8 @@ import * as React from 'react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@components/ui/card'
 import { Input } from '@components/ui/input'
+import { OnboardingStep } from './OnboardingStep'
 import type { AccessState, ConsentOutcome, MainWindowAPI, PendingConsent } from '@types'
 
 interface EnterpriseActivationCardProps {
@@ -34,18 +34,16 @@ function ProvisioningView({
   status: 'activating' | 'waiting_for_key'
 }): React.JSX.Element {
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">Activate Device</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          {status === 'activating'
+    <OnboardingStep>
+      <OnboardingStep.Header
+        title="Activate device"
+        subtitle={
+          status === 'activating'
             ? 'Activating this device...'
-            : 'Activation succeeded. Waiting for API key provisioning...'}
-        </p>
-      </CardContent>
-    </Card>
+            : 'Activation succeeded. Waiting for API key provisioning...'
+        }
+      />
+    </OnboardingStep>
   )
 }
 
@@ -77,35 +75,33 @@ function ActivationKeyEntry({
   }, [activationCode, api])
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">Activate Device</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          Enter the activation code your admin shared with you.
-        </p>
+    <OnboardingStep>
+      <OnboardingStep.Header
+        title="Activate device"
+        subtitle="Enter the activation code your admin shared with you."
+      />
 
-        {accessState?.error && <p className="text-xs text-destructive">{accessState.error}</p>}
+      {accessState?.error && <p className="text-xs text-destructive">{accessState.error}</p>}
 
-        <Input
-          type="password"
-          placeholder="Activation code"
-          autoComplete="off"
-          value={activationCode}
-          onChange={(e) => setActivationCode(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              void handleActivate()
-            }
-          }}
-        />
+      <Input
+        type="password"
+        placeholder="Activation code"
+        autoComplete="off"
+        value={activationCode}
+        onChange={(e) => setActivationCode(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            void handleActivate()
+          }
+        }}
+      />
 
-        <Button className="w-full" disabled={submitting} onClick={() => void handleActivate()}>
-          {submitting ? 'Activating...' : 'Activate Device'}
+      <div className="pt-2">
+        <Button size="lg" disabled={submitting} onClick={() => void handleActivate()}>
+          {submitting ? 'Activating...' : 'Activate device'}
         </Button>
-      </CardContent>
-    </Card>
+      </div>
+    </OnboardingStep>
   )
 }
 
@@ -159,59 +155,56 @@ function ConsentScreen({ api, accessState }: EnterpriseActivationCardProps): Rea
       : null
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">{consent?.title ?? 'Review and accept'}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          Your employer needs your consent before activating this device. Review the document below
-          before deciding.
-        </p>
+    <OnboardingStep>
+      <OnboardingStep.Header
+        title={consent?.title ?? 'Review and accept'}
+        subtitle="Your employer needs your consent before activating this device. Review the document below before deciding."
+      />
 
-        {loadError !== null && <p className="text-xs text-destructive">{loadError}</p>}
+      {loadError !== null && <p className="text-xs text-destructive">{loadError}</p>}
 
-        {accessState?.error && <p className="text-xs text-destructive">{accessState.error}</p>}
+      {accessState?.error && <p className="text-xs text-destructive">{accessState.error}</p>}
 
-        {docDataUrl !== null ? (
-          <iframe
-            title="Consent document"
-            src={docDataUrl}
-            referrerPolicy="no-referrer"
-            className="h-96 w-full rounded border border-border bg-background"
-          />
-        ) : (
-          loadError === null && <p className="text-xs text-muted-foreground">Loading document...</p>
-        )}
+      {docDataUrl !== null ? (
+        <iframe
+          title="Consent document"
+          src={docDataUrl}
+          referrerPolicy="no-referrer"
+          className="h-96 w-full rounded-lg border border-border bg-background"
+        />
+      ) : (
+        loadError === null && <p className="text-xs text-muted-foreground">Loading document...</p>
+      )}
 
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={agreed}
-            onChange={(e) => setAgreed(e.target.checked)}
-            disabled={submitting}
-          />
-          <span>I have read and agree to this document.</span>
-        </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={agreed}
+          onChange={(e) => setAgreed(e.target.checked)}
+          disabled={submitting}
+        />
+        <span>I have read and agree to this document.</span>
+      </label>
 
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            className="flex-1"
-            disabled={submitting}
-            onClick={() => void decide('declined')}
-          >
-            Decline
-          </Button>
-          <Button
-            className="flex-1"
-            disabled={submitting || !agreed || consent === null}
-            onClick={() => void decide('accepted')}
-          >
-            {submitting ? 'Submitting...' : 'Accept'}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      <div className="flex gap-2 pt-2">
+        <Button
+          size="lg"
+          variant="outline"
+          className="flex-1"
+          disabled={submitting}
+          onClick={() => void decide('declined')}
+        >
+          Decline
+        </Button>
+        <Button
+          size="lg"
+          className="flex-1"
+          disabled={submitting || !agreed || consent === null}
+          onClick={() => void decide('accepted')}
+        >
+          {submitting ? 'Submitting...' : 'Accept'}
+        </Button>
+      </div>
+    </OnboardingStep>
   )
 }
