@@ -78,7 +78,7 @@ function ActivationKeyEntry({
     <OnboardingStep>
       <OnboardingStep.Header
         title="Activate device"
-        subtitle="Enter the activation code your admin shared with you."
+        subtitle="Enter the activation code from your activation email."
       />
 
       {accessState?.error && <p className="text-xs text-destructive">{accessState.error}</p>}
