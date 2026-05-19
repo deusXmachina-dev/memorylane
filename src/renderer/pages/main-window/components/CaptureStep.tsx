@@ -79,7 +79,7 @@ export function CaptureStep({
 
       <div className="pt-2">
         <Button size="lg" disabled={!capturing} onClick={onContinue}>
-          Go to dashboard
+          Finish onboarding
         </Button>
       </div>
     </OnboardingStep>
