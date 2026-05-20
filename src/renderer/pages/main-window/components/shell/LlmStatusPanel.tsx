@@ -10,9 +10,9 @@ const VENDOR_LABELS: Record<Vendor, string> = {
 
 interface LlmStatusPanelProps {
   vendor: Vendor
-  modelLabel: string | null
   llmHealth: LlmHealthStatus | null
   configured: boolean
+  collapsed?: boolean
   onClick: () => void
 }
 
@@ -50,33 +50,44 @@ function stateLabel(configured: boolean, llmHealth: LlmHealthStatus | null): str
 
 export function LlmStatusPanel({
   vendor,
-  modelLabel,
   llmHealth,
   configured,
+  collapsed = false,
   onClick,
 }: LlmStatusPanelProps): React.JSX.Element {
+  const state = stateLabel(configured, llmHealth)
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={`LLM ${state} — open AI Models settings`}
+        title={`${VENDOR_LABELS[vendor]} · ${state}`}
+        className={cn(
+          'flex items-center justify-center size-9 rounded-md',
+          'hover:bg-sidebar-accent/70 transition-colors',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+        )}
+      >
+        <span className={cn('h-2.5 w-2.5 rounded-full', dotClass(configured, llmHealth))} />
+      </button>
+    )
+  }
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        'group flex flex-col gap-1 w-full text-left px-3 py-2.5 rounded-lg',
+        'flex items-center gap-2 w-full text-left px-3 py-2 rounded-lg',
         'border border-sidebar-border bg-sidebar-accent/40',
         'hover:bg-sidebar-accent/70 transition-colors',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
       )}
       aria-label="LLM status — open AI Models settings"
     >
-      <div className="flex items-center gap-2 text-xs text-sidebar-foreground/70">
-        <span className={cn('h-2 w-2 shrink-0 rounded-full', dotClass(configured, llmHealth))} />
-        <span>{VENDOR_LABELS[vendor]}</span>
-        <span className="ml-auto">{stateLabel(configured, llmHealth)}</span>
-      </div>
-      {modelLabel && (
-        <div className="font-mono text-[11px] text-sidebar-foreground/60 truncate">
-          {modelLabel}
-        </div>
-      )}
+      <span className={cn('h-2 w-2 shrink-0 rounded-full', dotClass(configured, llmHealth))} />
+      <span className="text-xs text-sidebar-foreground/80">{VENDOR_LABELS[vendor]}</span>
+      <span className="ml-auto text-xs text-sidebar-foreground/60">{state}</span>
     </button>
   )
 }
