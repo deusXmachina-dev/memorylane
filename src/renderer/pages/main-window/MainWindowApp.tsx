@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Settings } from 'lucide-react'
 import { Toaster } from '@components/ui/sonner'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { useLlmHealth } from '@/renderer/hooks/use-llm-health'
-import { Button } from '@components/ui/button'
-import { CaptureControlSection } from './components/CaptureControlSection'
-import { StatusLine } from './components/StatusLine'
-import { PatternsSection } from './components/PatternsSection'
-import { AdvancedSettingsPage } from './AdvancedSettingsPage'
+import { MainShell } from './components/shell/MainShell'
+import { Sidebar, type MainSection } from './components/shell/Sidebar'
+import { DashboardPage } from './pages/DashboardPage'
+import { ActivitiesPage } from './pages/ActivitiesPage'
+import { PatternsPage } from './pages/PatternsPage'
+import { SettingsPage, type SettingsTab } from './pages/SettingsPage'
 import { BlacklistStep } from './components/onboarding/BlacklistStep'
 import { CaptureStep } from './components/onboarding/CaptureStep'
 import { ConnectStep } from './components/onboarding/ConnectStep'
@@ -43,16 +43,15 @@ import type {
 
 export function MainWindowApp(): React.JSX.Element {
   const api = useMainWindowAPI()
-  const [page, setPage] = useState<'home' | 'settings'>('home')
-  const [settingsInitialTab, setSettingsInitialTab] = useState<
-    'privacy' | 'data' | 'ai-models' | 'integrations' | undefined
-  >(undefined)
+  const [section, setSection] = useState<MainSection>('dashboard')
+  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab | undefined>(undefined)
   const [editionConfig, setEditionConfig] = useState<AppEditionConfig | null>(null)
   const [accessState, setAccessState] = useState<AccessState | null>(null)
   const [credentialStatuses, setCredentialStatuses] = useState<Record<Vendor, VendorStatus> | null>(
     null,
   )
   const [activeVendor, setActiveVendor] = useState<Vendor>('openrouter')
+  const [captureSettings, setCaptureSettings] = useState<CaptureSettings | null>(null)
   const [capturing, setCapturing] = useState(false)
   const [captureHotkeyLabel, setCaptureHotkeyLabel] = useState('')
   const [toggling, setToggling] = useState(false)
@@ -114,6 +113,7 @@ export function MainWindowApp(): React.JSX.Element {
       ])
       setCredentialStatuses(statuses)
       setActiveVendor(settings.activeVendor)
+      setCaptureSettings(settings)
     } catch {
       // Silently handle error - credential statuses will remain null
     }
@@ -178,9 +178,10 @@ export function MainWindowApp(): React.JSX.Element {
   const isConfigured = isEnterprise
     ? accessState?.isEnterpriseActivated === true && hasActiveKey
     : hasActiveKey
+  const isCustomEndpoint = activeVendor === 'openai-compatible'
   const { llmHealth } = useLlmHealth({
     api,
-    enabled: page === 'home' && isConfigured,
+    enabled: isConfigured,
   })
 
   const initialScreenRecording = initialScreenRecordingRef.current
@@ -436,7 +437,7 @@ export function MainWindowApp(): React.JSX.Element {
             onKeySet={() => void loadCredentials()}
             onUseOwnEndpoint={() => {
               setSettingsInitialTab('ai-models')
-              setPage('settings')
+              setSection('settings')
             }}
             isConfigured={isConfigured}
             onContinue={advance('plan')}
@@ -470,59 +471,26 @@ export function MainWindowApp(): React.JSX.Element {
     }
   }
 
-  if (page === 'settings') {
+  const onSelectSection = useCallback((next: MainSection) => {
+    setSection(next)
+    if (next !== 'settings') setSettingsInitialTab(undefined)
+  }, [])
+
+  const handleOpenLlmSettings = useCallback(() => {
+    // Enterprise hides the AI Models tab — fall back to Data so the click still lands somewhere useful.
+    setSettingsInitialTab(isEnterprise ? 'data' : 'ai-models')
+    setSection('settings')
+  }, [isEnterprise])
+
+  // Onboarding takes over the full window — no shell. Exception: the
+  // CustomerActivation step's "use your own endpoint" escape hatch pushes
+  // section='settings' so the user can enter their key; surface the shell in
+  // that case so they can navigate. Returning to any other section flips
+  // back into the onboarding takeover.
+  if (initialLoaded && computedStep !== 'dashboard' && section !== 'settings') {
     return (
-      <div className="h-screen overflow-hidden antialiased select-none">
-        <AdvancedSettingsPage
-          onBack={() => {
-            setPage('home')
-            setSettingsInitialTab(undefined)
-            void loadAll()
-          }}
-          initialTab={settingsInitialTab}
-        />
-        <Toaster />
-      </div>
-    )
-  }
-
-  return (
-    <div className="min-h-screen antialiased select-none relative">
-      {computedStep === 'dashboard' && (
-        <div className="absolute top-3 right-3 z-10">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setPage('settings')}
-            aria-label="Settings"
-          >
-            <Settings className="size-4" />
-          </Button>
-        </div>
-      )}
-      <div className="p-6 max-w-xl mx-auto space-y-5">
-        {!initialLoaded ? null : displayStep === 'dashboard' ? (
-          <>
-            <StatusLine
-              capturing={capturing}
-              llmHealth={llmHealth}
-              activityCount={stats?.activityCount ?? null}
-            />
-
-            <CaptureControlSection
-              capturing={capturing}
-              captureHotkeyLabel={captureHotkeyLabel}
-              toggling={toggling}
-              onToggle={() => void handleToggle()}
-            />
-
-            <PatternsSection
-              api={api}
-              patterns={patterns!}
-              onPatternsChange={() => void loadPatterns()}
-            />
-          </>
-        ) : (
+      <div className="min-h-screen antialiased select-none">
+        <div className="p-6 max-w-xl mx-auto space-y-5">
           <OnboardingLayout
             steps={onboardingDisplaySteps}
             currentStep={displayStep as OnboardingStepId}
@@ -533,9 +501,59 @@ export function MainWindowApp(): React.JSX.Element {
           >
             {renderStep(displayStep as OnboardingStepId)}
           </OnboardingLayout>
-        )}
+        </div>
+        <Toaster />
       </div>
+    )
+  }
+
+  const sidebar = (
+    <Sidebar
+      section={section}
+      onSelectSection={onSelectSection}
+      capturing={capturing}
+      captureHotkeyLabel={captureHotkeyLabel}
+      toggling={toggling}
+      onToggleCapture={() => void handleToggle()}
+      vendor={activeVendor}
+      modelLabel={captureSettings?.semanticSnapshotModel ?? null}
+      llmHealth={llmHealth}
+      configured={isConfigured}
+      onOpenLlmSettings={handleOpenLlmSettings}
+    />
+  )
+
+  const content = !initialLoaded ? null : section === 'dashboard' ? (
+    <DashboardPage
+      capturing={capturing}
+      llmHealth={llmHealth}
+      stats={stats}
+      keyStatus={activeVendorStatus}
+      isCustomEndpoint={isCustomEndpoint}
+    />
+  ) : section === 'activities' ? (
+    <ActivitiesPage api={api} />
+  ) : section === 'patterns' ? (
+    <PatternsPage api={api} patterns={patterns} onPatternsChange={() => void loadPatterns()} />
+  ) : (
+    <SettingsPage
+      initialTab={settingsInitialTab}
+      onCredentialsChanged={() => void loadCredentials()}
+      onBack={
+        computedStep !== 'dashboard'
+          ? () => {
+              setSection('dashboard')
+              setSettingsInitialTab(undefined)
+            }
+          : undefined
+      }
+    />
+  )
+
+  return (
+    <>
+      <MainShell sidebar={sidebar}>{content}</MainShell>
       <Toaster />
-    </div>
+    </>
   )
 }

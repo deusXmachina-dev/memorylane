@@ -196,6 +196,24 @@ export class ActivityRepository {
     return this.getRowCount()
   }
 
+  /**
+   * Recent activities ordered newest-first. Excludes ocrText and vector.
+   */
+  listRecent(limit: number, offset = 0): ActivityDetail[] {
+    const safeLimit = Math.max(1, Math.min(500, Math.trunc(limit)))
+    const safeOffset = Math.max(0, Math.trunc(offset))
+    const rows = this.db
+      .prepare(
+        `SELECT id, start_timestamp, end_timestamp, app_name, window_title, tld, summary
+       FROM activities
+       ORDER BY start_timestamp DESC
+       LIMIT ? OFFSET ?`,
+      )
+      .all(safeLimit, safeOffset) as Record<string, unknown>[]
+
+    return rows.map((row) => this.rowToDetail(row))
+  }
+
   getDistinctTlds(limit = 200): { tld: string; count: number; lastSeenAt: number }[] {
     const excludedHosts = [...NON_WEBSITE_HOSTS]
     const notInClause = excludedHosts.length
