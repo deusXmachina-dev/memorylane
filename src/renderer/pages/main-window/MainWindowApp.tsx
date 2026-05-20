@@ -22,7 +22,12 @@ import {
   readLastCompletedIndex,
   writeIntFlag,
 } from './onboarding-storage'
-import { impliedCompletedIndex, resolveOnboarding } from './onboarding-state'
+import {
+  impliedCompletedIndex,
+  nextOverrideDisplayStep,
+  previousDisplayStep,
+  resolveOnboarding,
+} from './onboarding-state'
 import type { AppEditionConfig } from '@/shared/edition'
 import type {
   AccessState,
@@ -189,13 +194,19 @@ export function MainWindowApp(): React.JSX.Element {
   const anyMcpConnected = mcpStatus !== null && Object.values(mcpStatus).some(Boolean)
   const screenRecordingGranted = permissionStatus?.screenRecording === 'granted'
   const accessibilityGranted = permissionStatus?.accessibility === 'granted'
+  const hasExistingActivities = (stats?.activityCount ?? 0) > 0
   // On non-darwin, both permissions are hard-coded `granted`, so they aren't a
   // real "progress" signal — exclude them to avoid auto-completing Welcome for
-  // a brand-new Windows user.
+  // a brand-new Windows user. Existing DB activity counts as progress on every
+  // platform so wipe-localStorage users land straight on dashboard instead of
+  // flashing through Welcome before the self-heal effect bumps the index.
   const hasAnyProgress = isMac
-    ? isConfigured || screenRecordingGranted || accessibilityGranted || anyMcpConnected
-    : isConfigured || anyMcpConnected
-  const hasExistingActivities = (stats?.activityCount ?? 0) > 0
+    ? isConfigured ||
+      screenRecordingGranted ||
+      accessibilityGranted ||
+      anyMcpConnected ||
+      hasExistingActivities
+    : isConfigured || anyMcpConnected || hasExistingActivities
 
   const resolution = useMemo(
     () =>
@@ -243,22 +254,23 @@ export function MainWindowApp(): React.JSX.Element {
   }, [viewStepOverride, overrideValid])
 
   const handleBack = useCallback(() => {
-    // Navigate against the displayed (filtered) step list so platforms that
-    // hide the Permissions step don't accidentally land on it via override.
-    const displayedIdx = onboardingDisplaySteps.findIndex((s) => s.id === displayStep)
-    if (displayedIdx <= 0) return
-    setViewStepOverride(onboardingDisplaySteps[displayedIdx - 1].id)
+    const prev = previousDisplayStep(displayStep, onboardingDisplaySteps)
+    if (prev === null) return
+    setViewStepOverride(prev)
   }, [displayStep, onboardingDisplaySteps])
 
   const handleForward = useCallback(() => {
     // If the user is viewing an earlier step via override, just step the
     // override forward through the displayed list.
     if (overrideValid) {
-      const displayedIdx = onboardingDisplaySteps.findIndex((s) => s.id === displayStep)
-      const next = onboardingDisplaySteps[displayedIdx + 1]
-      const nextCanonicalIdx = next ? onboardingSteps.findIndex((s) => s.id === next.id) : -1
-      if (next && nextCanonicalIdx < computedIndex) {
-        setViewStepOverride(next.id)
+      const next = nextOverrideDisplayStep(
+        displayStep,
+        onboardingDisplaySteps,
+        onboardingSteps,
+        computedIndex,
+      )
+      if (next !== null) {
+        setViewStepOverride(next)
         return
       }
     }

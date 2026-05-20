@@ -167,17 +167,29 @@ export function resolveOnboarding(inputs: OnboardingInputs): OnboardingResolutio
   // Resolve an optional back-navigation override. The override lets the user
   // navigate backward through already-visited steps without mutating real
   // state (granted permissions, saved keys can't be reasonably "undone").
-  // Once the user reaches the dashboard, ignore any override.
+  // Once the user reaches the dashboard, ignore any override. The override
+  // target must also exist in the displayed list — otherwise a stale value
+  // (e.g. 'permissions' carried over to a non-darwin platform) could resolve
+  // to a step the stepper UI doesn't render.
   const overrideIndex =
     inputs.viewStepOverride !== null ? steps.findIndex((s) => s.id === inputs.viewStepOverride) : -1
+  const overrideInDisplay =
+    inputs.viewStepOverride !== null && displaySteps.some((s) => s.id === inputs.viewStepOverride)
   const overrideValid =
-    computedStep !== 'dashboard' && overrideIndex !== -1 && overrideIndex < computedIndex
+    computedStep !== 'dashboard' &&
+    overrideIndex !== -1 &&
+    overrideIndex < computedIndex &&
+    overrideInDisplay
   const displayStep: DisplayStep = overrideValid
     ? (inputs.viewStepOverride as OnboardingStepId)
     : computedStep
   const displayIndex = overrideValid ? overrideIndex : computedIndex
 
-  const canGoBack = displayIndex > 0 && displayStep !== 'dashboard'
+  // canGoBack is anchored to the *displayed* list — canonical indices include
+  // steps that may be filtered out (e.g. Permissions on Windows), so using
+  // displayIndex here would lie about there being an earlier step to land on.
+  const displayedPosition = displaySteps.findIndex((s) => s.id === displayStep)
+  const canGoBack = displayStep !== 'dashboard' && displayedPosition > 0
   const canGoForward = canStepGoForward(displayStep, inputs)
 
   return {
@@ -238,4 +250,37 @@ export function impliedCompletedIndex(inputs: OnboardingInputs): number {
     if (idx !== -1) implied = Math.max(implied, idx)
   }
   return implied
+}
+
+/**
+ * Previous step in the *displayed* list, or `null` at the leading edge.
+ * Display-list anchored so platforms that hide steps (Permissions on Windows)
+ * don't accidentally land on them via back-navigation.
+ */
+export function previousDisplayStep(
+  displayStep: DisplayStep,
+  displaySteps: OnboardingStepInfo[],
+): OnboardingStepId | null {
+  const idx = displaySteps.findIndex((s) => s.id === displayStep)
+  if (idx <= 0) return null
+  return displaySteps[idx - 1].id
+}
+
+/**
+ * Next step the user can advance to via the override path (i.e. while viewing
+ * an earlier step than the computed leading edge). Returns `null` once the
+ * override would catch up with the computed edge — at that point the caller
+ * should perform the step's actual continue action instead.
+ */
+export function nextOverrideDisplayStep(
+  displayStep: DisplayStep,
+  displaySteps: OnboardingStepInfo[],
+  canonicalSteps: OnboardingStepInfo[],
+  computedIndex: number,
+): OnboardingStepId | null {
+  const idx = displaySteps.findIndex((s) => s.id === displayStep)
+  const next = idx === -1 ? undefined : displaySteps[idx + 1]
+  if (!next) return null
+  const nextCanonicalIdx = canonicalSteps.findIndex((s) => s.id === next.id)
+  return nextCanonicalIdx !== -1 && nextCanonicalIdx < computedIndex ? next.id : null
 }

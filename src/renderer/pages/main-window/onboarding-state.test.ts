@@ -3,6 +3,8 @@ import {
   arePermissionsGranted,
   getOnboardingSteps,
   impliedCompletedIndex,
+  nextOverrideDisplayStep,
+  previousDisplayStep,
   resolveOnboarding,
   type OnboardingInputs,
 } from './onboarding-state'
@@ -414,6 +416,21 @@ describe('resolveOnboarding — non-darwin (Windows/Linux) platform', () => {
     expect(r.displayStep).toBe('plan')
     expect(r.canGoBack).toBe(true)
   })
+
+  it('rejects a viewStepOverride pointing at a hidden step (permissions on Windows)', () => {
+    // Defense-in-depth: the renderer only sets overrides from displaySteps, but
+    // a stale value must not resolve to a step the stepper UI doesn't render.
+    const r = resolveOnboarding(
+      baseInputs({
+        platform: 'win32',
+        lastCompletedStepIndex: 3,
+        isConfigured: true,
+        viewStepOverride: 'permissions',
+      }),
+    )
+    expect(r.overrideValid).toBe(false)
+    expect(r.displayStep).not.toBe('permissions')
+  })
 })
 
 describe('resolveOnboarding — existing activities short-circuit', () => {
@@ -427,5 +444,82 @@ describe('resolveOnboarding — existing activities short-circuit', () => {
       }),
     )
     expect(r.computedStep).toBe('dashboard')
+  })
+})
+
+describe('canGoBack is anchored to displaySteps', () => {
+  it('Windows at plan (canonical idx 2): canGoBack reflects displayed prev (welcome)', () => {
+    const r = resolveOnboarding(baseInputs({ platform: 'win32', lastCompletedStepIndex: 0 }))
+    expect(r.displayStep).toBe('plan')
+    // welcome is at displayedPosition 0 < plan at displayedPosition 1, so back is allowed.
+    expect(r.canGoBack).toBe(true)
+  })
+
+  it('macOS at welcome: canGoBack=false (first displayed step)', () => {
+    const r = resolveOnboarding(baseInputs({ platform: 'darwin' }))
+    expect(r.displayStep).toBe('welcome')
+    expect(r.canGoBack).toBe(false)
+  })
+
+  it('Windows at welcome: canGoBack=false even though canonical idx 1 is filtered out', () => {
+    const r = resolveOnboarding(baseInputs({ platform: 'win32' }))
+    expect(r.displayStep).toBe('welcome')
+    expect(r.canGoBack).toBe(false)
+  })
+})
+
+describe('previousDisplayStep', () => {
+  it('returns the prior displayed step', () => {
+    const consumer = getOnboardingSteps(false)
+    expect(previousDisplayStep('plan', consumer)).toBe('permissions')
+  })
+
+  it('skips filtered (Windows) steps — back from plan goes to welcome, not permissions', () => {
+    const consumer = getOnboardingSteps(false)
+    const windowsDisplay = consumer.filter((s) => s.id !== 'permissions')
+    expect(previousDisplayStep('plan', windowsDisplay)).toBe('welcome')
+  })
+
+  it('returns null at the first displayed step', () => {
+    const consumer = getOnboardingSteps(false)
+    expect(previousDisplayStep('welcome', consumer)).toBeNull()
+  })
+
+  it('returns null when displayStep is not in the displayed list (e.g. dashboard)', () => {
+    const consumer = getOnboardingSteps(false)
+    expect(previousDisplayStep('dashboard', consumer)).toBeNull()
+  })
+})
+
+describe('nextOverrideDisplayStep', () => {
+  it('advances through the displayed list, skipping filtered steps on Windows', () => {
+    // User is at welcome (override), has actually progressed to connect (canonical idx 3).
+    // Next override target should be plan — NOT permissions, which is filtered.
+    const consumer = getOnboardingSteps(false)
+    const windowsDisplay = consumer.filter((s) => s.id !== 'permissions')
+    const computedIndex = consumer.findIndex((s) => s.id === 'connect') // 3
+    expect(nextOverrideDisplayStep('welcome', windowsDisplay, consumer, computedIndex)).toBe('plan')
+  })
+
+  it('returns null when the next displayed step would catch up to the computed edge', () => {
+    // Computed edge is plan (idx 2). User is at welcome via override. plan IS the edge,
+    // so override can't advance to it — caller should perform the real continue action.
+    const consumer = getOnboardingSteps(false)
+    const windowsDisplay = consumer.filter((s) => s.id !== 'permissions')
+    const computedIndex = consumer.findIndex((s) => s.id === 'plan') // 2
+    expect(nextOverrideDisplayStep('welcome', windowsDisplay, consumer, computedIndex)).toBeNull()
+  })
+
+  it('returns null when displayStep is the last displayed entry', () => {
+    const consumer = getOnboardingSteps(false)
+    expect(nextOverrideDisplayStep('capture', consumer, consumer, consumer.length)).toBeNull()
+  })
+
+  it('macOS unfiltered: welcome → permissions when permissions is the override target', () => {
+    const consumer = getOnboardingSteps(false)
+    const computedIndex = consumer.findIndex((s) => s.id === 'plan') // 2
+    expect(nextOverrideDisplayStep('welcome', consumer, consumer, computedIndex)).toBe(
+      'permissions',
+    )
   })
 })
