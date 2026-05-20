@@ -39,4 +39,12 @@ function StepButton({ onClick, disabled, children }: StepButtonProps): React.JSX
   )
 }
 
-export const OnboardingStep = Object.assign(OnboardingStepRoot, { Header, Button: StepButton })
+function Actions({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <div className="flex gap-2 pt-2">{children}</div>
+}
+
+export const OnboardingStep = Object.assign(OnboardingStepRoot, {
+  Header,
+  Button: StepButton,
+  Actions,
+})

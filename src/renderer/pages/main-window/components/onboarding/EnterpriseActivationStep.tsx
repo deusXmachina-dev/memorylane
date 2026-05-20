@@ -2,7 +2,9 @@ import * as React from 'react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@components/ui/button'
+import { Checkbox } from '@components/ui/checkbox'
 import { Input } from '@components/ui/input'
+import { Label } from '@components/ui/label'
 import { OnboardingStep } from './OnboardingStep'
 import type { AccessState, ConsentOutcome, MainWindowAPI, PendingConsent } from '@types'
 
@@ -155,7 +157,7 @@ function ConsentScreen({ api, accessState }: EnterpriseActivationStepProps): Rea
   return (
     <OnboardingStep>
       <OnboardingStep.Header
-        title={consent?.title ?? 'Review and accept'}
+        title={consent?.title?.trim() ? consent.title : 'Review and accept'}
         subtitle="Your employer needs your consent before activating this device. Review the document below before deciding."
       />
 
@@ -174,17 +176,17 @@ function ConsentScreen({ api, accessState }: EnterpriseActivationStepProps): Rea
         loadError === null && <p className="text-xs text-muted-foreground">Loading document...</p>
       )}
 
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="consent-agree"
           checked={agreed}
-          onChange={(e) => setAgreed(e.target.checked)}
+          onCheckedChange={(value) => setAgreed(value === true)}
           disabled={submitting}
         />
-        <span>I have read and agree to this document.</span>
-      </label>
+        <Label htmlFor="consent-agree">I have read and agree to this document.</Label>
+      </div>
 
-      <div className="flex gap-2 pt-2">
+      <OnboardingStep.Actions>
         <Button
           size="lg"
           variant="outline"
@@ -202,7 +204,7 @@ function ConsentScreen({ api, accessState }: EnterpriseActivationStepProps): Rea
         >
           {submitting ? 'Submitting...' : 'Accept'}
         </Button>
-      </div>
+      </OnboardingStep.Actions>
     </OnboardingStep>
   )
 }
