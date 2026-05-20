@@ -174,7 +174,7 @@ export function DataTabPanel({
         {!isPurgeExpanded ? (
           <SettingsRow
             label="Purge database"
-            description="Permanently delete all activities, patterns, embeddings, and screenshots. Capture resumes afterwards if it was running. This cannot be undone."
+            description="Permanently delete all activities, patterns and other captured data. Capture resumes afterwards if it was running. This cannot be undone."
             control={
               <Button
                 type="button"
