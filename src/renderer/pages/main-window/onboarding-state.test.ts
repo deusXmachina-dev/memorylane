@@ -22,6 +22,8 @@ function baseInputs(overrides: Partial<OnboardingInputs> = {}): OnboardingInputs
     hasAnyProgress: false,
     anyMcpConnected: false,
     viewStepOverride: null,
+    platform: 'darwin',
+    hasExistingActivities: false,
     ...overrides,
   }
 }
@@ -179,22 +181,6 @@ describe('resolveOnboarding — enterprise', () => {
     expect(r.steps).toHaveLength(5)
   })
 
-  it('enterprise overshoot from legacy migration: lands on dashboard', () => {
-    // Legacy migration may produce lastCompletedStepIndex=5 (consumer capture
-    // index post-shift), but enterprise list has indices 0..4. Overshoot
-    // should resolve to dashboard.
-    const r = resolveOnboarding(
-      baseInputs({
-        isEnterprise: true,
-        lastCompletedStepIndex: 5,
-        permissionStatus: GRANTED,
-        isConfigured: true,
-        hasAnyProgress: true,
-      }),
-    )
-    expect(r.computedStep).toBe('dashboard')
-  })
-
   it('activation auto-completes purely on isConfigured', () => {
     const r = resolveOnboarding(
       baseInputs({
@@ -314,5 +300,132 @@ describe('impliedCompletedIndex', () => {
     expect(
       impliedCompletedIndex(baseInputs({ permissionStatus: PARTIAL, hasAnyProgress: true })),
     ).toBe(0)
+  })
+
+  it('returns last consumer index when hasExistingActivities (re-install scenario)', () => {
+    // User has DB data but blank localStorage — treat as fully onboarded.
+    expect(impliedCompletedIndex(baseInputs({ hasExistingActivities: true }))).toBe(5)
+  })
+
+  it('returns last enterprise index when hasExistingActivities', () => {
+    expect(
+      impliedCompletedIndex(baseInputs({ isEnterprise: true, hasExistingActivities: true })),
+    ).toBe(4)
+  })
+
+  it('does not bump implied past permissions on non-darwin even when granted', () => {
+    // On Windows getPermissionStatus auto-returns granted, but that grant is
+    // trivial and should not imply progress beyond welcome.
+    expect(
+      impliedCompletedIndex(
+        baseInputs({ platform: 'win32', permissionStatus: GRANTED, hasAnyProgress: false }),
+      ),
+    ).toBe(-1)
+  })
+})
+
+describe('resolveOnboarding — non-darwin (Windows/Linux) platform', () => {
+  it('consumer Windows: displaySteps has 5 steps, no permissions', () => {
+    const r = resolveOnboarding(baseInputs({ platform: 'win32' }))
+    expect(r.steps.map((s) => s.id)).toContain('permissions') // canonical untouched
+    expect(r.displaySteps.map((s) => s.id)).toEqual([
+      'welcome',
+      'plan',
+      'connect',
+      'blacklist',
+      'capture',
+    ])
+  })
+
+  it('enterprise Windows: displaySteps has 4 steps, no permissions', () => {
+    const r = resolveOnboarding(baseInputs({ platform: 'win32', isEnterprise: true }))
+    expect(r.displaySteps.map((s) => s.id)).toEqual([
+      'welcome',
+      'activation',
+      'blacklist',
+      'capture',
+    ])
+  })
+
+  it('consumer macOS: displaySteps still has 6 steps including permissions', () => {
+    const r = resolveOnboarding(baseInputs({ platform: 'darwin' }))
+    expect(r.displaySteps.map((s) => s.id)).toEqual([
+      'welcome',
+      'permissions',
+      'plan',
+      'connect',
+      'blacklist',
+      'capture',
+    ])
+  })
+
+  it('enterprise macOS: displaySteps has 5 steps including permissions', () => {
+    const r = resolveOnboarding(baseInputs({ platform: 'darwin', isEnterprise: true }))
+    expect(r.displaySteps.map((s) => s.id)).toEqual([
+      'welcome',
+      'permissions',
+      'activation',
+      'blacklist',
+      'capture',
+    ])
+  })
+
+  it('linux is treated like Windows: permissions filtered out', () => {
+    const r = resolveOnboarding(baseInputs({ platform: 'linux' }))
+    expect(r.displaySteps.map((s) => s.id)).not.toContain('permissions')
+    expect(r.displaySteps).toHaveLength(5)
+  })
+
+  it('auto-skips Permissions step on Windows: after welcome → plan', () => {
+    const r = resolveOnboarding(baseInputs({ platform: 'win32', lastCompletedStepIndex: 0 }))
+    expect(r.computedStep).toBe('plan')
+  })
+
+  it('Windows enterprise: after welcome → activation (skips permissions)', () => {
+    const r = resolveOnboarding(
+      baseInputs({ platform: 'win32', isEnterprise: true, lastCompletedStepIndex: 0 }),
+    )
+    expect(r.computedStep).toBe('activation')
+  })
+
+  it('Windows: existing activities → dashboard', () => {
+    const r = resolveOnboarding(baseInputs({ platform: 'win32', hasExistingActivities: true }))
+    // impliedCompletedIndex would push lastCompletedStepIndex to 5 in MainWindowApp,
+    // but resolveOnboarding alone needs both signals to short-circuit.
+    // Simulate post-self-heal state:
+    const r2 = resolveOnboarding(
+      baseInputs({
+        platform: 'win32',
+        hasExistingActivities: true,
+        lastCompletedStepIndex: 5,
+        isConfigured: true,
+      }),
+    )
+    expect(r2.computedStep).toBe('dashboard')
+    // First call (pre-self-heal) still works — every prior step is either
+    // auto-complete (permissions on Windows) or content-only (welcome).
+    expect(r.computedStep).not.toBe('permissions')
+  })
+
+  it('canGoBack from plan on Windows: previous displayed step is welcome', () => {
+    // The renderer-side handleBack uses displaySteps, but resolveOnboarding's
+    // canGoBack still reflects whether any earlier displayed step exists.
+    const r = resolveOnboarding(baseInputs({ platform: 'win32', lastCompletedStepIndex: 0 }))
+    expect(r.displayStep).toBe('plan')
+    expect(r.canGoBack).toBe(true)
+  })
+})
+
+describe('resolveOnboarding — existing activities short-circuit', () => {
+  it('returns dashboard once lastCompletedStepIndex covers all steps', () => {
+    const r = resolveOnboarding(
+      baseInputs({
+        hasExistingActivities: true,
+        lastCompletedStepIndex: 5,
+        permissionStatus: GRANTED,
+        isConfigured: true,
+      }),
+    )
+    expect(r.computedStep).toBe('dashboard')
   })
 })

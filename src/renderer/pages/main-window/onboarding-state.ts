@@ -39,10 +39,13 @@ export interface OnboardingInputs {
   hasAnyProgress: boolean
   anyMcpConnected: boolean
   viewStepOverride: OnboardingStepId | null
+  platform: NodeJS.Platform
+  hasExistingActivities: boolean
 }
 
 export interface OnboardingResolution {
   steps: OnboardingStepInfo[]
+  displaySteps: OnboardingStepInfo[]
   computedStep: DisplayStep
   computedIndex: number
   displayStep: DisplayStep
@@ -50,6 +53,17 @@ export interface OnboardingResolution {
   overrideValid: boolean
   canGoBack: boolean
   canGoForward: boolean
+}
+
+/**
+ * macOS is the only platform with TCC permissions the user can fail. On other
+ * platforms `getPermissionStatus()` hard-codes both fields to `granted`, so the
+ * Permissions step has nothing to do — filter it from the stepper UI and treat
+ * it as auto-complete in the resolution logic. Canonical step indices are kept
+ * stable; only the displayed list is filtered.
+ */
+function isPermissionsStepRelevant(platform: NodeJS.Platform): boolean {
+  return platform === 'darwin'
 }
 
 /**
@@ -90,11 +104,14 @@ function isStepComplete(id: OnboardingStepId, idx: number, inputs: OnboardingInp
     hasAnyProgress,
     permissionStatus,
     permissionRestartPending,
+    platform,
   } = inputs
   switch (id) {
     case 'welcome':
       return lastCompletedStepIndex >= idx || hasAnyProgress
     case 'permissions': {
+      // Non-darwin platforms have nothing to grant — skip the step entirely.
+      if (!isPermissionsStepRelevant(platform)) return true
       const granted = arePermissionsGranted(permissionStatus, permissionRestartPending)
       // Loading: only treat as complete if the user previously clicked through.
       if (granted === null) return lastCompletedStepIndex >= idx
@@ -115,6 +132,7 @@ function canStepGoForward(step: DisplayStep, inputs: OnboardingInputs): boolean 
     case 'welcome':
       return true
     case 'permissions': {
+      if (!isPermissionsStepRelevant(inputs.platform)) return true
       const granted = arePermissionsGranted(
         inputs.permissionStatus,
         inputs.permissionRestartPending,
@@ -137,6 +155,9 @@ function canStepGoForward(step: DisplayStep, inputs: OnboardingInputs): boolean 
 
 export function resolveOnboarding(inputs: OnboardingInputs): OnboardingResolution {
   const steps = getOnboardingSteps(inputs.isEnterprise)
+  const displaySteps = isPermissionsStepRelevant(inputs.platform)
+    ? steps
+    : steps.filter((s) => s.id !== 'permissions')
 
   const computedStepIndex = steps.findIndex((s, idx) => !isStepComplete(s.id, idx, inputs))
   const computedStep: DisplayStep =
@@ -161,6 +182,7 @@ export function resolveOnboarding(inputs: OnboardingInputs): OnboardingResolutio
 
   return {
     steps,
+    displaySteps,
     computedStep,
     computedIndex,
     displayStep,
@@ -180,11 +202,24 @@ export function resolveOnboarding(inputs: OnboardingInputs): OnboardingResolutio
  * Returns -1 if nothing is implied.
  */
 export function impliedCompletedIndex(inputs: OnboardingInputs): number {
-  const { isEnterprise, isConfigured, permissionStatus, hasAnyProgress, anyMcpConnected } = inputs
+  const {
+    isEnterprise,
+    isConfigured,
+    permissionStatus,
+    hasAnyProgress,
+    anyMcpConnected,
+    hasExistingActivities,
+    platform,
+  } = inputs
   const steps = getOnboardingSteps(isEnterprise)
+  // Existing recordings mean the user was fully onboarded in some prior
+  // session; localStorage may have been wiped (reinstall, profile reset).
+  // Skip the entire flow rather than walking them back through it.
+  if (hasExistingActivities) return steps.length - 1
   let implied = -1
   if (hasAnyProgress) implied = Math.max(implied, 0) // welcome
   if (
+    isPermissionsStepRelevant(platform) &&
     permissionStatus !== null &&
     permissionStatus.accessibility === 'granted' &&
     permissionStatus.screenRecording === 'granted'
