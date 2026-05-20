@@ -681,6 +681,15 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     },
   )
 
+  // Activities
+  ipcMain.handle(
+    'main-window:listRecentActivities',
+    (_event: IpcMainInvokeEvent, limit: number, offset?: number) => {
+      if (!deps) return []
+      return deps.storage.activities.listRecent(limit, offset ?? 0)
+    },
+  )
+
   // Stats
   ipcMain.handle('main-window:getStats', () => buildStats())
 
