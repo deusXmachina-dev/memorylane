@@ -41,9 +41,28 @@ import type {
   VendorStatus,
 } from '@types'
 
+const SIDEBAR_COLLAPSED_KEY = 'memorylane:sidebar:collapsed'
+
+function readSidebarCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeSidebarCollapsed(collapsed: boolean): void {
+  try {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0')
+  } catch {
+    // Silently ignore quota / unavailable storage
+  }
+}
+
 export function MainWindowApp(): React.JSX.Element {
   const api = useMainWindowAPI()
   const [section, setSection] = useState<MainSection>('dashboard')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => readSidebarCollapsed())
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab | undefined>(undefined)
   const [editionConfig, setEditionConfig] = useState<AppEditionConfig | null>(null)
   const [accessState, setAccessState] = useState<AccessState | null>(null)
@@ -51,9 +70,7 @@ export function MainWindowApp(): React.JSX.Element {
     null,
   )
   const [activeVendor, setActiveVendor] = useState<Vendor>('openrouter')
-  const [captureSettings, setCaptureSettings] = useState<CaptureSettings | null>(null)
   const [capturing, setCapturing] = useState(false)
-  const [captureHotkeyLabel, setCaptureHotkeyLabel] = useState('')
   const [toggling, setToggling] = useState(false)
   const [stats, setStats] = useState<MainWindowStats | null>(null)
   const [mcpStatus, setMcpStatus] = useState<McpRegistrationStatus | null>(null)
@@ -113,7 +130,6 @@ export function MainWindowApp(): React.JSX.Element {
       ])
       setCredentialStatuses(statuses)
       setActiveVendor(settings.activeVendor)
-      setCaptureSettings(settings)
     } catch {
       // Silently handle error - credential statuses will remain null
     }
@@ -296,11 +312,9 @@ export function MainWindowApp(): React.JSX.Element {
   useEffect(() => {
     void api.getStatus().then((status) => {
       setCapturing(status.capturing)
-      setCaptureHotkeyLabel(status.captureHotkeyLabel)
     })
     const unsubscribe = api.onStatusChanged((status) => {
       setCapturing(status.capturing)
-      setCaptureHotkeyLabel(status.captureHotkeyLabel)
       void loadStats()
       void loadPatterns()
     })
@@ -389,7 +403,6 @@ export function MainWindowApp(): React.JSX.Element {
       void refreshOnFocus()
       void api.getStatus().then((status) => {
         setCapturing(status.capturing)
-        setCaptureHotkeyLabel(status.captureHotkeyLabel)
       })
     }
     window.addEventListener('focus', handleFocus)
@@ -401,7 +414,6 @@ export function MainWindowApp(): React.JSX.Element {
     try {
       const status = await api.toggleCapture()
       setCapturing(status.capturing)
-      setCaptureHotkeyLabel(status.captureHotkeyLabel)
     } finally {
       setToggling(false)
     }
@@ -461,7 +473,6 @@ export function MainWindowApp(): React.JSX.Element {
           <CaptureStep
             api={api}
             capturing={capturing}
-            captureHotkeyLabel={captureHotkeyLabel}
             toggling={toggling}
             onToggle={() => void handleToggle()}
             activityCount={stats?.activityCount ?? null}
@@ -481,6 +492,14 @@ export function MainWindowApp(): React.JSX.Element {
     setSettingsInitialTab(isEnterprise ? 'data' : 'ai-models')
     setSection('settings')
   }, [isEnterprise])
+
+  const handleToggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev
+      writeSidebarCollapsed(next)
+      return next
+    })
+  }, [])
 
   // Onboarding takes over the full window — no shell. Exception: the
   // CustomerActivation step's "use your own endpoint" escape hatch pushes
@@ -512,14 +531,14 @@ export function MainWindowApp(): React.JSX.Element {
       section={section}
       onSelectSection={onSelectSection}
       capturing={capturing}
-      captureHotkeyLabel={captureHotkeyLabel}
       toggling={toggling}
       onToggleCapture={() => void handleToggle()}
       vendor={activeVendor}
-      modelLabel={captureSettings?.semanticSnapshotModel ?? null}
       llmHealth={llmHealth}
       configured={isConfigured}
       onOpenLlmSettings={handleOpenLlmSettings}
+      collapsed={sidebarCollapsed}
+      onToggleCollapsed={handleToggleSidebar}
     />
   )
 
@@ -552,7 +571,9 @@ export function MainWindowApp(): React.JSX.Element {
 
   return (
     <>
-      <MainShell sidebar={sidebar}>{content}</MainShell>
+      <MainShell sidebar={sidebar} sidebarCollapsed={sidebarCollapsed}>
+        {content}
+      </MainShell>
       <Toaster />
     </>
   )

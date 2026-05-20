@@ -6,7 +6,6 @@ import type { MainWindowAPI } from '@types'
 interface CaptureStepProps {
   api: MainWindowAPI
   capturing: boolean
-  captureHotkeyLabel: string
   toggling: boolean
   onToggle: () => void
   activityCount: number | null
@@ -16,7 +15,6 @@ interface CaptureStepProps {
 export function CaptureStep({
   api,
   capturing,
-  captureHotkeyLabel,
   toggling,
   onToggle,
   activityCount,
@@ -49,12 +47,7 @@ export function CaptureStep({
         </p>
       </div>
 
-      <CaptureControlSection
-        capturing={capturing}
-        captureHotkeyLabel={captureHotkeyLabel}
-        toggling={toggling}
-        onToggle={onToggle}
-      />
+      <CaptureControlSection capturing={capturing} toggling={toggling} onToggle={onToggle} />
 
       {capturing && (
         <div className="rounded-lg bg-secondary/50 p-3 space-y-1">

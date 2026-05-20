@@ -6,6 +6,7 @@ interface SidebarNavItemProps {
   icon: LucideIcon
   label: string
   active: boolean
+  collapsed?: boolean
   onClick: () => void
 }
 
@@ -13,6 +14,7 @@ export function SidebarNavItem({
   icon: Icon,
   label,
   active,
+  collapsed = false,
   onClick,
 }: SidebarNavItemProps): React.JSX.Element {
   return (
@@ -20,15 +22,18 @@ export function SidebarNavItem({
       type="button"
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
+      aria-label={label}
+      title={collapsed ? label : undefined}
       className={cn(
-        'flex items-center gap-2.5 w-full px-3 py-1.5 rounded-md text-sm text-left transition-colors',
+        'flex items-center rounded-md text-sm text-left transition-colors',
+        collapsed ? 'justify-center size-9' : 'gap-2.5 w-full px-3 py-1.5',
         active
           ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
           : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
       )}
     >
       <Icon className="size-4 shrink-0" />
-      <span>{label}</span>
+      {!collapsed && <span>{label}</span>}
     </button>
   )
 }
