@@ -12,6 +12,8 @@ import type { LlmHealthStatus, Vendor } from '@types'
 import { CaptureControlSection } from '../CaptureControlSection'
 import { SidebarNavItem } from './SidebarNavItem'
 import { LlmStatusPanel } from './LlmStatusPanel'
+import { Logo } from '@/renderer/components/Logo'
+import logoUrl from '@/renderer/assets/logo.png'
 
 export type MainSection = 'dashboard' | 'activities' | 'patterns' | 'settings'
 
@@ -43,24 +45,35 @@ export function Sidebar({
   onToggleCollapsed,
 }: SidebarProps): React.JSX.Element {
   const CollapseIcon = collapsed ? PanelLeftOpen : PanelLeftClose
+  const toggleButton = (
+    <button
+      type="button"
+      onClick={onToggleCollapsed}
+      aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      className={cn(
+        'flex items-center justify-center size-8 rounded-md',
+        'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/60',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+        'transition-colors',
+      )}
+    >
+      <CollapseIcon className="size-4" />
+    </button>
+  )
   return (
     <div className="flex flex-col h-full p-3 gap-3">
-      <div className={cn('flex', collapsed ? 'justify-center' : 'justify-end')}>
-        <button
-          type="button"
-          onClick={onToggleCollapsed}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className={cn(
-            'flex items-center justify-center size-8 rounded-md',
-            'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/60',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-            'transition-colors',
-          )}
-        >
-          <CollapseIcon className="size-4" />
-        </button>
-      </div>
+      {collapsed ? (
+        <div className="flex flex-col items-center gap-1">
+          <img src={logoUrl} alt="MemoryLane" className="size-7 invert dark:invert-0" />
+          {toggleButton}
+        </div>
+      ) : (
+        <div className="flex items-center justify-between pl-1.75">
+          <Logo size="sm" />
+          {toggleButton}
+        </div>
+      )}
 
       <nav className="flex flex-col gap-0.5">
         <SidebarNavItem
