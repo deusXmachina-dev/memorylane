@@ -119,6 +119,8 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   },
   // App lifecycle
   restartApp: () => ipcRenderer.invoke('main-window:restartApp'),
+  // Host platform — read once at preload time; never changes mid-session.
+  platform: process.platform,
 })
 
 console.log('[Preload] mainWindowAPI exposed to renderer')

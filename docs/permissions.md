@@ -11,7 +11,7 @@ This document is the source of truth for permission behaviour. Update it wheneve
 | **Accessibility**    | Detect app/window focus changes and typing activity (typing _duration_, not content) so captures can be grouped into distinct tasks. | `systemPreferences.isTrustedAccessibilityClient(false)` |
 | **Screen Recording** | Capture screenshots of the active display(s) so on-device OCR + embeddings can recognise what was on screen.                         | `systemPreferences.getMediaAccessStatus('screen')`      |
 
-Non-macOS platforms (Windows, Linux) report both as `granted` and skip the flow entirely.
+Non-macOS platforms (Windows, Linux) report both as `granted` and skip the flow entirely — the renderer filters the **Permissions** step out of the onboarding stepper based on `api.platform` so it never renders on those platforms.
 
 ## Permission states
 

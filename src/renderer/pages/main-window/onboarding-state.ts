@@ -39,10 +39,13 @@ export interface OnboardingInputs {
   hasAnyProgress: boolean
   anyMcpConnected: boolean
   viewStepOverride: OnboardingStepId | null
+  platform: NodeJS.Platform
+  hasExistingActivities: boolean
 }
 
 export interface OnboardingResolution {
   steps: OnboardingStepInfo[]
+  displaySteps: OnboardingStepInfo[]
   computedStep: DisplayStep
   computedIndex: number
   displayStep: DisplayStep
@@ -50,6 +53,17 @@ export interface OnboardingResolution {
   overrideValid: boolean
   canGoBack: boolean
   canGoForward: boolean
+}
+
+/**
+ * macOS is the only platform with TCC permissions the user can fail. On other
+ * platforms `getPermissionStatus()` hard-codes both fields to `granted`, so the
+ * Permissions step has nothing to do — filter it from the stepper UI and treat
+ * it as auto-complete in the resolution logic. Canonical step indices are kept
+ * stable; only the displayed list is filtered.
+ */
+function isPermissionsStepRelevant(platform: NodeJS.Platform): boolean {
+  return platform === 'darwin'
 }
 
 /**
@@ -90,11 +104,14 @@ function isStepComplete(id: OnboardingStepId, idx: number, inputs: OnboardingInp
     hasAnyProgress,
     permissionStatus,
     permissionRestartPending,
+    platform,
   } = inputs
   switch (id) {
     case 'welcome':
       return lastCompletedStepIndex >= idx || hasAnyProgress
     case 'permissions': {
+      // Non-darwin platforms have nothing to grant — skip the step entirely.
+      if (!isPermissionsStepRelevant(platform)) return true
       const granted = arePermissionsGranted(permissionStatus, permissionRestartPending)
       // Loading: only treat as complete if the user previously clicked through.
       if (granted === null) return lastCompletedStepIndex >= idx
@@ -115,6 +132,7 @@ function canStepGoForward(step: DisplayStep, inputs: OnboardingInputs): boolean 
     case 'welcome':
       return true
     case 'permissions': {
+      if (!isPermissionsStepRelevant(inputs.platform)) return true
       const granted = arePermissionsGranted(
         inputs.permissionStatus,
         inputs.permissionRestartPending,
@@ -137,6 +155,9 @@ function canStepGoForward(step: DisplayStep, inputs: OnboardingInputs): boolean 
 
 export function resolveOnboarding(inputs: OnboardingInputs): OnboardingResolution {
   const steps = getOnboardingSteps(inputs.isEnterprise)
+  const displaySteps = isPermissionsStepRelevant(inputs.platform)
+    ? steps
+    : steps.filter((s) => s.id !== 'permissions')
 
   const computedStepIndex = steps.findIndex((s, idx) => !isStepComplete(s.id, idx, inputs))
   const computedStep: DisplayStep =
@@ -146,21 +167,34 @@ export function resolveOnboarding(inputs: OnboardingInputs): OnboardingResolutio
   // Resolve an optional back-navigation override. The override lets the user
   // navigate backward through already-visited steps without mutating real
   // state (granted permissions, saved keys can't be reasonably "undone").
-  // Once the user reaches the dashboard, ignore any override.
+  // Once the user reaches the dashboard, ignore any override. The override
+  // target must also exist in the displayed list — otherwise a stale value
+  // (e.g. 'permissions' carried over to a non-darwin platform) could resolve
+  // to a step the stepper UI doesn't render.
   const overrideIndex =
     inputs.viewStepOverride !== null ? steps.findIndex((s) => s.id === inputs.viewStepOverride) : -1
+  const overrideInDisplay =
+    inputs.viewStepOverride !== null && displaySteps.some((s) => s.id === inputs.viewStepOverride)
   const overrideValid =
-    computedStep !== 'dashboard' && overrideIndex !== -1 && overrideIndex < computedIndex
+    computedStep !== 'dashboard' &&
+    overrideIndex !== -1 &&
+    overrideIndex < computedIndex &&
+    overrideInDisplay
   const displayStep: DisplayStep = overrideValid
     ? (inputs.viewStepOverride as OnboardingStepId)
     : computedStep
   const displayIndex = overrideValid ? overrideIndex : computedIndex
 
-  const canGoBack = displayIndex > 0 && displayStep !== 'dashboard'
+  // canGoBack is anchored to the *displayed* list — canonical indices include
+  // steps that may be filtered out (e.g. Permissions on Windows), so using
+  // displayIndex here would lie about there being an earlier step to land on.
+  const displayedPosition = displaySteps.findIndex((s) => s.id === displayStep)
+  const canGoBack = displayStep !== 'dashboard' && displayedPosition > 0
   const canGoForward = canStepGoForward(displayStep, inputs)
 
   return {
     steps,
+    displaySteps,
     computedStep,
     computedIndex,
     displayStep,
@@ -180,11 +214,24 @@ export function resolveOnboarding(inputs: OnboardingInputs): OnboardingResolutio
  * Returns -1 if nothing is implied.
  */
 export function impliedCompletedIndex(inputs: OnboardingInputs): number {
-  const { isEnterprise, isConfigured, permissionStatus, hasAnyProgress, anyMcpConnected } = inputs
+  const {
+    isEnterprise,
+    isConfigured,
+    permissionStatus,
+    hasAnyProgress,
+    anyMcpConnected,
+    hasExistingActivities,
+    platform,
+  } = inputs
   const steps = getOnboardingSteps(isEnterprise)
+  // Existing recordings mean the user was fully onboarded in some prior
+  // session; localStorage may have been wiped (reinstall, profile reset).
+  // Skip the entire flow rather than walking them back through it.
+  if (hasExistingActivities) return steps.length - 1
   let implied = -1
   if (hasAnyProgress) implied = Math.max(implied, 0) // welcome
   if (
+    isPermissionsStepRelevant(platform) &&
     permissionStatus !== null &&
     permissionStatus.accessibility === 'granted' &&
     permissionStatus.screenRecording === 'granted'
@@ -203,4 +250,37 @@ export function impliedCompletedIndex(inputs: OnboardingInputs): number {
     if (idx !== -1) implied = Math.max(implied, idx)
   }
   return implied
+}
+
+/**
+ * Previous step in the *displayed* list, or `null` at the leading edge.
+ * Display-list anchored so platforms that hide steps (Permissions on Windows)
+ * don't accidentally land on them via back-navigation.
+ */
+export function previousDisplayStep(
+  displayStep: DisplayStep,
+  displaySteps: OnboardingStepInfo[],
+): OnboardingStepId | null {
+  const idx = displaySteps.findIndex((s) => s.id === displayStep)
+  if (idx <= 0) return null
+  return displaySteps[idx - 1].id
+}
+
+/**
+ * Next step the user can advance to via the override path (i.e. while viewing
+ * an earlier step than the computed leading edge). Returns `null` once the
+ * override would catch up with the computed edge — at that point the caller
+ * should perform the step's actual continue action instead.
+ */
+export function nextOverrideDisplayStep(
+  displayStep: DisplayStep,
+  displaySteps: OnboardingStepInfo[],
+  canonicalSteps: OnboardingStepInfo[],
+  computedIndex: number,
+): OnboardingStepId | null {
+  const idx = displaySteps.findIndex((s) => s.id === displayStep)
+  const next = idx === -1 ? undefined : displaySteps[idx + 1]
+  if (!next) return null
+  const nextCanonicalIdx = canonicalSteps.findIndex((s) => s.id === next.id)
+  return nextCanonicalIdx !== -1 && nextCanonicalIdx < computedIndex ? next.id : null
 }

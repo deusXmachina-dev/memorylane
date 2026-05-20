@@ -330,4 +330,6 @@ export interface MainWindowAPI {
   onPermissionStatusChanged: (callback: (status: PermissionStatus) => void) => () => void
   // App lifecycle
   restartApp: () => Promise<void>
+  // Host platform (set at preload time; never changes mid-session)
+  platform: NodeJS.Platform
 }

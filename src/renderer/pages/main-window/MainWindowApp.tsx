@@ -19,10 +19,15 @@ import { WelcomeStep } from './components/onboarding/WelcomeStep'
 import {
   LAST_COMPLETED_STEP_INDEX_KEY,
   localStorageAdapter,
-  readOrMigrateLastCompletedIndex,
+  readLastCompletedIndex,
   writeIntFlag,
 } from './onboarding-storage'
-import { impliedCompletedIndex, resolveOnboarding } from './onboarding-state'
+import {
+  impliedCompletedIndex,
+  nextOverrideDisplayStep,
+  previousDisplayStep,
+  resolveOnboarding,
+} from './onboarding-state'
 import type { AppEditionConfig } from '@/shared/edition'
 import type {
   AccessState,
@@ -56,7 +61,7 @@ export function MainWindowApp(): React.JSX.Element {
   const [patterns, setPatterns] = useState<PatternInfo[] | null>(null)
   const [initialLoaded, setInitialLoaded] = useState(false)
   const [lastCompletedStepIndex, setLastCompletedStepIndex] = useState<number>(() =>
-    readOrMigrateLastCompletedIndex(localStorageAdapter),
+    readLastCompletedIndex(localStorageAdapter),
   )
   const [permissionStatus, setPermissionStatus] = useState<PermissionStatus | null>(null)
   // Captured synchronously on the first non-null permission status so we can
@@ -184,11 +189,24 @@ export function MainWindowApp(): React.JSX.Element {
     initialScreenRecording !== 'granted' &&
     permissionStatus?.screenRecording === 'granted'
 
+  const platform = api.platform
+  const isMac = platform === 'darwin'
   const anyMcpConnected = mcpStatus !== null && Object.values(mcpStatus).some(Boolean)
   const screenRecordingGranted = permissionStatus?.screenRecording === 'granted'
   const accessibilityGranted = permissionStatus?.accessibility === 'granted'
-  const hasAnyProgress =
-    isConfigured || screenRecordingGranted || accessibilityGranted || anyMcpConnected
+  const hasExistingActivities = (stats?.activityCount ?? 0) > 0
+  // On non-darwin, both permissions are hard-coded `granted`, so they aren't a
+  // real "progress" signal — exclude them to avoid auto-completing Welcome for
+  // a brand-new Windows user. Existing DB activity counts as progress on every
+  // platform so wipe-localStorage users land straight on dashboard instead of
+  // flashing through Welcome before the self-heal effect bumps the index.
+  const hasAnyProgress = isMac
+    ? isConfigured ||
+      screenRecordingGranted ||
+      accessibilityGranted ||
+      anyMcpConnected ||
+      hasExistingActivities
+    : isConfigured || anyMcpConnected || hasExistingActivities
 
   const resolution = useMemo(
     () =>
@@ -201,6 +219,8 @@ export function MainWindowApp(): React.JSX.Element {
         hasAnyProgress,
         anyMcpConnected,
         viewStepOverride,
+        platform,
+        hasExistingActivities,
       }),
     [
       isEnterprise,
@@ -211,10 +231,13 @@ export function MainWindowApp(): React.JSX.Element {
       hasAnyProgress,
       anyMcpConnected,
       viewStepOverride,
+      platform,
+      hasExistingActivities,
     ],
   )
   const {
     steps: onboardingSteps,
+    displaySteps: onboardingDisplaySteps,
     computedStep,
     computedIndex,
     displayStep,
@@ -231,16 +254,25 @@ export function MainWindowApp(): React.JSX.Element {
   }, [viewStepOverride, overrideValid])
 
   const handleBack = useCallback(() => {
-    if (displayIndex <= 0) return
-    setViewStepOverride(onboardingSteps[displayIndex - 1].id)
-  }, [displayIndex, onboardingSteps])
+    const prev = previousDisplayStep(displayStep, onboardingDisplaySteps)
+    if (prev === null) return
+    setViewStepOverride(prev)
+  }, [displayStep, onboardingDisplaySteps])
 
   const handleForward = useCallback(() => {
     // If the user is viewing an earlier step via override, just step the
-    // override forward (displayIndex === overrideIndex when overrideValid).
-    if (overrideValid && displayIndex + 1 < computedIndex) {
-      setViewStepOverride(onboardingSteps[displayIndex + 1].id)
-      return
+    // override forward through the displayed list.
+    if (overrideValid) {
+      const next = nextOverrideDisplayStep(
+        displayStep,
+        onboardingDisplaySteps,
+        onboardingSteps,
+        computedIndex,
+      )
+      if (next !== null) {
+        setViewStepOverride(next)
+        return
+      }
     }
     // Otherwise we're at the leading edge — perform the step's continue
     // action. Every step except `activation` needs an explicit completion
@@ -250,7 +282,15 @@ export function MainWindowApp(): React.JSX.Element {
       markStepCompleted(displayIndex)
     }
     setViewStepOverride(null)
-  }, [overrideValid, computedIndex, onboardingSteps, displayStep, displayIndex, markStepCompleted])
+  }, [
+    overrideValid,
+    computedIndex,
+    onboardingSteps,
+    onboardingDisplaySteps,
+    displayStep,
+    displayIndex,
+    markStepCompleted,
+  ])
 
   useEffect(() => {
     void api.getStatus().then((status) => {
@@ -304,6 +344,8 @@ export function MainWindowApp(): React.JSX.Element {
       hasAnyProgress,
       anyMcpConnected,
       viewStepOverride: null,
+      platform,
+      hasExistingActivities,
     })
     if (implied > lastCompletedStepIndex) {
       markStepCompleted(implied)
@@ -317,6 +359,8 @@ export function MainWindowApp(): React.JSX.Element {
     hasAnyProgress,
     anyMcpConnected,
     lastCompletedStepIndex,
+    platform,
+    hasExistingActivities,
     markStepCompleted,
   ])
 
@@ -480,7 +524,7 @@ export function MainWindowApp(): React.JSX.Element {
           </>
         ) : (
           <OnboardingLayout
-            steps={onboardingSteps}
+            steps={onboardingDisplaySteps}
             currentStep={displayStep as OnboardingStepId}
             onBack={handleBack}
             onForward={handleForward}
