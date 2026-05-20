@@ -182,7 +182,7 @@ export function DataTabPanel({
                 size="sm"
                 onClick={() => setIsPurgeExpanded(true)}
               >
-                Purge database…
+                Purge database
               </Button>
             }
           />
