@@ -1,6 +1,9 @@
 {
-  "teammateMode": "tmux",
   "permissions": {
     "deny": ["Read(./.entire/metadata/**)"]
+  },
+  "teammateMode": "tmux",
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true
   }
 }
