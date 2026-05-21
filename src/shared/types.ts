@@ -188,6 +188,13 @@ export interface RecentActivity {
   summary: string
 }
 
+export interface ActivityDigest {
+  totalCount: number
+  dateRange: { oldest: number | null; newest: number | null }
+  topApps: { appName: string; count: number }[]
+  topTlds: { tld: string; count: number; lastSeenAt: number }[]
+}
+
 export interface MainWindowStats {
   activityCount: number
   dbSize: number
@@ -317,6 +324,7 @@ export interface MainWindowAPI {
   onThemeChanged: (callback: (theme: 'dark' | 'light') => void) => void
   // Activities
   listRecentActivities: (limit: number, offset?: number) => Promise<RecentActivity[]>
+  getActivityDigest: () => Promise<ActivityDigest>
   // Stats
   getStats: () => Promise<MainWindowStats>
   chooseDatabaseExportDirectory: (initialPath?: string) => Promise<DirectorySelectionResult>

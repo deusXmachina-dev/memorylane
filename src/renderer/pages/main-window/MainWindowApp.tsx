@@ -551,7 +551,13 @@ export function MainWindowApp(): React.JSX.Element {
       isCustomEndpoint={isCustomEndpoint}
     />
   ) : section === 'activities' ? (
-    <ActivitiesPage api={api} />
+    <ActivitiesPage
+      api={api}
+      onOpenPrivacy={() => {
+        setSettingsInitialTab('privacy')
+        setSection('settings')
+      }}
+    />
   ) : section === 'patterns' ? (
     <PatternsPage api={api} patterns={patterns} onPatternsChange={() => void loadPatterns()} />
   ) : (
