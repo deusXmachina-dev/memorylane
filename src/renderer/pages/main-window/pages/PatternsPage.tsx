@@ -1,5 +1,6 @@
 import * as React from 'react'
 import type { MainWindowAPI, PatternInfo } from '@types'
+import { PageLayout } from '../components/shell/PageLayout'
 import { PatternsSection } from '../components/PatternsSection'
 
 interface PatternsPageProps {
@@ -14,13 +15,12 @@ export function PatternsPage({
   onPatternsChange,
 }: PatternsPageProps): React.JSX.Element {
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-4">
-      <h1 className="text-2xl font-semibold tracking-tight">Patterns</h1>
+    <PageLayout title="Patterns">
       {patterns === null ? (
         <div className="text-sm text-muted-foreground">Loading…</div>
       ) : (
         <PatternsSection api={api} patterns={patterns} onPatternsChange={onPatternsChange} />
       )}
-    </div>
+    </PageLayout>
   )
 }
