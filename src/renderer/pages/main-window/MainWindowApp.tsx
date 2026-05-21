@@ -547,7 +547,15 @@ export function MainWindowApp(): React.JSX.Element {
           />
         )
       case 'activities':
-        return <ActivitiesPage api={api} />
+        return (
+          <ActivitiesPage
+            api={api}
+            onOpenPrivacy={() => {
+              setSettingsInitialTab('privacy')
+              setSection('settings')
+            }}
+          />
+        )
       case 'patterns':
         return (
           <PatternsPage

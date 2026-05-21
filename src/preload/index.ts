@@ -83,6 +83,7 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   // Activities
   listRecentActivities: (limit: number, offset?: number) =>
     ipcRenderer.invoke('main-window:listRecentActivities', limit, offset),
+  getActivityDigest: () => ipcRenderer.invoke('main-window:getActivityDigest'),
   // Stats
   getStats: () => ipcRenderer.invoke('main-window:getStats'),
   chooseDatabaseExportDirectory: (initialPath?: string) =>
