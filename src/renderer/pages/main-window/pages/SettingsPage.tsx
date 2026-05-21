@@ -10,6 +10,7 @@ import { CapturePrivacySection } from '../components/advanced-settings/CapturePr
 import { DataTabPanel } from '../components/advanced-settings/DataTabPanel'
 import { IntegrationsTabPanel } from '../components/advanced-settings/IntegrationsTabPanel'
 import type { NumericCaptureSetting } from '../components/advanced-settings/types'
+import { PageLayout } from '../components/shell/PageLayout'
 import { detectHotkeyPlatform, toRecordedAccelerator } from '../hotkey-utils'
 
 export type SettingsTab = 'privacy' | 'data' | 'ai-models' | 'integrations'
@@ -261,19 +262,21 @@ export function SettingsPage({
   const showAiModels = editionConfig?.edition !== 'enterprise'
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-4">
-      {onBack && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onBack}
-          className="-ml-2 text-xs text-muted-foreground hover:text-foreground"
-        >
-          &larr; Back to onboarding
-        </Button>
-      )}
-      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-
+    <PageLayout
+      title="Settings"
+      headerBefore={
+        onBack && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onBack}
+            className="-ml-2 text-xs text-muted-foreground hover:text-foreground"
+          >
+            &larr; Back to onboarding
+          </Button>
+        )
+      }
+    >
       {form && (
         <Tabs defaultValue={initialTab ?? 'privacy'}>
           <TabsList>
@@ -330,6 +333,6 @@ export function SettingsPage({
           </TabsPanel>
         </Tabs>
       )}
-    </div>
+    </PageLayout>
   )
 }

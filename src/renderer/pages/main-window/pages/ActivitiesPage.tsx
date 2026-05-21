@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@components/ui/button'
 import { Card } from '@components/ui/card'
 import type { MainWindowAPI, RecentActivity } from '@types'
+import { PageLayout } from '../components/shell/PageLayout'
 
 const PAGE_SIZE = 100
 
@@ -79,9 +80,7 @@ export function ActivitiesPage({ api }: ActivitiesPageProps): React.JSX.Element 
   }, [items.length, loadPage])
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-3">
-      <h1 className="text-2xl font-semibold tracking-tight">Activities</h1>
-
+    <PageLayout title="Activities">
       {loading ? (
         <div className="text-sm text-muted-foreground">Loading…</div>
       ) : items.length === 0 ? (
@@ -109,6 +108,6 @@ export function ActivitiesPage({ api }: ActivitiesPageProps): React.JSX.Element 
           )}
         </>
       )}
-    </div>
+    </PageLayout>
   )
 }

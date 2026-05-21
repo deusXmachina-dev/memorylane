@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Card, CardContent } from '@components/ui/card'
 import type { KeyStatus, LlmHealthStatus, MainWindowStats } from '@types'
+import { PageLayout } from '../components/shell/PageLayout'
 import { StatusLine } from '../components/StatusLine'
 import { StatsDisplay } from '../components/StatsDisplay'
 
@@ -35,18 +36,16 @@ export function DashboardPage({
   const repetitiveHours = stats?.totalRepetitiveHoursPerWeek ?? null
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <div className="mt-1">
-          <StatusLine
-            capturing={capturing}
-            llmHealth={llmHealth}
-            activityCount={stats?.activityCount ?? null}
-          />
-        </div>
-      </div>
-
+    <PageLayout
+      title="Dashboard"
+      subtitle={
+        <StatusLine
+          capturing={capturing}
+          llmHealth={llmHealth}
+          activityCount={stats?.activityCount ?? null}
+        />
+      }
+    >
       <StatsDisplay stats={stats} keyStatus={keyStatus} isCustomEndpoint={isCustomEndpoint} />
 
       <div className="grid grid-cols-2 gap-4">
@@ -65,6 +64,6 @@ export function DashboardPage({
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageLayout>
   )
 }
