@@ -19,6 +19,7 @@ import { WelcomeStep } from './components/onboarding/WelcomeStep'
 import {
   LAST_COMPLETED_STEP_INDEX_KEY,
   localStorageAdapter,
+  readIntFlag,
   readLastCompletedIndex,
   writeIntFlag,
 } from './onboarding-storage'
@@ -43,26 +44,12 @@ import type {
 
 const SIDEBAR_COLLAPSED_KEY = 'memorylane:sidebar:collapsed'
 
-function readSidebarCollapsed(): boolean {
-  try {
-    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-function writeSidebarCollapsed(collapsed: boolean): void {
-  try {
-    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0')
-  } catch {
-    // Silently ignore quota / unavailable storage
-  }
-}
-
 export function MainWindowApp(): React.JSX.Element {
   const api = useMainWindowAPI()
   const [section, setSection] = useState<MainSection>('dashboard')
-  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => readSidebarCollapsed())
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(
+    () => readIntFlag(localStorageAdapter, SIDEBAR_COLLAPSED_KEY, 0) === 1,
+  )
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab | undefined>(undefined)
   const [editionConfig, setEditionConfig] = useState<AppEditionConfig | null>(null)
   const [accessState, setAccessState] = useState<AccessState | null>(null)
@@ -104,21 +91,21 @@ export function MainWindowApp(): React.JSX.Element {
     })
   }, [])
 
+  // Loader errors are surfaced indirectly via UI state (null fields, empty
+  // lists). The renderer recovers on the next focus / event refresh.
   const loadEditionConfig = useCallback(async () => {
     try {
-      const config = await api.getEditionConfig()
-      setEditionConfig(config)
+      setEditionConfig(await api.getEditionConfig())
     } catch {
-      // Silently handle error
+      /* ignored */
     }
   }, [api])
 
   const loadAccessState = useCallback(async () => {
     try {
-      const state = await api.refreshAccessState()
-      setAccessState(state)
+      setAccessState(await api.refreshAccessState())
     } catch {
-      // Silently handle error
+      /* ignored */
     }
   }, [api])
 
@@ -131,16 +118,15 @@ export function MainWindowApp(): React.JSX.Element {
       setCredentialStatuses(statuses)
       setActiveVendor(settings.activeVendor)
     } catch {
-      // Silently handle error - credential statuses will remain null
+      /* ignored */
     }
   }, [api])
 
   const loadStats = useCallback(async () => {
     try {
-      const s = await api.getStats()
-      setStats(s)
+      setStats(await api.getStats())
     } catch {
-      // Silently handle error
+      /* ignored */
     }
   }, [api])
 
@@ -148,7 +134,7 @@ export function MainWindowApp(): React.JSX.Element {
     try {
       setMcpStatus(await api.getMcpStatus())
     } catch {
-      // Silently handle error
+      /* ignored */
     }
   }, [api])
 
@@ -496,7 +482,7 @@ export function MainWindowApp(): React.JSX.Element {
   const handleToggleSidebar = useCallback(() => {
     setSidebarCollapsed((prev) => {
       const next = !prev
-      writeSidebarCollapsed(next)
+      writeIntFlag(localStorageAdapter, SIDEBAR_COLLAPSED_KEY, next ? 1 : 0)
       return next
     })
   }, [])
@@ -542,32 +528,46 @@ export function MainWindowApp(): React.JSX.Element {
     />
   )
 
-  const content = !initialLoaded ? null : section === 'dashboard' ? (
-    <DashboardPage
-      capturing={capturing}
-      llmHealth={llmHealth}
-      stats={stats}
-      keyStatus={activeVendorStatus}
-      isCustomEndpoint={isCustomEndpoint}
-    />
-  ) : section === 'activities' ? (
-    <ActivitiesPage api={api} />
-  ) : section === 'patterns' ? (
-    <PatternsPage api={api} patterns={patterns} onPatternsChange={() => void loadPatterns()} />
-  ) : (
-    <SettingsPage
-      initialTab={settingsInitialTab}
-      onCredentialsChanged={() => void loadCredentials()}
-      onBack={
-        computedStep !== 'dashboard'
-          ? () => {
-              setSection('dashboard')
-              setSettingsInitialTab(undefined)
+  const renderSection = (): React.JSX.Element => {
+    switch (section) {
+      case 'dashboard':
+        return (
+          <DashboardPage
+            capturing={capturing}
+            llmHealth={llmHealth}
+            stats={stats}
+            keyStatus={activeVendorStatus}
+            isCustomEndpoint={isCustomEndpoint}
+          />
+        )
+      case 'activities':
+        return <ActivitiesPage api={api} />
+      case 'patterns':
+        return (
+          <PatternsPage
+            api={api}
+            patterns={patterns}
+            onPatternsChange={() => void loadPatterns()}
+          />
+        )
+      case 'settings':
+        return (
+          <SettingsPage
+            initialTab={settingsInitialTab}
+            onCredentialsChanged={() => void loadCredentials()}
+            onBack={
+              computedStep !== 'dashboard'
+                ? () => {
+                    setSection('dashboard')
+                    setSettingsInitialTab(undefined)
+                  }
+                : undefined
             }
-          : undefined
-      }
-    />
-  )
+          />
+        )
+    }
+  }
+  const content = initialLoaded ? renderSection() : null
 
   return (
     <>

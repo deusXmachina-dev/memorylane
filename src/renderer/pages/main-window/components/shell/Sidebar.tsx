@@ -6,6 +6,7 @@ import {
   PanelLeftOpen,
   Sparkles,
   Settings as SettingsIcon,
+  type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/renderer/lib/utils'
 import type { LlmHealthStatus, Vendor } from '@types'
@@ -13,9 +14,15 @@ import { CaptureControlSection } from '../CaptureControlSection'
 import { SidebarNavItem } from './SidebarNavItem'
 import { LlmStatusPanel } from './LlmStatusPanel'
 import { Logo } from '@/renderer/components/Logo'
-import logoUrl from '@/renderer/assets/logo.png'
 
 export type MainSection = 'dashboard' | 'activities' | 'patterns' | 'settings'
+
+const NAV_ITEMS: { id: MainSection; label: string; icon: LucideIcon }[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'activities', label: 'Activities', icon: ListVideo },
+  { id: 'patterns', label: 'Patterns', icon: Sparkles },
+  { id: 'settings', label: 'Settings', icon: SettingsIcon },
+]
 
 interface SidebarProps {
   section: MainSection
@@ -65,7 +72,7 @@ export function Sidebar({
     <div className="flex flex-col h-full p-3 gap-3">
       {collapsed ? (
         <div className="flex flex-col items-center gap-1">
-          <img src={logoUrl} alt="MemoryLane" className="size-7 invert dark:invert-0" />
+          <Logo size="sm" iconOnly />
           {toggleButton}
         </div>
       ) : (
@@ -76,34 +83,16 @@ export function Sidebar({
       )}
 
       <nav className="flex flex-col gap-0.5">
-        <SidebarNavItem
-          icon={LayoutDashboard}
-          label="Dashboard"
-          active={section === 'dashboard'}
-          collapsed={collapsed}
-          onClick={() => onSelectSection('dashboard')}
-        />
-        <SidebarNavItem
-          icon={ListVideo}
-          label="Activities"
-          active={section === 'activities'}
-          collapsed={collapsed}
-          onClick={() => onSelectSection('activities')}
-        />
-        <SidebarNavItem
-          icon={Sparkles}
-          label="Patterns"
-          active={section === 'patterns'}
-          collapsed={collapsed}
-          onClick={() => onSelectSection('patterns')}
-        />
-        <SidebarNavItem
-          icon={SettingsIcon}
-          label="Settings"
-          active={section === 'settings'}
-          collapsed={collapsed}
-          onClick={() => onSelectSection('settings')}
-        />
+        {NAV_ITEMS.map(({ id, label, icon }) => (
+          <SidebarNavItem
+            key={id}
+            icon={icon}
+            label={label}
+            active={section === id}
+            collapsed={collapsed}
+            onClick={() => onSelectSection(id)}
+          />
+        ))}
       </nav>
 
       <div className="flex-1" />

@@ -178,7 +178,8 @@ export interface ObservationState {
   }
 }
 
-export interface RecentActivity {
+/** Activity with window context but without heavy ocr_text and vector fields. */
+export interface ActivityDetail {
   id: string
   startTimestamp: number
   endTimestamp: number
@@ -316,7 +317,7 @@ export interface MainWindowAPI {
   getTheme: () => Promise<'dark' | 'light'>
   onThemeChanged: (callback: (theme: 'dark' | 'light') => void) => void
   // Activities
-  listRecentActivities: (limit: number, offset?: number) => Promise<RecentActivity[]>
+  listRecentActivities: (limit: number, offset?: number) => Promise<ActivityDetail[]>
   // Stats
   getStats: () => Promise<MainWindowStats>
   chooseDatabaseExportDirectory: (initialPath?: string) => Promise<DirectorySelectionResult>

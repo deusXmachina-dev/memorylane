@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@components/ui/button'
 import { Card } from '@components/ui/card'
-import type { MainWindowAPI, RecentActivity } from '@types'
+import type { ActivityDetail, MainWindowAPI } from '@types'
 import { PageLayout } from '../components/shell/PageLayout'
 
 const PAGE_SIZE = 100
@@ -17,7 +17,7 @@ function formatTimestamp(ms: number): string {
   })
 }
 
-function ActivityRow({ activity }: { activity: RecentActivity }): React.JSX.Element {
+function ActivityRow({ activity }: { activity: ActivityDetail }): React.JSX.Element {
   const subtitle = activity.tld ? `${activity.appName} · ${activity.tld}` : activity.appName
   return (
     <Card className="px-3 py-2">
@@ -42,13 +42,13 @@ interface ActivitiesPageProps {
 }
 
 export function ActivitiesPage({ api }: ActivitiesPageProps): React.JSX.Element {
-  const [items, setItems] = useState<RecentActivity[]>([])
+  const [items, setItems] = useState<ActivityDetail[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
 
   const loadPage = useCallback(
-    async (offset: number): Promise<RecentActivity[]> => {
+    async (offset: number): Promise<ActivityDetail[]> => {
       try {
         return await api.listRecentActivities(PAGE_SIZE, offset)
       } catch {

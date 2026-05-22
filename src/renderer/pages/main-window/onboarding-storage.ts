@@ -1,10 +1,6 @@
 // Storage helpers for the renderer-driven onboarding flow.
-//
-// The current step is persisted as a single integer ("lastCompletedStepIndex").
-// Returning users who already captured data are detected via DB activity count
-// (see `hasExistingActivities` in MainWindowApp), not via legacy localStorage
-// flags — that path is the load-bearing one for "skip onboarding for already-
-// onboarded users."
+// Returning users are detected via DB activity count (`hasExistingActivities`),
+// not via localStorage.
 
 export const LAST_COMPLETED_STEP_INDEX_KEY = 'memorylane:onboarding:lastCompletedStepIndex'
 
