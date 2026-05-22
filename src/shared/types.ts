@@ -178,16 +178,7 @@ export interface ObservationState {
   }
 }
 
-/** Activity with window context but without heavy ocr_text and vector fields. */
-export interface ActivityDetail {
-  id: string
-  startTimestamp: number
-  endTimestamp: number
-  appName: string
-  windowTitle: string
-  tld: string | null
-  summary: string
-}
+export type { ActivityDetail } from '../main/storage/types'
 
 export interface MainWindowStats {
   activityCount: number
