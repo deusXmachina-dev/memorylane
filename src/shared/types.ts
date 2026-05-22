@@ -269,6 +269,32 @@ export interface PatternInfo {
   lastSeenAt: number | null
   lastConfidence: number | null
   estimatedHoursPerWeek: number | null
+  /** Internal composite score used for ranking. Not for display. */
+  score: number
+}
+
+export interface PatternActivityRef {
+  id: string
+  startTimestamp: number
+  endTimestamp: number
+  appName: string
+  windowTitle: string
+  tld: string | null
+  summary: string
+}
+
+export interface PatternSightingInfo {
+  id: string
+  detectedAt: number
+  evidence: string
+  confidence: number
+  durationEstimateMin: number | null
+  activities: PatternActivityRef[]
+}
+
+export interface PatternDetailInfo {
+  pattern: PatternInfo
+  sightings: PatternSightingInfo[]
 }
 
 export interface MainWindowAPI {
@@ -307,6 +333,7 @@ export interface MainWindowAPI {
   resetCaptureSettings: () => Promise<SaveResult>
   // Patterns
   getPatterns: () => Promise<PatternInfo[]>
+  getPatternDetail: (id: string) => Promise<PatternDetailInfo | null>
   approvePattern: (id: string) => Promise<SaveResult>
   rejectPattern: (id: string) => Promise<SaveResult>
   completePattern: (id: string) => Promise<SaveResult>
