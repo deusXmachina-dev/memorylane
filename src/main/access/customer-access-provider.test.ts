@@ -26,7 +26,7 @@ import type { DeviceIdentity } from '../settings/device-identity'
 type FetchCall = [unknown, RequestInit | undefined]
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
-  return { ok, status, json: async () => body } as unknown as Response
+  return { ok, status, json: async () => body, text: async () => '' } as unknown as Response
 }
 
 function makeFetchMock(responses: Response[]): typeof fetch {
@@ -182,5 +182,67 @@ describe('CustomerAccessProvider', () => {
     const provider = new CustomerAccessProvider(deviceIdentity)
     await expect(provider.openSubscriptionPortal()).rejects.toThrow(/outside backend domain/)
     expect(openExternalMock).not.toHaveBeenCalled()
+  })
+
+  // DEU-93: a ~30h backend outage returning 500s caused the desktop app to
+  // invalidate its managed key every refresh, killing inference. Only an
+  // authoritative 200 {key: null} should invalidate.
+  describe('refreshAccessState invalidation policy', () => {
+    it('keeps the managed key on backend 5xx', async () => {
+      globalThis.fetch = makeFetchMock([jsonResponse({}, false, 500)])
+      const provider = new CustomerAccessProvider(deviceIdentity)
+      const payloads: unknown[] = []
+      provider.setUpdateCallback((_, payload) => payloads.push(payload))
+
+      await provider.refreshAccessState()
+
+      expect(payloads).toEqual([])
+    })
+
+    it('keeps the managed key on backend 4xx', async () => {
+      globalThis.fetch = makeFetchMock([jsonResponse({}, false, 401)])
+      const provider = new CustomerAccessProvider(deviceIdentity)
+      const payloads: unknown[] = []
+      provider.setUpdateCallback((_, payload) => payloads.push(payload))
+
+      await provider.refreshAccessState()
+
+      expect(payloads).toEqual([])
+    })
+
+    it('keeps the managed key when fetch itself throws (network error)', async () => {
+      globalThis.fetch = vi.fn(async () => {
+        throw new TypeError('network error')
+      }) as unknown as typeof fetch
+      const provider = new CustomerAccessProvider(deviceIdentity)
+      const payloads: unknown[] = []
+      provider.setUpdateCallback((_, payload) => payloads.push(payload))
+
+      await provider.refreshAccessState()
+
+      expect(payloads).toEqual([])
+    })
+
+    it('invalidates the managed key on an authoritative 200 {key: null}', async () => {
+      globalThis.fetch = makeFetchMock([jsonResponse({ key: null })])
+      const provider = new CustomerAccessProvider(deviceIdentity)
+      const payloads: unknown[] = []
+      provider.setUpdateCallback((_, payload) => payloads.push(payload))
+
+      await provider.refreshAccessState()
+
+      expect(payloads).toEqual([{ invalidate: true }])
+    })
+
+    it('stores the managed key on 200 with a key', async () => {
+      globalThis.fetch = makeFetchMock([jsonResponse({ key: 'sk-or-managed' })])
+      const provider = new CustomerAccessProvider(deviceIdentity)
+      const payloads: unknown[] = []
+      provider.setUpdateCallback((_, payload) => payloads.push(payload))
+
+      await provider.refreshAccessState()
+
+      expect(payloads).toEqual([{ config: { provider: 'openrouter', apiKey: 'sk-or-managed' } }])
+    })
   })
 })

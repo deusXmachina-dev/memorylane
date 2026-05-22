@@ -12,6 +12,8 @@ import {
 } from './customer-access-machine'
 import { createInitialAccessState } from './types'
 
+type KeyFetchResult = { kind: 'key'; key: string } | { kind: 'no_key' } | { kind: 'transient' }
+
 export class CustomerAccessProvider extends BaseAccessProvider {
   private readonly deviceIdentity: DeviceIdentity
   private pollTimer: ReturnType<typeof setInterval> | null = null
@@ -24,25 +26,26 @@ export class CustomerAccessProvider extends BaseAccessProvider {
   }
 
   public async refreshAccessState(): Promise<void> {
-    try {
-      const key = await this.fetchCustomerKey(this.deviceIdentity.getDeviceId())
-      if (key) {
+    const result = await this.fetchCustomerKey(this.deviceIdentity.getDeviceId())
+    switch (result.kind) {
+      case 'key':
         log.info('[CustomerAccess] Received managed customer key')
         this.applyTransition(
-          transitionCustomerAccess(this.accessState, {
-            type: 'key_received',
-            key,
-          }),
+          transitionCustomerAccess(this.accessState, { type: 'key_received', key: result.key }),
         )
         return
-      }
-
-      log.info(
-        '[CustomerAccess] No managed customer key from backend, invalidating local managed key',
-      )
-      this.applyTransition(transitionCustomerAccess(this.accessState, { type: 'key_missing' }))
-    } catch (error) {
-      log.warn('[CustomerAccess] Refresh failed:', error)
+      case 'no_key':
+        log.info(
+          '[CustomerAccess] Backend reports no managed customer key, invalidating local managed key',
+        )
+        this.applyTransition(transitionCustomerAccess(this.accessState, { type: 'key_missing' }))
+        return
+      case 'transient':
+        // Server/network problem — keep whatever key we already have. An
+        // authoritative "no key" is only signaled by 200 {key: null}; treating
+        // 5xx or network errors as "no key" caused a ~30h inference outage
+        // (DEU-93) when the backend was returning 500s.
+        return
     }
   }
 
@@ -170,45 +173,57 @@ export class CustomerAccessProvider extends BaseAccessProvider {
   }
 
   private async pollForKey(deviceId: string): Promise<void> {
-    try {
-      const key = await this.fetchCustomerKey(deviceId)
-      if (!key) return
+    const result = await this.fetchCustomerKey(deviceId)
+    if (result.kind !== 'key') return
 
-      log.info('[CustomerAccess] Received managed customer key')
-      this.clearTimers()
-      this.applyTransition(
-        transitionCustomerAccess(this.accessState, {
-          type: 'key_received',
-          key,
-        }),
-      )
-    } catch (error) {
-      log.warn('[CustomerAccess] Poll request failed:', error)
-    }
+    log.info('[CustomerAccess] Received managed customer key')
+    this.clearTimers()
+    this.applyTransition(
+      transitionCustomerAccess(this.accessState, { type: 'key_received', key: result.key }),
+    )
   }
 
-  private async fetchCustomerKey(deviceId: string): Promise<string | null> {
+  private async fetchCustomerKey(deviceId: string): Promise<KeyFetchResult> {
     const url = new URL('/v2/subscription/key', MANAGED_KEY_CONFIG.BACKEND_URL)
     const deviceIdHint = `${deviceId.slice(0, 4)}…${deviceId.slice(-4)}`
 
-    const response = await fetch(url.toString(), {
-      headers: { Authorization: `Bearer ${deviceId}` },
-    })
+    let response: Response
+    try {
+      response = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${deviceId}` },
+      })
+    } catch (error) {
+      log.warn(
+        `[CustomerAccess] /v2/subscription/key request failed for device ${deviceIdHint}:`,
+        error,
+      )
+      return { kind: 'transient' }
+    }
+
     if (!response.ok) {
       const bodyExcerpt = await response.text().catch(() => '')
       log.warn(
         `[CustomerAccess] /v2/subscription/key returned ${response.status} for device ${deviceIdHint}: ${bodyExcerpt.slice(0, 200)}`,
       )
-      return null
+      return { kind: 'transient' }
     }
 
-    const data = (await response.json()) as { key?: string | null }
-    if (data.key == null) {
-      log.info(
-        `[CustomerAccess] /v2/subscription/key returned no key yet for device ${deviceIdHint}`,
+    let data: { key?: string | null }
+    try {
+      data = (await response.json()) as { key?: string | null }
+    } catch (error) {
+      log.warn(
+        `[CustomerAccess] /v2/subscription/key returned malformed JSON for device ${deviceIdHint}:`,
+        error,
       )
+      return { kind: 'transient' }
     }
-    return data.key ?? null
+
+    if (data.key == null) {
+      log.info(`[CustomerAccess] /v2/subscription/key returned no key for device ${deviceIdHint}`)
+      return { kind: 'no_key' }
+    }
+    return { kind: 'key', key: data.key }
   }
 
   private clearTimers(): void {
