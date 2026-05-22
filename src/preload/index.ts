@@ -79,6 +79,9 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   onThemeChanged: (callback: (theme: 'dark' | 'light') => void) => {
     ipcRenderer.on('main-window:themeChanged', (_event, theme) => callback(theme))
   },
+  // Activities
+  listRecentActivities: (limit: number, offset?: number) =>
+    ipcRenderer.invoke('main-window:listRecentActivities', limit, offset),
   // Stats
   getStats: () => ipcRenderer.invoke('main-window:getStats'),
   chooseDatabaseExportDirectory: (initialPath?: string) =>

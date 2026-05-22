@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Settings } from 'lucide-react'
 import { Toaster } from '@components/ui/sonner'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { useLlmHealth } from '@/renderer/hooks/use-llm-health'
-import { Button } from '@components/ui/button'
-import { CaptureControlSection } from './components/CaptureControlSection'
-import { StatusLine } from './components/StatusLine'
-import { PatternsSection } from './components/PatternsSection'
-import { AdvancedSettingsPage } from './AdvancedSettingsPage'
+import { MainShell } from './components/shell/MainShell'
+import { Sidebar, type MainSection } from './components/shell/Sidebar'
+import { DashboardPage } from './pages/DashboardPage'
+import { ActivitiesPage } from './pages/ActivitiesPage'
+import { PatternsPage } from './pages/PatternsPage'
+import { SettingsPage, type SettingsTab } from './pages/SettingsPage'
 import { BlacklistStep } from './components/onboarding/BlacklistStep'
 import { CaptureStep } from './components/onboarding/CaptureStep'
 import { ConnectStep } from './components/onboarding/ConnectStep'
@@ -19,6 +19,7 @@ import { WelcomeStep } from './components/onboarding/WelcomeStep'
 import {
   LAST_COMPLETED_STEP_INDEX_KEY,
   localStorageAdapter,
+  readIntFlag,
   readLastCompletedIndex,
   writeIntFlag,
 } from './onboarding-storage'
@@ -41,12 +42,15 @@ import type {
   VendorStatus,
 } from '@types'
 
+const SIDEBAR_COLLAPSED_KEY = 'memorylane:sidebar:collapsed'
+
 export function MainWindowApp(): React.JSX.Element {
   const api = useMainWindowAPI()
-  const [page, setPage] = useState<'home' | 'settings'>('home')
-  const [settingsInitialTab, setSettingsInitialTab] = useState<
-    'privacy' | 'data' | 'ai-models' | 'integrations' | undefined
-  >(undefined)
+  const [section, setSection] = useState<MainSection>('dashboard')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(
+    () => readIntFlag(localStorageAdapter, SIDEBAR_COLLAPSED_KEY, 0) === 1,
+  )
+  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab | undefined>(undefined)
   const [editionConfig, setEditionConfig] = useState<AppEditionConfig | null>(null)
   const [accessState, setAccessState] = useState<AccessState | null>(null)
   const [credentialStatuses, setCredentialStatuses] = useState<Record<Vendor, VendorStatus> | null>(
@@ -54,7 +58,6 @@ export function MainWindowApp(): React.JSX.Element {
   )
   const [activeVendor, setActiveVendor] = useState<Vendor>('openrouter')
   const [capturing, setCapturing] = useState(false)
-  const [captureHotkeyLabel, setCaptureHotkeyLabel] = useState('')
   const [toggling, setToggling] = useState(false)
   const [stats, setStats] = useState<MainWindowStats | null>(null)
   const [mcpStatus, setMcpStatus] = useState<McpRegistrationStatus | null>(null)
@@ -88,21 +91,21 @@ export function MainWindowApp(): React.JSX.Element {
     })
   }, [])
 
+  // Loader errors are surfaced indirectly via UI state (null fields, empty
+  // lists). The renderer recovers on the next focus / event refresh.
   const loadEditionConfig = useCallback(async () => {
     try {
-      const config = await api.getEditionConfig()
-      setEditionConfig(config)
+      setEditionConfig(await api.getEditionConfig())
     } catch {
-      // Silently handle error
+      /* ignored */
     }
   }, [api])
 
   const loadAccessState = useCallback(async () => {
     try {
-      const state = await api.refreshAccessState()
-      setAccessState(state)
+      setAccessState(await api.refreshAccessState())
     } catch {
-      // Silently handle error
+      /* ignored */
     }
   }, [api])
 
@@ -115,16 +118,15 @@ export function MainWindowApp(): React.JSX.Element {
       setCredentialStatuses(statuses)
       setActiveVendor(settings.activeVendor)
     } catch {
-      // Silently handle error - credential statuses will remain null
+      /* ignored */
     }
   }, [api])
 
   const loadStats = useCallback(async () => {
     try {
-      const s = await api.getStats()
-      setStats(s)
+      setStats(await api.getStats())
     } catch {
-      // Silently handle error
+      /* ignored */
     }
   }, [api])
 
@@ -132,7 +134,7 @@ export function MainWindowApp(): React.JSX.Element {
     try {
       setMcpStatus(await api.getMcpStatus())
     } catch {
-      // Silently handle error
+      /* ignored */
     }
   }, [api])
 
@@ -178,9 +180,10 @@ export function MainWindowApp(): React.JSX.Element {
   const isConfigured = isEnterprise
     ? accessState?.isEnterpriseActivated === true && hasActiveKey
     : hasActiveKey
+  const isCustomEndpoint = activeVendor === 'openai-compatible'
   const { llmHealth } = useLlmHealth({
     api,
-    enabled: page === 'home' && isConfigured,
+    enabled: isConfigured,
   })
 
   const initialScreenRecording = initialScreenRecordingRef.current
@@ -295,11 +298,9 @@ export function MainWindowApp(): React.JSX.Element {
   useEffect(() => {
     void api.getStatus().then((status) => {
       setCapturing(status.capturing)
-      setCaptureHotkeyLabel(status.captureHotkeyLabel)
     })
     const unsubscribe = api.onStatusChanged((status) => {
       setCapturing(status.capturing)
-      setCaptureHotkeyLabel(status.captureHotkeyLabel)
       void loadStats()
       void loadPatterns()
     })
@@ -388,7 +389,6 @@ export function MainWindowApp(): React.JSX.Element {
       void refreshOnFocus()
       void api.getStatus().then((status) => {
         setCapturing(status.capturing)
-        setCaptureHotkeyLabel(status.captureHotkeyLabel)
       })
     }
     window.addEventListener('focus', handleFocus)
@@ -400,7 +400,6 @@ export function MainWindowApp(): React.JSX.Element {
     try {
       const status = await api.toggleCapture()
       setCapturing(status.capturing)
-      setCaptureHotkeyLabel(status.captureHotkeyLabel)
     } finally {
       setToggling(false)
     }
@@ -436,7 +435,7 @@ export function MainWindowApp(): React.JSX.Element {
             onKeySet={() => void loadCredentials()}
             onUseOwnEndpoint={() => {
               setSettingsInitialTab('ai-models')
-              setPage('settings')
+              setSection('settings')
             }}
             isConfigured={isConfigured}
             onContinue={advance('plan')}
@@ -460,7 +459,6 @@ export function MainWindowApp(): React.JSX.Element {
           <CaptureStep
             api={api}
             capturing={capturing}
-            captureHotkeyLabel={captureHotkeyLabel}
             toggling={toggling}
             onToggle={() => void handleToggle()}
             activityCount={stats?.activityCount ?? null}
@@ -470,59 +468,40 @@ export function MainWindowApp(): React.JSX.Element {
     }
   }
 
-  if (page === 'settings') {
-    return (
-      <div className="h-screen overflow-hidden antialiased select-none">
-        <AdvancedSettingsPage
-          onBack={() => {
-            setPage('home')
-            setSettingsInitialTab(undefined)
-            void loadAll()
-          }}
-          initialTab={settingsInitialTab}
-        />
-        <Toaster />
-      </div>
-    )
+  const onSelectSection = useCallback((next: MainSection) => {
+    setSection(next)
+    if (next !== 'settings') setSettingsInitialTab(undefined)
+  }, [])
+
+  const handleOpenLlmSettings = useCallback(() => {
+    // Enterprise hides the AI Models tab — fall back to Data so the click still lands somewhere useful.
+    setSettingsInitialTab(isEnterprise ? 'data' : 'ai-models')
+    setSection('settings')
+  }, [isEnterprise])
+
+  const handleToggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev
+      writeIntFlag(localStorageAdapter, SIDEBAR_COLLAPSED_KEY, next ? 1 : 0)
+      return next
+    })
+  }, [])
+
+  // Until initial load completes we can't tell whether to show onboarding or
+  // the shell — render nothing rather than flashing the shell first.
+  if (!initialLoaded) {
+    return <Toaster />
   }
 
-  return (
-    <div className="min-h-screen antialiased select-none relative">
-      {computedStep === 'dashboard' && (
-        <div className="absolute top-3 right-3 z-10">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setPage('settings')}
-            aria-label="Settings"
-          >
-            <Settings className="size-4" />
-          </Button>
-        </div>
-      )}
-      <div className="p-6 max-w-xl mx-auto space-y-5">
-        {!initialLoaded ? null : displayStep === 'dashboard' ? (
-          <>
-            <StatusLine
-              capturing={capturing}
-              llmHealth={llmHealth}
-              activityCount={stats?.activityCount ?? null}
-            />
-
-            <CaptureControlSection
-              capturing={capturing}
-              captureHotkeyLabel={captureHotkeyLabel}
-              toggling={toggling}
-              onToggle={() => void handleToggle()}
-            />
-
-            <PatternsSection
-              api={api}
-              patterns={patterns!}
-              onPatternsChange={() => void loadPatterns()}
-            />
-          </>
-        ) : (
+  // Onboarding takes over the full window — no shell. Exception: the
+  // CustomerActivation step's "use your own endpoint" escape hatch pushes
+  // section='settings' so the user can enter their key; surface the shell in
+  // that case so they can navigate. Returning to any other section flips
+  // back into the onboarding takeover.
+  if (computedStep !== 'dashboard' && section !== 'settings') {
+    return (
+      <div className="min-h-screen antialiased select-none">
+        <div className="p-6 max-w-xl mx-auto space-y-5">
           <OnboardingLayout
             steps={onboardingDisplaySteps}
             currentStep={displayStep as OnboardingStepId}
@@ -533,9 +512,73 @@ export function MainWindowApp(): React.JSX.Element {
           >
             {renderStep(displayStep as OnboardingStepId)}
           </OnboardingLayout>
-        )}
+        </div>
+        <Toaster />
       </div>
+    )
+  }
+
+  const sidebar = (
+    <Sidebar
+      section={section}
+      onSelectSection={onSelectSection}
+      capturing={capturing}
+      toggling={toggling}
+      onToggleCapture={() => void handleToggle()}
+      vendor={activeVendor}
+      llmHealth={llmHealth}
+      configured={isConfigured}
+      onOpenLlmSettings={handleOpenLlmSettings}
+      collapsed={sidebarCollapsed}
+      onToggleCollapsed={handleToggleSidebar}
+    />
+  )
+
+  const renderSection = (): React.JSX.Element => {
+    switch (section) {
+      case 'dashboard':
+        return (
+          <DashboardPage
+            capturing={capturing}
+            llmHealth={llmHealth}
+            stats={stats}
+            keyStatus={activeVendorStatus}
+            isCustomEndpoint={isCustomEndpoint}
+          />
+        )
+      case 'activities':
+        return <ActivitiesPage api={api} />
+      case 'patterns':
+        return (
+          <PatternsPage
+            api={api}
+            patterns={patterns}
+            onPatternsChange={() => void loadPatterns()}
+          />
+        )
+      case 'settings':
+        return (
+          <SettingsPage
+            initialTab={settingsInitialTab}
+            onCredentialsChanged={() => void loadCredentials()}
+            onBack={
+              computedStep !== 'dashboard'
+                ? () => {
+                    setSection('dashboard')
+                    setSettingsInitialTab(undefined)
+                  }
+                : undefined
+            }
+          />
+        )
+    }
+  }
+  return (
+    <>
+      <MainShell sidebar={sidebar} sidebarCollapsed={sidebarCollapsed}>
+        {renderSection()}
+      </MainShell>
       <Toaster />
-    </div>
+    </>
   )
 }

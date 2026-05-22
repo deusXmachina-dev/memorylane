@@ -5,19 +5,24 @@ import { Tabs, TabsList, TabsPanel, TabsTab } from '@components/ui/tabs'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import type { AppEditionConfig } from '@/shared/edition'
 import type { CaptureSettings, SemanticPipelineMode, Vendor, VendorStatus } from '@types'
-import { AiModelsSection } from './components/advanced-settings/AiModelsSection'
-import { CapturePrivacySection } from './components/advanced-settings/CapturePrivacySection'
-import { DataTabPanel } from './components/advanced-settings/DataTabPanel'
-import { IntegrationsTabPanel } from './components/advanced-settings/IntegrationsTabPanel'
-import type { NumericCaptureSetting } from './components/advanced-settings/types'
-import { detectHotkeyPlatform, toRecordedAccelerator } from './hotkey-utils'
+import { AiModelsSection } from '../components/advanced-settings/AiModelsSection'
+import { CapturePrivacySection } from '../components/advanced-settings/CapturePrivacySection'
+import { DataTabPanel } from '../components/advanced-settings/DataTabPanel'
+import { IntegrationsTabPanel } from '../components/advanced-settings/IntegrationsTabPanel'
+import type { NumericCaptureSetting } from '../components/advanced-settings/types'
+import { PageLayout } from '../components/shell/PageLayout'
+import { detectHotkeyPlatform, toRecordedAccelerator } from '../hotkey-utils'
 
-export function AdvancedSettingsPage({
-  onBack,
+export type SettingsTab = 'privacy' | 'data' | 'ai-models' | 'integrations'
+
+export function SettingsPage({
   initialTab,
+  onBack,
+  onCredentialsChanged,
 }: {
-  onBack: () => void
-  initialTab?: 'privacy' | 'data' | 'ai-models' | 'integrations'
+  initialTab?: SettingsTab
+  onBack?: () => void
+  onCredentialsChanged?: () => void
 }): React.JSX.Element {
   const api = useMainWindowAPI()
   const hotkeyPlatform = useMemo(() => detectHotkeyPlatform(), [])
@@ -192,7 +197,8 @@ export function AdvancedSettingsPage({
   const refreshCredentials = useCallback(async (): Promise<void> => {
     const statuses = await api.getCredentialStatuses()
     setCredentialStatuses(statuses)
-  }, [api])
+    onCredentialsChanged?.()
+  }, [api, onCredentialsChanged])
 
   const refreshActiveVendor = useCallback(async (): Promise<void> => {
     const [statuses, settings] = await Promise.all([
@@ -201,7 +207,8 @@ export function AdvancedSettingsPage({
     ])
     setCredentialStatuses(statuses)
     setForm(settings)
-  }, [api])
+    onCredentialsChanged?.()
+  }, [api, onCredentialsChanged])
 
   const handleReset = useCallback(async (): Promise<void> => {
     await api.resetCaptureSettings()
@@ -255,76 +262,77 @@ export function AdvancedSettingsPage({
   const showAiModels = editionConfig?.edition !== 'enterprise'
 
   return (
-    <div className="h-screen overflow-y-auto">
-      <div className="p-6 max-w-3xl mx-auto space-y-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onBack}
-          className="-ml-2 text-xs text-muted-foreground hover:text-foreground"
-        >
-          &larr; Back
-        </Button>
+    <PageLayout
+      title="Settings"
+      headerBefore={
+        onBack && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onBack}
+            className="-ml-2 text-xs text-muted-foreground hover:text-foreground"
+          >
+            &larr; Back to onboarding
+          </Button>
+        )
+      }
+    >
+      {form && (
+        <Tabs defaultValue={initialTab ?? 'privacy'}>
+          <TabsList>
+            <TabsTab value="privacy">Privacy</TabsTab>
+            <TabsTab value="data">Data</TabsTab>
+            {showAiModels && <TabsTab value="ai-models">AI models</TabsTab>}
+            <TabsTab value="integrations">Integrations</TabsTab>
+          </TabsList>
 
-        <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
+          <TabsPanel value="privacy" className="pt-2">
+            <CapturePrivacySection
+              form={form}
+              hotkeyPlatform={hotkeyPlatform}
+              onToggleRecordingHotkey={() => setRecordingHotkey((current) => !current)}
+              onAutoStartEnabledChange={setAutoStartEnabled}
+              onExcludePrivateBrowsingChange={commitExcludePrivateBrowsing}
+              onExcludedRulesCommit={commitExcludedRules}
+              onObserved={() => void load()}
+            />
+          </TabsPanel>
 
-        {form && (
-          <Tabs defaultValue={initialTab ?? 'privacy'}>
-            <TabsList>
-              <TabsTab value="privacy">Privacy</TabsTab>
-              <TabsTab value="data">Data</TabsTab>
-              {showAiModels && <TabsTab value="ai-models">AI models</TabsTab>}
-              <TabsTab value="integrations">Integrations</TabsTab>
-            </TabsList>
+          <TabsPanel value="data" className="pt-2">
+            <DataTabPanel
+              api={api}
+              editionConfig={editionConfig}
+              databaseExportDirectory={form.databaseExportDirectory}
+              onDatabaseExportDirectoryChange={commitDatabaseExportDirectory}
+              uploadDetailLevel={form.uploadDetailLevel}
+              onUploadDetailLevelChange={setUploadDetailLevel}
+            />
+          </TabsPanel>
 
-            <TabsPanel value="privacy" className="pt-2">
-              <CapturePrivacySection
-                form={form}
-                hotkeyPlatform={hotkeyPlatform}
-                onToggleRecordingHotkey={() => setRecordingHotkey((current) => !current)}
-                onAutoStartEnabledChange={setAutoStartEnabled}
-                onExcludePrivateBrowsingChange={commitExcludePrivateBrowsing}
-                onExcludedRulesCommit={commitExcludedRules}
-                onObserved={() => void load()}
-              />
-            </TabsPanel>
-
-            <TabsPanel value="data" className="pt-2">
-              <DataTabPanel
+          {showAiModels && (
+            <TabsPanel value="ai-models" className="pt-2">
+              <AiModelsSection
                 api={api}
-                editionConfig={editionConfig}
-                databaseExportDirectory={form.databaseExportDirectory}
-                onDatabaseExportDirectoryChange={commitDatabaseExportDirectory}
-                uploadDetailLevel={form.uploadDetailLevel}
-                onUploadDetailLevelChange={setUploadDetailLevel}
+                form={form}
+                isEnterprise={editionConfig?.edition === 'enterprise'}
+                credentialStatuses={credentialStatuses}
+                onCredentialsChanged={() => void refreshCredentials()}
+                onActiveVendorChanged={() => void refreshActiveVendor()}
+                onSemanticPipelineModeChange={setSemanticPipelineMode}
+                onSettingChange={setNumericSetting}
+                onSettingCommit={commitNumericSetting}
+                onModelChange={commitModelChange}
+                onPatternDetectionEnabledChange={setPatternDetectionEnabled}
+                onReset={() => void handleReset()}
               />
             </TabsPanel>
+          )}
 
-            {showAiModels && (
-              <TabsPanel value="ai-models" className="pt-2">
-                <AiModelsSection
-                  api={api}
-                  form={form}
-                  isEnterprise={editionConfig?.edition === 'enterprise'}
-                  credentialStatuses={credentialStatuses}
-                  onCredentialsChanged={() => void refreshCredentials()}
-                  onActiveVendorChanged={() => void refreshActiveVendor()}
-                  onSemanticPipelineModeChange={setSemanticPipelineMode}
-                  onSettingChange={setNumericSetting}
-                  onSettingCommit={commitNumericSetting}
-                  onModelChange={commitModelChange}
-                  onPatternDetectionEnabledChange={setPatternDetectionEnabled}
-                  onReset={() => void handleReset()}
-                />
-              </TabsPanel>
-            )}
-
-            <TabsPanel value="integrations" className="pt-2">
-              <IntegrationsTabPanel api={api} />
-            </TabsPanel>
-          </Tabs>
-        )}
-      </div>
-    </div>
+          <TabsPanel value="integrations" className="pt-2">
+            <IntegrationsTabPanel api={api} />
+          </TabsPanel>
+        </Tabs>
+      )}
+    </PageLayout>
   )
 }

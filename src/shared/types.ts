@@ -178,6 +178,8 @@ export interface ObservationState {
   }
 }
 
+export type { ActivityDetail } from '../main/storage/types'
+
 export interface MainWindowStats {
   activityCount: number
   dbSize: number
@@ -305,6 +307,8 @@ export interface MainWindowAPI {
   // Theme
   getTheme: () => Promise<'dark' | 'light'>
   onThemeChanged: (callback: (theme: 'dark' | 'light') => void) => void
+  // Activities
+  listRecentActivities: (limit: number, offset?: number) => Promise<ActivityDetail[]>
   // Stats
   getStats: () => Promise<MainWindowStats>
   chooseDatabaseExportDirectory: (initialPath?: string) => Promise<DirectorySelectionResult>
