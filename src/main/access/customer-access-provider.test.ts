@@ -241,5 +241,29 @@ describe('CustomerAccessProvider', () => {
 
       expect(payloads).toEqual([{ config: { provider: 'openrouter', apiKey: 'sk-or-managed' } }])
     })
+
+    it('does not invalidate or hit the backend while a checkout is polling', async () => {
+      // First call: startCheckout's checkout-link POST returns a signed URL,
+      // and the immediate polling tick returns no key (state stays 'polling').
+      const fetchMock = makeFetchMock([
+        jsonResponse({ url: inBackendDomain('/checkout?token=t') }),
+        jsonResponse({ key: null }),
+      ])
+      globalThis.fetch = fetchMock
+      const provider = new CustomerAccessProvider(deviceIdentity)
+      await provider.startCheckout('explorer')
+
+      const payloads: unknown[] = []
+      const callsBefore = (fetchMock as unknown as { mock: { calls: unknown[] } }).mock.calls.length
+      provider.setUpdateCallback((_, payload) => payloads.push(payload))
+
+      await provider.refreshAccessState()
+
+      expect(payloads).toEqual([])
+      // No new fetch fired — refresh short-circuited on the polling guard.
+      expect((fetchMock as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBe(
+        callsBefore,
+      )
+    })
   })
 })

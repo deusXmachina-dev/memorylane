@@ -26,6 +26,11 @@ export class CustomerAccessProvider extends BaseAccessProvider {
   }
 
   public async refreshAccessState(): Promise<void> {
+    const status = this.accessState.customerSubscriptionStatus
+    if (status === 'polling' || status === 'awaiting_checkout') {
+      return
+    }
+
     const result = await this.fetchCustomerKey(this.deviceIdentity.getDeviceId())
     switch (result.kind) {
       case 'key':

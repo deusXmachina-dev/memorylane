@@ -151,7 +151,7 @@ export function CustomerActivationStep({
     })
 
     const unsubscribe = api.onSubscriptionUpdate((update) => {
-      if (update.status === 'idle' && statusRef.current !== 'idle') {
+      if (update.status === 'idle' && statusRef.current === 'polling') {
         toast.success('API key provisioned successfully')
         onKeySet()
       }
