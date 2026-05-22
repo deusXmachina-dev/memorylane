@@ -623,6 +623,43 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     return deps.storage.patterns.getAllPatterns()
   })
 
+  ipcMain.handle('main-window:getPatternDetail', (_event: IpcMainInvokeEvent, id: string) => {
+    if (!deps) return null
+    const detail = deps.storage.patterns.getPatternDetail(id)
+    if (!detail) return null
+
+    const allActivityIds = Array.from(new Set(detail.sightings.flatMap((s) => s.activityIds)))
+    const activities = deps.storage.activities.getByIds(allActivityIds)
+    const activityById = new Map(
+      activities.map((a) => [
+        a.id,
+        {
+          id: a.id,
+          startTimestamp: a.startTimestamp,
+          endTimestamp: a.endTimestamp,
+          appName: a.appName,
+          windowTitle: a.windowTitle,
+          tld: a.tld,
+          summary: a.summary,
+        },
+      ]),
+    )
+
+    return {
+      pattern: detail.pattern,
+      sightings: detail.sightings.map((s) => ({
+        id: s.id,
+        detectedAt: s.detectedAt,
+        evidence: s.evidence,
+        confidence: s.confidence,
+        durationEstimateMin: s.durationEstimateMin,
+        activities: s.activityIds
+          .map((aid) => activityById.get(aid))
+          .filter((a): a is NonNullable<typeof a> => a !== undefined),
+      })),
+    }
+  })
+
   ipcMain.handle('main-window:approvePattern', (_event: IpcMainInvokeEvent, id: string) => {
     if (!deps) return { success: false, error: 'Dependencies not initialized' }
     try {
