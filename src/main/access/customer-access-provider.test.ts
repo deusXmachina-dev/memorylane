@@ -196,8 +196,30 @@ describe('CustomerAccessProvider', () => {
       expect(payloads).toEqual([])
     })
 
-    it('keeps the managed key on backend 4xx', async () => {
+    it('invalidates the managed key on 401 (device unauthorized)', async () => {
       globalThis.fetch = makeFetchMock([jsonResponse({}, false, 401)])
+      const provider = new CustomerAccessProvider(deviceIdentity)
+      const payloads: unknown[] = []
+      provider.setUpdateCallback((_, payload) => payloads.push(payload))
+
+      await provider.refreshAccessState()
+
+      expect(payloads).toEqual([{ invalidate: true }])
+    })
+
+    it('invalidates the managed key on 403 (device forbidden)', async () => {
+      globalThis.fetch = makeFetchMock([jsonResponse({}, false, 403)])
+      const provider = new CustomerAccessProvider(deviceIdentity)
+      const payloads: unknown[] = []
+      provider.setUpdateCallback((_, payload) => payloads.push(payload))
+
+      await provider.refreshAccessState()
+
+      expect(payloads).toEqual([{ invalidate: true }])
+    })
+
+    it('keeps the managed key on other 4xx (e.g., 429 rate limit)', async () => {
+      globalThis.fetch = makeFetchMock([jsonResponse({}, false, 429)])
       const provider = new CustomerAccessProvider(deviceIdentity)
       const payloads: unknown[] = []
       provider.setUpdateCallback((_, payload) => payloads.push(payload))

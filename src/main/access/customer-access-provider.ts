@@ -206,6 +206,9 @@ export class CustomerAccessProvider extends BaseAccessProvider {
       log.warn(
         `[CustomerAccess] /v2/subscription/key returned ${response.status} for device ${deviceIdHint}: ${bodyExcerpt.slice(0, 200)}`,
       )
+      if (response.status === 401 || response.status === 403) {
+        return { kind: 'no_key' }
+      }
       return { kind: 'transient' }
     }
 
