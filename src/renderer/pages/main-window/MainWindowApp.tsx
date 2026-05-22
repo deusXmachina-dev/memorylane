@@ -487,12 +487,18 @@ export function MainWindowApp(): React.JSX.Element {
     })
   }, [])
 
+  // Until initial load completes we can't tell whether to show onboarding or
+  // the shell — render nothing rather than flashing the shell first.
+  if (!initialLoaded) {
+    return <Toaster />
+  }
+
   // Onboarding takes over the full window — no shell. Exception: the
   // CustomerActivation step's "use your own endpoint" escape hatch pushes
   // section='settings' so the user can enter their key; surface the shell in
   // that case so they can navigate. Returning to any other section flips
   // back into the onboarding takeover.
-  if (initialLoaded && computedStep !== 'dashboard' && section !== 'settings') {
+  if (computedStep !== 'dashboard' && section !== 'settings') {
     return (
       <div className="min-h-screen antialiased select-none">
         <div className="p-6 max-w-xl mx-auto space-y-5">
@@ -567,12 +573,10 @@ export function MainWindowApp(): React.JSX.Element {
         )
     }
   }
-  const content = initialLoaded ? renderSection() : null
-
   return (
     <>
       <MainShell sidebar={sidebar} sidebarCollapsed={sidebarCollapsed}>
-        {content}
+        {renderSection()}
       </MainShell>
       <Toaster />
     </>
