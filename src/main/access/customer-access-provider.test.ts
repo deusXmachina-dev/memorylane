@@ -184,9 +184,6 @@ describe('CustomerAccessProvider', () => {
     expect(openExternalMock).not.toHaveBeenCalled()
   })
 
-  // DEU-93: a ~30h backend outage returning 500s caused the desktop app to
-  // invalidate its managed key every refresh, killing inference. Only an
-  // authoritative 200 {key: null} should invalidate.
   describe('refreshAccessState invalidation policy', () => {
     it('keeps the managed key on backend 5xx', async () => {
       globalThis.fetch = makeFetchMock([jsonResponse({}, false, 500)])

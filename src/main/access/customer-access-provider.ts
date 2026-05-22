@@ -41,10 +41,6 @@ export class CustomerAccessProvider extends BaseAccessProvider {
         this.applyTransition(transitionCustomerAccess(this.accessState, { type: 'key_missing' }))
         return
       case 'transient':
-        // Server/network problem — keep whatever key we already have. An
-        // authoritative "no key" is only signaled by 200 {key: null}; treating
-        // 5xx or network errors as "no key" caused a ~30h inference outage
-        // (DEU-93) when the backend was returning 500s.
         return
     }
   }
