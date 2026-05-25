@@ -237,6 +237,26 @@ export class ActivityRepository {
     }))
   }
 
+  /**
+   * Top apps by captured-activity count, used by the trust digest on the
+   * Activities page.
+   */
+  getTopApps(limit = 10): { appName: string; count: number }[] {
+    const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit)))
+    const rows = this.db
+      .prepare(
+        `SELECT app_name AS appName, COUNT(*) AS count
+       FROM activities
+       WHERE app_name IS NOT NULL AND app_name != ''
+       GROUP BY app_name
+       ORDER BY count DESC
+       LIMIT ?`,
+      )
+      .all(safeLimit) as { appName: string; count: number }[]
+
+    return rows
+  }
+
   getDateRange(): { oldest: number | null; newest: number | null } {
     const result = this.db
       .prepare(

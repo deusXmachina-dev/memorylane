@@ -82,9 +82,6 @@ export interface VendorStatus {
   baseURL: string | null
 }
 
-/** Alias retained for renderer call sites; identical shape to VendorStatus. */
-export type KeyStatus = VendorStatus
-
 export type LlmHealthState = 'not_configured' | 'unknown' | 'active' | 'failing'
 
 export interface LlmHealthStatus {
@@ -180,6 +177,13 @@ export interface ObservationState {
 
 export type { ActivityDetail } from '../main/storage/types'
 
+export interface ActivityDigest {
+  totalCount: number
+  dateRange: { oldest: number | null; newest: number | null }
+  topApps: { appName: string; count: number }[]
+  topTlds: { tld: string; count: number; lastSeenAt: number }[]
+}
+
 export interface MainWindowStats {
   activityCount: number
   dbSize: number
@@ -263,6 +267,30 @@ export interface PatternInfo {
   estimatedHoursPerWeek: number | null
 }
 
+export interface PatternActivityRef {
+  id: string
+  startTimestamp: number
+  endTimestamp: number
+  appName: string
+  windowTitle: string
+  tld: string | null
+  summary: string
+}
+
+export interface PatternSightingInfo {
+  id: string
+  detectedAt: number
+  evidence: string
+  confidence: number
+  durationEstimateMin: number | null
+  activities: PatternActivityRef[]
+}
+
+export interface PatternDetailInfo {
+  pattern: PatternInfo
+  sightings: PatternSightingInfo[]
+}
+
 export interface MainWindowAPI {
   getEditionConfig: () => Promise<AppEditionConfig>
   getAccessState: () => Promise<AccessState>
@@ -299,6 +327,7 @@ export interface MainWindowAPI {
   resetCaptureSettings: () => Promise<SaveResult>
   // Patterns
   getPatterns: () => Promise<PatternInfo[]>
+  getPatternDetail: (id: string) => Promise<PatternDetailInfo | null>
   approvePattern: (id: string) => Promise<SaveResult>
   rejectPattern: (id: string) => Promise<SaveResult>
   completePattern: (id: string) => Promise<SaveResult>
@@ -309,6 +338,7 @@ export interface MainWindowAPI {
   onThemeChanged: (callback: (theme: 'dark' | 'light') => void) => void
   // Activities
   listRecentActivities: (limit: number, offset?: number) => Promise<ActivityDetail[]>
+  getActivityDigest: () => Promise<ActivityDigest>
   // Stats
   getStats: () => Promise<MainWindowStats>
   chooseDatabaseExportDirectory: (initialPath?: string) => Promise<DirectorySelectionResult>

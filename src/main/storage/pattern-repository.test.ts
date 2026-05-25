@@ -4,7 +4,7 @@ import { applyMigrations } from './migrator'
 import * as os from 'os'
 import * as path from 'path'
 import { deleteDbFiles } from './test-utils'
-import type { Pattern, PatternSighting } from './pattern-repository'
+import { computeScore, type Pattern, type PatternSighting } from './pattern-repository'
 
 // ---------------------------------------------------------------------------
 // Factories
@@ -20,6 +20,7 @@ const createPattern = (overrides: Partial<Pattern> & { id: string }): Pattern =>
   rejectedAt: overrides.rejectedAt ?? null,
   promptCopiedAt: overrides.promptCopiedAt ?? null,
   approvedAt: overrides.approvedAt ?? null,
+  completedAt: overrides.completedAt ?? null,
 })
 
 const createSighting = (
@@ -388,6 +389,166 @@ describe('PatternRepository', () => {
   // -----------------------------------------------------------------------
   // getLastRunTimestamp
   // -----------------------------------------------------------------------
+
+  // -----------------------------------------------------------------------
+  // composite score & ranking
+  // -----------------------------------------------------------------------
+
+  describe('composite score ranking', () => {
+    const DAY = 86_400_000
+
+    it('ranks high-impact recurring recent patterns above low-impact ones', () => {
+      const now = Date.now()
+      storage.patterns.addPattern(createPattern({ id: 'p-high' }))
+      storage.patterns.addPattern(createPattern({ id: 'p-low' }))
+
+      // p-high: 8 sightings over 7 days, 30 min each, very recent, high confidence
+      for (let i = 0; i < 8; i++) {
+        storage.patterns.addSighting(
+          createSighting({
+            id: `s-high-${i}`,
+            patternId: 'p-high',
+            detectedAt: now - (7 - i) * DAY,
+            durationEstimateMin: 30,
+            confidence: 0.9,
+          }),
+        )
+      }
+
+      // p-low: 2 sightings over 7 days, 5 min each, low confidence
+      storage.patterns.addSighting(
+        createSighting({
+          id: 's-low-1',
+          patternId: 'p-low',
+          detectedAt: now - 7 * DAY,
+          durationEstimateMin: 5,
+          confidence: 0.4,
+        }),
+      )
+      storage.patterns.addSighting(
+        createSighting({
+          id: 's-low-2',
+          patternId: 'p-low',
+          detectedAt: now,
+          durationEstimateMin: 5,
+          confidence: 0.4,
+        }),
+      )
+
+      const all = storage.patterns.getAllPatterns()
+      expect(all[0].id).toBe('p-high')
+      expect(computeScore(all[0])).toBeGreaterThan(computeScore(all[1]))
+      expect(all[1].id).toBe('p-low')
+    })
+
+    it('drops patterns with no computable impact (single sighting) below ones with impact', () => {
+      const now = Date.now()
+      storage.patterns.addPattern(createPattern({ id: 'p-impact' }))
+      storage.patterns.addPattern(createPattern({ id: 'p-single' }))
+
+      // p-impact: real recurrence and duration → nonzero score
+      for (let i = 0; i < 4; i++) {
+        storage.patterns.addSighting(
+          createSighting({
+            id: `s-imp-${i}`,
+            patternId: 'p-impact',
+            detectedAt: now - (3 - i) * DAY,
+            durationEstimateMin: 20,
+            confidence: 0.8,
+          }),
+        )
+      }
+      // p-single: 1 sighting → estimatedHoursPerWeek=null → score=0
+      storage.patterns.addSighting(
+        createSighting({
+          id: 's-single',
+          patternId: 'p-single',
+          detectedAt: now,
+          durationEstimateMin: 60,
+          confidence: 0.95,
+        }),
+      )
+
+      const all = storage.patterns.getAllPatterns()
+      expect(all[0].id).toBe('p-impact')
+      expect(computeScore(all[0])).toBeGreaterThan(0)
+      expect(all[1].id).toBe('p-single')
+      expect(computeScore(all[1])).toBe(0)
+    })
+
+    it('keeps completed patterns after active ones regardless of score', () => {
+      const now = Date.now()
+      storage.patterns.addPattern(createPattern({ id: 'p-done' }))
+      storage.patterns.addPattern(createPattern({ id: 'p-active' }))
+
+      for (let i = 0; i < 5; i++) {
+        storage.patterns.addSighting(
+          createSighting({
+            id: `s-done-${i}`,
+            patternId: 'p-done',
+            detectedAt: now - (4 - i) * DAY,
+            durationEstimateMin: 60,
+            confidence: 0.95,
+          }),
+        )
+        storage.patterns.addSighting(
+          createSighting({
+            id: `s-act-${i}`,
+            patternId: 'p-active',
+            detectedAt: now - (4 - i) * DAY,
+            durationEstimateMin: 5,
+            confidence: 0.5,
+          }),
+        )
+      }
+      storage.patterns.completePattern('p-done')
+
+      const all = storage.patterns.getAllPatterns()
+      expect(all[0].id).toBe('p-active')
+      expect(all[1].id).toBe('p-done')
+    })
+  })
+
+  // -----------------------------------------------------------------------
+  // getPatternDetail
+  // -----------------------------------------------------------------------
+
+  describe('getPatternDetail', () => {
+    it('returns null for unknown pattern', () => {
+      expect(storage.patterns.getPatternDetail('does-not-exist')).toBeNull()
+    })
+
+    it('returns pattern and its sightings ordered newest-first', () => {
+      storage.patterns.addPattern(createPattern({ id: 'p-det' }))
+      storage.patterns.addSighting(
+        createSighting({
+          id: 's-1',
+          patternId: 'p-det',
+          detectedAt: 1000,
+          evidence: 'old',
+          activityIds: ['a-1'],
+        }),
+      )
+      storage.patterns.addSighting(
+        createSighting({
+          id: 's-2',
+          patternId: 'p-det',
+          detectedAt: 3000,
+          evidence: 'new',
+          activityIds: ['a-2', 'a-3'],
+        }),
+      )
+
+      const detail = storage.patterns.getPatternDetail('p-det')
+      expect(detail).not.toBeNull()
+      expect(detail!.pattern.id).toBe('p-det')
+      expect(detail!.sightings).toHaveLength(2)
+      expect(detail!.sightings[0].id).toBe('s-2')
+      expect(detail!.sightings[0].evidence).toBe('new')
+      expect(detail!.sightings[0].activityIds).toEqual(['a-2', 'a-3'])
+      expect(detail!.sightings[1].id).toBe('s-1')
+    })
+  })
 
   describe('getLastRunTimestamp', () => {
     it('should return null when no detection runs are recorded', () => {

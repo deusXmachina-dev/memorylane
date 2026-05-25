@@ -447,6 +447,44 @@ describe('ActivityRepository', () => {
     })
   })
 
+  describe('getTopApps', () => {
+    it('returns apps ordered by activity count descending', () => {
+      for (let i = 0; i < 3; i++) {
+        storage.activities.add(
+          createStoredActivity({ id: `chrome-${i}`, appName: 'Chrome', startTimestamp: 1000 + i }),
+        )
+      }
+      for (let i = 0; i < 5; i++) {
+        storage.activities.add(
+          createStoredActivity({
+            id: `ghostty-${i}`,
+            appName: 'Ghostty',
+            startTimestamp: 2000 + i,
+          }),
+        )
+      }
+      storage.activities.add(
+        createStoredActivity({ id: 'one', appName: 'Notes', startTimestamp: 3000 }),
+      )
+
+      const top = storage.activities.getTopApps(10)
+
+      expect(top).toEqual([
+        { appName: 'Ghostty', count: 5 },
+        { appName: 'Chrome', count: 3 },
+        { appName: 'Notes', count: 1 },
+      ])
+    })
+
+    it('respects the limit', () => {
+      storage.activities.add(createStoredActivity({ id: 'a', appName: 'A' }))
+      storage.activities.add(createStoredActivity({ id: 'b', appName: 'B' }))
+      storage.activities.add(createStoredActivity({ id: 'c', appName: 'C' }))
+
+      expect(storage.activities.getTopApps(2)).toHaveLength(2)
+    })
+  })
+
   describe('count', () => {
     it('should return correct count of activities', () => {
       expect(storage.activities.count()).toBe(0)

@@ -15,7 +15,15 @@ export function PatternsPage({
   onPatternsChange,
 }: PatternsPageProps): React.JSX.Element {
   return (
-    <PageLayout title="Patterns">
+    <PageLayout
+      title="Patterns"
+      fillHeight
+      subtitle={
+        <p className="text-xs text-muted-foreground">
+          Repetitive workflows MemoryLane has spotted. Ranked by likely impact.
+        </p>
+      }
+    >
       {patterns === null ? (
         <div className="text-sm text-muted-foreground">Loading…</div>
       ) : (

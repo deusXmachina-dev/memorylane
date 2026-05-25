@@ -1,6 +1,5 @@
 import * as React from 'react'
 import {
-  LayoutDashboard,
   ListVideo,
   PanelLeftClose,
   PanelLeftOpen,
@@ -15,10 +14,9 @@ import { SidebarNavItem } from './SidebarNavItem'
 import { LlmStatusPanel } from './LlmStatusPanel'
 import { Logo } from '@/renderer/components/Logo'
 
-export type MainSection = 'dashboard' | 'activities' | 'patterns' | 'settings'
+export type MainSection = 'activities' | 'patterns' | 'settings'
 
 const NAV_ITEMS: { id: MainSection; label: string; icon: LucideIcon }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'activities', label: 'Activities', icon: ListVideo },
   { id: 'patterns', label: 'Patterns', icon: Sparkles },
   { id: 'settings', label: 'Settings', icon: SettingsIcon },

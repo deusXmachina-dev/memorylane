@@ -36,6 +36,42 @@ export interface PatternWithStats extends Pattern {
   estimatedHoursPerWeek: number | null
 }
 
+export interface PatternDetail {
+  pattern: PatternWithStats
+  sightings: PatternSighting[]
+}
+
+// ---------------------------------------------------------------------------
+// Scoring
+// ---------------------------------------------------------------------------
+
+const DAY_MS = 86_400_000
+
+function recencyDecay(lastSeenAt: number | null, now: number): number {
+  if (lastSeenAt === null) return 0
+  const ageDays = (now - lastSeenAt) / DAY_MS
+  if (ageDays < 7) return 1
+  if (ageDays < 30) return 0.5
+  return 0.2
+}
+
+export function computeScore(
+  input: {
+    estimatedHoursPerWeek: number | null
+    sightingCount: number
+    lastConfidence: number | null
+    lastSeenAt: number | null
+  },
+  now: number = Date.now(),
+): number {
+  const hours = input.estimatedHoursPerWeek ?? 0
+  if (hours <= 0) return 0
+  const recurrence = Math.log2(1 + input.sightingCount)
+  const confidence = input.lastConfidence ?? 0.5
+  const recency = recencyDecay(input.lastSeenAt, now)
+  return hours * recurrence * confidence * recency
+}
+
 // ---------------------------------------------------------------------------
 // Repository
 // ---------------------------------------------------------------------------
@@ -98,12 +134,30 @@ export class PatternRepository {
          FROM patterns p
          LEFT JOIN pattern_sightings s ON s.pattern_id = p.id
          WHERE p.rejected_at IS NULL
-         GROUP BY p.id
-         ORDER BY (p.completed_at IS NULL) DESC, sighting_count DESC`,
+         GROUP BY p.id`,
       )
       .all() as Record<string, unknown>[]
 
-    return rows.map((row) => this.rowToPatternWithStats(row))
+    const now = Date.now()
+    const patterns = rows.map((row) => this.rowToPatternWithStats(row))
+    const scores = new Map(patterns.map((p) => [p.id, computeScore(p, now)]))
+    return patterns.sort((a, b) => {
+      const aActive = a.completedAt === null ? 1 : 0
+      const bActive = b.completedAt === null ? 1 : 0
+      if (aActive !== bActive) return bActive - aActive
+      const sa = scores.get(a.id) ?? 0
+      const sb = scores.get(b.id) ?? 0
+      if (sb !== sa) return sb - sa
+      if (b.sightingCount !== a.sightingCount) return b.sightingCount - a.sightingCount
+      return (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0)
+    })
+  }
+
+  getPatternDetail(id: string): PatternDetail | null {
+    const pattern = this.getPatternById(id)
+    if (!pattern) return null
+    const sightings = this.getSightingsForPattern(id, 50)
+    return { pattern, sightings }
   }
 
   getRejectedPatterns(limit = 3): PatternWithStats[] {
@@ -295,12 +349,14 @@ export class PatternRepository {
       firstSeenAt !== null &&
       lastSeenAt !== null
     ) {
-      const spanDays = (lastSeenAt - firstSeenAt) / 86_400_000
+      const spanDays = (lastSeenAt - firstSeenAt) / DAY_MS
       if (spanDays >= 1) {
         const frequencyPerWeek = (sightingCount / spanDays) * 7
         estimatedHoursPerWeek = Math.round(((frequencyPerWeek * avgDurationMin) / 60) * 10) / 10
       }
     }
+
+    const lastConfidence = (row.last_confidence as number) ?? null
 
     return {
       id: row.id as string,
@@ -315,7 +371,7 @@ export class PatternRepository {
       completedAt: (row.completed_at as number) ?? null,
       sightingCount,
       lastSeenAt,
-      lastConfidence: (row.last_confidence as number) ?? null,
+      lastConfidence,
       estimatedHoursPerWeek,
     }
   }

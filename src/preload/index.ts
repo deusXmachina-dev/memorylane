@@ -68,6 +68,7 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   resetCaptureSettings: () => ipcRenderer.invoke('main-window:resetCaptureSettings'),
   // Patterns
   getPatterns: () => ipcRenderer.invoke('main-window:getPatterns'),
+  getPatternDetail: (id: string) => ipcRenderer.invoke('main-window:getPatternDetail', id),
   approvePattern: (id: string) => ipcRenderer.invoke('main-window:approvePattern', id),
   rejectPattern: (id: string) => ipcRenderer.invoke('main-window:rejectPattern', id),
   completePattern: (id: string) => ipcRenderer.invoke('main-window:completePattern', id),
@@ -82,6 +83,7 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   // Activities
   listRecentActivities: (limit: number, offset?: number) =>
     ipcRenderer.invoke('main-window:listRecentActivities', limit, offset),
+  getActivityDigest: () => ipcRenderer.invoke('main-window:getActivityDigest'),
   // Stats
   getStats: () => ipcRenderer.invoke('main-window:getStats'),
   chooseDatabaseExportDirectory: (initialPath?: string) =>

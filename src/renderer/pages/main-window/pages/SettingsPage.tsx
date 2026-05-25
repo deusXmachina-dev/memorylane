@@ -266,12 +266,7 @@ export function SettingsPage({
       title="Settings"
       headerBefore={
         onBack && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onBack}
-            className="-ml-2 text-xs text-muted-foreground hover:text-foreground"
-          >
+          <Button variant="ghost" size="sm" onClick={onBack}>
             &larr; Back to onboarding
           </Button>
         )
