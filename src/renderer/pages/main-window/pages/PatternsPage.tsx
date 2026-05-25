@@ -17,6 +17,7 @@ export function PatternsPage({
   return (
     <PageLayout
       title="Patterns"
+      fillHeight
       subtitle={
         <p className="text-xs text-muted-foreground">
           Repetitive workflows MemoryLane has spotted. Ranked by likely impact.

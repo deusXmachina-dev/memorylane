@@ -6,16 +6,11 @@ import { Input } from '@components/ui/input'
 import type { ActivityDetail } from '@types'
 import type { ActivitiesData } from '@/renderer/hooks/use-activities-data'
 import { RecordGroup } from './RecordGroup'
-import { formatDayHeading, formatDuration, startOfLocalDay } from './format'
-
-const ROLLUP_GAP_MS = 90 * 1000
+import { formatDayHeading, formatDuration } from './format'
+import { groupIntoRunsByDay } from './audit-log-grouping'
 
 interface AuditLogProps {
   activities: ActivitiesData
-}
-
-function sameRollupKey(a: ActivityDetail, b: ActivityDetail): boolean {
-  return a.appName === b.appName && (a.windowTitle ?? '') === (b.windowTitle ?? '')
 }
 
 function matchesQuery(a: ActivityDetail, q: string): boolean {
@@ -59,50 +54,10 @@ function summarizeDay(runs: ActivityDetail[][]): DaySummary {
   return { topApps, topTld, totalDurationMs, captureCount }
 }
 
-function groupIntoRunsByDay(
-  items: ActivityDetail[],
-): { dayStart: number; runs: ActivityDetail[][] }[] {
-  // activities arrive newest-first; group into days (keeping newest-first), then
-  // within each day group consecutive same-app/same-window into runs.
-  const days = new Map<number, ActivityDetail[]>()
-  for (const a of items) {
-    const day = startOfLocalDay(a.startTimestamp)
-    const arr = days.get(day) ?? []
-    arr.push(a)
-    days.set(day, arr)
-  }
-
-  const result: { dayStart: number; runs: ActivityDetail[][] }[] = []
-  for (const [dayStart, dayActs] of days) {
-    // dayActs is newest-first; sort ascending so roll-up reads chronologically.
-    const ascending = [...dayActs].sort((a, b) => a.startTimestamp - b.startTimestamp)
-    const runs: ActivityDetail[][] = []
-    for (const a of ascending) {
-      const last = runs[runs.length - 1]
-      const prev = last?.[last.length - 1]
-      if (
-        last &&
-        prev &&
-        sameRollupKey(prev, a) &&
-        a.startTimestamp - prev.endTimestamp <= ROLLUP_GAP_MS
-      ) {
-        last.push(a)
-      } else {
-        runs.push([a])
-      }
-    }
-    // Show newest run first within the day.
-    runs.reverse()
-    result.push({ dayStart, runs })
-  }
-  // Days newest first.
-  result.sort((a, b) => b.dayStart - a.dayStart)
-  return result
-}
-
 export function AuditLog({ activities }: AuditLogProps): React.JSX.Element {
   const {
     items,
+    digest,
     loading,
     loadingMore,
     hasMore,
@@ -114,6 +69,7 @@ export function AuditLog({ activities }: AuditLogProps): React.JSX.Element {
     setTldFilter,
     loadMore,
   } = activities
+  const totalCount = digest?.totalCount ?? null
 
   const filtered = useMemo(() => {
     let next = items
@@ -157,8 +113,10 @@ export function AuditLog({ activities }: AuditLogProps): React.JSX.Element {
 
       <div className="text-[11px] text-muted-foreground">
         Showing {filtered.length.toLocaleString()} of {items.length.toLocaleString()} loaded
-        captures
-        {anyFilter && <> matching current filters</>}. Consecutive captures of the same app and
+        {totalCount !== null && totalCount > items.length && (
+          <> · {totalCount.toLocaleString()} total</>
+        )}
+        {anyFilter && <> · matching current filters</>}. Consecutive captures of the same app and
         window are grouped; click to expand.
       </div>
 

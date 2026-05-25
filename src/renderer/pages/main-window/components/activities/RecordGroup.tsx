@@ -44,6 +44,8 @@ export function RecordGroup({ activities }: RecordGroupProps): React.JSX.Element
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        aria-label={`${expanded ? 'Collapse' : 'Expand'} ${groupLabel(first)}`}
         className="w-full text-left px-3 py-2 hover:bg-muted/40 rounded-md"
       >
         <div className="flex items-baseline justify-between gap-3">

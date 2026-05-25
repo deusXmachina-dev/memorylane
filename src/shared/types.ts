@@ -265,8 +265,6 @@ export interface PatternInfo {
   lastSeenAt: number | null
   lastConfidence: number | null
   estimatedHoursPerWeek: number | null
-  /** Internal composite score used for ranking. Not for display. */
-  score: number
 }
 
 export interface PatternActivityRef {

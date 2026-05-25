@@ -97,7 +97,9 @@ export function PatternsSection({
   const handleApprove = useCallback(
     (id: string) => {
       toast.success('Thanks for the feedback!')
-      api.approvePattern(id).catch(() => {})
+      api.approvePattern(id).catch((err) => {
+        console.warn('[patterns] approvePattern failed', err)
+      })
       onPatternsChange()
     },
     [api, onPatternsChange],
@@ -106,7 +108,9 @@ export function PatternsSection({
   const handleDismiss = useCallback(
     (id: string, name: string) => {
       toast.success(`Not useful — "${name}" hidden`)
-      api.rejectPattern(id).catch(() => {})
+      api.rejectPattern(id).catch((err) => {
+        console.warn('[patterns] rejectPattern failed', err)
+      })
       // If the dismissed pattern was selected, advance selection.
       if (selectedId === id) {
         const next = activePatterns.find((p) => p.id !== id) ?? null
@@ -119,7 +123,9 @@ export function PatternsSection({
 
   const handleComplete = useCallback(
     (id: string) => {
-      api.completePattern(id).catch(() => {})
+      api.completePattern(id).catch((err) => {
+        console.warn('[patterns] completePattern failed', err)
+      })
       onPatternsChange()
     },
     [api, onPatternsChange],
@@ -127,7 +133,9 @@ export function PatternsSection({
 
   const handleUncomplete = useCallback(
     (id: string) => {
-      api.uncompletePattern(id).catch(() => {})
+      api.uncompletePattern(id).catch((err) => {
+        console.warn('[patterns] uncompletePattern failed', err)
+      })
       onPatternsChange()
     },
     [api, onPatternsChange],
@@ -135,10 +143,18 @@ export function PatternsSection({
 
   const handleCopyPrompt = useCallback(
     (pattern: PatternInfo) => {
-      navigator.clipboard.writeText(buildCopyPrompt(pattern)).then(() => {
-        toast.success('Copied! Paste it into Claude Cowork')
+      navigator.clipboard
+        .writeText(buildCopyPrompt(pattern))
+        .then(() => {
+          toast.success('Copied! Paste it into Claude Cowork')
+        })
+        .catch((err) => {
+          console.warn('[patterns] clipboard.writeText failed', err)
+          toast.error('Could not copy prompt to clipboard')
+        })
+      api.markPatternPromptCopied(pattern.id).catch((err) => {
+        console.warn('[patterns] markPatternPromptCopied failed', err)
       })
-      api.markPatternPromptCopied(pattern.id).catch(() => {})
     },
     [api],
   )
@@ -168,7 +184,7 @@ export function PatternsSection({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4 h-full min-h-0">
       <PatternFeedbackNudge
         patterns={patterns}
         onApprove={handleApprove}
@@ -199,7 +215,7 @@ export function PatternsSection({
           once it has enough data.
         </div>
       ) : (
-        <div className="grid grid-cols-[360px_1fr] gap-4 h-[calc(100vh-220px)] min-h-[480px]">
+        <div className="grid grid-cols-[360px_1fr] gap-4 flex-1 min-h-0">
           <ScrollArea className="border rounded-lg">
             <div className="p-2 space-y-1">
               {activePatterns.map((pattern) => (

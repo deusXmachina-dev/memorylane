@@ -72,8 +72,8 @@ export function useActivitiesData(api: MainWindowAPI): ActivitiesData {
       if (!mountedRef.current) return
       setItems((prev) => (sameItemSequence(prev, rows) ? prev : rows))
       setHasMore(rows.length === ACTIVITIES_PAGE_SIZE)
-    } catch {
-      // Empty state is the failure mode; loading flag clears via the caller.
+    } catch (err) {
+      console.warn('[activities] listRecentActivities failed', err)
     }
   }, [api])
 
@@ -82,8 +82,8 @@ export function useActivitiesData(api: MainWindowAPI): ActivitiesData {
       const d = await api.getActivityDigest()
       if (!mountedRef.current) return
       setDigest((prev) => (sameDigest(prev, d) ? prev : d))
-    } catch {
-      // Empty intentional.
+    } catch (err) {
+      console.warn('[activities] getActivityDigest failed', err)
     }
   }, [api])
 
@@ -100,10 +100,14 @@ export function useActivitiesData(api: MainWindowAPI): ActivitiesData {
     inflightRef.current = initial
   }, [fetchDigest, fetchFirstPage])
 
-  const refresh = useCallback(async () => {
-    if (!loadedRef.current) return
+  // Always returns a Promise that resolves once the latest known refresh has
+  // settled (or immediately, if we're inside the throttle window and there's
+  // nothing in flight). Callers `await`-ing this should not chain on the
+  // expectation of fresh data — only on "the system is now idle".
+  const refresh = useCallback((): Promise<void> => {
+    if (!loadedRef.current) return Promise.resolve()
     if (inflightRef.current) return inflightRef.current
-    if (Date.now() - lastRefreshRef.current < REFRESH_THROTTLE_MS) return
+    if (Date.now() - lastRefreshRef.current < REFRESH_THROTTLE_MS) return Promise.resolve()
     const run = Promise.all([fetchDigest(), fetchFirstPage()]).then(() => {
       lastRefreshRef.current = Date.now()
       inflightRef.current = null
@@ -120,8 +124,8 @@ export function useActivitiesData(api: MainWindowAPI): ActivitiesData {
       if (!mountedRef.current) return
       setItems((prev) => [...prev, ...next])
       setHasMore(next.length === ACTIVITIES_PAGE_SIZE)
-    } catch {
-      // Empty intentional.
+    } catch (err) {
+      console.warn('[activities] listRecentActivities (loadMore) failed', err)
     } finally {
       if (mountedRef.current) setLoadingMore(false)
     }

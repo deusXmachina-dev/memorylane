@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Badge } from '@components/ui/badge'
 import { Button } from '@components/ui/button'
 import { ScrollArea } from '@components/ui/scroll-area'
@@ -52,25 +52,41 @@ export function PatternDetailPane({
   onCopyPrompt,
 }: PatternDetailPaneProps): React.JSX.Element {
   const [detail, setDetail] = useState<PatternDetailInfo | null>(null)
-  const [loading, setLoading] = useState(true)
+  // Loading indicator is delayed (LOADING_DELAY_MS) so fast list-nav between
+  // patterns doesn't flash "Loading evidence…" between every selection.
+  const [showLoading, setShowLoading] = useState(false)
+  const timerRef = useRef<number | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
     setDetail(null)
+    setShowLoading(false)
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+    timerRef.current = window.setTimeout(() => {
+      if (!cancelled) setShowLoading(true)
+    }, 150)
+    const clearTimer = (): void => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+    }
     api
       .getPatternDetail(pattern.id)
       .then((d) => {
         if (cancelled) return
+        clearTimer()
         setDetail(d)
-        setLoading(false)
+        setShowLoading(false)
       })
       .catch(() => {
         if (cancelled) return
-        setLoading(false)
+        clearTimer()
+        setShowLoading(false)
       })
     return () => {
       cancelled = true
+      clearTimer()
     }
   }, [api, pattern.id])
 
@@ -90,6 +106,7 @@ export function PatternDetailPane({
               size="icon-xs"
               onClick={() => onComplete(pattern.id)}
               title="Mark as done"
+              aria-label="Mark as done"
             >
               <Check className="w-3.5 h-3.5" />
             </Button>
@@ -99,6 +116,7 @@ export function PatternDetailPane({
               size="icon-xs"
               onClick={() => onUncomplete(pattern.id)}
               title="Mark as not done"
+              aria-label="Mark as not done"
             >
               <Undo2 className="w-3.5 h-3.5" />
             </Button>
@@ -109,6 +127,8 @@ export function PatternDetailPane({
             onClick={() => onApprove(pattern.id)}
             className={pattern.approvedAt ? 'text-green-500' : ''}
             title="Useful"
+            aria-label="Mark pattern as useful"
+            aria-pressed={pattern.approvedAt !== null}
           >
             <ThumbsUp className="w-3.5 h-3.5" />
           </Button>
@@ -117,6 +137,7 @@ export function PatternDetailPane({
             size="icon-xs"
             onClick={() => onDismiss(pattern.id, pattern.name)}
             title="Not useful"
+            aria-label="Dismiss pattern as not useful"
           >
             <ThumbsDown className="w-3.5 h-3.5 scale-x-[-1]" />
           </Button>
@@ -151,13 +172,15 @@ export function PatternDetailPane({
               Evidence
             </h3>
 
-            {loading && <div className="text-xs text-muted-foreground">Loading evidence…</div>}
+            {showLoading && !detail && (
+              <div className="text-xs text-muted-foreground">Loading evidence…</div>
+            )}
 
-            {!loading && detail && detail.sightings.length === 0 && (
+            {detail && detail.sightings.length === 0 && (
               <div className="text-xs text-muted-foreground">No sightings recorded.</div>
             )}
 
-            {!loading && detail && detail.sightings.length > 0 && (
+            {detail && detail.sightings.length > 0 && (
               <ol className="space-y-3 relative">
                 {detail.sightings.map((sighting) => {
                   const confPct = Math.round(sighting.confidence * 100)
