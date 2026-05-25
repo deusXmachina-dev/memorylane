@@ -92,10 +92,9 @@ export function useActivitiesData(api: MainWindowAPI): ActivitiesData {
     loadedRef.current = true
     setLoading(true)
     const initial = Promise.all([fetchDigest(), fetchFirstPage()]).then(() => {
-      if (!mountedRef.current) return
-      setLoading(false)
       lastRefreshRef.current = Date.now()
       inflightRef.current = null
+      if (mountedRef.current) setLoading(false)
     })
     inflightRef.current = initial
   }, [fetchDigest, fetchFirstPage])
