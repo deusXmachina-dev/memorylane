@@ -34,11 +34,6 @@ export interface PatternWithStats extends Pattern {
   lastSeenAt: number | null
   lastConfidence: number | null
   estimatedHoursPerWeek: number | null
-  /**
-   * Internal composite score for ranking: impact × recurrence × confidence ×
-   * recency. Not shown in UI; used purely for sort order.
-   */
-  score: number
 }
 
 export interface PatternDetail {
@@ -52,7 +47,7 @@ export interface PatternDetail {
 
 const DAY_MS = 86_400_000
 
-function recencyDecay(lastSeenAt: number | null, now: number = Date.now()): number {
+function recencyDecay(lastSeenAt: number | null, now: number): number {
   if (lastSeenAt === null) return 0
   const ageDays = (now - lastSeenAt) / DAY_MS
   if (ageDays < 7) return 1
@@ -143,15 +138,16 @@ export class PatternRepository {
       )
       .all() as Record<string, unknown>[]
 
+    const now = Date.now()
     const patterns = rows.map((row) => this.rowToPatternWithStats(row))
+    const scores = new Map(patterns.map((p) => [p.id, computeScore(p, now)]))
     return patterns.sort((a, b) => {
-      // Active before completed
       const aActive = a.completedAt === null ? 1 : 0
       const bActive = b.completedAt === null ? 1 : 0
       if (aActive !== bActive) return bActive - aActive
-      if (b.score !== a.score) return b.score - a.score
-      // Tie-breaker for patterns without computable score (e.g. single sighting):
-      // fall back to recurrence, then recency.
+      const sa = scores.get(a.id) ?? 0
+      const sb = scores.get(b.id) ?? 0
+      if (sb !== sa) return sb - sa
       if (b.sightingCount !== a.sightingCount) return b.sightingCount - a.sightingCount
       return (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0)
     })
@@ -353,7 +349,7 @@ export class PatternRepository {
       firstSeenAt !== null &&
       lastSeenAt !== null
     ) {
-      const spanDays = (lastSeenAt - firstSeenAt) / 86_400_000
+      const spanDays = (lastSeenAt - firstSeenAt) / DAY_MS
       if (spanDays >= 1) {
         const frequencyPerWeek = (sightingCount / spanDays) * 7
         estimatedHoursPerWeek = Math.round(((frequencyPerWeek * avgDurationMin) / 60) * 10) / 10
@@ -361,12 +357,6 @@ export class PatternRepository {
     }
 
     const lastConfidence = (row.last_confidence as number) ?? null
-    const score = computeScore({
-      estimatedHoursPerWeek,
-      sightingCount,
-      lastConfidence,
-      lastSeenAt,
-    })
 
     return {
       id: row.id as string,
@@ -383,7 +373,6 @@ export class PatternRepository {
       lastSeenAt,
       lastConfidence,
       estimatedHoursPerWeek,
-      score,
     }
   }
 

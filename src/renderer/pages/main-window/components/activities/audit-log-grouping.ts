@@ -13,8 +13,6 @@ export interface DayGroup {
 }
 
 export function groupIntoRunsByDay(items: ActivityDetail[]): DayGroup[] {
-  // activities arrive newest-first; group into days (keeping newest-first), then
-  // within each day group consecutive same-app/same-window into runs.
   const days = new Map<number, ActivityDetail[]>()
   for (const a of items) {
     const day = startOfLocalDay(a.startTimestamp)
@@ -25,7 +23,7 @@ export function groupIntoRunsByDay(items: ActivityDetail[]): DayGroup[] {
 
   const result: DayGroup[] = []
   for (const [dayStart, dayActs] of days) {
-    // dayActs is newest-first; sort ascending so roll-up reads chronologically.
+    // Sort ascending so adjacency-based roll-up reads chronologically.
     const ascending = [...dayActs].sort((a, b) => a.startTimestamp - b.startTimestamp)
     const runs: ActivityDetail[][] = []
     for (const a of ascending) {
@@ -42,11 +40,9 @@ export function groupIntoRunsByDay(items: ActivityDetail[]): DayGroup[] {
         runs.push([a])
       }
     }
-    // Show newest run first within the day.
     runs.reverse()
     result.push({ dayStart, runs })
   }
-  // Days newest first.
   result.sort((a, b) => b.dayStart - a.dayStart)
   return result
 }

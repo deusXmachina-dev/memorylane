@@ -100,10 +100,8 @@ export function useActivitiesData(api: MainWindowAPI): ActivitiesData {
     inflightRef.current = initial
   }, [fetchDigest, fetchFirstPage])
 
-  // Always returns a Promise that resolves once the latest known refresh has
-  // settled (or immediately, if we're inside the throttle window and there's
-  // nothing in flight). Callers `await`-ing this should not chain on the
-  // expectation of fresh data — only on "the system is now idle".
+  // Resolves on "system is now idle", not on "data was refetched": a throttled
+  // call can return Promise.resolve() without refetching.
   const refresh = useCallback((): Promise<void> => {
     if (!loadedRef.current) return Promise.resolve()
     if (inflightRef.current) return inflightRef.current

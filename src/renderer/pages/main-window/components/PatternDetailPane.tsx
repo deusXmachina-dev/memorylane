@@ -15,6 +15,10 @@ interface PatternDetailPaneProps {
   onCopyPrompt: (pattern: PatternInfo) => void
 }
 
+// Delay showing "Loading evidence…" so fast list-nav between patterns doesn't
+// flash the message between every selection.
+const LOADING_DELAY_MS = 150
+
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString(undefined, {
     month: 'short',
@@ -42,6 +46,12 @@ function formatRecurrence(pattern: PatternInfo): string | null {
   return `Seen ${pattern.sightingCount} times. Estimated ${hoursText}/week spent on this.`
 }
 
+function formatSightingDuration(min: number | null): string | null {
+  if (min === null) return null
+  if (min >= 60) return `~${(min / 60).toFixed(1)}h`
+  return `~${Math.round(min)}m`
+}
+
 export function PatternDetailPane({
   api,
   pattern,
@@ -52,8 +62,6 @@ export function PatternDetailPane({
   onCopyPrompt,
 }: PatternDetailPaneProps): React.JSX.Element {
   const [detail, setDetail] = useState<PatternDetailInfo | null>(null)
-  // Loading indicator is delayed (LOADING_DELAY_MS) so fast list-nav between
-  // patterns doesn't flash "Loading evidence…" between every selection.
   const [showLoading, setShowLoading] = useState(false)
   const timerRef = useRef<number | null>(null)
 
@@ -64,7 +72,7 @@ export function PatternDetailPane({
     if (timerRef.current !== null) window.clearTimeout(timerRef.current)
     timerRef.current = window.setTimeout(() => {
       if (!cancelled) setShowLoading(true)
-    }, 150)
+    }, LOADING_DELAY_MS)
     const clearTimer = (): void => {
       if (timerRef.current !== null) {
         window.clearTimeout(timerRef.current)
@@ -184,12 +192,7 @@ export function PatternDetailPane({
               <ol className="space-y-3 relative">
                 {detail.sightings.map((sighting) => {
                   const confPct = Math.round(sighting.confidence * 100)
-                  const durationText =
-                    sighting.durationEstimateMin !== null
-                      ? sighting.durationEstimateMin >= 60
-                        ? `~${(sighting.durationEstimateMin / 60).toFixed(1)}h`
-                        : `~${Math.round(sighting.durationEstimateMin)}m`
-                      : null
+                  const durationText = formatSightingDuration(sighting.durationEstimateMin)
 
                   return (
                     <li key={sighting.id} className="rounded-md border bg-card/50 p-3 space-y-2">

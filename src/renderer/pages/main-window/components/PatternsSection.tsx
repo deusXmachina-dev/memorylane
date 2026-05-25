@@ -78,20 +78,18 @@ export function PatternsSection({
     return { activePatterns: active, completedPatterns: completed }
   }, [patterns, minSightings])
 
-  // Auto-select top-ranked pattern when none selected, or keep selection valid.
-  useEffect(() => {
-    if (patterns.length === 0) {
-      setSelectedId(null)
-      return
-    }
-    if (selectedId && patterns.some((p) => p.id === selectedId)) return
-    const top = activePatterns[0] ?? completedPatterns[0] ?? patterns[0]
-    setSelectedId(top?.id ?? null)
-  }, [patterns, activePatterns, completedPatterns, selectedId])
+  // Derive the effective selection at render time: keep the user's pick if it's
+  // still around, otherwise fall back to the top-ranked pattern.
+  const effectiveSelectedId =
+    (selectedId && patterns.some((p) => p.id === selectedId) && selectedId) ||
+    activePatterns[0]?.id ||
+    completedPatterns[0]?.id ||
+    patterns[0]?.id ||
+    null
 
   const selected = useMemo(
-    () => patterns.find((p) => p.id === selectedId) ?? null,
-    [patterns, selectedId],
+    () => patterns.find((p) => p.id === effectiveSelectedId) ?? null,
+    [patterns, effectiveSelectedId],
   )
 
   const handleApprove = useCallback(
@@ -111,14 +109,9 @@ export function PatternsSection({
       api.rejectPattern(id).catch((err) => {
         console.warn('[patterns] rejectPattern failed', err)
       })
-      // If the dismissed pattern was selected, advance selection.
-      if (selectedId === id) {
-        const next = activePatterns.find((p) => p.id !== id) ?? null
-        setSelectedId(next?.id ?? null)
-      }
       onPatternsChange()
     },
-    [api, onPatternsChange, selectedId, activePatterns],
+    [api, onPatternsChange],
   )
 
   const handleComplete = useCallback(
@@ -222,7 +215,7 @@ export function PatternsSection({
                 <PatternListItem
                   key={pattern.id}
                   pattern={pattern}
-                  selected={pattern.id === selectedId}
+                  selected={pattern.id === effectiveSelectedId}
                   onSelect={() => setSelectedId(pattern.id)}
                 />
               ))}
@@ -249,7 +242,7 @@ export function PatternsSection({
                       <PatternListItem
                         key={pattern.id}
                         pattern={pattern}
-                        selected={pattern.id === selectedId}
+                        selected={pattern.id === effectiveSelectedId}
                         onSelect={() => setSelectedId(pattern.id)}
                       />
                     ))}

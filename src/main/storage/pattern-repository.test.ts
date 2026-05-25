@@ -4,7 +4,7 @@ import { applyMigrations } from './migrator'
 import * as os from 'os'
 import * as path from 'path'
 import { deleteDbFiles } from './test-utils'
-import type { Pattern, PatternSighting } from './pattern-repository'
+import { computeScore, type Pattern, type PatternSighting } from './pattern-repository'
 
 // ---------------------------------------------------------------------------
 // Factories
@@ -437,7 +437,7 @@ describe('PatternRepository', () => {
 
       const all = storage.patterns.getAllPatterns()
       expect(all[0].id).toBe('p-high')
-      expect(all[0].score).toBeGreaterThan(all[1].score)
+      expect(computeScore(all[0])).toBeGreaterThan(computeScore(all[1]))
       expect(all[1].id).toBe('p-low')
     })
 
@@ -471,9 +471,9 @@ describe('PatternRepository', () => {
 
       const all = storage.patterns.getAllPatterns()
       expect(all[0].id).toBe('p-impact')
-      expect(all[0].score).toBeGreaterThan(0)
+      expect(computeScore(all[0])).toBeGreaterThan(0)
       expect(all[1].id).toBe('p-single')
-      expect(all[1].score).toBe(0)
+      expect(computeScore(all[1])).toBe(0)
     })
 
     it('keeps completed patterns after active ones regardless of score', () => {
