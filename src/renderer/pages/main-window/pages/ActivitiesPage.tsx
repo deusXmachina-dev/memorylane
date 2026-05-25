@@ -1,41 +1,36 @@
 import * as React from 'react'
-import { useEffect, useState } from 'react'
-import type { ActivityDigest, MainWindowAPI } from '@types'
+import { useEffect } from 'react'
+import type { ActivitiesData } from '@/renderer/hooks/use-activities-data'
 import { PageLayout } from '../components/shell/PageLayout'
 import { Digest } from '../components/activities/Digest'
 import { AuditLog } from '../components/activities/AuditLog'
 
 interface ActivitiesPageProps {
-  api: MainWindowAPI
+  activities: ActivitiesData
   onOpenPrivacy?: () => void
 }
 
-export function ActivitiesPage({ api, onOpenPrivacy }: ActivitiesPageProps): React.JSX.Element {
-  const [digest, setDigest] = useState<ActivityDigest | null>(null)
-  const [digestLoading, setDigestLoading] = useState(true)
-
+export function ActivitiesPage({
+  activities,
+  onOpenPrivacy,
+}: ActivitiesPageProps): React.JSX.Element {
+  const { ensureLoaded } = activities
   useEffect(() => {
-    let cancelled = false
-    void api
-      .getActivityDigest()
-      .then((d) => {
-        if (cancelled) return
-        setDigest(d)
-        setDigestLoading(false)
-      })
-      .catch(() => {
-        if (cancelled) return
-        setDigestLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [api])
+    ensureLoaded()
+  }, [ensureLoaded])
 
   return (
     <PageLayout title="Activities">
-      <Digest digest={digest} loading={digestLoading} onOpenPrivacy={onOpenPrivacy} />
-      <AuditLog api={api} />
+      <Digest
+        digest={activities.digest}
+        loading={activities.loading}
+        onOpenPrivacy={onOpenPrivacy}
+        onSelectApp={activities.setAppFilter}
+        onSelectTld={activities.setTldFilter}
+        activeApp={activities.appFilter}
+        activeTld={activities.tldFilter}
+      />
+      <AuditLog activities={activities} />
     </PageLayout>
   )
 }

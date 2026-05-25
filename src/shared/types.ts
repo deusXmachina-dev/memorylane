@@ -82,9 +82,6 @@ export interface VendorStatus {
   baseURL: string | null
 }
 
-/** Alias retained for renderer call sites; identical shape to VendorStatus. */
-export type KeyStatus = VendorStatus
-
 export type LlmHealthState = 'not_configured' | 'unknown' | 'active' | 'failing'
 
 export interface LlmHealthStatus {

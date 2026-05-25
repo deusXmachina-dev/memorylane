@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Toaster } from '@components/ui/sonner'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { useLlmHealth } from '@/renderer/hooks/use-llm-health'
+import { useActivitiesData } from '@/renderer/hooks/use-activities-data'
 import { MainShell } from './components/shell/MainShell'
 import { Sidebar, type MainSection } from './components/shell/Sidebar'
-import { DashboardPage } from './pages/DashboardPage'
 import { ActivitiesPage } from './pages/ActivitiesPage'
 import { PatternsPage } from './pages/PatternsPage'
 import { SettingsPage, type SettingsTab } from './pages/SettingsPage'
@@ -46,7 +46,7 @@ const SIDEBAR_COLLAPSED_KEY = 'memorylane:sidebar:collapsed'
 
 export function MainWindowApp(): React.JSX.Element {
   const api = useMainWindowAPI()
-  const [section, setSection] = useState<MainSection>('dashboard')
+  const [section, setSection] = useState<MainSection>('activities')
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(
     () => readIntFlag(localStorageAdapter, SIDEBAR_COLLAPSED_KEY, 0) === 1,
   )
@@ -180,11 +180,13 @@ export function MainWindowApp(): React.JSX.Element {
   const isConfigured = isEnterprise
     ? accessState?.isEnterpriseActivated === true && hasActiveKey
     : hasActiveKey
-  const isCustomEndpoint = activeVendor === 'openai-compatible'
   const { llmHealth } = useLlmHealth({
     api,
     enabled: isConfigured,
   })
+  const activities = useActivitiesData(api)
+  const activitiesRefreshRef = useRef(activities.refresh)
+  activitiesRefreshRef.current = activities.refresh
 
   const initialScreenRecording = initialScreenRecordingRef.current
   const permissionRestartPending =
@@ -303,6 +305,7 @@ export function MainWindowApp(): React.JSX.Element {
       setCapturing(status.capturing)
       void loadStats()
       void loadPatterns()
+      void activitiesRefreshRef.current()
     })
     void loadAll().then(() => {
       setInitialLoaded(true)
@@ -374,6 +377,7 @@ export function MainWindowApp(): React.JSX.Element {
       loadMcpStatus(),
       loadPatterns(),
       loadPermissionStatus(),
+      activitiesRefreshRef.current(),
     ])
   }, [
     loadAccessState,
@@ -536,20 +540,10 @@ export function MainWindowApp(): React.JSX.Element {
 
   const renderSection = (): React.JSX.Element => {
     switch (section) {
-      case 'dashboard':
-        return (
-          <DashboardPage
-            capturing={capturing}
-            llmHealth={llmHealth}
-            stats={stats}
-            keyStatus={activeVendorStatus}
-            isCustomEndpoint={isCustomEndpoint}
-          />
-        )
       case 'activities':
         return (
           <ActivitiesPage
-            api={api}
+            activities={activities}
             onOpenPrivacy={() => {
               setSettingsInitialTab('privacy')
               setSection('settings')
@@ -572,7 +566,7 @@ export function MainWindowApp(): React.JSX.Element {
             onBack={
               computedStep !== 'dashboard'
                 ? () => {
-                    setSection('dashboard')
+                    setSection('activities')
                     setSettingsInitialTab(undefined)
                   }
                 : undefined
