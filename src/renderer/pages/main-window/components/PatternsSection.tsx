@@ -178,17 +178,15 @@ export function PatternsSection({
       <div className="flex items-center gap-1">
         <span className="text-xs text-muted-foreground mr-1">Sightings:</span>
         {SIGHTING_FILTERS.map((f) => (
-          <button
+          <Button
             key={f.min}
+            size="sm"
+            variant={minSightings === f.min ? 'default' : 'secondary'}
+            className="rounded-full h-7 px-3 text-xs"
             onClick={() => setMinSightings(f.min)}
-            className={`px-2 py-0.5 rounded-full text-xs transition-colors ${
-              minSightings === f.min
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-            }`}
           >
             {f.label}
-          </button>
+          </Button>
         ))}
         <span className="ml-auto text-xs text-muted-foreground">
           {activePatterns.length + completedPatterns.length} found
