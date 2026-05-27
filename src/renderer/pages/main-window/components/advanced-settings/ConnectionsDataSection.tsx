@@ -7,6 +7,7 @@ import type { AppEditionConfig } from '@/shared/edition'
 import type { MainWindowAPI } from '@types'
 import { IntegrationsSection } from '../IntegrationsSection'
 import { DatabaseExportSection } from '../DatabaseExportSection'
+import { DatabaseImportSection } from '../DatabaseImportSection'
 import { DatabaseSyncSection } from '../DatabaseSyncSection'
 import { SectionToggle } from './SectionToggle'
 import { SubSectionToggle } from './SubSectionToggle'
@@ -67,9 +68,10 @@ export function ConnectionsDataSection({
           <IntegrationsSection api={api} />
 
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Manual Export</Label>
+            <Label className="text-xs text-muted-foreground">Manual Export &amp; Import</Label>
             <div className="flex gap-2">
               <DatabaseExportSection api={api} />
+              <DatabaseImportSection api={api} />
             </div>
           </div>
 

@@ -141,6 +141,12 @@ export interface DatabaseExportResult {
   error?: string | undefined
 }
 
+export interface DatabaseImportResult {
+  success: boolean
+  cancelled?: boolean | undefined
+  error?: string | undefined
+}
+
 export interface DirectorySelectionResult {
   cancelled: boolean
   directoryPath?: string | undefined
@@ -304,6 +310,8 @@ export interface MainWindowAPI {
   setDatabaseExportDirectory: (directoryPath: string) => Promise<SaveResult>
   // Database export
   exportDatabaseZip: () => Promise<DatabaseExportResult>
+  importDatabase: () => Promise<DatabaseImportResult>
+  restartApp: () => Promise<void>
   syncDatabaseToRemote: () => Promise<{ success: boolean; error?: string }>
   // Updater
   getUpdateState: () => Promise<UpdateState>

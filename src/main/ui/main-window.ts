@@ -20,6 +20,7 @@ import { DEFAULT_EDITION, type AppEditionConfig } from '../../shared/edition'
 import log from '../logger'
 import { updateTrayMenu } from './tray'
 import { exportDatabaseZip } from './database-export'
+import { importDatabase } from './database-import'
 import { integrations } from '../integrations'
 import { listInstalledApps } from '../apps/installed-apps'
 import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
@@ -672,6 +673,19 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: false, error: 'Dependencies not initialized' }
     }
     return exportDatabaseZip({ storage: deps.storage, parentWindow: getMainWindow() })
+  })
+
+  ipcMain.handle('main-window:importDatabase', async () => {
+    if (!deps) {
+      return { success: false, error: 'Dependencies not initialized' }
+    }
+    return importDatabase({ parentWindow: getMainWindow() })
+  })
+
+  ipcMain.handle('main-window:restartApp', () => {
+    log.info('[App] Restart requested from renderer')
+    app.relaunch()
+    app.quit()
   })
 
   ipcMain.handle('main-window:syncDatabaseToRemote', async () => {
