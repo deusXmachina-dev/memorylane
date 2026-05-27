@@ -1,17 +1,14 @@
-# MemoryLane v0.26.1
+# MemoryLane v0.26.2
 
-Internal hardening plus a smoother enterprise activation flow when the backend already has consent on file.
+Adds the ability to import a previously exported database, replacing the active one.
 
 ## What's Changed
 
-- Enterprise: skip the in-app consent dialog when the backend reports `already_approved`; the client binds via external consent and proceeds straight to polling.
-- Tightened how custom vendor `baseURL` values and backend-returned URLs are validated.
-- Stricter validation of the database export directory (must be absolute and inside an allowed location).
-- Customer checkout and subscription portal now open via short-lived signed URLs minted from the backend.
-- Release workflow resolves the input ref to an immutable commit SHA once and reuses it across every job; all GitHub Actions are pinned to commit SHAs and tracked by Dependabot.
+- Import Database: replace the active database with a previously exported one (`.zip` or raw `.db`). Useful for migrating a Customer-edition database into an Enterprise install — schema, embedding model, and vector dimensions match across editions. The app validates the file, stages it, and restarts to finish importing; a timestamped backup of the current database is saved automatically. Screenshot/video files aren't part of an export, so imported activities keep summaries/OCR/search/patterns but not their original images.
 
 ## Known Issues & Limitations
 
+- Importing a database does not restore the original screenshot/video files; only the activity data is imported.
 - Vertex managed-mode bearer tokens aren't refreshed in-flight — long-running operations that outlive the token TTL may see 401s until the next refresh cycle (DEU-84).
 - Windows OCR still depends on native OCR component availability.
 - Intel macOS is not yet officially supported.
@@ -25,4 +22,6 @@ Internal hardening plus a smoother enterprise activation flow when the backend a
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v0.26.0...v0.26.1
+https://github.com/deusXmachina-dev/memorylane/compare/v0.26.1...v0.26.2
+</content>
+</invoke>
