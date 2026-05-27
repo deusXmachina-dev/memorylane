@@ -15,19 +15,19 @@ export function DatabaseImportSection({ api }: DatabaseImportSectionProps): Reac
     setIsImportingDb(true)
     try {
       const result = await api.importDatabase()
-      if (result.cancelled) return
       if (!result.success) {
-        toast.error(result.error ?? 'Database import failed')
+        if (!result.cancelled) toast.error(result.error ?? 'Database import failed')
+        setIsImportingDb(false)
         return
       }
-      // The imported DB is staged; it replaces the live one on restart.
+      // The imported DB is staged; it replaces the live one on restart. Keep the
+      // button disabled through the restart so a second import can't race it.
       toast.success('Database imported — restarting…')
       await new Promise((resolve) => setTimeout(resolve, 800))
       await api.restartApp()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Database import failed'
       toast.error(message)
-    } finally {
       setIsImportingDb(false)
     }
   }, [api])

@@ -679,7 +679,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     if (!deps) {
       return { success: false, error: 'Dependencies not initialized' }
     }
-    return importDatabase({ parentWindow: getMainWindow() })
+    return importDatabase({ dbPath: deps.storage.getDbPath(), parentWindow: getMainWindow() })
   })
 
   ipcMain.handle('main-window:restartApp', () => {
