@@ -157,3 +157,6 @@ packages/cli/node_modules/
 
 # deepsec
 .deepsec/
+
+# Data directory
+/data
