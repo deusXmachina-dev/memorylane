@@ -4,7 +4,7 @@ export interface StripOptions {
   detailLevel: 'summary' | 'detailed'
 }
 
-const ALWAYS_DROP_TABLES = ['user_context', 'pattern_detection_runs']
+const ALWAYS_DROP_TABLES = ['pattern_detection_runs']
 
 const SUMMARY_TRIGGERS_TO_DROP = ['activities_ai', 'activities_ad', 'activities_au']
 const SUMMARY_TABLES_TO_DROP = ['activities_fts']
