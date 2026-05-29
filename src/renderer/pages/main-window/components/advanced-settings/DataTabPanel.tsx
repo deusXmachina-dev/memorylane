@@ -87,7 +87,7 @@ export function DataTabPanel({
 
   return (
     <div className="space-y-6">
-      <SettingsSection title="Export" icon={<Database className="h-4 w-4" />}>
+      <SettingsSection title="Database" icon={<Database className="h-4 w-4" />}>
         <SettingsRow
           label="Manual export"
           description="Download a ZIP of the full database."
