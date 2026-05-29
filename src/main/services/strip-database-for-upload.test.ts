@@ -60,18 +60,22 @@ describe('stripDatabaseForUpload', () => {
     expect(tables).toHaveLength(1)
   })
 
-  it('drops user_context and pattern_detection_runs tables', async () => {
+  it('drops pattern_detection_runs but preserves user_context', async () => {
     await setupAndBackup()
     stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'summary' })
 
     const db = new Database(COPY_DB_PATH)
-    const tables = db
+    const runs = db
       .prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('user_context', 'pattern_detection_runs')",
+        "SELECT name FROM sqlite_master WHERE type='table' AND name = 'pattern_detection_runs'",
       )
       .all()
+    const userContext = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = 'user_context'")
+      .all()
     db.close()
-    expect(tables).toHaveLength(0)
+    expect(runs).toHaveLength(0)
+    expect(userContext).toHaveLength(1)
   })
 
   it('drops FTS triggers', async () => {
@@ -151,7 +155,7 @@ describe('stripDatabaseForUpload', () => {
   })
 
   describe('detailed mode', () => {
-    it('drops user_context but preserves ocr_text', async () => {
+    it('preserves user_context and ocr_text', async () => {
       await setupAndBackup()
       stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'detailed' })
 
@@ -160,7 +164,7 @@ describe('stripDatabaseForUpload', () => {
       const userContext = db
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = 'user_context'")
         .all()
-      expect(userContext).toHaveLength(0)
+      expect(userContext).toHaveLength(1)
 
       const columns = db.prepare('PRAGMA table_info(activities)').all() as { name: string }[]
       const columnNames = columns.map((c) => c.name)
