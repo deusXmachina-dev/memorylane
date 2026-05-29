@@ -8,6 +8,7 @@ import { createAccessProvider, type AccessProvider } from './access'
 import type { AppEdition } from '../shared/edition'
 import { StorageService } from './storage'
 import { applyMigrations } from './storage/migrator'
+import { applyPendingDatabaseImport } from './ui/database-import'
 import { EmbeddingService } from './processor/embedding'
 import { activityOcrService } from './processor/ocr'
 import { UsageTracker } from './services/usage-tracker'
@@ -74,6 +75,7 @@ export async function createMainRuntime(params: {
   const userDataPath = app.getPath('userData')
   const dbFile = dev ? 'memorylane-dev.db' : 'memorylane.db'
   const dbPath = path.join(userDataPath, dbFile)
+  applyPendingDatabaseImport(dbPath)
   const storage = new StorageService(dbPath)
   applyMigrations(storage.getDatabase())
   const usageTracker = new UsageTracker()

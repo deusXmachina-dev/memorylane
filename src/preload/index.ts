@@ -92,6 +92,7 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
     ipcRenderer.invoke('main-window:setDatabaseExportDirectory', directoryPath),
   // Database export
   exportDatabaseZip: () => ipcRenderer.invoke('main-window:exportDatabaseZip'),
+  importDatabase: () => ipcRenderer.invoke('main-window:importDatabase'),
   syncDatabaseToRemote: () => ipcRenderer.invoke('main-window:syncDatabaseToRemote'),
   purgeDatabase: (confirmation: string) =>
     ipcRenderer.invoke('main-window:purgeDatabase', confirmation),
