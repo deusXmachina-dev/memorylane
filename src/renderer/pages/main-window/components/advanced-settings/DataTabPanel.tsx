@@ -142,7 +142,7 @@ export function DataTabPanel({
         <SettingsSection
           title="Share with remote"
           icon={<Share2 className="h-4 w-4" />}
-          description="Off disables sharing. Summary strips OCR text and full-text search index. Both Summary and Detailed strip personal context; pattern detection runs locally either way."
+          description="Off disables sharing. Summary strips OCR text and full-text search index."
         >
           <SettingsRow
             layout="stacked"
