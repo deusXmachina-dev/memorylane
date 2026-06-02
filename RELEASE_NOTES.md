@@ -1,6 +1,11 @@
-# MemoryLane v1.0.0-rc.1
+# MemoryLane v1.0.0
 
-First 1.0 release candidate. Major UI shift toward a transparency-first product: you can see exactly what MemoryLane has captured and the recurring workflows it found, with evidence for each.
+First stable 1.0 release. A transparency-first product: you can see exactly what MemoryLane has captured and the recurring workflows it found, with evidence for each.
+
+## Since v1.0.0-rc.1
+
+- **Import Database**: replace the local database from an exported `.zip` or raw `.db`. The chosen file is validated and staged, then swapped in safely on the next startup — backing up the current database first.
+- **Sync**: backend uploads now include `user_context`.
 
 ## What's Changed
 
@@ -18,7 +23,6 @@ First 1.0 release candidate. Major UI shift toward a transparency-first product:
 - Vertex managed-mode bearer tokens aren't refreshed in-flight — long-running operations that outlive the token TTL may see 401s until the next refresh cycle (DEU-84).
 - Windows OCR still depends on native OCR component availability.
 - Intel macOS is not yet officially supported.
-- This is a release candidate: auto-update channels for customer builds are not yet pointed at 1.0.x.
 
 ## Installation
 
@@ -29,4 +33,4 @@ First 1.0 release candidate. Major UI shift toward a transparency-first product:
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v0.26.1...v1.0.0-rc.1
+https://github.com/deusXmachina-dev/memorylane/compare/v1.0.0-rc.1...v1.0.0
