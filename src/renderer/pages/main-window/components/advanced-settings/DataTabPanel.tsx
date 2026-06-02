@@ -8,6 +8,7 @@ import type { AppEditionConfig } from '@/shared/edition'
 import { PURGE_CONFIRMATION_PHRASE } from '@/shared/constants'
 import type { MainWindowAPI } from '@types'
 import { DatabaseExportSection } from '../DatabaseExportSection'
+import { DatabaseImportSection } from '../DatabaseImportSection'
 import { DatabaseSyncSection } from '../DatabaseSyncSection'
 import { SegmentedControl } from './SegmentedControl'
 import { SettingsRow } from './SettingsRow'
@@ -86,11 +87,16 @@ export function DataTabPanel({
 
   return (
     <div className="space-y-6">
-      <SettingsSection title="Export" icon={<Database className="h-4 w-4" />}>
+      <SettingsSection title="Database" icon={<Database className="h-4 w-4" />}>
         <SettingsRow
           label="Manual export"
           description="Download a ZIP of the full database."
           control={<DatabaseExportSection api={api} />}
+        />
+        <SettingsRow
+          label="Manual import"
+          description="Replace the database from an exported ZIP or .db file."
+          control={<DatabaseImportSection api={api} />}
         />
         {!isEnterprise && (
           <SettingsRow

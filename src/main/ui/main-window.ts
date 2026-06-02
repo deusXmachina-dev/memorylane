@@ -21,6 +21,7 @@ import { PURGE_CONFIRMATION_PHRASE } from '../../shared/constants'
 import log from '../logger'
 import { updateTrayMenu } from './tray'
 import { exportDatabaseZip } from './database-export'
+import { importDatabase } from './database-import'
 import { getPermissionStatus, openPermissionSettings, type PermissionStatus } from './permissions'
 import { integrations } from '../integrations'
 import { listInstalledApps } from '../apps/installed-apps'
@@ -784,6 +785,13 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: false, error: 'Dependencies not initialized' }
     }
     return exportDatabaseZip({ storage: deps.storage, parentWindow: getMainWindow() })
+  })
+
+  ipcMain.handle('main-window:importDatabase', async () => {
+    if (!deps) {
+      return { success: false, error: 'Dependencies not initialized' }
+    }
+    return importDatabase({ dbPath: deps.storage.getDbPath(), parentWindow: getMainWindow() })
   })
 
   ipcMain.handle('main-window:syncDatabaseToRemote', async () => {
