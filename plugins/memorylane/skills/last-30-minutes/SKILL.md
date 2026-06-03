@@ -1,7 +1,7 @@
 ---
-name: recent-activity
+name: last-30-minutes
 allowed-tools: mcp__memorylane__browse_timeline, mcp__memorylane__search_context, mcp__memorylane__get_activity_details
-description: Summarize what you've been doing recently
+description: Summarize what you've been doing in the last 30 minutes.
 ---
 
 # Recent Activity
