@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MemoryLane Process Report — Component Reference</title>
+<!--
+  REFERENCE GALLERY (not a deliverable).
+  Every section archetype the `report-new` skill produces, rendered from a sample
+  single-user ledger. Clone these blocks and bind real values from
+  process-analysis.json. In the real deliverable, INLINE report.css into a
+  <style> tag so the file is fully self-contained (PDF fidelity + portability).
+  Sample persona: "Revenue Operations Analyst", Northwind (B2B SaaS). Fictional.
+-->
+<link rel="stylesheet" href="report.css" />
+</head>
+<body>
+
+<!-- ============================ PAGE 1 — COVER ============================ -->
+<section class="page cover">
+  <div class="cover__grid">
+    <div class="cover__left">
+      <div class="cover__brand"><span class="dot"></span> MemoryLane · Process Intelligence</div>
+      <!-- CLIENT LOGO + NAME (page 1). Real report: <img src="data:image/png;base64,…"
+           class="cover__client-logo">. Here an inline SVG stands in for the client mark. -->
+      <div class="cover__client">
+        <span><span class="pre">Prepared for</span><span class="name">Northwind Inc.</span></span>
+        <svg height="40" viewBox="0 0 220 48" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="8" width="32" height="32" rx="8" fill="#2f6f8f"/><path d="M8 32 L16 16 L24 32" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round"/><text x="44" y="33" font-family="Inter,Arial,sans-serif" font-size="24" font-weight="800" fill="#142033">Northwind</text></svg>
+      </div>
+      <h1 class="cover__title">Northwind<br><span class="accent">RevOps</span><br>Automation Map</h1>
+      <p class="cover__lede">What this role actually does all week, the share we can take off their plate, and the hours and money it returns.</p>
+      <div class="cover__meta">
+        Revenue Operations Analyst &nbsp;·&nbsp; Sydney, AU<br>
+        Observation window: 14 days &nbsp;·&nbsp; 1,184 activities<br>
+        Prepared by MemoryLane &nbsp;·&nbsp; <span class="cover__conf">Overall confidence: Medium</span><br>
+        COMMERCIAL IN CONFIDENCE
+      </div>
+    </div>
+    <div class="cover__right">
+      <div class="cover__kpis">
+        <div class="kpi"><div class="kpi__num"><span class="accent">22.4h</span></div><div class="kpi__label">Repetitive work / week</div><div class="kpi__sub">reasoned · range 18–27h</div></div>
+        <div class="kpi"><div class="kpi__num"><span class="accent">61%</span></div><div class="kpi__label">Automatable share</div><div class="kpi__sub">estimated · range 48–70%</div></div>
+        <div class="kpi"><div class="kpi__num">~$48k</div><div class="kpi__label">Annual $ recoverable</div><div class="kpi__sub">estimated · $34k–$61k</div></div>
+        <div class="kpi"><div class="kpi__num">0.4 FTE</div><div class="kpi__label">Capacity unlocked</div><div class="kpi__sub">for this person</div></div>
+      </div>
+      <div class="cover__note">Every figure carries a basis (seen / reasoned / estimated). Scope: 1 observed person (n=1). Dollar rate estimated from role + location. Frequencies annualized from a 14-day window.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ====================== PAGE 2 — EXECUTIVE SUMMARY ====================== -->
+<section class="page">
+  <div class="band">
+    <span class="kicker">01 · Executive Summary</span>
+    <h2>What we found</h2>
+    <span class="sub">Synthesis from 14 days of recorded activity. Headline numbers carry a basis label and a caveat.</span>
+  </div>
+
+  <!-- DATA-CONFIDENCE BANNER: one honest, punchy line keyed to how much data we
+       actually have. Tier (rich/ok/light/thin) is computed from active hours,
+       active days, #people, window. Friendly + actionable, never a disclaimer dump. -->
+  <div class="databanner light" style="margin-bottom:13px;">
+    <span class="tier">Light sample</span>
+    <span class="msg"><strong>14 days, 1 person, ~37h/wk active.</strong> A directional first read, not a verdict. Single-person, so ranges are wide and a team view needs more people. Act on the top win now; widen the window to firm up the rest.</span>
+  </div>
+
+  <div class="kpi-row" style="--n:4; margin-bottom:14px;">
+    <div class="kpi"><div class="kpi__num"><span class="accent">22.4h</span></div><div class="kpi__label">Repetitive hrs / week <span class="basis basis--reason">reasoned</span></div><div class="kpi__sub">of ~37h active · 18–27h</div></div>
+    <div class="kpi"><div class="kpi__num">61%</div><div class="kpi__label">Automatable <span class="basis basis--est">estimated</span></div><div class="kpi__sub">48–70%</div></div>
+    <div class="kpi"><div class="kpi__num">~$48k</div><div class="kpi__label">$ / year <span class="basis basis--est">estimated</span></div><div class="kpi__sub">$34k–$61k</div></div>
+    <div class="kpi"><div class="kpi__num">7</div><div class="kpi__label">Repeated processes <span class="basis basis--reason">reasoned</span></div><div class="kpi__sub">3 detailed, 4 ranked</div></div>
+  </div>
+
+  <div class="card-grid cols-3" style="flex:1;">
+    <div class="card card--good"><h3><span class="ico">📥</span> Lead routing is the wedge</h3><p>~6.5h/wk re-keying inbound leads HubSpot → Salesforce. Clean, rules-based, ~80% automatable. Highest ROI.</p></div>
+    <div class="card card--accent2"><h3><span class="ico">📊</span> Reporting is a ritual</h3><p>Weekly pipeline pack rebuilt by hand from 3 sources. Strong AI-assist candidate; judgment stays human.</p></div>
+    <div class="card card--warn"><h3><span class="ico">🔁</span> CRM hygiene is constant</h3><p>De-duping and field fixes scattered through the day. Real, but messy; needs deeper analysis to build.</p></div>
+    <div class="card"><h3><span class="ico">⏱️</span> The day is fragmented</h3><p>38% deep-work, 62% scattered across apps. Context-switching tax is visible in the activity stream.</p></div>
+    <div class="card card--risk"><h3><span class="ico">⚠️</span> One caveat up front</h3><p>Durations are reasoned (gap-approximated), not measured. Ranges, not point values, throughout.</p></div>
+    <div class="card card--good"><h3><span class="ico">🚀</span> Tools already in place</h3><p>Salesforce + HubSpot expose APIs → deterministic automation. No new platform needed for the top win.</p></div>
+  </div>
+
+  <!-- FOOTER with client logo (goes on EVERY page). Real report uses
+       <img class="foot-logo" src="data:…">; inline SVG stands in here. -->
+  <div class="page__footer">
+    <span class="left"><svg class="foot-logo" viewBox="0 0 220 48" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="8" width="32" height="32" rx="8" fill="#2f6f8f"/><path d="M8 32 L16 16 L24 32" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round"/><text x="44" y="33" font-family="Inter,Arial" font-size="24" font-weight="800" fill="#142033">Northwind</text></svg>
+      Northwind Inc. · Process Automation Map · COMMERCIAL IN CONFIDENCE</span>
+    <span class="conf">Based on 1 observed person · overall confidence: Medium</span>
+  </div>
+</section>
+
+<!-- ===== MULTI-USER VARIANTS (rendered only when 2+ ledgers consolidate) ===== -->
+<!-- ====================== COHORT — POPULATION & ROLES ====================== -->
+<section class="page">
+  <div class="band">
+    <span class="kicker">Cohort · Population</span>
+    <h2>Who we observed</h2>
+    <span class="sub">5 people across 3 roles, ~2 weeks each. Reported by role/department, never by name. Exec numbers aggregate; workflows split by role.</span>
+  </div>
+  <table class="tbl">
+    <thead><tr><th>Role / department</th><th>Users</th><th>Active days</th><th>Repetitive hrs/wk</th><th>Top tools</th><th>Confidence</th></tr></thead>
+    <tbody>
+      <tr><td class="name">RevOps Analyst · Revenue</td><td class="num">3</td><td class="num">12–13</td><td class="num">20–24</td><td>Salesforce, HubSpot, Sheets</td><td><span class="chip chip--hi">High</span></td></tr>
+      <tr><td class="name">AR / Collections · Finance</td><td class="num">1</td><td class="num">11</td><td class="num">18</td><td>NetSuite, Excel, Gmail</td><td><span class="chip chip--med">Med</span></td></tr>
+      <tr><td class="name">Commercial Manager · Sales</td><td class="num">1</td><td class="num">13</td><td class="num">15</td><td>Notion, Sheets, Slack</td><td><span class="chip chip--med">Med</span></td></tr>
+    </tbody>
+  </table>
+  <div class="mt callout">Sample size (n) shown per role so thin samples stay honest. A 3-person role gives tighter ranges than a 1-person role; confidence reflects that.</div>
+  <div class="page__footer"><span class="left"><svg class="foot-logo" viewBox="0 0 220 48" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="8" width="32" height="32" rx="8" fill="#2f6f8f"/><path d="M8 32 L16 16 L24 32" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round"/><text x="44" y="33" font-family="Inter,Arial" font-size="24" font-weight="800" fill="#142033">Northwind</text></svg> Northwind Inc. · Process Automation Map · COMMERCIAL IN CONFIDENCE</span><span class="conf">Based on 5 observed people across 3 roles</span></div>
+</section>
+
+<!-- ====================== COHORT — PER-ROLE ROLLUP ====================== -->
+<section class="page">
+  <div class="band">
+    <span class="kicker">Cohort · By role</span>
+    <h2>Recoverable capacity per role</h2>
+    <span class="sub">Cohort sums within each role. Hours and $ are estimated ranges; bar shows automatable share of repetitive time.</span>
+  </div>
+  <table class="tbl">
+    <thead><tr><th>Role</th><th>Users</th><th>Repetitive hrs/wk</th><th>Automatable</th><th>Automatable share</th><th>Hrs/yr saved</th><th>$/yr</th><th>Top opportunity</th></tr></thead>
+    <tbody>
+      <tr><td class="name">RevOps Analyst</td><td class="num">3</td><td class="num">~66</td><td class="num">58%</td><td><div class="bar-track" style="width:120px"><div class="bar-fill" style="width:58%"></div></div></td><td class="num">~960</td><td class="num">~$96k</td><td>Lead routing auto-pilot</td></tr>
+      <tr><td class="name">AR / Collections</td><td class="num">1</td><td class="num">~18</td><td class="num">49%</td><td><div class="bar-track" style="width:120px"><div class="bar-fill" style="width:49%"></div></div></td><td class="num">~290</td><td class="num">~$28k</td><td>Statement + chase automation</td></tr>
+      <tr><td class="name">Commercial Manager</td><td class="num">1</td><td class="num">~15</td><td class="num">44%</td><td><div class="bar-track" style="width:120px"><div class="bar-fill" style="width:44%"></div></div></td><td class="num">~210</td><td class="num">~$24k</td><td>Deal-brief drafting (AI-assist)</td></tr>
+      <tr style="font-weight:700; background:var(--accent-soft);"><td class="name">Cohort total</td><td class="num">5</td><td class="num">~112</td><td class="num">~54%</td><td class="muted">weighted</td><td class="num">~1,460</td><td class="num">~$148k</td><td>—</td></tr>
+    </tbody>
+  </table>
+  <div class="mt legend">
+    <span class="item"><span class="chip chip--est"><span class="d"></span>estimated</span> $ ranges from role + location rates</span>
+    <span class="item">Cohort totals are real for these 5 people; extrapolating to the wider team would be a separate, labelled estimate.</span>
+  </div>
+  <div class="page__footer"><span class="left"><svg class="foot-logo" viewBox="0 0 220 48" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="8" width="32" height="32" rx="8" fill="#2f6f8f"/><path d="M8 32 L16 16 L24 32" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round"/><text x="44" y="33" font-family="Inter,Arial" font-size="24" font-weight="800" fill="#142033">Northwind</text></svg> Northwind Inc. · Process Automation Map · COMMERCIAL IN CONFIDENCE</span><span class="conf">Based on 5 observed people across 3 roles</span></div>
+</section>
+
+<!-- ====================== PAGE 3 — TIME / SYSTEMS BASELINE ================ -->
+<section class="page">
+  <div class="band">
+    <span class="kicker">02 · Where the time goes</span>
+    <h2>Descriptive baseline</h2>
+    <span class="sub">% of active time per real tool (not the OS app). Share is reasoned; active days are seen.</span>
+  </div>
+
+  <div class="row" style="gap:24px; flex:1; align-items:stretch;">
+    <div style="flex:1;">
+      <h3 style="font-size:13px; margin-bottom:10px;">Time per tool <span class="basis basis--reason">reasoned</span></h3>
+      <div class="bars">
+        <div class="bar-row"><span class="lab">Salesforce</span><div class="bar-track"><div class="bar-fill" style="width:28%"></div></div><span class="val">28%</span></div>
+        <div class="bar-row"><span class="lab">HubSpot</span><div class="bar-track"><div class="bar-fill" style="width:19%"></div></div><span class="val">19%</span></div>
+        <div class="bar-row"><span class="lab">Gmail</span><div class="bar-track"><div class="bar-fill" style="width:16%"></div></div><span class="val">16%</span></div>
+        <div class="bar-row"><span class="lab">Google Sheets</span><div class="bar-track"><div class="bar-fill" style="width:13%"></div></div><span class="val">13%</span></div>
+        <div class="bar-row"><span class="lab">Notion</span><div class="bar-track"><div class="bar-fill" style="width:9%"></div></div><span class="val">9%</span></div>
+        <div class="bar-row"><span class="lab">Slack</span><div class="bar-track"><div class="bar-fill" style="width:8%"></div></div><span class="val">8%</span></div>
+        <div class="bar-row"><span class="lab">Other</span><div class="bar-track"><div class="bar-fill" style="width:7%"></div></div><span class="val">7%</span></div>
+      </div>
+      <div class="mt callout">Browser time is split into real tools (Salesforce, HubSpot, Gmail) by parsing the domain in code — never shown as one "Chrome" bucket. OS shells, Finder, and MemoryLane itself are filtered out (AI-reviewed).</div>
+    </div>
+    <div style="width:46%; display:flex; flex-direction:column; gap:12px;">
+      <div class="kpi-row" style="--n:2;">
+        <div class="kpi"><div class="kpi__num">12</div><div class="kpi__label">Active days <span class="basis basis--seen">seen</span></div><div class="kpi__sub">of 14 in window</div></div>
+        <div class="kpi"><div class="kpi__num">37h</div><div class="kpi__label">Active / week <span class="basis basis--reason">reasoned</span></div><div class="kpi__sub">the denominator</div></div>
+      </div>
+      <div class="card"><h3>Deep-work vs scattered</h3><p>38% of time sits in long single-tool blocks; 62% is rapid app-hopping. A proxy for focus vs fragmentation, not a productivity score.</p>
+        <div class="range mt-s"><div class="span" style="left:0; width:38%"></div><div class="base" style="left:38%"></div></div>
+        <div class="row" style="justify-content:space-between; font-size:10px; margin-top:4px;"><span class="muted">deep 38%</span><span class="muted">scattered 62%</span></div>
+      </div>
+      <div class="legend">
+        <span class="item"><span class="chip chip--seen"><span class="d"></span>seen</span> read straight from data</span>
+        <span class="item"><span class="chip chip--reason"><span class="d"></span>reasoned</span> inferred from signals</span>
+        <span class="item"><span class="chip chip--est"><span class="d"></span>estimated</span> role/industry assumption</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="page__footer"><span>MemoryLane · Northwind RevOps Automation Map · COMMERCIAL IN CONFIDENCE</span><span class="conf">Based on 1 observed person · confidence: High (baseline)</span></div>
+</section>
+
+<!-- ====================== PAGE 4 — WORKFLOW SCORING ====================== -->
+<section class="page">
+  <div class="band">
+    <span class="kicker">03 · Priority ranking</span>
+    <h2>Process scoring</h2>
+    <span class="sub">All processes ranked by Impact × Automatability. Effort breaks ties. Confidence is computed, not vibed.</span>
+  </div>
+  <table class="tbl">
+    <thead><tr><th>#</th><th>Process</th><th>Category</th><th>Freq</th><th>Impact (hrs/yr)</th><th>Automatability</th><th>Effort</th><th>Verdict</th><th>Confidence</th></tr></thead>
+    <tbody>
+      <tr><td class="rank">1</td><td class="name">Inbound lead routing</td><td><span class="chip chip--cat">Data Shuttle</span></td><td class="num">~40/wk</td><td class="num">338</td><td><span class="dots auto"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span></td><td>Easy</td><td><span class="chip chip--auto">Automate</span></td><td><span class="chip chip--hi">High</span></td></tr>
+      <tr><td class="rank">2</td><td class="name">Weekly pipeline report</td><td><span class="chip chip--cat">Reporting Ritual</span></td><td class="num">1/wk</td><td class="num">182</td><td><span class="dots auto"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span></td><td>Medium</td><td><span class="chip chip--assist">AI-assist</span></td><td><span class="chip chip--hi">High</span></td></tr>
+      <tr><td class="rank">3</td><td class="name">CRM data hygiene</td><td><span class="chip chip--cat">Data Entry</span></td><td class="num">daily</td><td class="num">156</td><td><span class="dots auto"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span></td><td>Medium</td><td><span class="chip chip--assist">AI-assist</span></td><td><span class="chip chip--med">Med</span></td></tr>
+      <tr><td class="rank">4</td><td class="name">Renewal prep briefs</td><td><span class="chip chip--cat">Research &amp; Synthesis</span></td><td class="num">~3/wk</td><td class="num">120</td><td><span class="dots auto"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span></td><td>Medium</td><td><span class="chip chip--assist">AI-assist</span></td><td><span class="chip chip--med">Med</span></td></tr>
+      <tr><td class="rank">5</td><td class="name">Quote approvals chase</td><td><span class="chip chip--cat">Alert Response</span></td><td class="num">~10/wk</td><td class="num">88</td><td><span class="dots auto"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span></td><td>Easy</td><td><span class="chip chip--auto">Automate</span></td><td><span class="chip chip--med">Med</span></td></tr>
+      <tr><td class="rank">6</td><td class="name">Board-deck commentary</td><td><span class="chip chip--cat">Content Generation</span></td><td class="num">monthly</td><td class="num">36</td><td><span class="dots auto"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span></td><td>Hard</td><td><span class="chip chip--redesign">Redesign</span></td><td><span class="chip chip--lo">Low</span></td></tr>
+      <tr><td class="rank">7</td><td class="name">Ad-hoc data pulls</td><td><span class="chip chip--cat">Reporting Ritual</span></td><td class="num">variable</td><td class="num">30</td><td><span class="dots auto"><i class="on"></i><i></i><i></i><i></i><i></i></span></td><td>Hard</td><td><span class="chip chip--no">Not worth it</span></td><td><span class="chip chip--lo">Low</span></td></tr>
+    </tbody>
+  </table>
+  <div class="mt legend">
+    <span class="item"><span class="chip chip--auto">Automate</span> mostly hands-off</span>
+    <span class="item"><span class="chip chip--assist">AI-assist</span> AI drafts, human checks</span>
+    <span class="item"><span class="chip chip--redesign">Redesign</span> fix the process first</span>
+    <span class="item"><span class="chip chip--no">Not worth it</span> low net ROI today</span>
+  </div>
+  <div class="page__footer"><span>MemoryLane · Northwind RevOps Automation Map · COMMERCIAL IN CONFIDENCE</span><span class="conf">Based on 1 observed person · confidence: Medium</span></div>
+</section>
+
+<!-- ====================== PAGE 5 — AUTOMATION MATRIX ====================== -->
+<section class="page">
+  <div class="band">
+    <span class="kicker">04 · The map</span>
+    <h2>Impact × Automatability</h2>
+    <span class="sub">Top-right = automate first. Bubble = process (numbered from the scoring table).</span>
+  </div>
+  <div class="matrix">
+    <div class="vline"></div><div class="hline"></div>
+    <div class="quad q-tl"><h4>Quick wins</h4><p>Low effort · high payoff</p></div>
+    <div class="quad q-tr"><h4>Big bets</h4><p>High payoff · build carefully</p></div>
+    <div class="quad q-bl"><h4>Fill-ins</h4><p>Low effort · modest payoff</p></div>
+    <div class="quad q-br"><h4>Deprioritise</h4><p>High effort · low payoff</p></div>
+    <span class="axis-x">Impact →</span><span class="axis-y">Automatability →</span>
+    <div class="bub" style="left:30%; top:18%;">1</div>
+    <div class="bub" style="left:58%; top:34%;">2</div>
+    <div class="bub" style="left:42%; top:42%;">3</div>
+    <div class="bub" style="left:40%; top:62%;">4</div>
+    <div class="bub" style="left:24%; top:30%;">5</div>
+    <div class="bub" style="left:70%; top:78%;">6</div>
+    <div class="bub" style="left:78%; top:72%;">7</div>
+  </div>
+  <div class="page__footer"><span>MemoryLane · Northwind RevOps Automation Map · COMMERCIAL IN CONFIDENCE</span><span class="conf">Based on 1 observed person · confidence: Medium</span></div>
+</section>
+
+<!-- ====================== PAGE 6 — PROCESS DETAIL ====================== -->
+<section class="page">
+  <div class="band">
+    <span class="kicker">05 · Process 1 of 3</span>
+    <h2>Inbound lead routing</h2>
+    <span class="sub">Data Shuttle · ~40 cases/wk · RevOps · the highest-ROI target.</span>
+  </div>
+  <div class="row wrap" style="gap:8px; margin-bottom:12px;">
+    <span class="chip chip--auto">Verdict: Automate</span>
+    <span class="chip chip--hi">Confidence: High</span>
+    <span class="chip chip--status"><span class="d"></span>Work nature: mechanical</span>
+    <span class="chip chip--status"><span class="d"></span>Feasibility: API</span>
+    <span class="chip chip--cat">~80% automatable</span>
+    <span class="chip chip--status"><span class="d"></span>seen in 3 of 4 RevOps analysts</span>
+  </div>
+
+  <div class="row" style="gap:18px; align-items:flex-start; flex:1;">
+    <div style="flex:1.4;">
+      <table class="steps">
+        <thead><tr><th>#</th><th>Step</th><th>Tool</th><th>Output</th><th>Time</th><th>Pain</th><th>Auto?</th></tr></thead>
+        <tbody>
+          <tr><td><span class="stepno">1</span></td><td><span class="act">Read inbound lead</span><br>email + form fields</td><td>Gmail / HubSpot</td><td>Lead details</td><td class="num">2 min</td><td class="pain">●</td><td>✓</td></tr>
+          <tr><td><span class="stepno">2</span></td><td><span class="act">Check for duplicate</span><br>search existing account</td><td>Salesforce</td><td>Dup result</td><td class="num">2 min</td><td class="pain">●</td><td>✓</td></tr>
+          <tr><td><span class="stepno">3</span></td><td><span class="act">Re-key into CRM</span><br>name, company, source, owner</td><td>Salesforce</td><td>New lead record</td><td class="num">4 min</td><td class="pain">●</td><td>✓</td></tr>
+          <tr><td><span class="stepno">4</span></td><td><span class="act">Assign territory + owner</span><br>rules from a sheet</td><td>Sheets → SF</td><td>Routed lead</td><td class="num">2 min</td><td></td><td>✓</td></tr>
+          <tr><td><span class="stepno">5</span></td><td><span class="act">Notify rep</span></td><td>Slack</td><td>Ping</td><td class="num">1 min</td><td></td><td>✓</td></tr>
+        </tbody>
+      </table>
+      <div class="mt-s callout" style="font-size:11.5px;">Common path covers ~85% of cases (estimate). Seen across 3 of 4 RevOps analysts; one follows a shorter 3-step path (skips manual dedupe), which is why the ranges below are wide. Exceptions are not modelled; building the automation needs a short hands-on pass on real cases.</div>
+    </div>
+    <div style="width:38%; display:flex; flex-direction:column; gap:10px;">
+      <div class="card" style="border-left-color:var(--seen);"><h3>How to automate</h3><p><strong>Trigger:</strong> new HubSpot form → <strong>n8n</strong> webhook. <strong>Action:</strong> dedupe + create SF lead, apply routing rules, Slack the owner. <strong>Human stays:</strong> ambiguous-company review only.</p></div>
+      <div class="card"><h3>Savings <span class="basis basis--est">estimated</span></h3>
+        <p style="margin-bottom:6px;">~11 min × ~40/wk × loaded rate.</p>
+        <div class="row" style="justify-content:space-between; font-size:12px;"><span>Hours / yr saved</span><span class="mono">270 · <strong>338</strong> · 405</span></div>
+        <div class="range mt-s"><div class="span" style="left:8%; width:62%"></div><div class="base" style="left:46%"></div></div>
+        <div class="row" style="justify-content:space-between; font-size:12px; margin-top:8px;"><span>Net $ / yr</span><span class="mono">$13k · <strong>$18k</strong> · $24k</span></div>
+        <div class="muted" style="font-size:10px; margin-top:6px;">Net of ~30h build + ~$25/mo. Payback &lt; 2 months.</div>
+      </div>
+    </div>
+  </div>
+  <div class="page__footer"><span>MemoryLane · Northwind RevOps Automation Map · COMMERCIAL IN CONFIDENCE</span><span class="conf">Process confidence: High · durations reasoned</span></div>
+</section>
+
+<!-- ====================== PAGE 7 — SYSTEMS LANDSCAPE ====================== -->
+<section class="page">
+  <div class="band">
+    <span class="kicker">06 · Systems landscape</span>
+    <h2>The tool stack</h2>
+    <span class="sub">Tools grouped by function, with how they show up in the work. Time share from the baseline.</span>
+  </div>
+  <div class="sys-grid" style="flex:1;">
+    <div class="sys-row">
+      <div class="sys-group">CRM / Source</div>
+      <div class="sys-cells" style="--cols:3;">
+        <div class="sys-cell"><div class="sys-cell__top"><span class="sys-cell__name">Salesforce</span><span class="chip chip--status">28% · core</span></div><div class="sys-cell__body">System of record. Manual lead entry + hygiene. API available.</div></div>
+        <div class="sys-cell"><div class="sys-cell__top"><span class="sys-cell__name">HubSpot</span><span class="chip chip--status">19% · core</span></div><div class="sys-cell__body">Inbound capture. Feeds SF by hand today.</div></div>
+        <div class="sys-cell"><div class="sys-cell__top"><span class="sys-cell__name">Slack</span><span class="chip chip--status">8% · comms</span></div><div class="sys-cell__body">Rep notifications, chase pings.</div></div>
+      </div>
+    </div>
+    <div class="sys-row">
+      <div class="sys-group">Docs / Reporting</div>
+      <div class="sys-cells" style="--cols:3;">
+        <div class="sys-cell"><div class="sys-cell__top"><span class="sys-cell__name">Google Sheets</span><span class="chip chip--status">13% · manual</span></div><div class="sys-cell__body">Routing rules + report assembly. Glue layer.</div></div>
+        <div class="sys-cell"><div class="sys-cell__top"><span class="sys-cell__name">Notion</span><span class="chip chip--status">9% · docs</span></div><div class="sys-cell__body">Renewal briefs, playbooks.</div></div>
+        <div class="sys-cell"><div class="sys-cell__top"><span class="sys-cell__name">Gmail</span><span class="chip chip--status">16% · comms</span></div><div class="sys-cell__body">Inbound leads, approvals chase.</div></div>
+      </div>
+    </div>
+    <div class="sys-row">
+      <div class="sys-group">Proposed</div>
+      <div class="sys-cells" style="--cols:3;">
+        <div class="sys-cell"><div class="sys-cell__top"><span class="sys-cell__name">n8n</span><span class="chip chip--cat">add · automate</span></div><div class="sys-cell__body">Deterministic glue for routing + chase.</div></div>
+        <div class="sys-cell"><div class="sys-cell__top"><span class="sys-cell__name">Claude Cowork</span><span class="chip chip--cat">add · assist</span></div><div class="sys-cell__body">Drafts reports + briefs, human approves.</div></div>
+        <div class="sys-cell" style="opacity:0.5;"><div class="sys-cell__top"><span class="sys-cell__name">—</span><span class="chip chip--status">n/a</span></div><div class="sys-cell__body">No specialist tool needed for the top wins.</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="page__footer"><span>MemoryLane · Northwind RevOps Automation Map · COMMERCIAL IN CONFIDENCE</span><span class="conf">Time share reasoned · stack seen</span></div>
+</section>
+
+<!-- ====================== PAGE 8 — OPPORTUNITIES / QUICK WINS ============= -->
+<section class="page">
+  <div class="band">
+    <span class="kicker">07 · Where to start</span>
+    <h2>Top opportunities</h2>
+    <span class="sub">Ranked by net ROI. Each names a concrete mechanism, an effort estimate and the human remainder.</span>
+  </div>
+  <div class="card-grid cols-2" style="flex:1;">
+    <div class="opp"><div class="opp__head"><span class="opp__n">1</span><span class="opp__title">Lead routing auto-pilot</span><span class="opp__eta">~3 wks</span></div>
+      <div class="opp__body"><p class="now"><strong>Now:</strong> ~40 leads/wk re-keyed by hand HubSpot → Salesforce, ~11 min each.</p><p class="fut"><strong>After:</strong> n8n dedupes, creates, routes and notifies; only ambiguous companies reach a human.</p><div class="opp__tool">n8n · HubSpot webhook · Salesforce API · Slack</div></div></div>
+    <div class="opp"><div class="opp__head assist"><span class="opp__n">2</span><span class="opp__title">Pipeline report drafting</span><span class="opp__eta">~2 wks</span></div>
+      <div class="opp__body"><p class="now"><strong>Now:</strong> weekly pack rebuilt from SF + Sheets + Gmail, ~3.5h.</p><p class="fut"><strong>After:</strong> Cowork agent assembles the draft from the three sources; analyst edits the narrative.</p><div class="opp__tool">Claude Cowork · Salesforce + Sheets connectors</div></div></div>
+    <div class="opp"><div class="opp__head"><span class="opp__n">3</span><span class="opp__title">Quote-approval chaser</span><span class="opp__eta">~1 wk</span></div>
+      <div class="opp__body"><p class="now"><strong>Now:</strong> ~10/wk manual follow-ups on stalled approvals.</p><p class="fut"><strong>After:</strong> rule-based reminders by ageing bucket; escalation only.</p><div class="opp__tool">n8n · Salesforce · Slack</div></div></div>
+    <div class="opp"><div class="opp__head assist"><span class="opp__n">4</span><span class="opp__title">Renewal brief assistant</span><span class="opp__eta">~3 wks</span></div>
+      <div class="opp__body"><p class="now"><strong>Now:</strong> ~3/wk briefs compiled across CRM + Notion + email.</p><p class="fut"><strong>After:</strong> Cowork drafts the brief; owner adds the judgment and the ask.</p><div class="opp__tool">Claude Cowork · CRM + Notion connectors</div></div></div>
+  </div>
+  <div class="page__footer"><span>MemoryLane · Northwind RevOps Automation Map · COMMERCIAL IN CONFIDENCE</span><span class="conf">Net ROI ranked · costs estimated</span></div>
+</section>
+
+<!-- ====================== PAGE 9 — APPENDIX: METHOD + LOG ================ -->
+<section class="page">
+  <div class="band">
+    <span class="kicker">08 · Appendix</span>
+    <h2>Method, assumptions &amp; what would sharpen it</h2>
+    <span class="sub">The page your CFO pokes at. Nothing here is decorative.</span>
+  </div>
+  <div class="row" style="gap:20px; align-items:flex-start; flex:1;">
+    <div style="flex:1;">
+      <h3 style="font-size:13px; margin-bottom:8px;">Reasoning log <span class="muted" style="font-weight:400;">(7 candidates · 7 processes · 0 dropped)</span></h3>
+      <div class="logrow" style="font-weight:600; color:var(--ink); border-bottom:2px solid var(--ink);"><span>Candidate</span><span>Verdict</span><span>Why</span></div>
+      <div class="logrow"><span class="cand">Lead routing</span><span><span class="chip chip--auto">process</span></span><span>~40 cases/wk, stable 5-step shape, operational.</span></div>
+      <div class="logrow"><span class="cand">Pipeline report</span><span><span class="chip chip--auto">process</span></span><span>Weekly cadence, fixed source set, repeatable.</span></div>
+      <div class="logrow"><span class="cand">Slack triage</span><span><span class="chip chip--no">not a process</span></span><span>Interruptions, no stable cross-app workflow.</span></div>
+      <div class="logrow"><span class="cand">Deck design</span><span><span class="chip chip--no">not a process</span></span><span>Creative/judgment; logged, excluded from automate.</span></div>
+
+      <h3 style="font-size:13px; margin:14px 0 8px;">Assumptions</h3>
+      <div class="assume"><span class="plain">Saw lead routing ~80× in 14 days; assume ~40/wk steady; so ~2,080/yr.</span></div>
+      <div class="assume"><span class="plain">Loaded rate $62/h (est. from RevOps Analyst, Sydney + ×1.3 overhead). No salary supplied.</span></div>
+      <div class="assume"><span class="plain">Automatable fraction 0.8 for routing = sum of step times tagged automatable.</span></div>
+    </div>
+    <div style="width:42%; display:flex; flex-direction:column; gap:12px;">
+      <div class="card"><h3>What would sharpen this</h3>
+        <ul style="font-size:11.5px; color:var(--ink-2); margin:0;">
+          <li>Give a real loaded salary → tightens every $ figure.</li>
+          <li>30–45 day window → confirms monthly processes (board deck).</li>
+          <li>Enable OCR on Salesforce → recover case IDs, lift confidence.</li>
+          <li>Hand-label 1 day → converts durations from reasoned to seen.</li>
+        </ul>
+      </div>
+      <div class="card card--warn"><h3>How to read the numbers</h3>
+        <p><strong>seen</strong> = read straight from data. <strong>reasoned</strong> = inferred from clear signals (durations are gap-approximated). <strong>estimated</strong> = role/industry assumption. Deterministic numbers reproduce exactly on a re-run; judgment calls (clustering, common path, automatability) may vary slightly.</p>
+      </div>
+      <div class="callout" style="font-size:12px;"><strong>Scope:</strong> one observed person (n=1), 14 days. Team totals would need headcount and are not shown.</div>
+    </div>
+  </div>
+  <div class="page__footer"><span>MemoryLane · Northwind RevOps Automation Map · COMMERCIAL IN CONFIDENCE</span><span class="conf">Reproducible · zero invented figures</span></div>
+</section>
+
+<!-- ====================== PAGE 10 — STORYTELLING CLOSE ================ -->
+<section class="page">
+  <div class="band">
+    <span class="kicker">09 · In one breath</span>
+    <h2>The takeaway</h2>
+  </div>
+  <div class="row" style="flex:1; gap:30px; align-items:center;">
+    <div style="flex:1.2; max-width:54ch;">
+      <p class="story lead">This role spends about 22 hours a week on repeat work, and roughly six of those are pure re-keying of inbound leads.</p>
+      <p class="story mt">That one job is clean enough to hand to an automation today, with the tools already in place, paying for itself inside two months. Two more, the weekly report and renewal briefs, are strong AI-assist wins where the software drafts and the person decides. Do those three and you give this person back close to half a day every week, worth about $48k a year, without losing the parts of the job that need judgment.</p>
+      <p class="story mt muted" style="font-size:13px;">Directional, grounded in 14 days of one person's real activity, labelled where we reasoned or estimated rather than measured.</p>
+    </div>
+    <div class="statlist" style="width:40%;">
+      <div class="statline"><span class="big">7</span><span class="txt">repeated processes found</span></div>
+      <div class="statline"><span class="big">3</span><span class="txt">worth automating now</span></div>
+      <div class="statline"><span class="big">~22h</span><span class="txt">repetitive work / week</span></div>
+      <div class="statline"><span class="big">~$48k</span><span class="txt">annual capacity recoverable</span></div>
+      <div class="statline muted"><span class="big">14 days</span><span class="txt">observed · 1 person</span></div>
+    </div>
+  </div>
+  <div class="page__footer"><span>MemoryLane · Northwind RevOps Automation Map · COMMERCIAL IN CONFIDENCE</span><span class="conf">Based on 1 observed person · overall confidence: Medium</span></div>
+</section>
+
+<!-- ============================================================================
+     OPTIONAL SALES-DECK ARCHETYPES (shipped patterns)
+     Use these when the deck is a client-facing proposal. Bind real values from
+     the ledger; options + open items are CLIENT-SUPPLIED, never invented.
+     ============================================================================ -->
+
+<!-- ===== SECTION DIVIDER (numbered dark interstitial between report sections) ===== -->
+<section class="page divider">
+  <div class="divider__inner">
+    <div class="snum">01</div>
+    <h1>Automation Opportunities</h1>
+  </div>
+  <div class="conf">COMMERCIAL IN CONFIDENCE</div>
+</section>
+
+<!-- ===== PER-FUNCTION "AUTOMATION OPPORTUNITIES" TABLE (exec, sales variant) =====
+     Measured rows sum to the company total; the illustrative row is a labelled
+     extrapolation. Column header "New capacity unlocked" is the house phrase. -->
+<section class="page">
+  <div class="band">
+    <span class="kicker">Automation Opportunities</span>
+    <h2>Where the hours and dollars are</h2>
+    <span class="sub">Per function. Measured rows sum to the company total; the illustrative row is a labelled extrapolation.</span>
+  </div>
+  <table class="tbl">
+    <thead><tr><th>Function</th><th>Processes</th><th>Automatable</th><th>New capacity unlocked</th><th>Annual savings</th></tr></thead>
+    <tbody>
+      <tr><td class="name">RevOps</td><td class="num">4</td><td class="num">58%</td><td class="num">5h/week (14%)</td><td class="num">$96k</td></tr>
+      <tr><td class="name">AR / Collections</td><td class="num">2</td><td class="num">49%</td><td class="num">4h/week (11%)</td><td class="num">$28k</td></tr>
+      <tr><td class="name">Commercial</td><td class="num">2</td><td class="num">44%</td><td class="num">3h/week (8%)</td><td class="num">$24k</td></tr>
+      <tr style="font-weight:700; background:var(--accent-soft);"><td class="name">Measured (5 users)</td><td class="num">8</td><td class="num">–</td><td class="num">~4h/week (11%)</td><td class="num">$148k</td></tr>
+      <tr style="font-weight:700; background:var(--accent-soft);"><td class="name">Company-wide (illustrative)</td><td class="num">–</td><td class="num">–</td><td class="num">~2 FTE (11%)</td><td class="num">~$300k+</td></tr>
+    </tbody>
+  </table>
+  <div class="mt callout">Figures are directional and extrapolated from the available data. The company-wide illustrative row is a lower-range estimate across the wider team, net of licence and rollout costs.</div>
+  <div class="page__footer"><span>MemoryLane · Northwind Automation Map · COMMERCIAL IN CONFIDENCE</span><span class="conf">Based on 5 observed people across 3 roles</span></div>
+</section>
+
+<!-- ===== TIME BY APPLICATION (appendix, per-function logo bars, 80% rule) =====
+     Real reports inline each app's brand logo as a data URI in .tba-ico; the
+     inline SVG squares below are placeholders. Bar width is relative to the
+     function's top app. The dimmed "Other" row bundles the long tail. -->
+<section class="page">
+  <div class="band">
+    <span class="kicker">Appendix · time by application</span>
+    <h2>Where most of the time goes, by function</h2>
+    <span class="sub">Top apps making up roughly 80% of captured time per function. The rest grouped as Other.</span>
+  </div>
+
+  <div class="tba-fn">
+    <div class="tba-fn-h"><span class="tba-fn-name">RevOps</span><span class="tba-fn-meta">14.6h measured · 38% focused work</span></div>
+    <div class="tba-bars">
+      <div class="tba-bar"><span class="tba-nm"><svg class="tba-ico" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20" rx="4" fill="#2f6f8f"/></svg><span>Salesforce</span></span><span class="tba-track"><span class="tba-fill" style="width:100%"></span></span><span class="tba-val"><b>4.1h</b> · 28%</span></div>
+      <div class="tba-bar"><span class="tba-nm"><svg class="tba-ico" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20" rx="4" fill="#e0571c"/></svg><span>HubSpot</span></span><span class="tba-track"><span class="tba-fill" style="width:68%"></span></span><span class="tba-val"><b>2.8h</b> · 19%</span></div>
+      <div class="tba-bar"><span class="tba-nm"><svg class="tba-ico" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20" rx="4" fill="#c0392b"/></svg><span>Gmail</span></span><span class="tba-track"><span class="tba-fill" style="width:57%"></span></span><span class="tba-val"><b>2.3h</b> · 16%</span></div>
+      <div class="tba-bar"><span class="tba-nm"><svg class="tba-ico" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20" rx="4" fill="#1f9e8f"/></svg><span>Google Sheets</span></span><span class="tba-track"><span class="tba-fill" style="width:46%"></span></span><span class="tba-val"><b>1.9h</b> · 13%</span></div>
+      <div class="tba-bar tba-other"><span class="tba-nm"><svg class="tba-ico" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20" rx="4" fill="#9aa3ad"/></svg><span>Other</span></span><span class="tba-track"><span class="tba-fill" style="width:86%"></span></span><span class="tba-val"><b>3.5h</b> · 24%</span></div>
+    </div>
+  </div>
+
+  <div class="tba-fn">
+    <div class="tba-fn-h"><span class="tba-fn-name">Commercial</span><span class="tba-fn-meta">12.1h measured · 11% focused work</span></div>
+    <div class="tba-bars">
+      <div class="tba-bar"><span class="tba-nm"><svg class="tba-ico" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20" rx="4" fill="#15171c"/></svg><span>Notion</span></span><span class="tba-track"><span class="tba-fill" style="width:100%"></span></span><span class="tba-val"><b>3.4h</b> · 28%</span></div>
+      <div class="tba-bar"><span class="tba-nm"><svg class="tba-ico" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20" rx="4" fill="#7a5ea8"/></svg><span>Slack</span></span><span class="tba-track"><span class="tba-fill" style="width:64%"></span></span><span class="tba-val"><b>2.2h</b> · 18%</span></div>
+      <div class="tba-bar"><span class="tba-nm"><svg class="tba-ico" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20" rx="4" fill="#c0392b"/></svg><span>Gmail</span></span><span class="tba-track"><span class="tba-fill" style="width:54%"></span></span><span class="tba-val"><b>1.8h</b> · 15%</span></div>
+      <div class="tba-bar"><span class="tba-nm"><svg class="tba-ico" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20" rx="4" fill="#1f9e8f"/></svg><span>Google Sheets</span></span><span class="tba-track"><span class="tba-fill" style="width:43%"></span></span><span class="tba-val"><b>1.5h</b> · 12%</span></div>
+      <div class="tba-bar"><span class="tba-nm"><svg class="tba-ico" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20" rx="4" fill="#b8862e"/></svg><span>Looker</span></span><span class="tba-track"><span class="tba-fill" style="width:32%"></span></span><span class="tba-val"><b>1.1h</b> · 9%</span></div>
+      <div class="tba-bar tba-other"><span class="tba-nm"><svg class="tba-ico" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20" rx="4" fill="#9aa3ad"/></svg><span>Other</span></span><span class="tba-track"><span class="tba-fill" style="width:64%"></span></span><span class="tba-val"><b>2.2h</b> · 18%</span></div>
+    </div>
+  </div>
+
+  <p class="mt callout">Top apps making up roughly 80% of captured time per role, the rest grouped as Other. Icons are real app logos, embedded as data URIs (placeholders shown here).</p>
+  <div class="page__footer"><span>MemoryLane · Northwind Automation Map · COMMERCIAL IN CONFIDENCE</span><span class="conf">Time share reasoned · top apps to ~80%</span></div>
+</section>
+
+<!-- ===== ENGAGEMENT OPTIONS / NEXT STEPS (sales-deck close) =====
+     A/B/C option cards + amber "to confirm" box. All copy is CLIENT-SUPPLIED. -->
+<section class="page">
+  <div class="band">
+    <span class="kicker">Next Steps</span>
+    <h2>Roll out now, map the rest in parallel</h2>
+    <span class="sub">Pick an engagement model. Open items to confirm before we start.</span>
+  </div>
+  <div style="font-weight:700; font-size:13px; margin:4px 0 10px; color:var(--ink);">Options for moving forward</div>
+  <div class="opt-stack">
+    <div class="opt">
+      <div class="opt__h"><span class="opt__badge">A</span><span class="opt__name">MemoryLane</span></div>
+      <p>MemoryLane owns rollout and process mapping end to end.</p>
+      <ul>
+        <li>Embedded as your internal automation team.</li>
+        <li>Pick the right plan, setup and deployment with sign-off.</li>
+        <li>Train people, build automations as the mapping surfaces them.</li>
+        <li>Priced as a bundled monthly fee.</li>
+      </ul>
+    </div>
+    <div class="opt">
+      <div class="opt__h"><span class="opt__badge">B</span><span class="opt__name">Hybrid</span></div>
+      <ul>
+        <li>You run the rollout in-house.</li>
+        <li>MemoryLane runs the process mapping, quoted separately.</li>
+      </ul>
+    </div>
+    <div class="opt">
+      <div class="opt__h"><span class="opt__badge">C</span><span class="opt__name">External</span></div>
+      <ul>
+        <li>An external partner runs the rollout.</li>
+        <li>MemoryLane runs the process mapping, quoted separately.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="confirm">
+    <div class="confirm__h">To confirm before we start</div>
+    <div class="confirm__row"><span class="confirm__k">Deployment</span><span class="confirm__v">Agree the exact deployment setup for the wider mapping exercise.</span></div>
+    <div class="confirm__row"><span class="confirm__k">Regulatory review</span><span class="confirm__v">Confirm exact compliance requirements for the industry.</span></div>
+  </div>
+  <div class="page__footer"><span>MemoryLane · Northwind Automation Map · COMMERCIAL IN CONFIDENCE</span><span class="conf">Options + open items are client-supplied</span></div>
+</section>
+
+</body>
+</html>

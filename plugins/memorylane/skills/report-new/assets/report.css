@@ -1,0 +1,488 @@
+/* =====================================================================
+   MemoryLane Process Report — Design System
+   One stylesheet, inlined into the report HTML so the browser preview
+   and the printed PDF render from the EXACT same rules (fidelity).
+
+   Page model: each .page is one A4-landscape sheet. Fixed size = clean,
+   deterministic page breaks. Nothing reflows across a break because every
+   page is composed to fit. The print block maps 1 .page -> 1 PDF page.
+
+   To switch to portrait: set --page-w/--page-h and @page size (see PRINT).
+   ===================================================================== */
+
+/* ---------- Fonts (self-contained: system stack, no network) ---------- */
+/* Inter if installed, else a clean system sans. Mono for figures/labels. */
+:root {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-mono: "Geist Mono", "SF Mono", ui-monospace, "JetBrains Mono", Menlo,
+    Consolas, monospace;
+  --font-serif: "Playfair Display", "Iowan Old Style", Georgia, serif;
+
+  /* ---- Brand palette (from MemoryLane landing tokens) ---- */
+  --accent: #e0571c;        /* warm amber/orange, brand primary */
+  --accent-2: #f5a623;      /* secondary amber for gradients/charts */
+  --accent-soft: #fbeee6;   /* tinted accent background */
+  --ink: #15171c;           /* near-black warm, primary text */
+  --ink-2: #4a4f59;         /* secondary text */
+  --ink-3: #80868f;         /* muted text */
+  --panel: #161c2c;         /* deep ink-navy for cover + section bands */
+  --panel-2: #20283c;       /* lighter panel layer */
+  --line: #e6e8ec;          /* hairlines / borders */
+  --line-2: #d6d9df;        /* stronger border */
+  --bg: #ffffff;            /* page background */
+  --bg-soft: #f7f8fa;       /* zebra / muted fills */
+
+  /* ---- Data viz palette (restrained, amber-anchored) ---- */
+  --c1: #e0571c;
+  --c2: #2f6f8f;
+  --c3: #1f9e8f;
+  --c4: #b8862e;
+  --c5: #7a5ea8;
+  --c6: #9aa3ad;
+
+  /* ---- Basis (honesty) colours: seen / reasoned / estimated ---- */
+  --seen: #0f7a4f;     --seen-bg: #e8f5ee;
+  --reason: #2563c9;   --reason-bg: #e9f0fc;
+  --est: #b4651a;      --est-bg: #fbf0e3;
+
+  /* ---- Confidence ---- */
+  --hi: #0f7a4f;  --med: #b4651a;  --lo: #c0392b;
+
+  /* ---- Verdict ---- */
+  --v-auto: #0f7a4f;     /* Automate */
+  --v-assist: #2563c9;   /* AI-assist */
+  --v-redesign: #b4651a; /* Redesign */
+  --v-no: #80868f;       /* Not worth it */
+
+  /* ---- Page geometry (A4 landscape) ---- */
+  --page-w: 297mm;
+  --page-h: 210mm;
+  --pad: 13mm;
+  --radius: 10px;
+  --radius-sm: 7px;
+}
+
+/* ---------- Reset / base ---------- */
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #5b6170;            /* workspace canvas behind the pages */
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+h1, h2, h3, h4 { margin: 0; font-weight: 700; letter-spacing: -0.01em; color: var(--ink); }
+p { margin: 0 0 0.6em; }
+strong { font-weight: 650; }
+ul { margin: 0; padding-left: 1.1em; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* ---------- Page model ---------- */
+.page {
+  position: relative;
+  width: var(--page-w);
+  height: var(--page-h);
+  margin: 10mm auto;
+  padding: var(--pad);
+  background: var(--bg);
+  overflow: hidden;                /* guard: content must be composed to fit */
+  box-shadow: 0 6px 30px rgba(0,0,0,0.28);
+  display: flex;
+  flex-direction: column;
+}
+/* A page whose body should scroll content as flowing rows can opt out of the
+   fixed height by adding .page--flow (used only when a printed body genuinely
+   needs natural pagination; prefer composing fixed pages). */
+.page--flow { height: auto; min-height: var(--page-h); }
+
+/* Running footer strip on every page */
+.page__footer {
+  position: absolute;
+  left: var(--pad); right: var(--pad); bottom: 6mm;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 9.5px; color: var(--ink-3);
+  letter-spacing: 0.02em;
+  border-top: 1px solid var(--line);
+  padding-top: 4px;
+}
+.page__footer .conf { color: var(--ink-2); }
+.page__footer .left { display: flex; align-items: center; gap: 8px; }
+.foot-logo { height: 14px; max-width: 86px; object-fit: contain; vertical-align: middle; opacity: 0.9; } /* client logo, every page */
+.page__num::after { content: counter(page); } /* optional manual numbering */
+
+/* ---------- Section header band (top of content pages) ---------- */
+.band {
+  display: flex; align-items: baseline; gap: 12px;
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 10px; margin-bottom: 16px;
+}
+.band h2 { font-size: 26px; line-height: 1.1; }
+.band .kicker {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent);
+}
+.band .sub { margin-left: auto; font-size: 12.5px; color: var(--ink-2); max-width: 46%; text-align: right; }
+
+/* ---------- Cover ---------- */
+.cover {
+  padding: 0; background: var(--panel); color: #fff; overflow: hidden;
+}
+.cover__grid { display: grid; grid-template-columns: 1.05fr 1fr; height: 100%; }
+.cover__left {
+  padding: var(--pad);
+  background:
+    radial-gradient(120% 100% at 0% 0%, rgba(224,87,28,0.30), transparent 55%),
+    var(--panel);
+  display: flex; flex-direction: column;
+}
+.cover__brand { display: flex; align-items: center; gap: 9px; font-weight: 700; letter-spacing: 0.01em; }
+.cover__brand .dot { width: 13px; height: 13px; border-radius: 4px; background: var(--accent); }
+/* Client logo + name lockup ("Prepared for ___"). Logo embedded as a data URI. */
+.cover__client { display: flex; align-items: center; gap: 11px; margin-top: 18px; }
+/* White plate so ANY logo (incl. dark-on-transparent) reads on the dark cover.
+   Add .plain to drop the plate when the logo is already light/has its own bg. */
+.cover__client img, .cover__client svg { max-height: 44px; max-width: 210px; object-fit: contain;
+  background: #fff; padding: 6px 9px; border-radius: 7px; }
+.cover__client .plain { background: none; padding: 0; }
+.cover__client .pre { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.12em; color: #9aa1b0; }
+.cover__client .name { font-weight: 700; font-size: 15px; color: #fff; }
+.cover__title { margin-top: auto; font-size: 46px; line-height: 1.04; font-weight: 800; letter-spacing: -0.02em; color: #fff; }
+.cover__title .accent { color: var(--accent-2); }
+.cover__lede { margin-top: 14px; font-size: 15px; color: #c7ccd6; max-width: 38ch; }
+.cover__meta { margin-top: 24px; font-size: 12.5px; color: #9aa1b0; line-height: 1.8; }
+.cover__conf { color: var(--accent-2); font-weight: 600; }
+.cover__right { padding: var(--pad); background: var(--panel-2); display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+.cover__kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.cover .kpi { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); }
+.cover .kpi__num, .cover .kpi__label { color: #fff; }
+.cover .kpi__num .accent { color: var(--accent-2); }
+.cover__note { font-size: 11px; color: #8e96a6; border-top: 1px solid rgba(255,255,255,0.10); padding-top: 10px; }
+
+/* ---------- KPI tiles ---------- */
+.kpi-row { display: grid; grid-template-columns: repeat(var(--n, 4), 1fr); gap: 12px; }
+.kpi {
+  background: var(--bg-soft); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 16px 16px 14px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.kpi__num { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.kpi__num .accent { color: var(--accent); }
+.kpi__label { font-size: 12px; color: var(--ink-2); font-weight: 600; }
+.kpi__sub { font-size: 10.5px; color: var(--ink-3); font-family: var(--font-mono); }
+
+/* ---------- Cards ---------- */
+.card-grid { display: grid; gap: 12px; }
+.card-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+.card-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.card-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+.card {
+  background: var(--bg); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 14px 15px;
+  border-left: 4px solid var(--accent);
+}
+.card h3 { font-size: 14.5px; display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.card h3 .ico { font-size: 15px; }
+.card p { font-size: 12.5px; color: var(--ink-2); margin: 0; }
+.card--accent2 { border-left-color: var(--c2); }
+.card--good { border-left-color: var(--seen); }
+.card--warn { border-left-color: var(--est); }
+.card--risk { border-left-color: var(--lo); }
+
+/* Column lists (Good / Challenges / Risks etc.) */
+.col-head {
+  color: #fff; font-weight: 700; font-size: 13px; padding: 9px 12px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0; letter-spacing: 0.02em;
+}
+.col-head.good { background: var(--seen); }
+.col-head.warn { background: var(--est); }
+.col-head.risk { background: var(--lo); }
+.col-body { display: flex; flex-direction: column; gap: 8px; padding: 10px 0 0; }
+.col-item { background: var(--bg-soft); border: 1px solid var(--line); border-left: 3px solid var(--line-2); border-radius: var(--radius-sm); padding: 8px 11px; font-size: 12px; color: var(--ink-2); }
+
+/* ---------- Chips (modern pills) ---------- */
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10.5px; font-weight: 600; line-height: 1;
+  padding: 4px 9px 4px 8px; border-radius: 999px;
+  border: 1px solid transparent; white-space: nowrap; letter-spacing: 0.01em;
+}
+.chip .d { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.9; }
+/* basis */
+.chip--seen   { color: var(--seen);   background: var(--seen-bg);   border-color: color-mix(in srgb, var(--seen) 22%, transparent); }
+.chip--reason { color: var(--reason); background: var(--reason-bg); border-color: color-mix(in srgb, var(--reason) 22%, transparent); }
+.chip--est    { color: var(--est);    background: var(--est-bg);    border-color: color-mix(in srgb, var(--est) 22%, transparent); }
+/* confidence (solid, stronger) */
+.chip--hi  { color: #fff; background: var(--hi); }
+.chip--med { color: #fff; background: var(--med); }
+.chip--lo  { color: #fff; background: var(--lo); }
+/* verdict */
+.chip--auto     { color: #fff; background: var(--v-auto); }
+.chip--assist   { color: #fff; background: var(--v-assist); }
+.chip--redesign { color: #fff; background: var(--v-redesign); }
+.chip--no       { color: #fff; background: var(--v-no); }
+/* neutral status / category */
+.chip--status { color: var(--ink-2); background: var(--bg-soft); border-color: var(--line-2); }
+.chip--cat    { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 22%, transparent); }
+.chip--ghost  { color: #fff; background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.22); }
+
+/* Inline micro basis label that sits beside a number */
+.basis { font-family: var(--font-mono); font-size: 9.5px; font-weight: 600; text-transform: lowercase; letter-spacing: 0.02em; }
+.basis--seen { color: var(--seen); }
+.basis--reason { color: var(--reason); }
+.basis--est { color: var(--est); }
+
+/* Legend row */
+.legend { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; font-size: 11px; color: var(--ink-2); }
+.legend .item { display: inline-flex; align-items: center; gap: 6px; }
+.legend .sw { width: 10px; height: 10px; border-radius: 3px; }
+
+/* ---------- Tables ---------- */
+.tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+.tbl thead th {
+  background: var(--panel); color: #fff; text-align: left; font-weight: 600;
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 9px 10px; white-space: nowrap;
+}
+.tbl tbody td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; color: var(--ink-2); }
+.tbl tbody tr:nth-child(even) td { background: var(--bg-soft); }
+.tbl tbody td.name { color: var(--ink); font-weight: 600; }
+.tbl td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+.tbl .rank { font-family: var(--font-mono); font-weight: 700; color: var(--accent); }
+
+/* Dot rating (1..5 filled circles) */
+.dots { display: inline-flex; gap: 3px; }
+.dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--line-2); display: inline-block; }
+.dots i.on { background: var(--accent); }
+.dots.auto i.on { background: var(--seen); }
+
+/* Step table (per-process detail) */
+.steps { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.steps thead th { background: var(--panel); color: #fff; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; padding: 8px 9px; text-align: left; }
+.steps tbody td { padding: 8px 9px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--ink-2); }
+.steps .stepno { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; font-size: 11px; display: flex; align-items: center; justify-content: center; }
+.steps .act { color: var(--ink); font-weight: 600; }
+.steps .pain { color: var(--lo); }
+
+/* ---------- 2x2 Automation matrix ---------- */
+.matrix { position: relative; flex: 1; border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--bg-soft); overflow: hidden; }
+.matrix .quad { position: absolute; width: 50%; height: 50%; padding: 12px 14px; }
+.matrix .quad h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.matrix .quad p { font-size: 10.5px; color: var(--ink-3); margin-top: 3px; }
+.matrix .q-tl { top: 0; left: 0; }
+.matrix .q-tr { top: 0; left: 50%; }
+.matrix .q-bl { top: 50%; left: 0; }
+.matrix .q-br { top: 50%; left: 50%; }
+.matrix .q-tl h4 { color: var(--seen); }
+.matrix .q-tr h4 { color: var(--est); }
+.matrix .q-bl h4 { color: var(--c2); }
+.matrix .q-br h4 { color: var(--lo); }
+.matrix .axis-x, .matrix .axis-y { position: absolute; font-size: 10px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.matrix .axis-x { bottom: 4px; left: 50%; transform: translateX(-50%); }
+.matrix .axis-y { top: 50%; left: 4px; transform: translateY(-50%) rotate(-90deg); transform-origin: left; }
+.matrix .vline { position: absolute; left: 50%; top: 0; bottom: 0; border-left: 1px dashed var(--line-2); }
+.matrix .hline { position: absolute; top: 50%; left: 0; right: 0; border-top: 1px dashed var(--line-2); }
+.matrix .bub {
+  position: absolute; width: 30px; height: 30px; border-radius: 50%;
+  background: var(--accent); color: #fff; font-weight: 700; font-size: 12px;
+  display: flex; align-items: center; justify-content: center;
+  transform: translate(-50%, -50%); box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+  border: 2px solid #fff;
+}
+.bub-label { position: absolute; transform: translate(-50%, -50%); font-size: 10px; color: var(--ink-2); white-space: nowrap; }
+
+/* ---------- Bars (% time per app, savings ranges) ---------- */
+.bars { display: flex; flex-direction: column; gap: 7px; }
+.bar-row { display: grid; grid-template-columns: 140px 1fr 56px; gap: 10px; align-items: center; font-size: 12px; }
+.bar-row .lab { color: var(--ink); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-track { height: 14px; background: var(--bg-soft); border-radius: 7px; overflow: hidden; border: 1px solid var(--line); }
+.bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 7px; }
+.bar-row .val { font-family: var(--font-mono); text-align: right; color: var(--ink-2); }
+/* range bar (low|base|high) */
+.range { position: relative; height: 16px; background: var(--bg-soft); border: 1px solid var(--line); border-radius: 8px; }
+.range .span { position: absolute; height: 100%; background: color-mix(in srgb, var(--accent) 26%, transparent); border-radius: 8px; }
+.range .base { position: absolute; top: -2px; width: 3px; height: calc(100% + 4px); background: var(--accent); border-radius: 2px; }
+
+/* ---------- Systems landscape grid ---------- */
+.sys-grid { display: grid; grid-template-columns: 120px 1fr; gap: 8px; align-items: start; }
+.sys-row { display: contents; }
+.sys-group { font-weight: 700; font-size: 11px; color: #fff; background: var(--panel); border-radius: var(--radius-sm); padding: 10px; text-transform: uppercase; letter-spacing: 0.04em; height: 100%; display: flex; align-items: center; }
+.sys-cells { display: grid; grid-template-columns: repeat(var(--cols, 4), 1fr); gap: 8px; }
+.sys-cell { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg); overflow: hidden; }
+.sys-cell__top { display: flex; justify-content: space-between; align-items: center; padding: 7px 9px; background: var(--bg-soft); border-bottom: 1px solid var(--line); }
+.sys-cell__name { font-weight: 700; font-size: 11.5px; }
+.sys-cell__body { padding: 7px 9px; font-size: 10.5px; color: var(--ink-3); line-height: 1.4; }
+
+/* ---------- Opportunity cards (quick wins) ---------- */
+.opp { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.opp__head { display: flex; align-items: center; gap: 10px; background: var(--seen); color: #fff; padding: 9px 12px; }
+.opp__head.assist { background: var(--v-assist); }
+.opp__head.redesign { background: var(--v-redesign); }
+.opp__n { width: 22px; height: 22px; border-radius: 50%; background: rgba(255,255,255,0.25); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; }
+.opp__title { font-weight: 700; font-size: 13.5px; }
+.opp__eta { margin-left: auto; background: #fff; color: var(--ink); font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px; }
+.opp__body { padding: 10px 12px; font-size: 11.5px; color: var(--ink-2); }
+.opp__body .now { color: var(--ink-2); }
+.opp__body .fut { color: var(--seen); }
+.opp__tool { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); margin-top: 6px; }
+
+/* ---------- Timeline / phases ---------- */
+.phases { display: grid; grid-template-columns: repeat(var(--n, 3), 1fr); gap: 12px; }
+.phase { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.phase__head { color: #fff; padding: 10px 12px; display: flex; align-items: center; gap: 9px; }
+.phase__head .num { width: 24px; height: 24px; border-radius: 50%; background: rgba(255,255,255,0.25); display: flex; align-items: center; justify-content: center; font-weight: 700; }
+.phase__head .eta { margin-left: auto; font-size: 10.5px; opacity: 0.9; }
+.phase__body { padding: 11px 12px; font-size: 12px; color: var(--ink-2); }
+
+/* ---------- Reasoning log / assumptions ---------- */
+.logrow { display: grid; grid-template-columns: 150px 90px 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 11.5px; }
+.logrow .cand { font-weight: 600; color: var(--ink); }
+.assume { font-size: 11.5px; color: var(--ink-2); padding: 6px 0; border-bottom: 1px solid var(--line); }
+.assume .plain { color: var(--ink); }
+
+/* Data-confidence banner — one honest line, tier-coloured, set near headlines */
+.databanner { display: flex; align-items: center; gap: 12px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: var(--radius-sm); padding: 8px 13px; font-size: 12.5px; }
+.databanner .tier { font-family: var(--font-mono); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.databanner .msg { color: var(--ink-2); }
+.databanner.rich  { border-left-color: var(--seen); }   .databanner.rich  .tier { background: var(--seen-bg);   color: var(--seen); }
+.databanner.ok    { border-left-color: var(--reason); }  .databanner.ok    .tier { background: var(--reason-bg); color: var(--reason); }
+.databanner.light { border-left-color: var(--est); }     .databanner.light .tier { background: var(--est-bg);    color: var(--est); }
+.databanner.thin  { border-left-color: var(--lo); }      .databanner.thin  .tier { background: #fdecea;          color: var(--lo); }
+
+/* Callout / quote */
+.callout { border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; padding: 12px 14px; font-size: 13px; color: var(--ink); }
+.story { font-size: 15px; line-height: 1.6; color: var(--ink); }
+.story .lead { font-size: 17px; font-weight: 600; }
+
+/* Punchy stat-list (conclusion / "by the numbers") */
+.statlist { display: flex; flex-direction: column; gap: 9px; }
+.statline { display: flex; align-items: baseline; gap: 16px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.statline .big { font-family: var(--font-mono); font-size: 26px; font-weight: 800; color: var(--accent); min-width: 132px; text-align: right; }
+.statline .txt { font-size: 14px; color: var(--ink); }
+.statline.muted .big { color: var(--ink-3); }
+
+/* Utility */
+.row { display: flex; gap: 10px; align-items: center; }
+.row.wrap { flex-wrap: wrap; }
+.gap-sm { gap: 6px; }
+.spacer { flex: 1; }
+.muted { color: var(--ink-3); }
+.right { text-align: right; }
+.mt { margin-top: 14px; }
+.mt-s { margin-top: 8px; }
+.hl { color: var(--accent); font-weight: 700; }
+
+/* =====================================================================
+   PRINT  — 1 .page -> 1 PDF page, faithful colours, clean breaks
+   ===================================================================== */
+@page {
+  size: A4 landscape;   /* portrait variant: change to "A4 portrait" + swap --page-w/h */
+  margin: 0;
+}
+@media print {
+  html, body { background: #fff; }
+  .page {
+    margin: 0;
+    box-shadow: none;
+    break-after: page;
+    page-break-after: always;     /* legacy */
+    break-inside: avoid;
+  }
+  .page:last-child { break-after: auto; }
+  .no-print { display: none !important; }
+
+  /* Force background colours / gradients to print (critical for cover,
+     bands, chips, KPI tiles). */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  /* Things that must never split across a page break */
+  .card, .kpi, .opp, .phase, .sys-cell, .steps tr, tr, .bar-row, .logrow,
+  .col-item, .matrix { break-inside: avoid; }
+  thead { display: table-header-group; }   /* repeat header if a table flows */
+}
+
+/* Screen-only review toolbar (stripped in print) */
+.toolbar {
+  position: fixed; top: 10px; right: 10px; z-index: 50;
+  background: var(--ink); color: #fff; font-size: 12px;
+  padding: 8px 12px; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+  font-family: var(--font-mono);
+}
+
+/* =====================================================================
+   OPTIONAL SALES-DECK ARCHETYPES (shipped patterns)
+   Section divider · time-by-application bars · engagement options + confirm box
+   ===================================================================== */
+
+/* --- Numbered section divider (full-bleed dark interstitial) --- */
+.page.divider {
+  position: relative;
+  background: var(--panel); color: #fff;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: var(--pad) calc(var(--pad) * 2.2);
+}
+.divider .snum {
+  font-family: var(--font-mono); font-size: 20px; letter-spacing: 3px;
+  color: var(--accent-2); margin-bottom: 14px;
+}
+.divider h1 { font-size: 60px; line-height: 1.04; font-weight: 800; max-width: 18ch; }
+.divider .conf {
+  position: absolute; left: var(--pad); bottom: var(--pad);
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: .5px;
+  color: rgba(255,255,255,.5);
+}
+
+/* --- Time-by-application appendix (per-function logo bars, 80% rule) --- */
+.tba-fn { margin-bottom: 16px; }
+.tba-fn-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.tba-fn-name { font-size: 14px; font-weight: 700; color: var(--ink); }
+.tba-fn-meta { font-size: 11px; color: var(--ink-3); }
+.tba-bar {
+  display: grid; grid-template-columns: 160px 1fr 92px;
+  align-items: center; gap: 12px; margin-bottom: 6px;
+}
+.tba-nm { display: flex; align-items: center; font-size: 12px; color: var(--ink); }
+.tba-ico {
+  width: 20px; height: 20px; border-radius: 4px;
+  object-fit: contain; vertical-align: middle; margin-right: 8px;
+}
+.tba-track { height: 8px; background: var(--bg-soft); border-radius: 5px; overflow: hidden; }
+.tba-fill {
+  height: 100%; border-radius: 5px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+.tba-val { font-size: 11.5px; color: var(--ink-2); text-align: right; }
+.tba-bar.tba-other { opacity: .5; }
+
+/* --- Engagement options (A/B/C cards) + amber "to confirm" box --- */
+.opt-stack { display: flex; flex-direction: column; gap: 9px; }
+.opt { background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 13px 16px; }
+.opt__h { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; }
+.opt__badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 6px;
+  background: var(--accent); color: #fff; font-weight: 800; font-size: 12px;
+  font-family: var(--font-mono);
+}
+.opt__name { font-size: 14px; font-weight: 700; color: var(--ink); }
+.opt p { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; margin: 0; }
+.opt ul { list-style: disc; margin: 8px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--ink-2); line-height: 1.55; }
+.confirm {
+  margin-top: 14px; background: var(--accent-soft);
+  border: 1px solid #ead9c6; border-radius: 9px; padding: 12px 16px;
+}
+.confirm__h {
+  font-family: var(--font-mono); font-weight: 700; color: #9a6b2f;
+  font-size: 10px; letter-spacing: .6px; text-transform: uppercase; margin-bottom: 8px;
+}
+.confirm__row { display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 8px 0; }
+.confirm__row + .confirm__row { border-top: 1px solid #efe2d2; }
+.confirm__k { font-weight: 700; color: var(--ink); font-size: 12.5px; }
+.confirm__v { color: var(--ink-2); font-size: 12.5px; line-height: 1.5; }

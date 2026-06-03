@@ -304,11 +304,11 @@ After saving the HTML report, use the `AskUserQuestion` tool to present two inte
       "options": [
         {
           "label": "Pattern to PDF",
-          "description": "Create a process description document as PDF — via /pattern-to-pdf"
+          "description": "Create a process description document as PDF, via /pattern-to-pdf"
         },
         {
-          "label": "Pattern to runbook",
-          "description": "Create an automation runbook — via /pattern-to-runbook"
+          "label": "Automation instructions",
+          "description": "Write step-by-step automation instructions, via /automation-instructions"
         }
       ],
       "multiSelect": true
