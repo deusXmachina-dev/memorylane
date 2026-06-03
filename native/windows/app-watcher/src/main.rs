@@ -9,6 +9,7 @@ mod win32_window;
 
 use windows::Win32::Foundation::RPC_E_CHANGED_MODE;
 use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
+use windows::Win32::System::SystemInformation::GetTickCount;
 use windows::Win32::UI::Accessibility::UnhookWinEvent;
 use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
 
@@ -29,7 +30,9 @@ fn main() {
 
     let initial_hwnd = unsafe { GetForegroundWindow() };
     if hwnd_is_valid(initial_hwnd) {
-        emit_window_event("app_change", initial_hwnd);
+        // Startup snapshot has no originating WinEvent; use the current tick so
+        // the converted timestamp resolves to wall-clock now.
+        emit_window_event("app_change", initial_hwnd, unsafe { GetTickCount() });
     }
 
     let hooks = match install_hooks() {

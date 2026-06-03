@@ -467,9 +467,12 @@ export class ActivityProducer {
   }
 
   private getFramesInRange(startTimestamp: number, endTimestamp: number): StreamRecord<Frame>[] {
+    // End is exclusive: on an app switch the closing window's endTimestamp equals
+    // the next window's startTimestamp, so a frame landing exactly on the boundary
+    // belongs to the next activity only (which claims it via the inclusive start).
     return this.frameBuffer.filter(
       (record) =>
-        record.payload.timestamp >= startTimestamp && record.payload.timestamp <= endTimestamp,
+        record.payload.timestamp >= startTimestamp && record.payload.timestamp < endTimestamp,
     )
   }
 
@@ -496,7 +499,10 @@ export class ActivityProducer {
   private async advanceFrameAck(windowEndTimestamp: number): Promise<void> {
     let ackTarget: Offset | null = null
     for (const frame of this.frameBuffer) {
-      if (frame.payload.timestamp <= windowEndTimestamp) {
+      // Exclusive, matching getFramesInRange: a frame exactly on the window
+      // boundary must stay buffered so the next window can still claim it
+      // instead of being trimmed away here.
+      if (frame.payload.timestamp < windowEndTimestamp) {
         ackTarget = frame.offset
       }
     }

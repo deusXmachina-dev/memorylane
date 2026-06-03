@@ -156,6 +156,71 @@ describe('ActivityProducer', () => {
     expect(await frameStream.getLowestAvailableOffset()).toBe(2)
   })
 
+  it('assigns a frame on the app-switch boundary to the next activity only', async () => {
+    const { producer, frameStream, eventStream, activityStream } = createProducer()
+    const activities: Activity[] = []
+    subscriptions.push(
+      activityStream.subscribe({
+        startAt: { type: 'now' },
+        onRecord: (record) => activities.push(record.payload),
+      }),
+    )
+
+    await producer.start()
+    // One frame before the switch, one landing exactly on the boundary, one after.
+    await frameStream.append(makeFrame(1_500, 0))
+    await frameStream.append(makeFrame(2_000, 1))
+    await frameStream.append(makeFrame(2_500, 2))
+
+    // App A closes on an app switch at t=2000; App B opens at the same boundary
+    // (mirrors EventCapturer, where the closing window's end equals the next
+    // window's start).
+    await eventStream.append(
+      makeWindow({
+        id: 'window-a',
+        startTimestamp: 900,
+        endTimestamp: 2_000,
+        closedBy: 'app_change',
+        events: [
+          makeEvent(900, 'app_change', {
+            activeWindow: { title: 'A', processName: 'Code', bundleId: 'com.microsoft.VSCode' },
+          }),
+        ],
+      }),
+    )
+    await eventStream.append(
+      makeWindow({
+        id: 'window-b',
+        startTimestamp: 2_000,
+        endTimestamp: 3_000,
+        closedBy: 'flush',
+        events: [
+          makeEvent(2_000, 'app_change', {
+            activeWindow: {
+              title: 'B',
+              processName: 'Slack',
+              bundleId: 'com.tinyspeck.slackmacgap',
+            },
+          }),
+        ],
+      }),
+    )
+
+    await waitFor(() => activities.length === 2, 'Expected two activities split by app switch')
+
+    const activityA = activities.find((a) => a.provenance.sourceWindowIds.includes('window-a'))
+    const activityB = activities.find((a) => a.provenance.sourceWindowIds.includes('window-b'))
+    expect(activityA?.frames.map((f) => f.frame.timestamp)).toEqual([1_500])
+    expect(activityB?.frames.map((f) => f.frame.timestamp)).toEqual([2_000, 2_500])
+
+    // The boundary frame appears exactly once across all activities — not dropped,
+    // not double-counted.
+    const boundaryFrames = activities.flatMap((a) =>
+      a.frames.filter((f) => f.frame.timestamp === 2_000),
+    )
+    expect(boundaryFrames).toHaveLength(1)
+  })
+
   it('emits deterministic UUIDv5 ids for the same source window chunk', async () => {
     const runOnce = async (): Promise<string> => {
       const { producer, frameStream, eventStream, activityStream } = createProducer()

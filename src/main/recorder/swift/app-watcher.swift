@@ -175,14 +175,19 @@ func browserURL(pid: pid_t, bundleId: String) -> String? {
 // MARK: - Build event payload
 
 /// Build the full event dictionary, enriching with url/document where possible.
-func buildEvent(type: String, app: NSRunningApplication, title: String) -> [String: Any] {
+///
+/// `timestamp` is captured by the caller at the moment the OS reported the
+/// change, BEFORE the (potentially blocking) Accessibility queries below run.
+/// This keeps activity boundaries aligned with when the switch actually
+/// happened rather than when we finished reading window metadata.
+func buildEvent(type: String, app: NSRunningApplication, title: String, timestamp: Int64) -> [String: Any] {
     let bundleId = app.bundleIdentifier ?? ""
     let appName = app.localizedName ?? ""
     let pid = app.processIdentifier
 
     var dict: [String: Any] = [
         "type": type,
-        "timestamp": nowMs(),
+        "timestamp": timestamp,
         "app": appName,
         "bundleId": bundleId,
         "pid": pid,
@@ -246,6 +251,7 @@ func tearDownTitleObserver() {
 
 /// Callback fired when the focused window's title changes (e.g. browser tab switch).
 let titleCallback: AXObserverCallback = { _, element, _, _ in
+    let eventTimestamp = nowMs()
     guard let app = NSWorkspace.shared.frontmostApplication else { return }
 
     var titleValue: AnyObject?
@@ -257,7 +263,7 @@ let titleCallback: AXObserverCallback = { _, element, _, _ in
         title = ""
     }
 
-    emit(buildEvent(type: "window_change", app: app, title: title))
+    emit(buildEvent(type: "window_change", app: app, title: title, timestamp: eventTimestamp))
 }
 
 func setupTitleObserver(forPid pid: pid_t) {
@@ -284,6 +290,7 @@ func setupTitleObserver(forPid pid: pid_t) {
 
 /// Callback fired when the focused window changes within the observed app.
 let axCallback: AXObserverCallback = { _, element, _, _ in
+    let eventTimestamp = nowMs()
     guard let app = NSWorkspace.shared.frontmostApplication else { return }
 
     var titleValue: AnyObject?
@@ -295,7 +302,7 @@ let axCallback: AXObserverCallback = { _, element, _, _ in
         title = windowTitle(forPid: app.processIdentifier) ?? ""
     }
 
-    emit(buildEvent(type: "window_change", app: app, title: title))
+    emit(buildEvent(type: "window_change", app: app, title: title, timestamp: eventTimestamp))
 
     // Re-target title observer to the newly focused window
     setupTitleObserver(forPid: app.processIdentifier)
@@ -331,10 +338,11 @@ let nc = NSWorkspace.shared.notificationCenter
 
 nc.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
                object: nil, queue: .main) { notification in
+    let eventTimestamp = nowMs()
     guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
 
     let title = windowTitle(forPid: app.processIdentifier) ?? ""
-    emit(buildEvent(type: "app_change", app: app, title: title))
+    emit(buildEvent(type: "app_change", app: app, title: title, timestamp: eventTimestamp))
 
     // Set up AX observer for window changes within this new app
     setupAXObserver(forPid: app.processIdentifier)

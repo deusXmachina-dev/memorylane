@@ -5,7 +5,7 @@ use crate::snapshot::snapshot_window;
 use crate::state::{
     should_emit_app_change, should_emit_window_change, update_last_state, LAST_WINDOW_STATE,
 };
-use crate::time::now_ms;
+use crate::time::{event_time_to_wall_ms, now_ms};
 
 pub fn emit_json_line(value: &serde_json::Value) {
     let mut stdout = io::stdout().lock();
@@ -23,7 +23,7 @@ pub fn emit_error_event(error: &str) {
     }));
 }
 
-pub fn emit_window_event(event_type: &str, hwnd: HWND) {
+pub fn emit_window_event(event_type: &str, hwnd: HWND, event_time: u32) {
     let Some(snapshot) = snapshot_window(hwnd) else {
         return;
     };
@@ -52,7 +52,7 @@ pub fn emit_window_event(event_type: &str, hwnd: HWND) {
     );
     payload.insert(
         "timestamp".to_string(),
-        serde_json::Value::Number(serde_json::Number::from(now_ms())),
+        serde_json::Value::Number(serde_json::Number::from(event_time_to_wall_ms(event_time))),
     );
     payload.insert("app".to_string(), serde_json::Value::String(snapshot.app));
     payload.insert(

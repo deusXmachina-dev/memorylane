@@ -18,7 +18,7 @@ unsafe extern "system" fn win_event_callback(
     id_object: i32,
     id_child: i32,
     _event_thread: u32,
-    _event_time: u32,
+    event_time: u32,
 ) {
     if !hwnd_is_valid(hwnd) {
         return;
@@ -43,7 +43,7 @@ unsafe extern "system" fn win_event_callback(
         return;
     };
 
-    emit_window_event(event_type, hwnd);
+    emit_window_event(event_type, hwnd, event_time);
 }
 
 pub fn install_hooks() -> Result<(HWINEVENTHOOK, HWINEVENTHOOK), String> {
