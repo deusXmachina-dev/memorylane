@@ -258,7 +258,7 @@ jobs:
           cache: npm
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@fb51252c7ba57d633bc668f941da052e410add48 # v1.13.0
+        uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1.16.1
         with:
           toolchain: stable
           # Preserve previous behaviour: this action defaults to `-D warnings`
@@ -306,7 +306,7 @@ jobs:
           cache: npm
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@fb51252c7ba57d633bc668f941da052e410add48 # v1.13.0
+        uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1.16.1
         with:
           toolchain: stable
           # Preserve previous behaviour: this action defaults to `-D warnings`
