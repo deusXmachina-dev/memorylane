@@ -1,22 +1,13 @@
-# MemoryLane v1.0.0
+# MemoryLane v1.1.0
 
-First stable 1.0 release. A transparency-first product: you can see exactly what MemoryLane has captured and the recurring workflows it found, with evidence for each.
-
-## Since v1.0.0-rc.1
-
-- **Import Database**: replace the local database from an exported `.zip` or raw `.db`. The chosen file is validated and staged, then swapped in safely on the next startup — backing up the current database first.
-- **Sync**: backend uploads now include `user_context`.
+In-app updates and friendlier custom-endpoint setup, on top of the 1.0 transparency-first foundation.
 
 ## What's Changed
 
-- **Activities page**: replaces the per-minute flat list with a trust digest (total captures, time span, top apps, top sites) plus a day-grouped audit log that collapses consecutive same-app captures into expandable rows. Includes substring search and click-to-filter chips from the digest.
-- **Patterns page**: new split-view ranked by likely impact (~hours/week × recurrence × confidence × recency). Each pattern shows recurrence sentence, description, apps, a "Copy prompt for Claude" action, and a sightings timeline with linked source activities.
-- **Onboarding**: renderer-driven flow with state machine, Windows-specific permission handling, and skip-on-existing-recordings detection.
-- **Main window shell**: unified `PageLayout`, shadcn pill controls, sidebar with collapsible state, persistent Activities state across navigation. Resizable window.
-- **Enterprise**: backend keeps the managed key on backend 5xx instead of clearing it; smoother activation when the backend already has consent on file (DEU-93).
-- **Storage**: new `getPatternDetail` and `getActivityDigest` IPC; pattern ranking moved from SQL ordering to composite scoring in the repo layer.
-- **Settings**: tightened custom vendor `baseURL` validation; stricter database export directory validation.
-- **Release pipeline**: GitHub Actions pinned to commit SHAs; release workflow resolves the input ref to an immutable SHA once and reuses it across jobs.
+- **In-app updates**: when a new version finishes downloading, a "Relaunch to update" banner appears in the sidebar so you can apply it in one click — no need to quit and reopen (#154).
+- **Settings**: custom model `baseURL` now accepts `http://` for private/LAN addresses, so you can point MemoryLane at a self-hosted endpoint on your own network (#153).
+- **Plugin**: pruned and renamed the MemoryLane Claude Code skills (9 → 6) and bumped the plugin to v0.6.1 (#151).
+- **Docs**: added a "Using Your Own Models" guide for running MemoryLane against a self-hosted or third-party model endpoint (#155).
 
 ## Known Issues & Limitations
 
@@ -33,4 +24,4 @@ First stable 1.0 release. A transparency-first product: you can see exactly what
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.0.0-rc.1...v1.0.0
+https://github.com/deusXmachina-dev/memorylane/compare/v1.0.0...v1.1.0
