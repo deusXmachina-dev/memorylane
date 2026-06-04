@@ -3,7 +3,7 @@ import * as path from 'path'
 import log from '../logger'
 import type { Vendor, VendorCredentials, VendorStatus } from '../../shared/types'
 import { VENDORS } from '../../shared/types'
-import { registrableDomain } from '../../shared/url-utils'
+import { isPrivateNetworkHost, registrableDomain } from '../../shared/url-utils'
 
 interface SafeStorageLike {
   isEncryptionAvailable(): boolean
@@ -412,7 +412,9 @@ const VENDOR_EXPECTED_DOMAIN: Partial<Record<Vendor, string>> = {
  *   - empty/whitespace input → '' (caller treats this as "use default")
  *   - https:// URLs (constrained to the vendor's expected registrable domain
  *     when one is pinned in `VENDOR_EXPECTED_DOMAIN`; arbitrary host otherwise)
- *   - http:// URLs only when the host is a loopback address (Ollama-style local dev)
+ *   - http:// URLs only when the host is a loopback or private/link-local
+ *     network address (Ollama-style local dev, on this box or elsewhere on the
+ *     LAN) — never a public host, where http would leak the key in cleartext
  * and reject everything else (file:, ftp:, embedded credentials, etc.).
  */
 export function validateVendorBaseURL(value: unknown, vendor?: Vendor): string {
@@ -442,10 +444,10 @@ export function validateVendorBaseURL(value: unknown, vendor?: Vendor): string {
     return trimmed
   }
   if (url.protocol === 'http:') {
-    if (LOOPBACK_HOSTS.has(url.hostname)) {
+    if (LOOPBACK_HOSTS.has(url.hostname) || isPrivateNetworkHost(url.hostname)) {
       return trimmed
     }
-    throw new Error('Invalid baseURL: http is only allowed for localhost')
+    throw new Error('Invalid baseURL: http is only allowed for localhost and private networks')
   }
   throw new Error(`Invalid baseURL: unsupported scheme ${url.protocol}`)
 }
