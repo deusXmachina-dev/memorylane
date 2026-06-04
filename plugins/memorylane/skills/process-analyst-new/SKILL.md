@@ -25,7 +25,7 @@ Verified against the MemoryLane MCP + storage code; everything below references 
 - **Row != step:** a row is an event window (closed ~5s idle, force-split 5 min, split on app change; sub-3s dropped). One task spans many rows.
 - **`tld`/OCR not in the timeline** (`tld` only via `get_activity_details`).
 - **Single-user DB.**
-- *Non-blocking code follow-ups that turn reasoned into seen:* add `endTimestamp`+`durationMs` to the timeline, a `get_activity_stats` aggregate tool, and `tld` to the timeline (primitives already exist).
+- _Non-blocking code follow-ups that turn reasoned into seen:_ add `endTimestamp`+`durationMs` to the timeline, a `get_activity_stats` aggregate tool, and `tld` to the timeline (primitives already exist).
 
 ## 0. Operating Principles
 
@@ -59,24 +59,25 @@ Verified against the MemoryLane MCP + storage code; everything below references 
 
 Preferred: one sub-agent per stage via `Task` + a reviewer, passing structured output forward. Fallback (no sub-agents): run stages in order yourself. Gates are mandatory. A **human review gate** (Checkpoint, after process discovery) pauses the run: detailed quantification + deliverables run only after the user approves the identified processes and direction.
 
-**Stage 0 — Ground & scope.** Confirm inputs; resolve cost basis (rate + derivation + label). Pull `get_user_context` (prior, not truth). Record coverage + blind spots (per Data limits). *Gate:* cost basis has formula/source/label; coverage + n=1 scope stated.
+**Stage 0 — Ground & scope.** Confirm inputs; resolve cost basis (rate + derivation + label). Pull `get_user_context` (prior, not truth). Record coverage + blind spots (per Data limits). _Gate:_ cost basis has formula/source/label; coverage + n=1 scope stated.
 
 **Stage 0.5 — Descriptive baseline (credibility floor).** Anchors the report; supplies the denominator/ceiling even with zero processes found.
+
 - **Logical apps, never raw URLs.** For browser rows, reduce URL/`tld`/title-host to a domain **in code**, then map to a clean name via a lookup table (mail.google.com -> Gmail, `*.atlassian.net` -> Jira, ...); AI only names misses. Non-browser apps use `app_name`. Shows Jira/Gmail/Notion, not one "Chrome" bucket.
 - **Filter noise** first: MemoryLane itself; OS shell/utilities (Finder, System Settings, Control Center, Notification Center, Spotlight, Dock, loginwindow, lock screen, screensaver, WindowServer); blank titles. Keep + extend this denylist.
 - **AI cleanup review (required):** list every app, flag OS/utility/noise, remove it, log drops in `data_coverage_notes`. Nothing runs on an unreviewed list.
 - Report only: **% time per app (PRIMARY)**; time per app hours (secondary); **deep-work vs scattered** share (long single-app blocks vs rapid hopping; explain in one line); **active/observed days** (the one count worth quoting, seen if unsampled); **total active hours** (the denominator; sum of gap-durations clamped to 5 min, reasoned). Skip vanity (raw counts, time-of-day, transition matrix) unless asked.
 - **Count exactly:** from a file, a deterministic snippet (counts/sums by app); via MCP, enumerate **full unsampled days** (raise limit until header reads `N activities`; split sub-ranges if needed). Never compute a share from a sampled batch.
 - **Capture coverage:** `coverage = total_active_hours / (work_hours_per_day x active_days)` (default 8 h/day). If coverage < ~40%, enter **sample mode**: label everything "from a captured sample of Xh (~Y% of work time)"; still give the capacity/savings headline but as a **clearly-labelled estimate** (sample-based, wide low/base/high range, coverage caveat, confidence Low), and prefer expressing capacity as "% of the work we observed" before projecting to the full role/team; force overall confidence to Low; put "record more continuously (coverage too low)" at the top of `what_would_sharpen`. Coverage is a lower bound on representativeness, not proof the sample is unbiased.
-*Gate:* % per app sums ~100; contributing days unsampled (or from file); active-days exact; coverage computed and sample mode set if low.
+  _Gate:_ % per app sums ~100; contributing days unsampled (or from file); active-days exact; coverage computed and sample mode set if low.
 
-**Stage 1 — Sessionize.** Pull day-by-day, de-sampled. Segment by priority: (1) **case-hints (primary)** from `window_title` (seen); if titles weak, a **bounded** OCR sweep (`get_activity_details`, <=100 ids/call) for IDs (reasoned, require corroboration, never join on a bare number); (2) **topic / content continuity** from summary text and (when titles are weak) the OCR content, used to set run boundaries, not only to find IDs, so two runs that share the same app-set (e.g. two different Sheets+Slack sessions) are split by *what the content is about*, not merged because the apps match; (3) app-sequence; (4) **time gap (last-resort tie-breaker only)**, 5-min default, calibrated to this user's start-delta distribution (state value + why). The gap is the weakest signal: never let it be the *primary* boundary when content/topic can separate two runs. **Pre-merge** adjacent rows sharing app+hint (and rows split only by the 5-min cap or an app change) into one step before any gap rule. **Record the ID-corroborated share** (K of N runs carry a stable cross-app ID) rather than applying a hard cutoff: label frequency "reasoned, ID-corroborated on K of N runs", and let confidence scale with that share (graded, §4), not a binary cliff. When K/N is low, lean harder on content continuity (above) before the gap, and say so. Output = ordered activity-level steps (start/stop, hint, apps, gap-duration reasoned, id_corroborated bool); reasoning log for non-obvious boundaries. *Gate:* no sampled day; no single-row split artifact; durations reasoned; ID-corroborated share recorded.
+**Stage 1 — Sessionize.** Pull day-by-day, de-sampled. Segment by priority: (1) **case-hints (primary)** from `window_title` (seen); if titles weak, a **bounded** OCR sweep (`get_activity_details`, <=100 ids/call) for IDs (reasoned, require corroboration, never join on a bare number); (2) **topic / content continuity** from summary text and (when titles are weak) the OCR content, used to set run boundaries, not only to find IDs, so two runs that share the same app-set (e.g. two different Sheets+Slack sessions) are split by _what the content is about_, not merged because the apps match; (3) app-sequence; (4) **time gap (last-resort tie-breaker only)**, 5-min default, calibrated to this user's start-delta distribution (state value + why). The gap is the weakest signal: never let it be the _primary_ boundary when content/topic can separate two runs. **Pre-merge** adjacent rows sharing app+hint (and rows split only by the 5-min cap or an app change) into one step before any gap rule. **Record the ID-corroborated share** (K of N runs carry a stable cross-app ID) rather than applying a hard cutoff: label frequency "reasoned, ID-corroborated on K of N runs", and let confidence scale with that share (graded, §4), not a binary cliff. When K/N is low, lean harder on content continuity (above) before the gap, and say so. Output = ordered activity-level steps (start/stop, hint, apps, gap-duration reasoned, id*corroborated bool); reasoning log for non-obvious boundaries. \_Gate:* no sampled day; no single-row split artifact; durations reasoned; ID-corroborated share recorded.
 
-**Stage 2 — De-pollute.** Flag interruptions (Slack/email peeks, personal messaging, browsing, entertainment): excise from task time but **log** them; keep only if OCR/summary shows the content fed back in. Remove pure-discard sessions: personal messaging; learning/studying; general browsing/social/news/shopping; programming + code review; entertainment; generic inbox/Slack triage unless it triggers a cross-app workflow; standalone IDE/file management. Reasoning log per excised chunk. *Gate:* kept interruptions have an evidence reason; discards match the list.
+**Stage 2 — De-pollute.** Flag interruptions (Slack/email peeks, personal messaging, browsing, entertainment): excise from task time but **log** them; keep only if OCR/summary shows the content fed back in. Remove pure-discard sessions: personal messaging; learning/studying; general browsing/social/news/shopping; programming + code review; entertainment; generic inbox/Slack triage unless it triggers a cross-app workflow; standalone IDE/file management. Reasoning log per excised chunk. _Gate:_ kept interruptions have an evidence reason; discards match the list.
 
-**Stage 3 — Cluster into repeated processes.** Cluster by hint-type + step-sequence similarity + app set. An **instance = one reconstructed case; frequency = count of cases, not rows** (log "N rows -> M cases"). A process repeats, is stable, and is operational. **Cadence gate:** >=3 cases in window, OR >=2 with a period the window can contain; for weekly/monthly hints (month-end, payroll, board pack) widen to 30 to 60 days via **targeted** `search_context` before deciding/annualizing. **Below the gate, demote, do not drop.** A cluster that looks recurring but misses the gate (1 to 2 sightings, or a likely weekly/monthly process the window was too short to confirm) is NOT discarded: tag it `verdict: candidate` (low confidence) and carry it into the Checkpoint table as a candidate-tier row, with its uncertainty named (e.g. "seen 2x in 21 days, possibly monthly, window too short to confirm"). Only **true one-offs and creative/judgment work** are excluded outright. This protects the high-ROI low-frequency tail (close, board pack, quarterly rollups) that a short window or strict count would otherwise hide. Per process: frequency, time-per-instance distribution (n, median, IQR/p90), total time, varies/constant, role/department. If estimated time-per-instance exceeds captured hands-on time, state the ratio + why ("captured 100 min, estimated 5 h, x3 for fragmentation"). Reasoning log: why each cluster is a process, a candidate, or excluded (one-offs + creative logged as considered-and-excluded). *Gate:* frequency traces to counted cases or a stated inference; time carries n + spread, reasoned.
+**Stage 3 — Cluster into repeated processes.** Cluster by hint-type + step-sequence similarity + app set. An **instance = one reconstructed case; frequency = count of cases, not rows** (log "N rows -> M cases"). A process repeats, is stable, and is operational. **Cadence gate:** >=3 cases in window, OR >=2 with a period the window can contain; for weekly/monthly hints (month-end, payroll, board pack) widen to 30 to 60 days via **targeted** `search_context` before deciding/annualizing. **Below the gate, demote, do not drop.** A cluster that looks recurring but misses the gate (1 to 2 sightings, or a likely weekly/monthly process the window was too short to confirm) is NOT discarded: tag it `verdict: candidate` (low confidence) and carry it into the Checkpoint table as a candidate-tier row, with its uncertainty named (e.g. "seen 2x in 21 days, possibly monthly, window too short to confirm"). Only **true one-offs and creative/judgment work** are excluded outright. This protects the high-ROI low-frequency tail (close, board pack, quarterly rollups) that a short window or strict count would otherwise hide. Per process: frequency, time-per-instance distribution (n, median, IQR/p90), total time, varies/constant, role/department. If estimated time-per-instance exceeds captured hands-on time, state the ratio + why ("captured 100 min, estimated 5 h, x3 for fragmentation"). Reasoning log: why each cluster is a process, a candidate, or excluded (one-offs + creative logged as considered-and-excluded). _Gate:_ frequency traces to counted cases or a stated inference; time carries n + spread, reasoned.
 
-**Stage 3.5 — Common path (80/20).** Describe the single dominant way it usually goes (~80/90% sequence) + rough coverage. Do NOT over-model (no variant trees, loops, exception enumeration). Note exceptions exist but aren't modelled, and that **building the automation needs deeper hands-on analysis**. Common path = automatable core; remainder stays human. Path + coverage = **estimates**. *Gate:* coverage + case-n recorded; output says it's an estimate needing deeper analysis to build.
+**Stage 3.5 — Common path (80/20).** Describe the single dominant way it usually goes (~80/90% sequence) + rough coverage. Do NOT over-model (no variant trees, loops, exception enumeration). Note exceptions exist but aren't modelled, and that **building the automation needs deeper hands-on analysis**. Common path = automatable core; remainder stays human. Path + coverage = **estimates**. _Gate:_ coverage + case-n recorded; output says it's an estimate needing deeper analysis to build.
 
 **Checkpoint, confirm processes + pick what to detail (human review gate, triage menu).** Before the detailed half, STOP. First run a **light provisional pass** over EVERY qualifying process AND every demoted **candidate** (Stage 3), none dropped: rough automatable % (from category + work-nature, judgment cap applies), difficulty (Easy/Med/Hard), and uplift (provisional capacity-unlock % + net annual savings range), reusing the Stage 3 frequency + time and the cost basis. Everything here is **provisional**, refined by Stages 5, 5.5, 6 after selection. Then present **one table listing ALL of them**, confirmed processes first sorted by impact (annual hours) then occurrence (frequency), candidate-tier rows below:
 
@@ -84,36 +85,39 @@ Preferred: one sub-agent per stage via `Task` + a reviewer, passing structured o
 
 The last column marks each row **process** or **candidate (low confidence)** with a one-line reason for any candidate (e.g. "possibly monthly, window too short"). Under the table, list only the **true exclusions** and why (genuine one-offs, creative/judgment work); sub-threshold-but-recurring work appears IN the table as a candidate row, never demoted to a footnote. Then ask the user (`AskUserQuestion`, multi-select the rows) **which processes to dig deeper into**, and allow drop / merge / re-scope / redirect. Run Stages 4 to 6 ONLY on the selected processes; the rest stay in the table and in the ledger as logged-but-not-detailed (`selected_for_detail: false`), so nothing found is hidden. Honor their edits. If there are more candidates than the question can list, show the table and ask them to name their picks. If no human is available (batch run), record "checkpoint auto-passed" in `review.checkpoint`, dig into the top processes by provisional ROI, and continue.
 
-**Stage 4 — Decompose steps (activity level, map-ready).** Ordered steps: action (verb+object), app, input, output/artifact, time (reasoned), pain (reasoned), automatable (bool), note (what changes / watch-out). A row is not a step: derive steps from transitions across rows; don't split one row into separately-timed steps. Also capture for the map: **0 to 3 key decision points** with branches (estimated, light, not variant trees) and a **per-app per-run time** rollup (sum step time by app). Steps + decisions + per-app times = the map-ready representation; a downstream map skill reads this and draws the visual (like the /patterns Map view), not here. *Gate:* each step maps to >=1 activity (cite IDs) or a labelled reasoned bridge; time/pain reasoned; decisions estimated.
+**Stage 4 — Decompose steps (activity level, map-ready).** Ordered steps: action (verb+object), app, input, output/artifact, time (reasoned), pain (reasoned), automatable (bool), note (what changes / watch-out). A row is not a step: derive steps from transitions across rows; don't split one row into separately-timed steps. Also capture for the map: **0 to 3 key decision points** with branches (estimated, light, not variant trees) and a **per-app per-run time** rollup (sum step time by app). Steps + decisions + per-app times = the map-ready representation; a downstream map skill reads this and draws the visual (like the /patterns Map view), not here. _Gate:_ each step maps to >=1 activity (cite IDs) or a labelled reasoned bridge; time/pain reasoned; decisions estimated.
 
 **Stage 5 — Map automation (decision tree).** Classify into a category (Section 3). **Bottom-up fraction:** `automatable_fraction = sum(step.time where automatable) / sum(step.time)`, re-derivable; map the 1-5 score to a band (5 -> 0.8-0.95, 3 -> 0.4-0.6, 1 -> 0.05-0.2); express as a range; name human steps in `human_remainder`. **Judgment cap:** Content Generation + Research & Synthesis fraction <=0.6 unless OCR shows boilerplate.
 
 **Verdict + route (walk every process through this tree, never forced):**
+
 1. Still need it? No -> **kill**.
 2. Worth changing? No -> **leave as-is** (document + train).
 3. Worth automating (net ROI + work nature)? No -> **redesign** (document + train).
 4. Automate -> **first route that fits**: (a) **current stack / native features**, incl. the company's own **custom/internal apps** (e.g. Notion's Jira sync, or extending an in-house tool) = least new tooling; (b) **Claude (chat or Cowork)** for judgment/generation/augment, preferring a verified connector that removes the manual action (connectors work in Claude chat and Cowork, so phrase it "connect [tool] to Claude", not "enable the Cowork connector"; for a non-technical owner, frame setup as done-for-them, not a DIY build); roll out + train on Skill creation (MemoryLane surfaces new Skills); (c) their **current automation tool**; (d) **n8n** (flexible, more upkeep) or **Gumloop** (less upkeep, not zero). Make/Zapier/Power Automate when the stack/team demands.
-   - **Frame by effort/investment:** **quick wins (do now, low effort)** = Cowork, process redesign, current tooling / native connectors; **extra engagement (more build + investment)** = n8n / Gumloop / custom, offered as possible *if they want to invest*, never the lead. (The owner question informs upkeep risk; effort is the main lens.) Tag each as `effort_tier`.
+   - **Frame by effort/investment:** **quick wins (do now, low effort)** = Cowork, process redesign, current tooling / native connectors; **extra engagement (more build + investment)** = n8n / Gumloop / custom, offered as possible _if they want to invest_, never the lead. (The owner question informs upkeep risk; effort is the main lens.) Tag each as `effort_tier`.
    - Deterministic tools (n8n etc.) can't do judgment steps (story-pointing, picking findings), so for those they aren't full automation anyway, the judgment stays a human/AI-assist step whatever the tool.
 
 **Connector capability check (before recommending a route):** for every API/MCP connector or plugin in the recommendation, fetch its latest official docs and confirm the specific read/write it needs; record server, read, write, how verified, and date in `connector_checks`. Confirm the **exact product/edition** the user runs (variants differ, e.g. Looker vs Looker Studio); if the surface tool cannot connect, pivot the route to the underlying data source and record that pivot in `connector_checks`. An unverified or write-incapable connector cannot back a Human-in-the-loop or Automated verdict (see Future state).
 
-**Future state (score every kept process on this ordered scale):** **No change** (manual) -> **AI-augmented** (human operates, AI drafts/suggests) -> **Human-in-the-loop** (automation runs, human approves/handles exceptions) -> **Automated** (hands-off). Kills = **eliminated** (off-scale). Augmented vs HITL = who operates (human invoking AI = augmented; automation running with a human gate = HITL). Roughly MECE on one axis (how much the machine does); the tree picks the route, this labels the end state. Ordered, so a downstream report can render it as a chevron (highlight the step, grey the rest). **Capability ceiling:** the label follows *verified* connector capability, not assumption. Reaching **Human-in-the-loop** or **Automated** (the machine writes) requires a **verified write** to the target tool; if only read is verified (or nothing), cap at **AI-augmented** (AI drafts, human writes). E.g. sprint estimation only moves from "AI drafts" to "runs with a human gate" once Jira + Notion writes are confirmed.
+**Future state (score every kept process on this ordered scale):** **No change** (manual) -> **AI-augmented** (human operates, AI drafts/suggests) -> **Human-in-the-loop** (automation runs, human approves/handles exceptions) -> **Automated** (hands-off). Kills = **eliminated** (off-scale). Augmented vs HITL = who operates (human invoking AI = augmented; automation running with a human gate = HITL). Roughly MECE on one axis (how much the machine does); the tree picks the route, this labels the end state. Ordered, so a downstream report can render it as a chevron (highlight the step, grey the rest). **Capability ceiling:** the label follows _verified_ connector capability, not assumption. Reaching **Human-in-the-loop** or **Automated** (the machine writes) requires a **verified write** to the target tool; if only read is verified (or nothing), cap at **AI-augmented** (AI drafts, human writes). E.g. sprint estimation only moves from "AI drafts" to "runs with a human gate" once Jira + Notion writes are confirmed.
 
 **Tie every recommendation to the manual step(s) it removes** (cite step numbers); prefer an integration that **eliminates** the action over one that merely assists (e.g. a Cowork Figma plugin that fills the slide template from a CSV/JSON, removing the copy/paste re-keying, not "paste into Claude then drop it in by hand").
 
-**Name + frame honestly:** name the process after the **automatable slice + verdict**, not the creative whole; creative/judgment work is augment ("AI-assist: structure findings + draft deck text; designer keeps the insight and builds the deck"), never "automate the slide deck". A priority label must reflect net ROI + verdict, never the gross size of a judgment-capped activity. *Gate:* tools exist in context or are explicit defaults; fraction re-derives; every process has a verdict, a route (if automate), a future-state label, the manual steps removed, and an honest name.
+**Name + frame honestly:** name the process after the **automatable slice + verdict**, not the creative whole; creative/judgment work is augment ("AI-assist: structure findings + draft deck text; designer keeps the insight and builds the deck"), never "automate the slide deck". A priority label must reflect net ROI + verdict, never the gross size of a judgment-capped activity. _Gate:_ tools exist in context or are explicit defaults; fraction re-derives; every process has a verdict, a route (if automate), a future-state label, the manual steps removed, and an honest name.
 
 **Stage 5.5 — Automation feasibility.** Per candidate:
+
 - **Work nature:** mechanical/repetitive -> automate; creative/high-judgment (Figma design, strategy, negotiation) -> augment or leave alone, never full automate.
 - **Concrete mechanism (no hand-waving):** trigger -> tool/integration -> action -> what stays human, naming the manual step(s) removed. "Automate Figma" is not an answer; "auto-generate first-draft components from design tokens via a plugin, designer refines" is. No mechanism -> redesign or leave as-is.
 - **Feasibility, two paths (API isn't the only gate):** (a) deterministic automation for recurring clearly-defined tasks where an API/webhook/integration is the **best** gate -> Automate; (b) **AI augmentation** for judgment/creative/variable work where a Cowork agent speeds it up with **no API** (drive UI, browse, code, draft, research, prototype, connect via Cowork plugins/MCP) -> AI-assist. Missing API shifts the path to AI-assist, doesn't kill it; mark feasibility low only when neither exists.
 - **Automation cost (bands, estimated):** one-time build hours, tool $/mo, learning, maintenance.
-*Gate:* every Automate/AI-assist has a mechanism + feasibility + work-nature tag; creative work never full automate.
+  _Gate:_ every Automate/AI-assist has a mechanism + feasibility + work-nature tag; creative work never full automate.
 
 **Stage 6 — Quantify savings + net ROI (ranges).** All arithmetic in code.
+
 - Per process: `annual_hours = time_per_instance x frequency_per_year`; `automatable_hours = annual_hours x automatable_fraction`; `gross_$ = automatable_hours x rate`. Show inputs + labels.
-- **Reconciliation invariant (displayed % == realized fraction).** The automatable % you publish MUST be the exact fraction that reproduces the reported (rounded, conservative) savings, i.e. `hours_freed = time_per_instance x frequency_per_year x automatable_fraction` and `annual_savings = hours_freed x loaded_rate`. Never display one automatable % while deriving the dollars from a different effective fraction. A skeptic multiplies the printed inputs and must land on the printed savings; per-process savings must sum to the role/function subtotal and then to the combined total. Carry the exact inputs so a downstream page reconciles without re-deriving (see `reconciliation` in §5). *Worked example (real build):* slide-deck 3h/run x 2/month x 46% x A$105/hr -> ~A$3,500/yr; sprint-estimation 45m x 2/month x 28% x A$105/hr -> ~A$500/yr; Product subtotal A$4k. Marketing perf-reporting 27m daily x 90% -> ~A$6,200, SEM 35m x 8/month x 71% -> ~A$2,800, optimisation-logging 60m x 4/month x 60% -> ~A$2,000, all x A$70/hr; subtotal A$11k. Measured total A$15k; capacity 1h + 3h = 4h/week (5%); 2 + 3 = 5 processes.
+- **Reconciliation invariant (displayed % == realized fraction).** The automatable % you publish MUST be the exact fraction that reproduces the reported (rounded, conservative) savings, i.e. `hours_freed = time_per_instance x frequency_per_year x automatable_fraction` and `annual_savings = hours_freed x loaded_rate`. Never display one automatable % while deriving the dollars from a different effective fraction. A skeptic multiplies the printed inputs and must land on the printed savings; per-process savings must sum to the role/function subtotal and then to the combined total. Carry the exact inputs so a downstream page reconciles without re-deriving (see `reconciliation` in §5). _Worked example (real build):_ slide-deck 3h/run x 2/month x 46% x A$105/hr -> ~A$3,500/yr; sprint-estimation 45m x 2/month x 28% x A$105/hr -> ~A$500/yr; Product subtotal A$4k. Marketing perf-reporting 27m daily x 90% -> ~A$6,200, SEM 35m x 8/month x 71% -> ~A$2,800, optimisation-logging 60m x 4/month x 60% -> ~A$2,000, all x A$70/hr; subtotal A$11k. Measured total A$15k; capacity 1h + 3h = 4h/week (5%); 2 + 3 = 5 processes.
 - **Ranges** low/base/high on every figure; name the dominant uncertainty.
 - **Annualization as a plain sentence** a non-expert can override: "Saw it [N] times in [window]; assume it runs [cadence]; so about [X]/year." Flag a yearly figure from a single observation as low-confidence. Carry the observed run-frequency through to the output and, by default, name recurrence (run-frequency) as the dominant uncertainty on annualized figures. In **sample mode** (low coverage), annual figures are still given but as estimates: sample-based, wide low/base/high range, coverage caveat, low-confidence; frame them as capacity unlocked + savings, basing the capacity % on observed work before projecting to the full role/team.
 - **Net ROI (worth-it gate):** `net_annual = gross_annual - annual_automation_cost`; `payback_months = build_cost / monthly_net`. If payback > ~6 to 12 months, tool cost > savings, or high effort for a tiny saving, the verdict is **leave as-is** or **redesign**, not automate. Net, not gross, drives the verdict + ranking.
@@ -123,9 +127,9 @@ The last column marks each row **process** or **candidate (low confidence)** wit
 - **Reconcile with the built-in detector:** if `list_patterns` exists, cross-check frequency vs sighting counts and time vs `durationEstimateMin` (pre-counted, sampling-immune); cite as support, never add to your numbers; report discrepancies. Detector looks back ~1 day, so absent != nonexistent.
 - **Roll up + frame as capacity unlocked + savings.** `capacity_unlocked_pct = annual saved hours / annual work capacity` (this person; or the team if headcount supplied); pair with net $ saved. Headline reads like "automating these unlocks ~12% of annual capacity (~$Xk), low/base/high". FTE = saved hours / working hours per year. Per role/department (this person's share) then an n=1 exec total.
 - **Per-function loaded rate (carry the derivation verbatim).** `cost_basis.derivation` states base salary, loading multiplier, work-year hours, and the resulting loaded rate, in this exact shape: Product "A$160k base -> A$105/hr loaded (x1.3 on-cost over ~1,950 h)", Marketing "A$105k base -> A$70/hr loaded (same basis)". When several ledgers combine downstream, **each role/function keeps its own loaded rate**; per-process savings sum to that function's subtotal, function subtotals sum to the combined total, and the exec headline restates the combined total. Never blend two functions onto one rate.
-*Gate (triple-test):* re-derive top-3 savings independently; dedup map has no duplicate IDs; aggregate = sum of parts and sits under `total_active_hours`; FTE checked; inputs labelled; ranges present.
+  _Gate (triple-test):_ re-derive top-3 savings independently; dedup map has no duplicate IDs; aggregate = sum of parts and sits under `total_active_hours`; FTE checked; inputs labelled; ranges present.
 
-**Stage 7 — Systems landscape.** Synthesis, last because it needs automation status. Inventory + time share come from the cleaned baseline (0.5); this stage overlays function grouping (Source/ERP, Comms, Docs, BI, Finance, CRM) + status (manual/partial/automated) from how each system appears in processes. *Gate:* every system appears in the cleaned baseline list.
+**Stage 7 — Systems landscape.** Synthesis, last because it needs automation status. Inventory + time share come from the cleaned baseline (0.5); this stage overlays function grouping (Source/ERP, Comms, Docs, BI, Finance, CRM) + status (manual/partial/automated) from how each system appears in processes. _Gate:_ every system appears in the cleaned baseline list.
 
 **Final Review — adversarial.** Mechanical checks as code (aggregate = sum of parts; no duplicate IDs; % per app ~100; every headline has a range + label). Then break it: any number without label/evidence/range? sampled count? weak reasoning log? duplicate ID? team/FTE without headcount? `automatable=true` on judgment the data can't show is mechanical? tool not in context? aggregate above ceiling? click-level/fabricated detail? overall future-state label inconsistent with its steps (an AI-augmented or human-in-the-loop process with no human/judgment step, or an all-automate step list under an augmented label)? **Slop sweep:** every name/app/tool/step/number traces to a row or labelled assumption, else strip; deterministic numbers re-run identically. **Threshold-sensitivity:** re-segment one day at 3-min and 10-min gaps; if process count or total time shifts >25%, flag it. Write `what_would_sharpen` (2 to 4 cheap next steps that most raise confidence). Only survivors ship; record verdict + demoted/stripped.
 
@@ -146,47 +150,220 @@ Write two files, then a 5-line chat summary (don't dump raw output): `process-an
 
 ```json
 {
-  "meta": { "user_role": "", "department": "", "location": "", "measurement_scope": "single observed user (n=1)", "observed_user_count": 1, "data_source": "", "data_quality_tier": "", "window": "", "activities_analyzed": 0, "active_days": 0, "work_hours_per_day": 8, "capture_coverage_pct": 0, "sample_mode": false, "cost_basis": { "hourly_rate": 0, "currency": "", "basis": "estimated", "derivation": "" }, "data_coverage_notes": "", "blind_spots": "", "threshold_sensitive": false },
-  "baseline": { "total_active_hours": { "value": 0, "basis": "reasoned" }, "active_days": { "value": 0, "basis": "seen" }, "app_time_share": [{ "app": "", "pct": 0, "hours": 0, "basis": "reasoned" }], "deep_work_share": { "value": 0, "basis": "reasoned" } },
+  "meta": {
+    "user_role": "",
+    "department": "",
+    "location": "",
+    "measurement_scope": "single observed user (n=1)",
+    "observed_user_count": 1,
+    "data_source": "",
+    "data_quality_tier": "",
+    "window": "",
+    "activities_analyzed": 0,
+    "active_days": 0,
+    "work_hours_per_day": 8,
+    "capture_coverage_pct": 0,
+    "sample_mode": false,
+    "cost_basis": { "hourly_rate": 0, "currency": "", "basis": "estimated", "derivation": "" },
+    "data_coverage_notes": "",
+    "blind_spots": "",
+    "threshold_sensitive": false
+  },
+  "baseline": {
+    "total_active_hours": { "value": 0, "basis": "reasoned" },
+    "active_days": { "value": 0, "basis": "seen" },
+    "app_time_share": [{ "app": "", "pct": 0, "hours": 0, "basis": "reasoned" }],
+    "deep_work_share": { "value": 0, "basis": "reasoned" }
+  },
   "exec_rollup": {
-    "total_repetitive_hours_per_week": { "low": 0, "base": 0, "high": 0, "basis": "reasoned", "evidence": [] },
+    "total_repetitive_hours_per_week": {
+      "low": 0,
+      "base": 0,
+      "high": 0,
+      "basis": "reasoned",
+      "evidence": []
+    },
     "automatable_pct": { "low": 0, "base": 0, "high": 0, "basis": "estimated" },
     "capacity_unlocked_pct": { "low": 0, "base": 0, "high": 0, "basis": "estimated" },
-    "hours_saved_per_year": { "low": 0, "base": 0, "high": 0, "basis": "estimated", "error_sources": [] },
+    "hours_saved_per_year": {
+      "low": 0,
+      "base": 0,
+      "high": 0,
+      "basis": "estimated",
+      "error_sources": []
+    },
     "dollars_saved_per_year_net": { "low": 0, "base": 0, "high": 0, "basis": "estimated" },
     "fte_capacity_unlocked_this_person": { "low": 0, "base": 0, "high": 0, "basis": "estimated" },
-    "team_extrapolation": { "headcount_supplied": false, "value": null, "basis": "estimated", "multiplier": "", "unverified": true },
+    "team_extrapolation": {
+      "headcount_supplied": false,
+      "value": null,
+      "basis": "estimated",
+      "multiplier": "",
+      "unverified": true
+    },
     "overall_confidence": { "grade": "", "why": "" },
     "headline": "e.g. Automating these unlocks ~12% of annual capacity (~$Xk/yr), low/base/high",
     "shown_caveat": ""
   },
-  "processes": [{
-    "name": "", "category": "", "role_department": "", "selected_for_detail": true,
-    "tier": "process", "tier_note": "process | candidate (low confidence, sub-threshold but recurring); reason if candidate",
-    "frequency": { "value": "", "period": "", "basis": "reasoned", "evidence": [], "annualization_multiplier": "", "id_corroborated_runs": "K of N" },
-    "time_per_instance_min": { "n": 0, "median": 0, "iqr": "", "basis": "reasoned", "evidence": [] },
-    "annual_hours": { "low": 0, "base": 0, "high": 0, "basis": "estimated" },
-    "common_path": { "description": "", "approx_coverage_pct": 0, "basis": "estimated", "note": "" },
-    "steps": [{ "action": "", "app": "", "input": "", "output": "", "time_min": 0, "pain": "", "automatable": true, "note": "", "basis": "reasoned", "evidence": [] }],
-    "decision_points": [{ "question": "", "branches": [], "basis": "estimated" }],
-    "time_per_app_per_run": [{ "app": "", "minutes": 0 }],
-    "reconciliation": { "per_run_min": 0, "frequency_per_year": 0, "automatable_pct": 0, "loaded_rate": 0, "hours_freed": 0, "annual_savings": 0, "note": "per_run_min x (frequency_per_year/60... ) -> the displayed automatable_pct reproduces annual_savings; downstream reads these, never re-derives" },
-    "what_varies": "", "what_constant": "",
-    "automation": { "verdict": "kill|leave_as_is|redesign|automate", "future_state": "no_change|ai_augmented|human_in_the_loop|automated|eliminated", "route": "current_stack|internal_app|claude_cowork|current_automation_tool|n8n|gumloop|other", "effort_tier": "quick_win|extra_engagement", "work_nature": "mechanical|creative_judgment", "mechanism": "", "removes_manual_steps": [], "feasibility": "api|webhook|agent|none", "tool": "", "approach": "", "automatable_fraction_low": 0.0, "automatable_fraction_high": 0.0, "human_remainder": "", "automation_cost": { "build_hours": "", "tool_monthly": 0, "learning": "low|med|high", "maintenance": "low|med|high" }, "basis": "estimated" },
-    "scores": { "impact_hours": 0, "automatability": 0, "effort": "", "priority_rank": 0 },
-    "confidence": { "grade": "", "drivers": "" },
-    "savings": { "annual_hours_saved": { "low": 0, "base": 0, "high": 0 }, "gross_annual_dollars_saved": { "low": 0, "base": 0, "high": 0 }, "net_annual_dollars_saved": { "low": 0, "base": 0, "high": 0 }, "payback_months": 0, "formula": "", "inputs": [], "dominant_uncertainty": "" }
-  }],
-  "systems_landscape": [{ "system": "", "function_group": "", "time_share": "", "roles": [], "automation_status": "", "basis": "reasoned" }],
-  "patterns_cross_check": [{ "pattern": "", "their_frequency": "", "our_frequency": "", "discrepancy_note": "" }],
-  "reasoning_log": [{ "candidate": "", "verdict": "process|not_a_process|candidate", "why": "", "common_path_coverage_pct": 0, "case_n": 0, "evidence": [] }],
-  "assumptions": [{ "plain": "", "process": "", "observed_count": "", "window": "", "assumed_cadence": "", "annual_estimate": "" }],
-  "connector_checks": [{ "server": "", "read": false, "write": false, "verified_via": "", "date": "" }],
-  "cowork_skills": [{ "process": "", "name": "", "benefit_line": "", "trigger": "", "steps": { "connect": "", "create": "", "run": "" }, "notes": "", "connectors": [], "human_approval_gate": "" }],
-  "bottom_line": { "automatable_task_count": 0, "hours_saved_per_year": { "low": 0, "base": 0, "high": 0 }, "dollars_saved_per_year_net": { "low": 0, "base": 0, "high": 0 }, "capacity_unlocked_pct_per_person": 0, "capacity_unlocked_pct_per_role": 0, "how": "" },
+  "processes": [
+    {
+      "name": "",
+      "category": "",
+      "role_department": "",
+      "selected_for_detail": true,
+      "tier": "process",
+      "tier_note": "process | candidate (low confidence, sub-threshold but recurring); reason if candidate",
+      "frequency": {
+        "value": "",
+        "period": "",
+        "basis": "reasoned",
+        "evidence": [],
+        "annualization_multiplier": "",
+        "id_corroborated_runs": "K of N"
+      },
+      "time_per_instance_min": {
+        "n": 0,
+        "median": 0,
+        "iqr": "",
+        "basis": "reasoned",
+        "evidence": []
+      },
+      "annual_hours": { "low": 0, "base": 0, "high": 0, "basis": "estimated" },
+      "common_path": {
+        "description": "",
+        "approx_coverage_pct": 0,
+        "basis": "estimated",
+        "note": ""
+      },
+      "steps": [
+        {
+          "action": "",
+          "app": "",
+          "input": "",
+          "output": "",
+          "time_min": 0,
+          "pain": "",
+          "automatable": true,
+          "note": "",
+          "basis": "reasoned",
+          "evidence": []
+        }
+      ],
+      "decision_points": [{ "question": "", "branches": [], "basis": "estimated" }],
+      "time_per_app_per_run": [{ "app": "", "minutes": 0 }],
+      "reconciliation": {
+        "per_run_min": 0,
+        "frequency_per_year": 0,
+        "automatable_pct": 0,
+        "loaded_rate": 0,
+        "hours_freed": 0,
+        "annual_savings": 0,
+        "note": "per_run_min x (frequency_per_year/60... ) -> the displayed automatable_pct reproduces annual_savings; downstream reads these, never re-derives"
+      },
+      "what_varies": "",
+      "what_constant": "",
+      "automation": {
+        "verdict": "kill|leave_as_is|redesign|automate",
+        "future_state": "no_change|ai_augmented|human_in_the_loop|automated|eliminated",
+        "route": "current_stack|internal_app|claude_cowork|current_automation_tool|n8n|gumloop|other",
+        "effort_tier": "quick_win|extra_engagement",
+        "work_nature": "mechanical|creative_judgment",
+        "mechanism": "",
+        "removes_manual_steps": [],
+        "feasibility": "api|webhook|agent|none",
+        "tool": "",
+        "approach": "",
+        "automatable_fraction_low": 0.0,
+        "automatable_fraction_high": 0.0,
+        "human_remainder": "",
+        "automation_cost": {
+          "build_hours": "",
+          "tool_monthly": 0,
+          "learning": "low|med|high",
+          "maintenance": "low|med|high"
+        },
+        "basis": "estimated"
+      },
+      "scores": { "impact_hours": 0, "automatability": 0, "effort": "", "priority_rank": 0 },
+      "confidence": { "grade": "", "drivers": "" },
+      "savings": {
+        "annual_hours_saved": { "low": 0, "base": 0, "high": 0 },
+        "gross_annual_dollars_saved": { "low": 0, "base": 0, "high": 0 },
+        "net_annual_dollars_saved": { "low": 0, "base": 0, "high": 0 },
+        "payback_months": 0,
+        "formula": "",
+        "inputs": [],
+        "dominant_uncertainty": ""
+      }
+    }
+  ],
+  "systems_landscape": [
+    {
+      "system": "",
+      "function_group": "",
+      "time_share": "",
+      "roles": [],
+      "automation_status": "",
+      "basis": "reasoned"
+    }
+  ],
+  "patterns_cross_check": [
+    { "pattern": "", "their_frequency": "", "our_frequency": "", "discrepancy_note": "" }
+  ],
+  "reasoning_log": [
+    {
+      "candidate": "",
+      "verdict": "process|not_a_process|candidate",
+      "why": "",
+      "common_path_coverage_pct": 0,
+      "case_n": 0,
+      "evidence": []
+    }
+  ],
+  "assumptions": [
+    {
+      "plain": "",
+      "process": "",
+      "observed_count": "",
+      "window": "",
+      "assumed_cadence": "",
+      "annual_estimate": ""
+    }
+  ],
+  "connector_checks": [
+    { "server": "", "read": false, "write": false, "verified_via": "", "date": "" }
+  ],
+  "cowork_skills": [
+    {
+      "process": "",
+      "name": "",
+      "benefit_line": "",
+      "trigger": "",
+      "steps": { "connect": "", "create": "", "run": "" },
+      "notes": "",
+      "connectors": [],
+      "human_approval_gate": ""
+    }
+  ],
+  "bottom_line": {
+    "automatable_task_count": 0,
+    "hours_saved_per_year": { "low": 0, "base": 0, "high": 0 },
+    "dollars_saved_per_year_net": { "low": 0, "base": 0, "high": 0 },
+    "capacity_unlocked_pct_per_person": 0,
+    "capacity_unlocked_pct_per_role": 0,
+    "how": ""
+  },
   "what_would_sharpen": [],
   "narrative_summary": "",
-  "review": { "verdict": "", "checkpoint": "approved|adjusted|auto-passed", "demoted": [], "stripped": [], "double_count_check": "passed", "threshold_sensitivity": "", "reproducibility_note": "deterministic numbers reproduce exactly; AI-judgment calls may vary slightly" }
+  "review": {
+    "verdict": "",
+    "checkpoint": "approved|adjusted|auto-passed",
+    "demoted": [],
+    "stripped": [],
+    "double_count_check": "passed",
+    "threshold_sensitivity": "",
+    "reproducibility_note": "deterministic numbers reproduce exactly; AI-judgment calls may vary slightly"
+  }
 }
 ```
 

@@ -47,6 +47,7 @@ turn after the review step (stage 6). This overrides speed.
 Source: one or more `process-analysis*.json` ledgers in the working dir (+
 optional `.md` for wording). Each ledger is **one observed person** (the analysis
 is single-user by construction). Any producer of the same shape works.
+
 - **Detect the cohort:** glob `process-analysis*.json` (and any paths the user
   gives). 1 file → single-user report. 2+ → **consolidated** report (§7 stage 2).
 - Each ledger MUST carry `meta.role` (and ideally `department`) for grouping. If
@@ -55,6 +56,7 @@ is single-user by construction). Any producer of the same shape works.
 
 **Expected ledger shape** (top-level keys + the leaves the report binds; omit
 any element whose field is absent, per §2):
+
 - `meta`: role, location, window, active_days, measurement_scope, `cost_basis`
   (rate, derivation, basis), shown_caveat; optional report_title, client.
 - `exec_rollup`: repetitive_hours_per_week, automatable_pct, hours_saved_per_year,
@@ -76,6 +78,7 @@ any element whose field is absent, per §2):
 **Intake gate.** Ask ONCE in a single batched `AskUserQuestion` for everything
 missing. Cosmetic fields take a default on skip; **data-affecting gaps are never
 invented** (per the rule above): label them missing/estimated or omit:
+
 - **Ledger(s)** path/data, and which users form the cohort (if absent or a
   different shape: ask for the file(s) or the fields above).
 - **Role/department** for any ledger missing it (grouping key, never guessed).
@@ -92,6 +95,7 @@ invented** (per the rule above): label them missing/estimated or omit:
 
 The ledger labels every exec number `seen` / `reasoned` / `estimated` with a
 `shown_caveat` and a reasoning log. Surface them, or this becomes slop:
+
 - **Every headline number carries its basis** as a chip (`seen` green ·
   `reasoned` blue · `estimated` amber) or the inline `.basis` micro-label. No
   bare numbers.
@@ -110,7 +114,7 @@ The ledger labels every exec number `seen` / `reasoned` / `estimated` with a
   frequency x automatable% = hours freed; hours freed x the role's loaded rate =
   annual savings; per-process savings sum to the function subtotal; function
   subtotals sum to the combined total; the headline restates the combined total.
-  *Worked example (shipped):* Product (slide deck ~A$3,500 + sprint ~A$500) = A$4k;
+  _Worked example (shipped):_ Product (slide deck ~A$3,500 + sprint ~A$500) = A$4k;
   Marketing (~A$6,200 + ~A$2,800 + ~A$2,000) = A$11k; Measured (2 users) = A$15k;
   capacity 1h + 3h = 4h/week (5%); 2 + 3 = 5 processes.
 - **One rounding grain.** Round money to a clean grain with "~" (nearest $100/$1k
@@ -127,6 +131,7 @@ The ledger labels every exec number `seen` / `reasoned` / `estimated` with a
 
 **Number + money formatting (house style, from shipped reports; currency follows
 the ledger, A$ shown as the example).**
+
 - Capacity + time reads `1h/week (2%)` (no space inside `1h`, one space before the
   parenthesis). Shipped: `1h/week (2%)`, `3h/week (8%)`, `4h/week (5%)`, `~1 FTE (5%)`.
 - Per-process figures and the in-scope table carry `~` and full digits with a comma
@@ -145,17 +150,18 @@ the ledger, A$ shown as the example).**
 ledger's coverage (total active hours, active days, #people, window) and show it
 as a one-line `.databanner` near the headlines (cover + exec); fold it into the
 scope line too. Tiers and voice:
+
 - **rich** (≈20+ active days, or n≥3 in a role): "Strong sample, numbers are
   well-grounded."
 - **ok** (a couple of weeks, decent hours): "Solid first read (N days, n people)."
 - **light** (few days / one person): "Directional first read, not a verdict;
   ranges wide on purpose."
 - **thin** (e.g. ~7h over 8 days, n=1): say it plainly and stay useful, e.g.
-  *"~7h over 8 days, 1 person. Little data, but here's the read: <top finding>.
+  _"~7h over 8 days, 1 person. Little data, but here's the read: <top finding>.
   Reasonable extrapolation: <X>. Act on the top one; get more data before the
-  rest."* Friendly, confident, actionable, never a disclaimer dump.
-Thin data also: widen the ranges, push figures to `estimated`, and lead with the
-single most reasonable extrapolation + the one action, not a hedge.
+  rest."_ Friendly, confident, actionable, never a disclaimer dump.
+  Thin data also: widen the ranges, push figures to `estimated`, and lead with the
+  single most reasonable extrapolation + the one action, not a hedge.
 
 **Voice, no essays.** Short, plain, compelling. Fragments and bullets over
 paragraphs; label, number, basis, done. The only running prose is the ledger's
@@ -168,6 +174,7 @@ here's the read, here's the reasonable extrapolation, here's the one move."
 ## 3. Design system & assets
 
 In `assets/` beside this file:
+
 - **`report.css`** — full design system + print rules. **Inline it into a
   `<style>` tag.** The whole report is **one self-contained HTML file**: CSS
   inlined, charts as inline SVG/CSS, images as data URIs, **no external links,
@@ -214,6 +221,7 @@ The report carries the client's identity, like a consulting deliverable.
 
 **Per-app icons (time-by-application appendix), and the acquisition gotchas we
 hit shipping:**
+
 - Inline every icon as a data URI: PNG → `data:image/png;base64,…`, brand SVG →
   `data:image/svg+xml;base64,…`. Size each at
   `width:20px;height:20px;border-radius:4px;object-fit:contain`.
@@ -236,6 +244,7 @@ The report is a stack of `.page` elements; each is **exactly one A4-landscape
 sheet** (fixed size in `report.css`). Print maps **one `.page` → one PDF page**
 via `break-after: page`. Pages are **composed to fit**, not reflowed, so breaks
 are deterministic and nothing splits mid-element.
+
 - Compose each page to fit; if a section overflows (long step table, many
   processes), **split across more `.page` blocks**.
 - The CSS already sets `break-inside: avoid` on cards/tables/rows and
@@ -249,19 +258,19 @@ are deterministic and nothing splits mid-element.
 
 Cover first, appendix/conclusion last; reorder the middle for narrative.
 
-| Page | Source | Archetype |
-|------|--------|-----------|
-| **Cover** | `meta`, `exec_rollup` (4 KPIs + caveat), client logo/name | `.cover` |
-| **Exec summary** | `exec_rollup`, top `processes`, `narrative_summary`, confidence | KPI row + `.card-grid` |
-| **Baseline** | `baseline` (app bars, active days, hours, deep-work) | `.bars`, KPI, range |
-| **Process scoring** | `processes[].scores`, category, frequency, confidence, verdict | `.tbl` + `.dots` + chips |
-| **Automation matrix** | `processes[].scores` (impact × automatability) | `.matrix` + `.bub` |
-| **Process detail** (top ~5–7 by rank) | `processes[]`: common_path, steps, automation, savings | step table + savings card |
-| **Long-tail table** | lower-ranked `processes[]` | `.tbl` (light) |
-| **Systems landscape** | `systems_landscape[]` | `.sys-grid` + status chips |
-| **Opportunities** | top processes by net ROI | `.opp` cards |
-| **Appendix** | `reasoning_log`(+counts), `assumptions`, `what_would_sharpen`, cost derivation, reproducibility_note | `.logrow`, `.assume`, cards |
-| **Conclusion** | `narrative_summary` + headline tallies | `.story` + `.statlist` |
+| Page                                  | Source                                                                                               | Archetype                   |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------- |
+| **Cover**                             | `meta`, `exec_rollup` (4 KPIs + caveat), client logo/name                                            | `.cover`                    |
+| **Exec summary**                      | `exec_rollup`, top `processes`, `narrative_summary`, confidence                                      | KPI row + `.card-grid`      |
+| **Baseline**                          | `baseline` (app bars, active days, hours, deep-work)                                                 | `.bars`, KPI, range         |
+| **Process scoring**                   | `processes[].scores`, category, frequency, confidence, verdict                                       | `.tbl` + `.dots` + chips    |
+| **Automation matrix**                 | `processes[].scores` (impact × automatability)                                                       | `.matrix` + `.bub`          |
+| **Process detail** (top ~5–7 by rank) | `processes[]`: common_path, steps, automation, savings                                               | step table + savings card   |
+| **Long-tail table**                   | lower-ranked `processes[]`                                                                           | `.tbl` (light)              |
+| **Systems landscape**                 | `systems_landscape[]`                                                                                | `.sys-grid` + status chips  |
+| **Opportunities**                     | top processes by net ROI                                                                             | `.opp` cards                |
+| **Appendix**                          | `reasoning_log`(+counts), `assumptions`, `what_would_sharpen`, cost derivation, reproducibility_note | `.logrow`, `.assume`, cards |
+| **Conclusion**                        | `narrative_summary` + headline tallies                                                               | `.story` + `.statlist`      |
 
 Chips: basis `seen|reasoned|estimated`→`chip--seen|--reason|--est`; confidence
 `high|medium|low`→`chip--hi|--med|--lo`; verdict `automate|ai_assist|redesign|
@@ -288,6 +297,7 @@ automating now / repetitive hours / $ recoverable / scope).
 **Multi-user (cohort) layout.** With 2+ ledgers, the exec rollup is AGGREGATED
 across the population; processes are reported per role/department (founder's
 rule: numbers aggregate, workflows split by role). Add:
+
 - **Population & roles** page (after exec summary): one row per role/department,
   with users observed, days, repetitive hrs/wk, top tools. Anonymized to
   roles/teams, **never personal names**.
@@ -298,10 +308,11 @@ rule: numbers aggregate, workflows split by role). Add:
   K of N <role>s") + one line on path divergence. Never average two genuinely
   different processes (see §7 stage 2).
 - Cover/exec KPIs = cohort totals; scope = "N people across M roles".
-1 ledger → skip these, use the n=1 layout.
+  1 ledger → skip these, use the n=1 layout.
 
 **Optional sales-deck sections (shipped patterns, archetypes in `components.html`).**
 Use when the deck is a client-facing proposal, not just an internal map:
+
 - **Per-function "Automation Opportunities" table** on the exec summary
   (`.tbl`): columns Function, Processes, Automatable, New capacity unlocked,
   Annual savings, with a "Measured (N users)" total row and a clearly-labelled
@@ -339,8 +350,8 @@ per process for detail pages), then assemble; else do them in order.
    shared once**, not charged per role (else net ROI is understated). One
    sub-agent per role works well. 1 ledger → skip, scope n=1.
 3. **Plan pages.** Fixed pages (+ Population & roles + Per-role rollup if cohort)
-   + one detail page per top process + long-tail table. A detail page holds ~8
-   step rows + a savings card; split if more.
+   - one detail page per top process + long-tail table. A detail page holds ~8
+     step rows + a savings card; split if more.
 4. **Generate `report.html`** in the working dir: one self-contained file (§3),
    clone archetypes, bind real values, enforce the honesty contract (§2), embed
    the logo (§4). Tight copy: label, number, basis, done. When many near-identical
@@ -388,13 +399,14 @@ install chromium`. `make-pdf.sh` also cross-checks expected `.page` count vs the
 PDF's actual page count and warns on mismatch (any engine).
 
 Fallbacks, only if install is impossible (offline/locked sandbox), best-first:
+
 1. **System Chrome** `--headless=new --print-to-pdf` — good fidelity (CSS forces
    `print-color-adjust: exact`); overflow NOT measured, so **say so and eyeball
    every page**.
 2. **WeasyPrint** — layout may differ; last automated resort.
 3. **Manual** — HTML is print-ready; user prints to PDF (Landscape, margins None,
    Background graphics ON). Reproduces exactly.
-Always state which engine ran and whether overflow was auto-verified.
+   Always state which engine ran and whether overflow was auto-verified.
 
 ---
 

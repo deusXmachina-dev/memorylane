@@ -57,23 +57,28 @@ Markdown skeleton (keep it tight, drop empty sections):
 ```markdown
 # [Workflow] - Automation instructions ([tool])
 
-**Does:** [one line]  **Trigger:** [what starts it]  **Frequency:** [from the source]
+**Does:** [one line] **Trigger:** [what starts it] **Frequency:** [from the source]
 **Constraints:** [what it must not do]
 
 ## Variables (inputs that change each run)
+
 - [name]: [example]
 
 ## Constants (hardcoded)
+
 - [name]: [value]
 
 ## Steps
+
 1. [Action] in [app] - input [x] -> output [y]. On error: [fallback].
 2. ...
 
 ## Stays human
+
 - [step + why, incl. anything the constraints forced manual]
 
 ## Build notes ([tool])
+
 - [trigger + key apps/nodes/actions + effort: easy/medium/hard]
 ```
 
