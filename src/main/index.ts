@@ -242,8 +242,10 @@ app.on('ready', async () => {
 
   if (editionConfig.edition === 'customer') {
     const { initAutoUpdater } = await import('./updater')
+    const { sendUpdateState } = await import('./ui/main-window')
     initAutoUpdater(() => {
       void updateTrayMenu()
+      sendUpdateState()
     })
   } else {
     log.info('[Updater] Skipping auto-updater for enterprise edition')

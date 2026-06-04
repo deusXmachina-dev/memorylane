@@ -20,6 +20,7 @@ import { DEFAULT_EDITION, type AppEditionConfig } from '../../shared/edition'
 import { PURGE_CONFIRMATION_PHRASE } from '../../shared/constants'
 import log from '../logger'
 import { updateTrayMenu } from './tray'
+import { getUpdateInfo, quitAndInstall } from '../updater'
 import { exportDatabaseZip } from './database-export'
 import { importDatabase } from './database-import'
 import { getPermissionStatus, openPermissionSettings, type PermissionStatus } from './permissions'
@@ -188,6 +189,15 @@ export function sendStatusToRenderer(): void {
 export function sendObservationUpdate(state: ObservationState): void {
   if (!mainWindow || mainWindow.isDestroyed()) return
   mainWindow.webContents.send('main-window:observationUpdate', state)
+}
+
+/**
+ * Broadcast the current auto-update state to the renderer so it can show the
+ * "Relaunch to update" banner when an update is ready.
+ */
+export function sendUpdateState(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.webContents.send('main-window:updateStateChanged', getUpdateInfo())
 }
 
 // Permission status broadcaster — the renderer subscribes while on the
@@ -1013,5 +1023,10 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     log.info('[App] Restart requested from renderer')
     app.relaunch()
     app.quit()
+  })
+  ipcMain.handle('main-window:getUpdateState', () => getUpdateInfo())
+  ipcMain.handle('main-window:installUpdate', () => {
+    log.info('[Updater] Install requested from renderer')
+    void quitAndInstall()
   })
 }
