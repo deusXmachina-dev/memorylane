@@ -270,9 +270,19 @@ describe('VendorCredentialsManager', () => {
       expect(validateVendorBaseURL('https://example.com/path')).toBe('https://example.com/path')
     })
 
-    it('accepts http URLs only for loopback hosts', () => {
+    it('accepts http URLs for loopback hosts', () => {
       expect(validateVendorBaseURL('http://localhost:11434/v1')).toBe('http://localhost:11434/v1')
       expect(validateVendorBaseURL('http://127.0.0.1:11434/v1')).toBe('http://127.0.0.1:11434/v1')
+    })
+
+    it('accepts http URLs for private / link-local network hosts (LAN Ollama)', () => {
+      expect(validateVendorBaseURL('http://10.0.0.92:11434/v1')).toBe('http://10.0.0.92:11434/v1')
+      expect(validateVendorBaseURL('http://192.168.1.50:11434/v1')).toBe(
+        'http://192.168.1.50:11434/v1',
+      )
+      expect(validateVendorBaseURL('http://172.16.0.1/')).toBe('http://172.16.0.1/')
+      expect(validateVendorBaseURL('http://172.31.255.255/')).toBe('http://172.31.255.255/')
+      expect(validateVendorBaseURL('http://169.254.1.1/')).toBe('http://169.254.1.1/')
     })
 
     it('returns empty string for empty / whitespace / undefined input', () => {
@@ -282,9 +292,14 @@ describe('VendorCredentialsManager', () => {
       expect(validateVendorBaseURL(null)).toBe('')
     })
 
-    it('rejects http URLs to non-loopback hosts', () => {
-      expect(() => validateVendorBaseURL('http://10.0.0.1/')).toThrow(/localhost/)
+    it('rejects http URLs to public hosts', () => {
+      expect(() => validateVendorBaseURL('http://8.8.8.8/')).toThrow(/localhost/)
       expect(() => validateVendorBaseURL('http://evil.example.com/v1')).toThrow(/localhost/)
+      // Just outside the 172.16.0.0/12 private block on either side.
+      expect(() => validateVendorBaseURL('http://172.15.0.1/')).toThrow(/localhost/)
+      expect(() => validateVendorBaseURL('http://172.32.0.1/')).toThrow(/localhost/)
+      // Hostname that merely starts with a private octet must not slip through.
+      expect(() => validateVendorBaseURL('http://10.0.0.1.evil.com/')).toThrow(/localhost/)
     })
 
     it('rejects file:, ftp:, and other schemes', () => {
@@ -383,7 +398,7 @@ describe('VendorCredentialsManager', () => {
     expect(() =>
       m.saveCredentials('openai-compatible', {
         apiKey: 'sk-x',
-        baseURL: 'http://10.0.0.1/v1',
+        baseURL: 'http://attacker.example/v1',
       }),
     ).toThrow(/localhost/)
     // Nothing should have been persisted.
