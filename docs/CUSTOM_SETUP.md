@@ -46,7 +46,7 @@ ollama pull llama2:70b-chat   # use the full tag, not just "llama2"
 - **Model names aren't checked when you save.** A typo only shows up when analysis runs — watch **LLM Health** and the model's behavior.
 - **HTTP vs HTTPS.** Plain `http://` works only for `localhost` and private/LAN addresses (`10.x`, `192.168.x`, `172.16–31.x`). Public addresses must use `https://` (your API key rides in the request header).
 - **Switching vendors keeps your settings.** Each vendor remembers its own key and model choices, so you can flip back and forth.
-- **Power-user shortcut:** you can set credentials with environment variables before launching the app instead of using the UI — `OPENAI_COMPATIBLE_BASE_URL`, `OPENAI_COMPATIBLE_API_KEY`, `OPENROUTER_API_KEY`. Env vars win over whatever's saved in the UI.
+- **Power-user shortcut:** you can set credentials with environment variables before launching the app instead of using the UI — `OPENAI_COMPATIBLE_BASE_URL`, `OPENAI_COMPATIBLE_API_KEY`, `OPENROUTER_API_KEY`. These are a fallback: anything saved in the UI for that vendor takes precedence, so clear the saved credentials if you want the env vars to take effect.
 
 ## Connecting your own AI client (MCP)
 
@@ -75,4 +75,4 @@ That folder holds the database (`memorylane.db`), your settings, and your saved 
 - **Ollama "model not found"** — use the full tag (`llama2:70b-chat`), not the base name, and make sure you pulled it.
 - **LLM Health is red** — double-check the base URL, key, and that your server is running. Quick test from a terminal: `curl -H "Authorization: Bearer <key>" http://localhost:11434/v1/models`.
 - **Video analysis falls back to images** — expected with image-only local models (`moondream`, `llava`). Set the media pipeline to **image**, or use a model that supports video.
-- **Changed a key but the old one's still used** — environment variables override the UI. Unset them (or clear the saved credentials) to be sure which is active.
+- **Changed a key but the old one's still used** — UI-saved credentials take precedence over environment variables. Update the key in **Settings**, or clear the saved credentials there so the env var is used.
