@@ -123,6 +123,16 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
       ipcRenderer.off('main-window:permissionStatusChanged', handler)
     }
   },
+  // Updater
+  getUpdateInfo: () => ipcRenderer.invoke('main-window:getUpdateInfo'),
+  installUpdate: () => ipcRenderer.invoke('main-window:installUpdate'),
+  onUpdateStateChanged: (callback: (info: unknown) => void) => {
+    const handler = (_event: unknown, info: unknown): void => callback(info)
+    ipcRenderer.on('main-window:updateStateChanged', handler)
+    return () => {
+      ipcRenderer.off('main-window:updateStateChanged', handler)
+    }
+  },
   // App lifecycle
   restartApp: () => ipcRenderer.invoke('main-window:restartApp'),
   // Host platform — read once at preload time; never changes mid-session.

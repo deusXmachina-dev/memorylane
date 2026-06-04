@@ -12,6 +12,7 @@ import type { LlmHealthStatus, Vendor } from '@types'
 import { CaptureControlSection } from '../CaptureControlSection'
 import { SidebarNavItem } from './SidebarNavItem'
 import { LlmStatusPanel } from './LlmStatusPanel'
+import { UpdateBanner } from './UpdateBanner'
 import { Logo } from '@/renderer/components/Logo'
 
 export type MainSection = 'activities' | 'patterns' | 'settings'
@@ -32,6 +33,9 @@ interface SidebarProps {
   llmHealth: LlmHealthStatus | null
   configured: boolean
   onOpenLlmSettings: () => void
+  updateReady: boolean
+  updateVersion: string | null
+  onInstallUpdate: () => void
   collapsed: boolean
   onToggleCollapsed: () => void
 }
@@ -46,6 +50,9 @@ export function Sidebar({
   llmHealth,
   configured,
   onOpenLlmSettings,
+  updateReady,
+  updateVersion,
+  onInstallUpdate,
   collapsed,
   onToggleCollapsed,
 }: SidebarProps): React.JSX.Element {
@@ -94,6 +101,10 @@ export function Sidebar({
       </nav>
 
       <div className="flex-1" />
+
+      {updateReady ? (
+        <UpdateBanner version={updateVersion} onRelaunch={onInstallUpdate} collapsed={collapsed} />
+      ) : null}
 
       <LlmStatusPanel
         vendor={vendor}

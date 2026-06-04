@@ -38,6 +38,7 @@ import type {
   PatternInfo,
   PermissionState,
   PermissionStatus,
+  UpdateInfo,
   Vendor,
   VendorStatus,
 } from '@types'
@@ -67,6 +68,7 @@ export function MainWindowApp(): React.JSX.Element {
     readLastCompletedIndex(localStorageAdapter),
   )
   const [permissionStatus, setPermissionStatus] = useState<PermissionStatus | null>(null)
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   // Captured synchronously on the first non-null permission status so we can
   // detect a mid-session screen-recording grant — macOS won't let the running
   // process actually capture until it restarts, so we gate onboarding on a
@@ -333,6 +335,12 @@ export function MainWindowApp(): React.JSX.Element {
     return () => unsubscribe()
   }, [api, updatePermissionStatus])
 
+  useEffect(() => {
+    void api.getUpdateInfo().then(setUpdateInfo)
+    const unsubscribe = api.onUpdateStateChanged(setUpdateInfo)
+    return () => unsubscribe()
+  }, [api])
+
   // Self-heal `lastCompletedStepIndex` from concrete state once everything
   // has loaded. If a returning user has already granted permissions, set a
   // key, or connected MCP, those steps are implicitly done — bump the mark
@@ -533,6 +541,9 @@ export function MainWindowApp(): React.JSX.Element {
       llmHealth={llmHealth}
       configured={isConfigured}
       onOpenLlmSettings={handleOpenLlmSettings}
+      updateReady={updateInfo?.state === 'ready'}
+      updateVersion={updateInfo?.version ?? null}
+      onInstallUpdate={() => void api.installUpdate()}
       collapsed={sidebarCollapsed}
       onToggleCollapsed={handleToggleSidebar}
     />

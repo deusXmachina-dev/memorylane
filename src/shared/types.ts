@@ -249,6 +249,11 @@ export type SemanticPipelineMode = 'auto' | 'video' | 'image'
 
 export type UpdateState = 'idle' | 'downloading' | 'ready'
 
+export interface UpdateInfo {
+  state: UpdateState
+  version: string | null
+}
+
 export type PermissionKind = 'accessibility' | 'screenRecording'
 export type PermissionState = 'granted' | 'denied' | 'unknown'
 export interface PermissionStatus {
@@ -355,8 +360,8 @@ export interface MainWindowAPI {
   syncDatabaseToRemote: () => Promise<{ success: boolean; error?: string }>
   purgeDatabase: (confirmation: string) => Promise<{ success: boolean; error?: string }>
   // Updater
-  getUpdateState: () => Promise<UpdateState>
-  onUpdateStateChanged: (callback: (state: UpdateState) => void) => void
+  getUpdateInfo: () => Promise<UpdateInfo>
+  onUpdateStateChanged: (callback: (info: UpdateInfo) => void) => () => void
   installUpdate: () => Promise<void>
   openExternal: (url: string) => Promise<void>
   // Observation (build exclusion list from live activity)
