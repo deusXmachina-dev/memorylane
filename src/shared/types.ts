@@ -360,7 +360,7 @@ export interface MainWindowAPI {
   syncDatabaseToRemote: () => Promise<{ success: boolean; error?: string }>
   purgeDatabase: (confirmation: string) => Promise<{ success: boolean; error?: string }>
   // Updater
-  getUpdateState: () => Promise<UpdateInfo>
+  getUpdateInfo: () => Promise<UpdateInfo>
   onUpdateStateChanged: (callback: (info: UpdateInfo) => void) => () => void
   installUpdate: () => Promise<void>
   openExternal: (url: string) => Promise<void>

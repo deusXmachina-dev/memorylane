@@ -124,7 +124,7 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
     }
   },
   // Updater
-  getUpdateState: () => ipcRenderer.invoke('main-window:getUpdateState'),
+  getUpdateInfo: () => ipcRenderer.invoke('main-window:getUpdateInfo'),
   installUpdate: () => ipcRenderer.invoke('main-window:installUpdate'),
   onUpdateStateChanged: (callback: (info: unknown) => void) => {
     const handler = (_event: unknown, info: unknown): void => callback(info)

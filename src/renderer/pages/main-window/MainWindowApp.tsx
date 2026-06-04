@@ -336,7 +336,7 @@ export function MainWindowApp(): React.JSX.Element {
   }, [api, updatePermissionStatus])
 
   useEffect(() => {
-    void api.getUpdateState().then(setUpdateInfo)
+    void api.getUpdateInfo().then(setUpdateInfo)
     const unsubscribe = api.onUpdateStateChanged(setUpdateInfo)
     return () => unsubscribe()
   }, [api])

@@ -1024,7 +1024,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     app.relaunch()
     app.quit()
   })
-  ipcMain.handle('main-window:getUpdateState', () => getUpdateInfo())
+  ipcMain.handle('main-window:getUpdateInfo', () => getUpdateInfo())
   ipcMain.handle('main-window:installUpdate', () => {
     log.info('[Updater] Install requested from renderer')
     void quitAndInstall()
