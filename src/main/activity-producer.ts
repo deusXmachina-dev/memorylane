@@ -17,8 +17,19 @@ const ACTIVITY_ID_NAMESPACE = uuidv5('memorylane:v2-activity', uuidv5.DNS)
 
 export interface ActivityProducerStats {
   emittedActivities: number
+  // Windows dropped because no frame fell in their time range at all.
   droppedNoFrameWindows: number
+  // Windows that had frames in their time range but every one was excluded by
+  // the grab-time app filter (the leak signature: in-range frames all stamped
+  // with a different app than the window context).
+  droppedAllFramesFilteredWindows: number
   droppedUnknownContextWindows: number
+  // Total frames kept out of a window by the grab-time app filter (includes the
+  // ones counted by droppedAllFramesFilteredWindows). A proxy for how often the
+  // leak the filter guards against actually fires in production.
+  framesExcludedByAppFilter: number
+  // Total trailing "transition bleed" frames dropped at app-switch boundaries.
+  trailingFramesDropped: number
 }
 
 interface ChunkContext {
@@ -64,7 +75,10 @@ export class ActivityProducer {
   private readonly stats: ActivityProducerStats = {
     emittedActivities: 0,
     droppedNoFrameWindows: 0,
+    droppedAllFramesFilteredWindows: 0,
     droppedUnknownContextWindows: 0,
+    framesExcludedByAppFilter: 0,
+    trailingFramesDropped: 0,
   }
 
   constructor(params: {
@@ -201,15 +215,25 @@ export class ActivityProducer {
       return
     }
 
-    const candidateFrames = this.getFramesInRange(
+    const { frames: candidateFrames, excludedByAppFilter } = this.getFramesInRange(
       window.startTimestamp,
       window.endTimestamp,
       windowContext,
     )
+    this.stats.framesExcludedByAppFilter += excludedByAppFilter
     if (candidateFrames.length === 0) {
-      this.stats.droppedNoFrameWindows++
+      // Distinguish "no frames captured in this window" from "frames were
+      // captured but all belonged to a different app" — the latter is the leak
+      // signature and worth tracking separately for diagnosis.
+      if (excludedByAppFilter > 0) {
+        this.stats.droppedAllFramesFilteredWindows++
+      } else {
+        this.stats.droppedNoFrameWindows++
+      }
       log.info(
-        `[ActivityProducer] Dropping window ${window.id} at offset ${record.offset}: no frames in ${window.startTimestamp}-${window.endTimestamp}`,
+        `[ActivityProducer] Dropping window ${window.id} at offset ${record.offset}: ` +
+          `${excludedByAppFilter > 0 ? `all ${excludedByAppFilter} frame(s) app-filtered out` : 'no frames'} ` +
+          `in ${window.startTimestamp}-${window.endTimestamp}`,
       )
       // A frameless window can neither seed nor extend an activity, but if its
       // context is incompatible with the in-progress pendingActivity it still
@@ -472,6 +496,7 @@ export class ActivityProducer {
     // Frames are kept sorted ascending by timestamp, so the latest is the bleed.
     const dropped = activity.frames.pop()
     if (dropped === undefined) return
+    this.stats.trailingFramesDropped++
     activity.provenance.frameOffsets = activity.provenance.frameOffsets.filter(
       (offset) => offset !== dropped.offset,
     )
@@ -547,13 +572,15 @@ export class ActivityProducer {
     startTimestamp: number,
     endTimestamp: number,
     context: ActivityContext,
-  ): StreamRecord<Frame>[] {
-    return this.frameBuffer.filter(
+  ): { frames: StreamRecord<Frame>[]; excludedByAppFilter: number } {
+    const inTimeRange = this.frameBuffer.filter(
       (record) =>
-        record.payload.timestamp >= startTimestamp &&
-        record.payload.timestamp <= endTimestamp &&
-        this.frameAppMatchesContext(record.payload, context),
+        record.payload.timestamp >= startTimestamp && record.payload.timestamp <= endTimestamp,
     )
+    const frames = inTimeRange.filter((record) =>
+      this.frameAppMatchesContext(record.payload, context),
+    )
+    return { frames, excludedByAppFilter: inTimeRange.length - frames.length }
   }
 
   private async waitForFramesToSettle(windowEndTimestamp: number): Promise<void> {

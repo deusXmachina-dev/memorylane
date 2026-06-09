@@ -536,6 +536,7 @@ describe('ActivityProducer', () => {
     await waitFor(() => activities.length === 1, 'Expected one activity')
     expect(activities[0].context.appName).toBe('Code')
     expect(activities[0].frames.map((f) => f.frame.filepath)).toEqual(['frame-0.png'])
+    expect(producer.getStats().framesExcludedByAppFilter).toBe(1)
   })
 
   it('retains an app-less (unstamped) frame regardless of context', async () => {
@@ -698,12 +699,16 @@ describe('ActivityProducer', () => {
     )
 
     await waitFor(
-      () => activities.length === 1 && producer.getStats().droppedNoFrameWindows === 1,
+      () => activities.length === 1 && producer.getStats().droppedAllFramesFilteredWindows === 1,
       'Expected the Ghostty activity to emit and the app-mismatched Electron window to drop',
     )
     expect(activities.map((a) => a.context.appName)).toEqual(['Ghostty'])
     expect(activities[0].frames.map((f) => f.frame.filepath)).toEqual(['frame-0.png'])
     expect(producer.getStats().emittedActivities).toBe(1)
+    // The Electron window had a frame in range but it was app-filtered out, so it
+    // counts as all-filtered, not genuinely no-frame.
+    expect(producer.getStats().droppedNoFrameWindows).toBe(0)
+    expect(producer.getStats().framesExcludedByAppFilter).toBe(1)
 
     // The incompatible frameless window finalized the pending activity, so the
     // event offsets ack without an explicit flush/stop.
@@ -738,10 +743,12 @@ describe('ActivityProducer', () => {
     )
 
     await waitFor(
-      () => producer.getStats().droppedNoFrameWindows === 1,
+      () => producer.getStats().droppedAllFramesFilteredWindows === 1,
       'Expected the Unknown-context window to drop the mismatched frame',
     )
     expect(activities).toHaveLength(0)
+    expect(producer.getStats().droppedNoFrameWindows).toBe(0)
+    expect(producer.getStats().framesExcludedByAppFilter).toBe(1)
   })
 
   it('keeps a mismatched frame when the app filter is disabled', async () => {
@@ -842,6 +849,7 @@ describe('ActivityProducer', () => {
     expect(activities[0].provenance.frameOffsets).toEqual([0])
     // Slack is finalized by flush (not an app switch), so its frame is kept.
     expect(activities[1].frames.map((f) => f.frame.filepath)).toEqual(['frame-2.png'])
+    expect(producer.getStats().trailingFramesDropped).toBe(1)
   })
 
   it('keeps the trailing frame when dropAppSwitchTrailingFrame is disabled', async () => {
@@ -900,6 +908,7 @@ describe('ActivityProducer', () => {
     )
     const code = activities.find((a) => a.context.appName === 'Code')!
     expect(code.frames.map((f) => f.frame.filepath)).toEqual(['frame-0.png', 'frame-1.png'])
+    expect(producer.getStats().trailingFramesDropped).toBe(0)
   })
 
   it('does not drop the trailing frame on a same-app tld boundary', async () => {
