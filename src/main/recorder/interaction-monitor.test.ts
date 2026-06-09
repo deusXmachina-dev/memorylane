@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { INTERACTION_MONITOR_CONFIG } from '@constants'
+import { EVENT_CAPTURER_CONFIG, INTERACTION_MONITOR_CONFIG } from '@constants'
 import type { InteractionContext } from '../../shared/types'
 
 // --- Mocks -----------------------------------------------------------------
@@ -151,5 +151,17 @@ describe('interaction-monitor session emission', () => {
     monitor.stopInteractionMonitoring()
     vi.advanceTimersByTime(60_000)
     expect(emitted).toHaveLength(0)
+  })
+})
+
+describe('interaction-monitor keep-alive invariant', () => {
+  // The interim flush only keeps the downstream event-capturer window alive if a
+  // continuous session emits more often than the gap timer closes it. If this
+  // regresses (e.g. MAX_SESSION_MS bumped to >= GAP_TIMEOUT_MS), long scroll/typing
+  // sessions are silently dropped again — the exact bug this module fixes.
+  it('emits interim sub-windows faster than the event-capturer gap closes the window', () => {
+    expect(INTERACTION_MONITOR_CONFIG.MAX_SESSION_MS).toBeLessThan(
+      EVENT_CAPTURER_CONFIG.GAP_TIMEOUT_MS,
+    )
   })
 })
