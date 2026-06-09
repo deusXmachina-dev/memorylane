@@ -352,5 +352,15 @@ emit([
     "timestamp": nowMs(),
 ])
 
+// Emit the current frontmost app as the initial app_change so the first activity
+// inherits its real identity instead of falling back to 'Unknown'. NSWorkspace
+// only notifies on focus *changes*, so the app already focused at launch would
+// otherwise never be announced. (The Windows watcher already emits the initial
+// foreground window on startup — see native/windows/app-watcher/src/main.rs.)
+if let frontmost = NSWorkspace.shared.frontmostApplication {
+    let title = windowTitle(forPid: frontmost.processIdentifier) ?? ""
+    emit(buildEvent(type: "app_change", app: frontmost, title: title))
+}
+
 // Keep the process alive
 RunLoop.main.run()
