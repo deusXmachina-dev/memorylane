@@ -71,6 +71,16 @@ vi.mock('./recorder/native-screenshot', () => ({
   }),
 }))
 
+const { cleanupSpy, sweepSpy } = vi.hoisted(() => ({
+  cleanupSpy: vi.fn(),
+  sweepSpy: vi.fn(),
+}))
+
+vi.mock('./activity-cleanup', () => ({
+  cleanupActivityFiles: cleanupSpy,
+  sweepStaleFiles: sweepSpy,
+}))
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -101,6 +111,8 @@ describe('pipeline harness', () => {
       clearInterval(mockBackendState.frameTimer)
       mockBackendState.frameTimer = null
     }
+    cleanupSpy.mockClear()
+    sweepSpy.mockClear()
     for (const sub of subscriptions.splice(0)) {
       sub.unsubscribe()
     }
@@ -275,6 +287,80 @@ describe('pipeline harness', () => {
     expect(transformedActivityIds).toHaveLength(1)
     expect(persistedActivityIds).toEqual(transformedActivityIds)
     expect(extractor.getStats().succeeded).toBe(1)
+
+    // Default behavior: each completed activity has its frames/video cleaned up.
+    await waitFor(
+      () => cleanupSpy.mock.calls.length === 1,
+      'Expected cleanupActivityFiles to run for the completed activity',
+    )
+    expect(cleanupSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ id: transformedActivityIds[0] }),
+      expect.any(String),
+    )
+
+    await harness.stop()
+  })
+
+  it('retains screenshots (skips per-activity cleanup) when retainScreenshots is set', async () => {
+    const persistedActivityIds: string[] = []
+
+    const harness = createPipelineHarness({
+      outputDir: path.join(process.cwd(), '.tmp-harness-retain'),
+      frameIntervalMs: 10,
+      retainScreenshots: true,
+      activityProducerConfig: {
+        frameJoinGraceMs: 0,
+        maxFrameWaitMs: 0,
+        minActivityDurationMs: 0,
+        eventConsumerId: 'harness:event:retain',
+        frameConsumerId: 'harness:frame:retain',
+      },
+      activityExtractorConfig: {
+        consumerId: 'harness:activity-extractor:retain',
+        maxConcurrent: 1,
+        maxRetries: 0,
+        retryBackoffMs: 0,
+      },
+      extractorTransformer: {
+        transform: async (activity): Promise<ExtractedActivity> => ({
+          activityId: activity.id,
+          startTimestamp: activity.startTimestamp,
+          endTimestamp: activity.endTimestamp,
+          appName: activity.context.appName,
+          windowTitle: activity.context.windowTitle ?? '',
+          tld: activity.context.tld,
+          summary: `summary:${activity.id}`,
+          summaryModel: '',
+          ocrText: `ocr:${activity.id}`,
+          vector: [0.1, 0.2, 0.3],
+        }),
+      },
+      extractorSink: {
+        persist: async ({ activity }) => {
+          persistedActivityIds.push(activity.id)
+        },
+      },
+    })
+
+    await harness.start()
+
+    harness.handleEvent({
+      type: 'app_change',
+      timestamp: Date.now(),
+      activeWindow: {
+        title: 'Retain Window',
+        processName: 'Code',
+        bundleId: 'com.microsoft.VSCode',
+      },
+    })
+    await sleep(60)
+    harness.handleEvent({ type: 'keyboard', timestamp: Date.now(), keyCount: 2, durationMs: 60 })
+    harness.eventCapturer.flush()
+
+    await waitFor(() => persistedActivityIds.length >= 1, 'Expected the activity to persist')
+    // Let onTaskComplete run; with retention on it must NOT clean up files.
+    await sleep(50)
+    expect(cleanupSpy).not.toHaveBeenCalled()
 
     await harness.stop()
   })

@@ -12,6 +12,7 @@ import type {
 import { InMemoryStream } from './streams/in-memory-stream'
 import { ScreenCapturer, type Frame } from './recorder/screen-capturer'
 import { cleanupActivityFiles, sweepStaleFiles } from './activity-cleanup'
+import log from './logger'
 
 export interface PipelineHarness {
   frameStream: InMemoryStream<Frame>
@@ -38,7 +39,12 @@ export function createPipelineHarness(params: {
   activityExtractorConfig?: Partial<ActivityExtractorConfig>
   extractorTransformer?: ActivityTransformer
   extractorSink?: ActivitySink
+  // Debug-only: when true, processed activities' frames/videos are NOT deleted
+  // and the periodic stale-file sweep is disabled, so screenshots survive for
+  // inspection. Lets the screenshots dir grow unbounded — dev use only.
+  retainScreenshots?: boolean
 }): PipelineHarness {
+  const retainScreenshots = params.retainScreenshots ?? false
   const frameStream = new InMemoryStream<Frame>()
   const eventStream = new InMemoryStream<EventWindow>()
   const activityStream = new InMemoryStream<Activity>()
@@ -72,7 +78,9 @@ export function createPipelineHarness(params: {
           config: {
             ...params.activityExtractorConfig,
             onTaskComplete: (activity) => {
-              cleanupActivityFiles(activity, params.outputDir)
+              if (!retainScreenshots) {
+                cleanupActivityFiles(activity, params.outputDir)
+              }
             },
           },
         })
@@ -102,9 +110,16 @@ export function createPipelineHarness(params: {
           await screenCapturer.start()
         }
 
-        cleanupTimer = setInterval(() => {
-          sweepStaleFiles(params.outputDir)
-        }, SCREENSHOT_CLEANUP_CONFIG.CLEANUP_INTERVAL_MS)
+        if (retainScreenshots) {
+          log.warn(
+            '[PipelineHarness] retainScreenshots enabled — activity frames/videos are kept and the ' +
+              'stale-file sweep is disabled. The screenshots dir will grow unbounded (debug only).',
+          )
+        } else {
+          cleanupTimer = setInterval(() => {
+            sweepStaleFiles(params.outputDir)
+          }, SCREENSHOT_CLEANUP_CONFIG.CLEANUP_INTERVAL_MS)
+        }
       } catch (error) {
         running = false
         throw error
