@@ -252,7 +252,21 @@ export class EventCapturer {
     const index = this.pendingWindows.findIndex((window) => window.id === windowId)
     if (index < 0) return
 
-    const [pendingWindow] = this.pendingWindows.splice(index, 1)
+    // Finalize this window AND every earlier still-pending one, oldest first, so
+    // windows always reach the stream in close (chronological) order. Otherwise a
+    // window finalized with no grace delay — e.g. the flush window on
+    // capture-stop — can jump ahead of an earlier app_change window still in its
+    // late-event grace. The producer would then process the later window first
+    // and advance its frame ack past the earlier window's range, dropping that
+    // earlier window for "no frames" even though it had screenshots.
+    for (let i = 0; i <= index; i++) {
+      const pendingWindow = this.pendingWindows.shift()
+      if (pendingWindow === undefined) break
+      this.emitPendingWindow(pendingWindow)
+    }
+  }
+
+  private emitPendingWindow(pendingWindow: PendingWindow): void {
     if (pendingWindow.finalizeTimer !== null) {
       clearTimeout(pendingWindow.finalizeTimer)
       pendingWindow.finalizeTimer = null
