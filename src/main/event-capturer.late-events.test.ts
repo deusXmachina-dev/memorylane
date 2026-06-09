@@ -92,4 +92,52 @@ describe('EventCapturer late event handling', () => {
     expect(windows[1].startTimestamp).toBe(2_000)
     expect(windows[1].endTimestamp).toBe(2_000)
   })
+
+  it('emits windows in close order when capture stops while an earlier window is still in grace', async () => {
+    const appOf = (window: EventWindow): string | undefined =>
+      [...window.events].reverse().find((event) => event.activeWindow)?.activeWindow?.processName
+
+    // W1 (Unknown): keyboard, closed by the switch to Ghostty.
+    capturer.handleEvent(makeEvent({ type: 'keyboard', timestamp: 1_000 }))
+    capturer.handleEvent(
+      makeEvent({
+        type: 'app_change',
+        timestamp: 2_000,
+        activeWindow: { title: 'term', processName: 'ghostty' },
+      }),
+    )
+    // Let W1 finalize through its grace so it has the lowest offset.
+    vi.advanceTimersByTime(80)
+    await flushAsyncAppends()
+    expect(windows).toHaveLength(1)
+
+    // W2 (Ghostty): scroll, then switch to Electron — closes W2 and starts its grace.
+    capturer.handleEvent(makeEvent({ type: 'scroll', timestamp: 3_000 }))
+    capturer.handleEvent(
+      makeEvent({
+        type: 'app_change',
+        timestamp: 4_000,
+        activeWindow: { title: 'MemoryLane', processName: 'electron' },
+      }),
+    )
+
+    // Capture stops while W2 (Ghostty) is STILL in its late-event grace. The flush
+    // window (Electron) must not jump ahead of the not-yet-finalized Ghostty window.
+    capturer.flush()
+    // Drain the async append chain (the fix emits both Ghostty and Electron here).
+    for (let i = 0; i < 10 && windows.length < 3; i++) {
+      vi.advanceTimersByTime(80)
+      await flushAsyncAppends()
+    }
+    expect(windows).toHaveLength(3)
+
+    const ghosttyIdx = windows.findIndex((window) => appOf(window) === 'ghostty')
+    const electronIdx = windows.findIndex((window) => appOf(window) === 'electron')
+
+    expect(ghosttyIdx).toBeGreaterThanOrEqual(0)
+    expect(electronIdx).toBeGreaterThanOrEqual(0)
+    // Ghostty (closed first) must be emitted before the Electron flush window, so
+    // the producer processes it before Electron's frame-ack trims its frames.
+    expect(ghosttyIdx).toBeLessThan(electronIdx)
+  })
 })
