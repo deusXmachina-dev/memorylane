@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import * as path from 'path'
 import { setLogger } from './logger'
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -6,8 +7,20 @@ const electronLog = require('electron-log/main')
 const isDev = !app.isPackaged
 const level = isDev ? 'debug' : 'info'
 
-electronLog.transports.file.level = isDev ? false : level
+// File logging is normally off in dev (console is primary). Enable it when
+// debugging the pipeline so the run's logs — including otherwise console-only
+// extractor dead-letters — are captured to a file for inspection, written next
+// to the dev DB and screenshots. Packaged builds always log to file.
+const devFileLogging =
+  isDev && Boolean(process.env.DEBUG_PIPELINE || process.env.MEMORYLANE_DEV_FILE_LOG)
+
+electronLog.transports.file.level = isDev ? (devFileLogging ? level : false) : level
 electronLog.transports.console.level = level
 electronLog.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}] [{level}] {text}'
+
+if (devFileLogging) {
+  electronLog.transports.file.resolvePathFn = (): string =>
+    path.join(app.getPath('userData'), 'memorylane-dev.log')
+}
 
 setLogger(electronLog)

@@ -95,6 +95,17 @@ export async function createMainRuntime(params: {
     ? new InteractionEventDebugDumper(debugPipelineDir)
     : undefined
 
+  // Debug-only: keep screenshots (skip per-activity cleanup + the stale sweep)
+  // so frames survive for inspection. On by default whenever the debug pipeline
+  // is active, and independently togglable via MEMORYLANE_RETAIN_SCREENSHOTS.
+  const retainScreenshots =
+    dev && Boolean(process.env.DEBUG_PIPELINE || process.env.MEMORYLANE_RETAIN_SCREENSHOTS)
+  if (retainScreenshots) {
+    log.info(
+      '[Runtime] Screenshot retention enabled — captured frames will not be cleaned up (debug only)',
+    )
+  }
+
   const presets = VENDOR_PRESETS[params.getActiveVendor()]
   const initialVideoModels = buildModelChain(params.initialVideoModel ?? '', presets.semanticVideo)
   const initialSnapshotModels = buildModelChain(
@@ -148,6 +159,7 @@ export async function createMainRuntime(params: {
     outputDir,
     extractorTransformer: transformer,
     extractorSink: sink,
+    retainScreenshots,
   })
 
   const capture: RuntimeCaptureController = createCaptureController({
