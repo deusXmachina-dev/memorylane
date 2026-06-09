@@ -189,6 +189,34 @@ func resolveDisplayId(_ requestedDisplayId: UInt32?) throws -> CGDirectDisplayID
     return displays[0]
 }
 
+// MARK: - Frontmost app tracking
+
+/// Caches the system-wide frontmost app, updated on the main run loop via an
+/// NSWorkspace notification, so the SCStreamOutput callback (which runs on a
+/// background queue) can read it cheaply at the grab instant. Identifiers match
+/// the app-watcher daemon (localizedName + bundleIdentifier) so the downstream
+/// frame/app matching in ActivityProducer compares like-for-like.
+final class FrontmostAppTracker {
+    private let lock = NSLock()
+    private var appName: String?
+    private var bundleId: String?
+
+    func update(_ app: NSRunningApplication?) {
+        lock.lock()
+        defer { lock.unlock() }
+        appName = app?.localizedName
+        bundleId = app?.bundleIdentifier
+    }
+
+    func snapshot() -> (appName: String?, bundleId: String?) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (appName, bundleId)
+    }
+}
+
+let frontmostTracker = FrontmostAppTracker()
+
 // MARK: - Autonomous ScreenCaptureKit Daemon
 
 class AutonomousCapture: NSObject, SCStreamOutput {
@@ -327,6 +355,7 @@ class AutonomousCapture: NSObject, SCStreamOutput {
         let quality = self.config.quality
         let outputDir = self.config.outputDir
         let captureTimestamp = Int(Date().timeIntervalSince1970 * 1000)
+        let frontmost = frontmostTracker.snapshot()
         let droppedFrames = takeDroppedFrameCount()
         shouldReleaseSemaphore = false
 
@@ -346,13 +375,21 @@ class AutonomousCapture: NSObject, SCStreamOutput {
                     fputs("[daemon] Dropped \(droppedFrames) frame(s) while previous capture was still being written\n", stderr)
                 }
 
-                let payload: [String: Any] = [
+                var payload: [String: Any] = [
                     "filepath": filepath,
                     "timestamp": captureTimestamp,
                     "width": resized.width,
                     "height": resized.height,
                     "displayId": Int(displayId),
                 ]
+                // Stamp the grab-time frontmost app. Omit keys when unknown
+                // (no NSNull) — the consumer treats absent app info as "keep".
+                if let name = frontmost.appName, !name.isEmpty {
+                    payload["appName"] = name
+                }
+                if let bid = frontmost.bundleId, !bid.isEmpty {
+                    payload["bundleId"] = bid
+                }
                 emitJSON(payload)
             } catch {
                 fputs("[daemon] Frame write failed: \(error)\n", stderr)
@@ -411,7 +448,18 @@ try FileManager.default.createDirectory(
 
 let capture = AutonomousCapture(config: config)
 
-let semaphore = DispatchSemaphore(value: 0)
+// Track the frontmost app on the main run loop so every captured frame can be
+// stamped with the app on screen at the grab instant (see FrontmostAppTracker).
+// Same NSWorkspace source as app-watcher.swift, so identifiers match.
+let workspaceCenter = NSWorkspace.shared.notificationCenter
+workspaceCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+                            object: nil, queue: .main) { notification in
+    let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+    frontmostTracker.update(app ?? NSWorkspace.shared.frontmostApplication)
+}
+// Seed with the app focused at launch — NSWorkspace only notifies on *changes*.
+frontmostTracker.update(NSWorkspace.shared.frontmostApplication)
+
 Task {
     do {
         try await capture.startStream()
@@ -422,4 +470,8 @@ Task {
     // Start listening for stdin commands
     listenForCommands(capture: capture)
 }
-semaphore.wait()
+
+// Keep the process alive AND service the main run loop so the workspace observer
+// above fires — NSWorkspace notifications are delivered on the main run loop, and
+// a bare DispatchSemaphore.wait() would block the thread without running it.
+RunLoop.main.run()

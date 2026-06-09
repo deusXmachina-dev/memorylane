@@ -201,7 +201,11 @@ export class ActivityProducer {
       return
     }
 
-    const candidateFrames = this.getFramesInRange(window.startTimestamp, window.endTimestamp)
+    const candidateFrames = this.getFramesInRange(
+      window.startTimestamp,
+      window.endTimestamp,
+      windowContext,
+    )
     if (candidateFrames.length === 0) {
       this.stats.droppedNoFrameWindows++
       log.info(
@@ -445,6 +449,34 @@ export class ActivityProducer {
     return left.tld === right.tld
   }
 
+  /**
+   * Whether a candidate frame belongs to a window's derived app context.
+   *
+   * The frame carries the frontmost app observed by the native daemon at the
+   * grab instant — an observation independent of the app-watcher's (lagging)
+   * event timeline. Comparing it against the window context catches frames that
+   * fall in a window's time range but were actually captured under a different
+   * app (the "leak" around an app switch).
+   *
+   * Only app identity is compared, mirroring the app half of canMergeContexts
+   * (bundleId-preferred, appName fallback). We deliberately do NOT compare
+   * tld/url (frames carry none; browser tld boundaries are enforced by window
+   * splitting) nor displayId (the frame's displayId is the capture target,
+   * which can differ from the focused-window display on multi-display setups).
+   *
+   * Frames with no app stamp are always kept (backward compatible: pre-fix
+   * frames, platforms that don't stamp yet, and frames the daemon couldn't
+   * resolve). The filter can also be disabled wholesale via config.
+   */
+  private frameAppMatchesContext(frame: Frame, context: ActivityContext): boolean {
+    if (!this.config.enableFrameAppFilter) return true
+    if (frame.appName === undefined && frame.bundleId === undefined) return true
+
+    return frame.bundleId && context.bundleId
+      ? frame.bundleId === context.bundleId
+      : frame.appName === context.appName
+  }
+
   private deriveWindowContext(events: InteractionContext[]): ActivityContext | null {
     const recentEvents = [...events].reverse()
     const activeWindowEvent = recentEvents.find((event) => event.activeWindow)
@@ -479,10 +511,16 @@ export class ActivityProducer {
     }
   }
 
-  private getFramesInRange(startTimestamp: number, endTimestamp: number): StreamRecord<Frame>[] {
+  private getFramesInRange(
+    startTimestamp: number,
+    endTimestamp: number,
+    context: ActivityContext,
+  ): StreamRecord<Frame>[] {
     return this.frameBuffer.filter(
       (record) =>
-        record.payload.timestamp >= startTimestamp && record.payload.timestamp <= endTimestamp,
+        record.payload.timestamp >= startTimestamp &&
+        record.payload.timestamp <= endTimestamp &&
+        this.frameAppMatchesContext(record.payload, context),
     )
   }
 

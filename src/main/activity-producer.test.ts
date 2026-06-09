@@ -17,7 +17,11 @@ vi.mock('./logger', () => ({
   },
 }))
 
-function makeFrame(timestamp: number, sequenceNumber: number): Frame {
+function makeFrame(
+  timestamp: number,
+  sequenceNumber: number,
+  app?: { appName: string; bundleId?: string },
+): Frame {
   return {
     filepath: `frame-${sequenceNumber}.png`,
     timestamp,
@@ -25,6 +29,7 @@ function makeFrame(timestamp: number, sequenceNumber: number): Frame {
     height: 720,
     displayId: 1,
     sequenceNumber,
+    ...(app ?? {}),
   }
 }
 
@@ -491,6 +496,290 @@ describe('ActivityProducer', () => {
     expect(producer.getStats().droppedUnknownContextWindows).toBe(0)
     expect(producer.getStats().droppedNoFrameWindows).toBe(1)
     expect(noContextOffset).toBeLessThan(noFrameOffset)
+  })
+
+  it('excludes a frame whose stamped app does not match the window context', async () => {
+    const { producer, frameStream, eventStream, activityStream } = createProducer()
+    const activities: Activity[] = []
+    subscriptions.push(
+      activityStream.subscribe({
+        startAt: { type: 'now' },
+        onRecord: (record) => activities.push(record.payload),
+      }),
+    )
+
+    await producer.start()
+    await frameStream.append(
+      makeFrame(1_000, 0, { appName: 'Code', bundleId: 'com.microsoft.VSCode' }),
+    )
+    await frameStream.append(
+      makeFrame(1_200, 1, { appName: 'Slack', bundleId: 'com.tinyspeck.slackmacgap' }),
+    )
+    await eventStream.append(
+      makeWindow({
+        id: 'code-window',
+        startTimestamp: 900,
+        endTimestamp: 1_500,
+        closedBy: 'flush',
+        events: [
+          makeEvent(900, 'app_change', {
+            activeWindow: {
+              title: 'Repo',
+              processName: 'Code',
+              bundleId: 'com.microsoft.VSCode',
+            },
+          }),
+        ],
+      }),
+    )
+
+    await waitFor(() => activities.length === 1, 'Expected one activity')
+    expect(activities[0].context.appName).toBe('Code')
+    expect(activities[0].frames.map((f) => f.frame.filepath)).toEqual(['frame-0.png'])
+  })
+
+  it('retains an app-less (unstamped) frame regardless of context', async () => {
+    const { producer, frameStream, eventStream, activityStream } = createProducer()
+    const activities: Activity[] = []
+    subscriptions.push(
+      activityStream.subscribe({
+        startAt: { type: 'now' },
+        onRecord: (record) => activities.push(record.payload),
+      }),
+    )
+
+    await producer.start()
+    await frameStream.append(makeFrame(1_000, 0)) // no app stamp
+    await eventStream.append(
+      makeWindow({
+        id: 'code-window',
+        startTimestamp: 900,
+        endTimestamp: 1_500,
+        closedBy: 'flush',
+        events: [
+          makeEvent(900, 'app_change', {
+            activeWindow: {
+              title: 'Repo',
+              processName: 'Code',
+              bundleId: 'com.microsoft.VSCode',
+            },
+          }),
+        ],
+      }),
+    )
+
+    await waitFor(() => activities.length === 1, 'Expected one activity')
+    expect(activities[0].frames).toHaveLength(1)
+  })
+
+  it('matches on appName when the frame carries no bundleId', async () => {
+    const { producer, frameStream, eventStream, activityStream } = createProducer()
+    const activities: Activity[] = []
+    subscriptions.push(
+      activityStream.subscribe({
+        startAt: { type: 'now' },
+        onRecord: (record) => activities.push(record.payload),
+      }),
+    )
+
+    await producer.start()
+    await frameStream.append(makeFrame(1_000, 0, { appName: 'Code' })) // matches by appName
+    await frameStream.append(makeFrame(1_200, 1, { appName: 'Slack' })) // excluded by appName
+    await eventStream.append(
+      makeWindow({
+        id: 'code-window',
+        startTimestamp: 900,
+        endTimestamp: 1_500,
+        closedBy: 'flush',
+        events: [
+          makeEvent(900, 'app_change', {
+            activeWindow: {
+              title: 'Repo',
+              processName: 'Code',
+              bundleId: 'com.microsoft.VSCode',
+            },
+          }),
+        ],
+      }),
+    )
+
+    await waitFor(() => activities.length === 1, 'Expected one activity')
+    expect(activities[0].frames.map((f) => f.frame.filepath)).toEqual(['frame-0.png'])
+  })
+
+  it('prefers bundleId: excludes a frame whose bundleId differs even if appName matches', async () => {
+    const { producer, frameStream, eventStream, activityStream } = createProducer()
+    const activities: Activity[] = []
+    subscriptions.push(
+      activityStream.subscribe({
+        startAt: { type: 'now' },
+        onRecord: (record) => activities.push(record.payload),
+      }),
+    )
+
+    await producer.start()
+    await frameStream.append(makeFrame(1_000, 0, { appName: 'Helper', bundleId: 'com.a' }))
+    await frameStream.append(makeFrame(1_200, 1, { appName: 'Helper', bundleId: 'com.b' }))
+    await eventStream.append(
+      makeWindow({
+        id: 'helper-window',
+        startTimestamp: 900,
+        endTimestamp: 1_500,
+        closedBy: 'flush',
+        events: [
+          makeEvent(900, 'app_change', {
+            activeWindow: { title: 'A', processName: 'Helper', bundleId: 'com.a' },
+          }),
+        ],
+      }),
+    )
+
+    await waitFor(() => activities.length === 1, 'Expected one activity')
+    expect(activities[0].frames.map((f) => f.frame.filepath)).toEqual(['frame-0.png'])
+  })
+
+  it('treats a window whose only frames are app-mismatched as frameless and finalizes the incompatible pending activity', async () => {
+    const { producer, frameStream, eventStream, activityStream } = createProducer()
+    const activities: Activity[] = []
+    subscriptions.push(
+      activityStream.subscribe({
+        startAt: { type: 'now' },
+        onRecord: (record) => activities.push(record.payload),
+      }),
+    )
+
+    await producer.start()
+    await frameStream.append(
+      makeFrame(1_500, 0, { appName: 'Ghostty', bundleId: 'com.mitchellh.ghostty' }),
+    )
+    // Lands in W2's time range but is stamped with the PREVIOUS app (the leak):
+    // excluded from the Electron window, leaving it frameless.
+    await frameStream.append(
+      makeFrame(2_100, 1, { appName: 'Ghostty', bundleId: 'com.mitchellh.ghostty' }),
+    )
+
+    await eventStream.append(
+      makeWindow({
+        id: 'ghostty',
+        startTimestamp: 1_000,
+        endTimestamp: 2_000,
+        closedBy: 'app_change',
+        events: [
+          makeEvent(1_000, 'app_change', {
+            displayId: 1,
+            activeWindow: {
+              title: 'session',
+              processName: 'Ghostty',
+              bundleId: 'com.mitchellh.ghostty',
+            },
+          }),
+          makeEvent(1_600, 'scroll'),
+        ],
+      }),
+    )
+
+    const lastOffset = await eventStream.append(
+      makeWindow({
+        id: 'electron',
+        startTimestamp: 2_000,
+        endTimestamp: 2_200,
+        closedBy: 'gap',
+        events: [
+          makeEvent(2_000, 'app_change', {
+            displayId: 1,
+            activeWindow: {
+              title: 'MemoryLane',
+              processName: 'Electron',
+              bundleId: 'com.github.Electron',
+            },
+          }),
+        ],
+      }),
+    )
+
+    await waitFor(
+      () => activities.length === 1 && producer.getStats().droppedNoFrameWindows === 1,
+      'Expected the Ghostty activity to emit and the app-mismatched Electron window to drop',
+    )
+    expect(activities.map((a) => a.context.appName)).toEqual(['Ghostty'])
+    expect(activities[0].frames.map((f) => f.frame.filepath)).toEqual(['frame-0.png'])
+    expect(producer.getStats().emittedActivities).toBe(1)
+
+    // The incompatible frameless window finalized the pending activity, so the
+    // event offsets ack without an explicit flush/stop.
+    await waitFor(
+      async () => (await eventStream.getAck('test:event')) === lastOffset,
+      'Expected event offsets to ack after the pending activity is finalized',
+    )
+  })
+
+  it('drops a concrete-app-stamped frame in an Unknown-context window', async () => {
+    const { producer, frameStream, eventStream, activityStream } = createProducer()
+    const activities: Activity[] = []
+    subscriptions.push(
+      activityStream.subscribe({
+        startAt: { type: 'now' },
+        onRecord: (record) => activities.push(record.payload),
+      }),
+    )
+
+    await producer.start()
+    await frameStream.append(
+      makeFrame(1_050, 0, { appName: 'Ghostty', bundleId: 'com.mitchellh.ghostty' }),
+    )
+    await eventStream.append(
+      makeWindow({
+        id: 'unknown',
+        startTimestamp: 1_000,
+        endTimestamp: 1_100,
+        closedBy: 'flush',
+        events: [makeEvent(1_020, 'keyboard')], // no app_change -> 'Unknown' context
+      }),
+    )
+
+    await waitFor(
+      () => producer.getStats().droppedNoFrameWindows === 1,
+      'Expected the Unknown-context window to drop the mismatched frame',
+    )
+    expect(activities).toHaveLength(0)
+  })
+
+  it('keeps a mismatched frame when the app filter is disabled', async () => {
+    const { producer, frameStream, eventStream, activityStream } = createProducer({
+      enableFrameAppFilter: false,
+    })
+    const activities: Activity[] = []
+    subscriptions.push(
+      activityStream.subscribe({
+        startAt: { type: 'now' },
+        onRecord: (record) => activities.push(record.payload),
+      }),
+    )
+
+    await producer.start()
+    await frameStream.append(
+      makeFrame(1_000, 0, { appName: 'Slack', bundleId: 'com.tinyspeck.slackmacgap' }),
+    )
+    await eventStream.append(
+      makeWindow({
+        id: 'code-window',
+        startTimestamp: 900,
+        endTimestamp: 1_500,
+        closedBy: 'flush',
+        events: [
+          makeEvent(900, 'app_change', {
+            activeWindow: {
+              title: 'Repo',
+              processName: 'Code',
+              bundleId: 'com.microsoft.VSCode',
+            },
+          }),
+        ],
+      }),
+    )
+
+    await waitFor(() => activities.length === 1, 'Expected one activity')
+    expect(activities[0].frames).toHaveLength(1)
   })
 
   // Regression for the "trailing pending activity" data loss: the producer keeps

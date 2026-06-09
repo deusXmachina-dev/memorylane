@@ -21,6 +21,10 @@ export interface CapturedFrame {
   width: number
   height: number
   displayId: number
+  // Frontmost app at the grab instant, stamped by the native daemon. Absent
+  // when the daemon could not resolve it (or on platforms that don't stamp yet).
+  appName?: string
+  bundleId?: string
 }
 
 export interface CaptureBackendConfig {
