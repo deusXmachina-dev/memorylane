@@ -17,8 +17,19 @@ const ACTIVITY_ID_NAMESPACE = uuidv5('memorylane:v2-activity', uuidv5.DNS)
 
 export interface ActivityProducerStats {
   emittedActivities: number
+  // Windows dropped because no frame fell in their time range at all.
   droppedNoFrameWindows: number
+  // Windows that had frames in their time range but every one was excluded by
+  // the grab-time app filter (the leak signature: in-range frames all stamped
+  // with a different app than the window context).
+  droppedAllFramesFilteredWindows: number
   droppedUnknownContextWindows: number
+  // Total frames kept out of a window by the grab-time app filter (includes the
+  // ones counted by droppedAllFramesFilteredWindows). A proxy for how often the
+  // leak the filter guards against actually fires in production.
+  framesExcludedByAppFilter: number
+  // Total trailing "transition bleed" frames dropped at app-switch boundaries.
+  trailingFramesDropped: number
 }
 
 interface ChunkContext {
@@ -64,7 +75,10 @@ export class ActivityProducer {
   private readonly stats: ActivityProducerStats = {
     emittedActivities: 0,
     droppedNoFrameWindows: 0,
+    droppedAllFramesFilteredWindows: 0,
     droppedUnknownContextWindows: 0,
+    framesExcludedByAppFilter: 0,
+    trailingFramesDropped: 0,
   }
 
   constructor(params: {
@@ -201,11 +215,25 @@ export class ActivityProducer {
       return
     }
 
-    const candidateFrames = this.getFramesInRange(window.startTimestamp, window.endTimestamp)
+    const { frames: candidateFrames, excludedByAppFilter } = this.getFramesInRange(
+      window.startTimestamp,
+      window.endTimestamp,
+      windowContext,
+    )
+    this.stats.framesExcludedByAppFilter += excludedByAppFilter
     if (candidateFrames.length === 0) {
-      this.stats.droppedNoFrameWindows++
+      // Distinguish "no frames captured in this window" from "frames were
+      // captured but all belonged to a different app" — the latter is the leak
+      // signature and worth tracking separately for diagnosis.
+      if (excludedByAppFilter > 0) {
+        this.stats.droppedAllFramesFilteredWindows++
+      } else {
+        this.stats.droppedNoFrameWindows++
+      }
       log.info(
-        `[ActivityProducer] Dropping window ${window.id} at offset ${record.offset}: no frames in ${window.startTimestamp}-${window.endTimestamp}`,
+        `[ActivityProducer] Dropping window ${window.id} at offset ${record.offset}: ` +
+          `${excludedByAppFilter > 0 ? `all ${excludedByAppFilter} frame(s) app-filtered out` : 'no frames'} ` +
+          `in ${window.startTimestamp}-${window.endTimestamp}`,
       )
       // A frameless window can neither seed nor extend an activity, but if its
       // context is incompatible with the in-progress pendingActivity it still
@@ -217,7 +245,7 @@ export class ActivityProducer {
         this.pendingActivity !== null &&
         !this.canMergeContexts(this.pendingActivity.context, windowContext)
       ) {
-        await this.finalizePendingActivity('context_change')
+        await this.finalizePendingActivity('context_change', { droppedToApp: windowContext })
         await this.flushDeferredEventAck()
       }
       await this.markRecordProcessed(record.offset)
@@ -299,6 +327,7 @@ export class ActivityProducer {
     if (!compatible) {
       await this.finalizePendingActivity(
         combinedDuration > this.config.maxActivityDurationMs ? 'max_duration' : 'context_change',
+        { droppedToApp: chunk.context },
       )
       await this.flushDeferredEventAck()
       this.pendingActivity = this.createPendingActivity(chunk)
@@ -363,8 +392,11 @@ export class ActivityProducer {
 
   private async finalizePendingActivity(
     reason: 'context_change' | 'max_duration' | 'flush',
+    options?: { droppedToApp?: ActivityContext },
   ): Promise<void> {
     if (this.pendingActivity === null) return
+
+    this.maybeDropTrailingBoundaryFrame(this.pendingActivity, options?.droppedToApp)
 
     const durationMs = this.pendingActivity.endTimestamp - this.pendingActivity.startTimestamp
     const eventOffsetsToAck = [...this.pendingActivity.provenance.eventWindowOffsets]
@@ -430,11 +462,7 @@ export class ActivityProducer {
       return false
     }
 
-    const sameApp =
-      left.bundleId && right.bundleId
-        ? left.bundleId === right.bundleId
-        : left.appName === right.appName
-    if (!sameApp) return false
+    if (!this.appsEqual(left, right)) return false
 
     const browser = isBrowserApp({
       processName: left.appName,
@@ -443,6 +471,67 @@ export class ActivityProducer {
     if (!browser) return true
     if (!left.tld || !right.tld) return false
     return left.tld === right.tld
+  }
+
+  /** App-identity equality: bundleId-preferred, appName fallback. */
+  private appsEqual(left: ActivityContext, right: ActivityContext): boolean {
+    return left.bundleId && right.bundleId
+      ? left.bundleId === right.bundleId
+      : left.appName === right.appName
+  }
+
+  /**
+   * Drop the activity's last frame when it's finalized because a *different* app
+   * took over. In the sub-second skew between screen compositing and the
+   * frontmost-app signal, that trailing frame tends to already show the next app
+   * (a one-frame "transition bleed"). Only drops on a real app change, and never
+   * empties an activity (keeps at least one frame).
+   */
+  private maybeDropTrailingBoundaryFrame(activity: Activity, successor?: ActivityContext): void {
+    if (!this.config.dropAppSwitchTrailingFrame) return
+    if (successor === undefined) return
+    if (this.appsEqual(activity.context, successor)) return
+    if (activity.frames.length <= 1) return
+
+    // Frames are kept sorted ascending by timestamp, so the latest is the bleed.
+    const dropped = activity.frames.pop()
+    if (dropped === undefined) return
+    this.stats.trailingFramesDropped++
+    activity.provenance.frameOffsets = activity.provenance.frameOffsets.filter(
+      (offset) => offset !== dropped.offset,
+    )
+    log.info(
+      `[ActivityProducer] Dropped trailing boundary frame ${dropped.frame.filepath} from ` +
+        `${activity.context.appName} activity (switch to ${successor.appName})`,
+    )
+  }
+
+  /**
+   * Whether a candidate frame belongs to a window's derived app context.
+   *
+   * The frame carries the frontmost app observed by the native daemon at the
+   * grab instant — an observation independent of the app-watcher's (lagging)
+   * event timeline. Comparing it against the window context catches frames that
+   * fall in a window's time range but were actually captured under a different
+   * app (the "leak" around an app switch).
+   *
+   * Only app identity is compared, mirroring the app half of canMergeContexts
+   * (bundleId-preferred, appName fallback). We deliberately do NOT compare
+   * tld/url (frames carry none; browser tld boundaries are enforced by window
+   * splitting) nor displayId (the frame's displayId is the capture target,
+   * which can differ from the focused-window display on multi-display setups).
+   *
+   * Frames with no app stamp are always kept (backward compatible: pre-fix
+   * frames, platforms that don't stamp yet, and frames the daemon couldn't
+   * resolve). The filter can also be disabled wholesale via config.
+   */
+  private frameAppMatchesContext(frame: Frame, context: ActivityContext): boolean {
+    if (!this.config.enableFrameAppFilter) return true
+    if (frame.appName === undefined && frame.bundleId === undefined) return true
+
+    return frame.bundleId && context.bundleId
+      ? frame.bundleId === context.bundleId
+      : frame.appName === context.appName
   }
 
   private deriveWindowContext(events: InteractionContext[]): ActivityContext | null {
@@ -479,11 +568,19 @@ export class ActivityProducer {
     }
   }
 
-  private getFramesInRange(startTimestamp: number, endTimestamp: number): StreamRecord<Frame>[] {
-    return this.frameBuffer.filter(
+  private getFramesInRange(
+    startTimestamp: number,
+    endTimestamp: number,
+    context: ActivityContext,
+  ): { frames: StreamRecord<Frame>[]; excludedByAppFilter: number } {
+    const inTimeRange = this.frameBuffer.filter(
       (record) =>
         record.payload.timestamp >= startTimestamp && record.payload.timestamp <= endTimestamp,
     )
+    const frames = inTimeRange.filter((record) =>
+      this.frameAppMatchesContext(record.payload, context),
+    )
+    return { frames, excludedByAppFilter: inTimeRange.length - frames.length }
   }
 
   private async waitForFramesToSettle(windowEndTimestamp: number): Promise<void> {

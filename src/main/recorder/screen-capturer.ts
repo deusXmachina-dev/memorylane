@@ -17,6 +17,11 @@ export interface Frame {
   height: number
   displayId: number
   sequenceNumber: number
+  // Frontmost app at the grab instant (carried through from the native daemon).
+  // Used by the ActivityProducer to keep a frame out of a window whose app
+  // doesn't match. Absent for unstamped frames (kept as-is).
+  appName?: string
+  bundleId?: string
 }
 
 export class ScreenCapturer {
