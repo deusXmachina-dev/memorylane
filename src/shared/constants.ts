@@ -14,6 +14,11 @@ export const INTERACTION_MONITOR_CONFIG = {
   CLICK_DEBOUNCE_MS: 3000, // Wait for clicking to stop before emitting event (500-5000ms)
   TYPING_DEBOUNCE_MS: 2000, // Wait for typing to stop before emitting event (500-5000ms)
   SCROLL_DEBOUNCE_MS: 2000, // Wait for scrolling to stop before emitting event (200-2000ms)
+  // Force-emit an interim event when a continuous session runs longer than this,
+  // so long scroll/typing keeps the event-capturer's window alive instead of
+  // being cut by its idle gap. MUST be > the longest debounce above and
+  // < EVENT_CAPTURER_CONFIG.GAP_TIMEOUT_MS.
+  MAX_SESSION_MS: 4000,
 }
 
 // App Watcher Configuration (platform-native subprocess for app/window change detection)
