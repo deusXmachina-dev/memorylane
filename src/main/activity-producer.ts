@@ -221,7 +221,7 @@ export class ActivityProducer {
         this.pendingActivity !== null &&
         !this.canMergeContexts(this.pendingActivity.context, windowContext)
       ) {
-        await this.finalizePendingActivity('context_change')
+        await this.finalizePendingActivity('context_change', { droppedToApp: windowContext })
         await this.flushDeferredEventAck()
       }
       await this.markRecordProcessed(record.offset)
@@ -303,6 +303,7 @@ export class ActivityProducer {
     if (!compatible) {
       await this.finalizePendingActivity(
         combinedDuration > this.config.maxActivityDurationMs ? 'max_duration' : 'context_change',
+        { droppedToApp: chunk.context },
       )
       await this.flushDeferredEventAck()
       this.pendingActivity = this.createPendingActivity(chunk)
@@ -367,8 +368,11 @@ export class ActivityProducer {
 
   private async finalizePendingActivity(
     reason: 'context_change' | 'max_duration' | 'flush',
+    options?: { droppedToApp?: ActivityContext },
   ): Promise<void> {
     if (this.pendingActivity === null) return
+
+    this.maybeDropTrailingBoundaryFrame(this.pendingActivity, options?.droppedToApp)
 
     const durationMs = this.pendingActivity.endTimestamp - this.pendingActivity.startTimestamp
     const eventOffsetsToAck = [...this.pendingActivity.provenance.eventWindowOffsets]
@@ -434,11 +438,7 @@ export class ActivityProducer {
       return false
     }
 
-    const sameApp =
-      left.bundleId && right.bundleId
-        ? left.bundleId === right.bundleId
-        : left.appName === right.appName
-    if (!sameApp) return false
+    if (!this.appsEqual(left, right)) return false
 
     const browser = isBrowserApp({
       processName: left.appName,
@@ -447,6 +447,38 @@ export class ActivityProducer {
     if (!browser) return true
     if (!left.tld || !right.tld) return false
     return left.tld === right.tld
+  }
+
+  /** App-identity equality: bundleId-preferred, appName fallback. */
+  private appsEqual(left: ActivityContext, right: ActivityContext): boolean {
+    return left.bundleId && right.bundleId
+      ? left.bundleId === right.bundleId
+      : left.appName === right.appName
+  }
+
+  /**
+   * Drop the activity's last frame when it's finalized because a *different* app
+   * took over. In the sub-second skew between screen compositing and the
+   * frontmost-app signal, that trailing frame tends to already show the next app
+   * (a one-frame "transition bleed"). Only drops on a real app change, and never
+   * empties an activity (keeps at least one frame).
+   */
+  private maybeDropTrailingBoundaryFrame(activity: Activity, successor?: ActivityContext): void {
+    if (!this.config.dropAppSwitchTrailingFrame) return
+    if (successor === undefined) return
+    if (this.appsEqual(activity.context, successor)) return
+    if (activity.frames.length <= 1) return
+
+    // Frames are kept sorted ascending by timestamp, so the latest is the bleed.
+    const dropped = activity.frames.pop()
+    if (dropped === undefined) return
+    activity.provenance.frameOffsets = activity.provenance.frameOffsets.filter(
+      (offset) => offset !== dropped.offset,
+    )
+    log.info(
+      `[ActivityProducer] Dropped trailing boundary frame ${dropped.frame.filepath} from ` +
+        `${activity.context.appName} activity (switch to ${successor.appName})`,
+    )
   }
 
   /**

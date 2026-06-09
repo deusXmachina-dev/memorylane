@@ -47,6 +47,12 @@ export interface ActivityProducerConfig {
   // leaking across an app boundary). Kill-switch: set false to disable the
   // filter without a native rebuild. Unstamped frames are always kept.
   enableFrameAppFilter: boolean
+  // When true, drop an activity's last frame when it's finalized because a
+  // different app took over. That trailing frame is captured in the sub-second
+  // skew between screen compositing and the frontmost-app signal, so it tends to
+  // already show the *next* app (a one-frame "transition bleed"). Never empties
+  // an activity (only drops when it has more than one frame).
+  dropAppSwitchTrailingFrame: boolean
 }
 
 export function createDefaultActivityProducerConfig(): ActivityProducerConfig {
@@ -59,5 +65,6 @@ export function createDefaultActivityProducerConfig(): ActivityProducerConfig {
     eventConsumerId: 'activity-producer:event-stream',
     frameConsumerId: 'activity-producer:frame-stream',
     enableFrameAppFilter: true,
+    dropAppSwitchTrailingFrame: true,
   }
 }

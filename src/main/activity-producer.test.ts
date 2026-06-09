@@ -782,6 +782,178 @@ describe('ActivityProducer', () => {
     expect(activities[0].frames).toHaveLength(1)
   })
 
+  it('drops the trailing frame when an activity is finalized by a different app', async () => {
+    const { producer, frameStream, eventStream, activityStream } = createProducer()
+    const activities: Activity[] = []
+    subscriptions.push(
+      activityStream.subscribe({
+        startAt: { type: 'now' },
+        onRecord: (record) => activities.push(record.payload),
+      }),
+    )
+
+    await producer.start()
+    await frameStream.append(
+      makeFrame(1_200, 0, { appName: 'Code', bundleId: 'com.microsoft.VSCode' }),
+    )
+    await frameStream.append(
+      makeFrame(1_800, 1, { appName: 'Code', bundleId: 'com.microsoft.VSCode' }),
+    )
+    await frameStream.append(
+      makeFrame(2_500, 2, { appName: 'Slack', bundleId: 'com.tinyspeck.slackmacgap' }),
+    )
+
+    await eventStream.append(
+      makeWindow({
+        id: 'code',
+        startTimestamp: 1_000,
+        endTimestamp: 2_000,
+        closedBy: 'app_change',
+        events: [
+          makeEvent(1_000, 'app_change', {
+            activeWindow: { title: 'Repo', processName: 'Code', bundleId: 'com.microsoft.VSCode' },
+          }),
+          makeEvent(1_500, 'scroll'),
+        ],
+      }),
+    )
+    await eventStream.append(
+      makeWindow({
+        id: 'slack',
+        startTimestamp: 2_000,
+        endTimestamp: 3_000,
+        closedBy: 'flush',
+        events: [
+          makeEvent(2_000, 'app_change', {
+            activeWindow: {
+              title: 'general',
+              processName: 'Slack',
+              bundleId: 'com.tinyspeck.slackmacgap',
+            },
+          }),
+        ],
+      }),
+    )
+
+    await waitFor(() => activities.length === 2, 'Expected two activities')
+    expect(activities.map((a) => a.context.appName)).toEqual(['Code', 'Slack'])
+    // Code's trailing frame (1_800, offset 1) is the transition bleed -> dropped.
+    expect(activities[0].frames.map((f) => f.frame.filepath)).toEqual(['frame-0.png'])
+    expect(activities[0].provenance.frameOffsets).toEqual([0])
+    // Slack is finalized by flush (not an app switch), so its frame is kept.
+    expect(activities[1].frames.map((f) => f.frame.filepath)).toEqual(['frame-2.png'])
+  })
+
+  it('keeps the trailing frame when dropAppSwitchTrailingFrame is disabled', async () => {
+    const { producer, frameStream, eventStream, activityStream } = createProducer({
+      dropAppSwitchTrailingFrame: false,
+    })
+    const activities: Activity[] = []
+    subscriptions.push(
+      activityStream.subscribe({
+        startAt: { type: 'now' },
+        onRecord: (record) => activities.push(record.payload),
+      }),
+    )
+
+    await producer.start()
+    await frameStream.append(
+      makeFrame(1_200, 0, { appName: 'Code', bundleId: 'com.microsoft.VSCode' }),
+    )
+    await frameStream.append(
+      makeFrame(1_800, 1, { appName: 'Code', bundleId: 'com.microsoft.VSCode' }),
+    )
+    await eventStream.append(
+      makeWindow({
+        id: 'code',
+        startTimestamp: 1_000,
+        endTimestamp: 2_000,
+        closedBy: 'app_change',
+        events: [
+          makeEvent(1_000, 'app_change', {
+            activeWindow: { title: 'Repo', processName: 'Code', bundleId: 'com.microsoft.VSCode' },
+          }),
+        ],
+      }),
+    )
+    await eventStream.append(
+      makeWindow({
+        id: 'slack',
+        startTimestamp: 2_000,
+        endTimestamp: 3_000,
+        closedBy: 'flush',
+        events: [
+          makeEvent(2_000, 'app_change', {
+            activeWindow: {
+              title: 'general',
+              processName: 'Slack',
+              bundleId: 'com.tinyspeck.slackmacgap',
+            },
+          }),
+        ],
+      }),
+    )
+
+    await waitFor(
+      () => activities.some((a) => a.context.appName === 'Code'),
+      'Expected the Code activity',
+    )
+    const code = activities.find((a) => a.context.appName === 'Code')!
+    expect(code.frames.map((f) => f.frame.filepath)).toEqual(['frame-0.png', 'frame-1.png'])
+  })
+
+  it('does not drop the trailing frame on a same-app tld boundary', async () => {
+    const { producer, frameStream, eventStream, activityStream } = createProducer()
+    const activities: Activity[] = []
+    subscriptions.push(
+      activityStream.subscribe({
+        startAt: { type: 'now' },
+        onRecord: (record) => activities.push(record.payload),
+      }),
+    )
+
+    await producer.start()
+    const chrome = { appName: 'Google Chrome', bundleId: 'com.google.Chrome' }
+    await frameStream.append(makeFrame(1_200, 0, chrome))
+    await frameStream.append(makeFrame(1_800, 1, chrome))
+    await frameStream.append(makeFrame(2_500, 2, chrome)) // lands in the second (other.org) window
+
+    await eventStream.append(
+      makeWindow({
+        id: 'chrome-a',
+        startTimestamp: 1_000,
+        endTimestamp: 2_000,
+        closedBy: 'app_change',
+        events: [
+          makeEvent(1_000, 'app_change', {
+            activeWindow: { title: 'A', ...chrome, url: 'https://example.com/a' },
+          }),
+          makeEvent(1_500, 'scroll'),
+        ],
+      }),
+    )
+    await eventStream.append(
+      makeWindow({
+        id: 'chrome-b',
+        startTimestamp: 2_000,
+        endTimestamp: 3_000,
+        closedBy: 'flush',
+        events: [
+          makeEvent(2_000, 'app_change', {
+            activeWindow: { title: 'B', ...chrome, url: 'https://other.org/b' },
+          }),
+        ],
+      }),
+    )
+
+    await waitFor(() => activities.length === 2, 'Expected two activities split by tld')
+    // Same app across the boundary -> no transition bleed -> both frames kept.
+    expect(activities[0].frames.map((f) => f.frame.filepath)).toEqual([
+      'frame-0.png',
+      'frame-1.png',
+    ])
+  })
+
   // Regression for the "trailing pending activity" data loss: the producer keeps
   // a single pendingActivity. It used to be emitted only when a LATER frame-backed
   // window with an incompatible context arrived (-> context_change finalize) or on
