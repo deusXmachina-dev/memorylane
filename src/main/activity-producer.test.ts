@@ -6,6 +6,7 @@ import type { StreamSubscription } from './streams/stream'
 import type { Frame } from './recorder/screen-capturer'
 import type { Activity } from './activity-types'
 import { ActivityProducer } from './activity-producer'
+import { ActivityExtractor } from './activity-extractor'
 
 vi.mock('./logger', () => ({
   default: {
@@ -490,6 +491,228 @@ describe('ActivityProducer', () => {
     expect(producer.getStats().droppedUnknownContextWindows).toBe(0)
     expect(producer.getStats().droppedNoFrameWindows).toBe(1)
     expect(noContextOffset).toBeLessThan(noFrameOffset)
+  })
+
+  // Regression for the "trailing pending activity" data loss: the producer keeps
+  // a single pendingActivity. It used to be emitted only when a LATER frame-backed
+  // window with an incompatible context arrived (-> context_change finalize) or on
+  // an explicit flush/stop. A no-frame successor is dropped BEFORE
+  // buildWindowChunks/integrateChunk run, so it never finalized the pending
+  // activity, and the last frame-backed window of a session was stranded and lost.
+  // Now a frameless window with an incompatible context still finalizes the
+  // pending activity.
+  //
+  // Mirrors a real recording: App-X (Unknown) -> Ghostty (frames) -> switch to a
+  // frameless window at session end. Both App-X and Ghostty must be persisted.
+  it('finalizes the trailing pending activity when its successor is an incompatible no-frame window', async () => {
+    const { producer, frameStream, eventStream, activityStream } = createProducer()
+    const activities: Activity[] = []
+    subscriptions.push(
+      activityStream.subscribe({
+        startAt: { type: 'now' },
+        onRecord: (record) => activities.push(record.payload),
+      }),
+    )
+
+    await producer.start()
+
+    // Frames for the first two windows; the trailing window gets none.
+    await frameStream.append(makeFrame(1_500, 0)) // App-X window
+    await frameStream.append(makeFrame(2_500, 1)) // Ghostty window
+    await frameStream.append(makeFrame(3_500, 2)) // Ghostty window
+
+    // W1 - pre-existing focus, no app_change inside it -> 'Unknown' context.
+    // Closed by the switch to Ghostty (the app_change lands in the NEXT window).
+    await eventStream.append(
+      makeWindow({
+        id: 'appx',
+        startTimestamp: 1_000,
+        endTimestamp: 2_000,
+        closedBy: 'app_change',
+        events: [makeEvent(1_500, 'scroll')],
+      }),
+    )
+
+    // W2 - Ghostty: frame-backed, valid context, well above min duration.
+    // Its arrival is what flushes W1 out (incompatible context), and it then
+    // becomes the trailing pendingActivity.
+    await eventStream.append(
+      makeWindow({
+        id: 'ghostty',
+        startTimestamp: 2_000,
+        endTimestamp: 4_000,
+        closedBy: 'app_change',
+        events: [
+          makeEvent(2_000, 'app_change', {
+            displayId: 1,
+            activeWindow: {
+              title: 'activity-boundary-bugs',
+              processName: 'Ghostty',
+              bundleId: 'com.mitchellh.ghostty',
+            },
+          }),
+          makeEvent(3_000, 'scroll'),
+        ],
+      }),
+    )
+
+    // W3 - switch to a context whose window has no frames yet (end of session).
+    // Dropped as a no-frame window WITHOUT flushing the pending Ghostty activity.
+    const lastOffset = await eventStream.append(
+      makeWindow({
+        id: 'electron',
+        startTimestamp: 4_000,
+        endTimestamp: 4_200,
+        closedBy: 'gap',
+        events: [
+          makeEvent(4_000, 'app_change', {
+            displayId: 1,
+            activeWindow: {
+              title: 'MemoryLane',
+              processName: 'Electron',
+              bundleId: 'com.github.Electron',
+            },
+          }),
+        ],
+      }),
+    )
+
+    // All three windows processed - WITHOUT any explicit flush/stop: App-X
+    // emitted, Ghostty finalized by the incompatible frameless successor, and
+    // the trailing no-frame window dropped.
+    await waitFor(
+      () => activities.length === 2 && producer.getStats().droppedNoFrameWindows === 1,
+      'Expected both App-X and Ghostty to emit, and the trailing no-frame window to drop',
+    )
+
+    // Ghostty (frames + valid context + 2000ms duration) is persisted even though
+    // its only successor was a frameless window, instead of being stranded.
+    expect(activities.map((a) => a.context.appName)).toEqual(['Unknown', 'Ghostty'])
+    expect(activities[1].provenance.sourceWindowIds).toEqual(['ghostty'])
+    expect(producer.getStats().emittedActivities).toBe(2)
+
+    // The pending activity was finalized by the incompatible window, so its event
+    // offsets ack without needing a flush/stop.
+    await waitFor(
+      async () => (await eventStream.getAck('test:event')) === lastOffset,
+      'Expected event offsets to ack after the pending activity is finalized',
+    )
+  })
+
+  it('shutdown: trailing activities emitted at stop are still persisted by the extractor', async () => {
+    const { producer, frameStream, eventStream, activityStream } = createProducer({
+      minActivityDurationMs: 0,
+    })
+    const persisted: string[] = []
+    let releaseFirst: (() => void) | null = null
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve
+    })
+    let firstSeen = false
+
+    const extractor = new ActivityExtractor({
+      activityStream,
+      transformer: {
+        transform: async (a) => {
+          // Hold the FIRST activity's transform in-flight to mirror the real
+          // timing: the first activity's (slow LLM) transform is still running
+          // when capture stops and the trailing activities are emitted.
+          if (!firstSeen) {
+            firstSeen = true
+            await firstGate
+          }
+          return {
+            activityId: a.id,
+            startTimestamp: a.startTimestamp,
+            endTimestamp: a.endTimestamp,
+            appName: a.context.appName,
+            windowTitle: a.context.windowTitle ?? '',
+            tld: a.context.tld,
+            summary: '',
+            summaryModel: '',
+            ocrText: '',
+            vector: [0, 0, 0],
+          }
+        },
+      },
+      sink: {
+        persist: async ({ extracted }) => {
+          persisted.push(extracted.appName)
+        },
+      },
+      config: { consumerId: 'shutdown:x', maxConcurrent: 1, maxRetries: 0, retryBackoffMs: 0 },
+    })
+
+    await producer.start()
+    await extractor.start()
+
+    // App-X (no app_change -> Unknown), closed by switch to Ghostty.
+    await frameStream.append(makeFrame(1_500, 0))
+    await eventStream.append(
+      makeWindow({
+        id: 'appx',
+        startTimestamp: 1_000,
+        endTimestamp: 2_000,
+        closedBy: 'app_change',
+        events: [makeEvent(1_500, 'scroll')],
+      }),
+    )
+    // Ghostty, closed by switch to Electron.
+    await frameStream.append(makeFrame(2_500, 1))
+    await frameStream.append(makeFrame(3_500, 2))
+    await eventStream.append(
+      makeWindow({
+        id: 'ghostty',
+        startTimestamp: 2_000,
+        endTimestamp: 4_000,
+        closedBy: 'app_change',
+        events: [
+          makeEvent(2_000, 'app_change', {
+            displayId: 1,
+            activeWindow: {
+              title: 'term',
+              processName: 'Ghostty',
+              bundleId: 'com.mitchellh.ghostty',
+            },
+          }),
+          makeEvent(3_000, 'scroll'),
+        ],
+      }),
+    )
+    // Electron (final app), closed by switch (becomes trailing pending).
+    await frameStream.append(makeFrame(4_500, 3))
+    await eventStream.append(
+      makeWindow({
+        id: 'electron',
+        startTimestamp: 4_000,
+        endTimestamp: 5_000,
+        closedBy: 'app_change',
+        events: [
+          makeEvent(4_000, 'app_change', {
+            displayId: 1,
+            activeWindow: {
+              title: 'MemoryLane',
+              processName: 'Electron',
+              bundleId: 'com.github.Electron',
+            },
+          }),
+        ],
+      }),
+    )
+
+    // Wait until the first emitted activity (Unknown) is in-flight on the gate.
+    await waitFor(() => firstSeen, 'Expected the first activity transform to start')
+
+    // Mirror harness.stop(): producer first (flushes the trailing pending), then extractor.
+    const stopProducer = producer.stop()
+    releaseFirst?.()
+    await stopProducer
+    await extractor.stop()
+
+    // Every emitted activity must be persisted — nothing lost in the shutdown drain.
+    expect(persisted).toContain('Unknown')
+    expect(persisted).toContain('Ghostty')
+    expect(persisted).toContain('Electron')
   })
 
   it('enforces max activity duration while keeping each emitted activity frame-backed', async () => {
