@@ -8,22 +8,17 @@ import log from '../logger'
 
 // State
 let isRunning = false
-let typingSessionTimeoutId: NodeJS.Timeout | null = null
-let isTyping = false
+
+// Typing session accumulation (counters only; timers/lifecycle live in `typingSession`)
 let typingSessionKeyCount = 0
-let typingSessionStartTime = 0
 
-// Scroll state
-let scrollSessionTimeoutId: NodeJS.Timeout | null = null
-let isScrolling = false
+// Scroll session accumulation
 let scrollSessionAmount = 0
+let scrollSessionEventCount = 0
 let scrollSessionDirection: 'vertical' | 'horizontal' = 'vertical'
-let scrollSessionStartTime = 0
 
-// Click debounce state
-let clickSessionTimeoutId: NodeJS.Timeout | null = null
+// Click session accumulation
 let clickSessionCount = 0
-let clickSessionStartTime = 0
 let lastClickPosition: { x: number; y: number } | null = null
 let lastClickDisplayId: number | undefined
 
@@ -51,6 +46,171 @@ function getDisplayIdForPoint(x: number, y: number): number {
 type OnInteractionCallback = (context: InteractionContext) => void
 const interactionCallbacks: OnInteractionCallback[] = []
 
+function notifyInteraction(context: InteractionContext): void {
+  interactionCallbacks.forEach((callback) => {
+    try {
+      callback(context)
+    } catch (error) {
+      log.error('Error in interaction callback:', error)
+    }
+  })
+}
+
+/**
+ * Manages a debounced interaction "session" — a burst of same-type raw events
+ * (clicks, keystrokes, scroll) coalesced into emitted InteractionContexts.
+ *
+ * Two timers drive emission:
+ * - a debounce timer, reset on every raw event, emits the final sub-window once
+ *   input stops; and
+ * - a max-session timer that emits an interim sub-window during *continuous*
+ *   input, so a long session (e.g. a 30s scroll) keeps emitting and the
+ *   downstream event-capturer window stays alive instead of being cut by its
+ *   idle/gap timer.
+ *
+ * Each emitted sub-window is timestamped at the receipt time of its last raw
+ * event (occurrence time) — not at the moment a timer happens to fire.
+ */
+class DebouncedSession {
+  private active = false
+  private debounceTimer: NodeJS.Timeout | null = null
+  private maxTimer: NodeJS.Timeout | null = null
+  private subWindowStart = 0
+  private lastEventTime = 0
+
+  constructor(
+    // Read lazily so runtime settings changes (capture-settings-manager
+    // mutates INTERACTION_MONITOR_CONFIG) take effect without a restart.
+    private readonly debounceMs: () => number,
+    private readonly maxSessionMs: () => number,
+    private readonly handlers: {
+      hasActivity: () => boolean
+      emit: (subWindowStart: number, lastEventTime: number) => void
+      resetAccumulation: () => void
+      onStart?: () => void
+    },
+  ) {}
+
+  /** Call synchronously from the raw event handler, with the receipt time. */
+  record(now: number): void {
+    if (!this.active) {
+      this.active = true
+      this.subWindowStart = now
+      this.handlers.resetAccumulation()
+      this.handlers.onStart?.()
+      this.maxTimer = setTimeout(() => this.flushInterim(), this.maxSessionMs())
+    }
+    this.lastEventTime = now
+    if (this.debounceTimer) clearTimeout(this.debounceTimer)
+    this.debounceTimer = setTimeout(() => this.flushFinal(), this.debounceMs())
+  }
+
+  private flushInterim(): void {
+    if (this.handlers.hasActivity()) {
+      this.handlers.emit(this.subWindowStart, this.lastEventTime)
+      this.handlers.resetAccumulation()
+      this.subWindowStart = this.lastEventTime
+    }
+    // Re-arm: continuous input keeps emitting at most maxSessionMs apart.
+    this.maxTimer = setTimeout(() => this.flushInterim(), this.maxSessionMs())
+  }
+
+  private flushFinal(): void {
+    if (this.handlers.hasActivity()) {
+      this.handlers.emit(this.subWindowStart, this.lastEventTime)
+      this.handlers.resetAccumulation()
+    }
+    this.reset()
+  }
+
+  /** Cancel timers and clear lifecycle state without emitting (used on stop). */
+  reset(): void {
+    this.active = false
+    if (this.maxTimer) {
+      clearTimeout(this.maxTimer)
+      this.maxTimer = null
+    }
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer)
+      this.debounceTimer = null
+    }
+  }
+}
+
+const clickSession = new DebouncedSession(
+  () => INTERACTION_MONITOR_CONFIG.CLICK_DEBOUNCE_MS,
+  () => INTERACTION_MONITOR_CONFIG.MAX_SESSION_MS,
+  {
+    hasActivity: () => clickSessionCount > 0,
+    resetAccumulation: () => {
+      clickSessionCount = 0
+    },
+    onStart: () => log.info('[Interaction Monitor] Click session started'),
+    emit: (subWindowStart, lastEventTime) => {
+      log.info(
+        `[Interaction Monitor] Click session: ${clickSessionCount} clicks over ${lastEventTime - subWindowStart}ms`,
+      )
+      notifyInteraction({
+        type: 'click',
+        timestamp: lastEventTime,
+        displayId: lastClickDisplayId,
+        clickPosition: lastClickPosition ?? undefined,
+      })
+    },
+  },
+)
+
+const typingSession = new DebouncedSession(
+  () => INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS,
+  () => INTERACTION_MONITOR_CONFIG.MAX_SESSION_MS,
+  {
+    hasActivity: () => typingSessionKeyCount > 0,
+    resetAccumulation: () => {
+      typingSessionKeyCount = 0
+    },
+    onStart: () => log.info('[Interaction Monitor] Typing session started'),
+    emit: (subWindowStart, lastEventTime) => {
+      log.info(
+        `[Interaction Monitor] Typing session: ${typingSessionKeyCount} keys over ${lastEventTime - subWindowStart}ms`,
+      )
+      notifyInteraction({
+        type: 'keyboard',
+        timestamp: lastEventTime,
+        displayId: cachedDisplayId ?? undefined,
+        keyCount: typingSessionKeyCount,
+        durationMs: Math.max(0, lastEventTime - subWindowStart),
+        windowTitle: cachedWindowTitle ?? undefined,
+      })
+    },
+  },
+)
+
+const scrollSession = new DebouncedSession(
+  () => INTERACTION_MONITOR_CONFIG.SCROLL_DEBOUNCE_MS,
+  () => INTERACTION_MONITOR_CONFIG.MAX_SESSION_MS,
+  {
+    hasActivity: () => scrollSessionEventCount > 0,
+    resetAccumulation: () => {
+      scrollSessionAmount = 0
+      scrollSessionEventCount = 0
+    },
+    onStart: () => log.info('[Interaction Monitor] Scroll session started'),
+    emit: (subWindowStart, lastEventTime) => {
+      log.info(
+        `[Interaction Monitor] Scroll session: ${scrollSessionAmount} rotation over ${lastEventTime - subWindowStart}ms`,
+      )
+      notifyInteraction({
+        type: 'scroll',
+        timestamp: lastEventTime,
+        displayId: cachedDisplayId ?? undefined,
+        scrollDirection: scrollSessionDirection,
+        scrollAmount: scrollSessionAmount,
+        durationMs: Math.max(0, lastEventTime - subWindowStart),
+      })
+    },
+  },
+)
+
 /**
  * Handle mouse click events
  * Debounced: accumulates clicks and emits a single event when clicking stops,
@@ -61,51 +221,10 @@ function handleMouseClick(event: UiohookMouseEvent): void {
     return
   }
 
-  const now = Date.now()
-
-  if (clickSessionTimeoutId) {
-    clearTimeout(clickSessionTimeoutId)
-  }
-
-  if (clickSessionCount === 0) {
-    clickSessionStartTime = now
-    log.info('[Interaction Monitor] Click session started')
-  }
-
+  clickSession.record(Date.now())
   clickSessionCount++
   lastClickPosition = { x: event.x, y: event.y }
   lastClickDisplayId = getDisplayIdForPoint(event.x, event.y)
-
-  clickSessionTimeoutId = setTimeout(() => {
-    if (clickSessionCount === 0) return
-
-    const endTime = Date.now() - INTERACTION_MONITOR_CONFIG.CLICK_DEBOUNCE_MS
-    const durationMs = endTime - clickSessionStartTime
-
-    log.info(
-      `[Interaction Monitor] Click session ended: ${clickSessionCount} clicks over ${durationMs}ms`,
-    )
-
-    const context: InteractionContext = {
-      type: 'click',
-      timestamp: endTime,
-      displayId: lastClickDisplayId,
-      clickPosition: lastClickPosition ?? undefined,
-    }
-
-    interactionCallbacks.forEach((callback) => {
-      try {
-        callback(context)
-      } catch (error) {
-        log.error('Error in interaction callback:', error)
-      }
-    })
-
-    clickSessionCount = 0
-    clickSessionStartTime = 0
-    lastClickPosition = null
-    lastClickDisplayId = undefined
-  }, INTERACTION_MONITOR_CONFIG.CLICK_DEBOUNCE_MS)
 }
 
 /**
@@ -117,58 +236,8 @@ function handleKeyboard(): void {
     return
   }
 
-  const now = Date.now()
-
-  // Clear any existing typing session timeout
-  if (typingSessionTimeoutId) {
-    clearTimeout(typingSessionTimeoutId)
-  }
-
-  // Mark that user is typing and track session
-  if (!isTyping) {
-    isTyping = true
-    typingSessionKeyCount = 0
-    typingSessionStartTime = now
-    log.info('[Interaction Monitor] Typing session started')
-  }
-
-  // Increment key count
+  typingSession.record(Date.now())
   typingSessionKeyCount++
-
-  // Set timeout to detect when typing stops
-  typingSessionTimeoutId = setTimeout(() => {
-    if (!isTyping) return
-
-    isTyping = false
-    const endTime = Date.now() - INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS
-    const durationMs = Math.max(0, endTime - typingSessionStartTime)
-
-    log.info(
-      `[Interaction Monitor] Typing session ended: ${typingSessionKeyCount} keys over ${durationMs}ms`,
-    )
-
-    const context: InteractionContext = {
-      type: 'keyboard',
-      timestamp: endTime,
-      displayId: cachedDisplayId ?? undefined,
-      keyCount: typingSessionKeyCount,
-      durationMs: durationMs,
-      windowTitle: cachedWindowTitle ?? undefined,
-    }
-
-    // Notify all callbacks
-    interactionCallbacks.forEach((callback) => {
-      try {
-        callback(context)
-      } catch (error) {
-        log.error('Error in interaction callback:', error)
-      }
-    })
-
-    // Reset session tracking
-    typingSessionKeyCount = 0
-    typingSessionStartTime = 0
-  }, INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS)
 }
 
 /**
@@ -180,58 +249,10 @@ function handleScroll(event: UiohookWheelEvent): void {
     return
   }
 
-  const now = Date.now()
-
-  // Clear any existing scroll session timeout
-  if (scrollSessionTimeoutId) {
-    clearTimeout(scrollSessionTimeoutId)
-  }
-
-  // Mark that user is scrolling and track session
-  if (!isScrolling) {
-    isScrolling = true
-    scrollSessionAmount = 0
-    scrollSessionStartTime = now
-    scrollSessionDirection = event.direction === 3 ? 'vertical' : 'horizontal' // WheelDirection.VERTICAL = 3
-    log.info('[Interaction Monitor] Scroll session started')
-  }
-
-  // Accumulate scroll amount
+  scrollSession.record(Date.now())
   scrollSessionAmount += event.rotation
-
-  // Set timeout to detect when scrolling stops
-  scrollSessionTimeoutId = setTimeout(() => {
-    if (!isScrolling) return
-
-    isScrolling = false
-    const endTime = Date.now() - INTERACTION_MONITOR_CONFIG.SCROLL_DEBOUNCE_MS
-    const durationMs = endTime - scrollSessionStartTime
-
-    log.info(
-      `[Interaction Monitor] Scroll session ended: ${scrollSessionAmount} rotation over ${durationMs}ms`,
-    )
-
-    const context: InteractionContext = {
-      type: 'scroll',
-      timestamp: endTime,
-      displayId: cachedDisplayId ?? undefined,
-      scrollDirection: scrollSessionDirection,
-      scrollAmount: scrollSessionAmount,
-    }
-
-    // Notify all callbacks
-    interactionCallbacks.forEach((callback) => {
-      try {
-        callback(context)
-      } catch (error) {
-        log.error('Error in interaction callback:', error)
-      }
-    })
-
-    // Reset session tracking
-    scrollSessionAmount = 0
-    scrollSessionStartTime = 0
-  }, INTERACTION_MONITOR_CONFIG.SCROLL_DEBOUNCE_MS)
+  scrollSessionEventCount++
+  scrollSessionDirection = event.direction === 3 ? 'vertical' : 'horizontal' // WheelDirection.VERTICAL = 3
 }
 
 /**
@@ -374,38 +395,21 @@ export function stopInteractionMonitoring(): void {
   try {
     log.info('[Interaction Monitor] Stopping')
     isRunning = false
-    isTyping = false
+
+    // Cancel pending session timers and clear accumulation
+    clickSession.reset()
+    typingSession.reset()
+    scrollSession.reset()
     typingSessionKeyCount = 0
-    typingSessionStartTime = 0
-    isScrolling = false
     scrollSessionAmount = 0
-    scrollSessionStartTime = 0
+    scrollSessionEventCount = 0
     clickSessionCount = 0
-    clickSessionStartTime = 0
     lastClickPosition = null
     lastClickDisplayId = undefined
     previousWindow = null
     previousWindowDisplayId = null
     cachedDisplayId = null
     cachedWindowTitle = null
-
-    // Clear any pending typing session timeout
-    if (typingSessionTimeoutId) {
-      clearTimeout(typingSessionTimeoutId)
-      typingSessionTimeoutId = null
-    }
-
-    // Clear any pending scroll session timeout
-    if (scrollSessionTimeoutId) {
-      clearTimeout(scrollSessionTimeoutId)
-      scrollSessionTimeoutId = null
-    }
-
-    // Clear any pending click session timeout
-    if (clickSessionTimeoutId) {
-      clearTimeout(clickSessionTimeoutId)
-      clickSessionTimeoutId = null
-    }
 
     // Stop the native app-watcher process (only our listener; others may still be attached)
     if (appWatcherUnsubscribe) {
