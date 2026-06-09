@@ -207,6 +207,19 @@ export class ActivityProducer {
       log.info(
         `[ActivityProducer] Dropping window ${window.id} at offset ${record.offset}: no frames in ${window.startTimestamp}-${window.endTimestamp}`,
       )
+      // A frameless window can neither seed nor extend an activity, but if its
+      // context is incompatible with the in-progress pendingActivity it still
+      // marks a real boundary. Finalize the pending activity here so it isn't
+      // stranded waiting for a frame-backed successor that may never arrive
+      // (e.g. the last app of a session, before capture stops). A compatible
+      // frameless window is left alone so the same activity keeps accruing.
+      if (
+        this.pendingActivity !== null &&
+        !this.canMergeContexts(this.pendingActivity.context, windowContext)
+      ) {
+        await this.finalizePendingActivity('context_change')
+        await this.flushDeferredEventAck()
+      }
       await this.markRecordProcessed(record.offset)
       await this.advanceFrameAck(window.endTimestamp)
       return

@@ -18,6 +18,7 @@ import { SqliteActivitySink } from './sqlite-activity-sink'
 import { FfmpegVideoStitcher } from './video/video-stitcher'
 import { ActivitySemanticService, SemanticFileDebugDumper } from './activity-semantic-service'
 import type { SemanticPipelinePreference } from './activity-semantic-service'
+import { InteractionEventDebugDumper } from './interaction-event-debug-dump'
 import { InferenceProviderImpl, type InferenceProvider } from './llm'
 import type { Vendor } from '../shared/types'
 import { VENDOR_PRESETS, buildModelChain } from '../shared/vendor-defaults'
@@ -80,14 +81,30 @@ export async function createMainRuntime(params: {
   applyMigrations(storage.getDatabase())
   const usageTracker = new UsageTracker()
 
+  const debugPipelineDir = path.join(app.getAppPath(), '.debug-pipeline')
   const debugDumper =
     !app.isPackaged && process.env.DEBUG_PIPELINE
       ? new SemanticFileDebugDumper({
-          rootDir: path.join(app.getAppPath(), '.debug-pipeline'),
+          rootDir: debugPipelineDir,
           cleanRootDir: true,
           copyMediaAssets: true,
         })
       : undefined
+  // Created after the semantic dumper so its cleanRootDir has already run.
+  const interactionDumper = debugDumper
+    ? new InteractionEventDebugDumper(debugPipelineDir)
+    : undefined
+
+  // Debug-only: keep screenshots (skip per-activity cleanup + the stale sweep)
+  // so frames survive for inspection. On by default whenever the debug pipeline
+  // is active, and independently togglable via MEMORYLANE_RETAIN_SCREENSHOTS.
+  const retainScreenshots =
+    dev && Boolean(process.env.DEBUG_PIPELINE || process.env.MEMORYLANE_RETAIN_SCREENSHOTS)
+  if (retainScreenshots) {
+    log.info(
+      '[Runtime] Screenshot retention enabled — captured frames will not be cleaned up (debug only)',
+    )
+  }
 
   const presets = VENDOR_PRESETS[params.getActiveVendor()]
   const initialVideoModels = buildModelChain(params.initialVideoModel ?? '', presets.semanticVideo)
@@ -142,6 +159,7 @@ export async function createMainRuntime(params: {
     outputDir,
     extractorTransformer: transformer,
     extractorSink: sink,
+    retainScreenshots,
   })
 
   const capture: RuntimeCaptureController = createCaptureController({
@@ -169,6 +187,7 @@ export async function createMainRuntime(params: {
   })
 
   const interactionHandler = (event: Parameters<typeof harness.handleEvent>[0]): void => {
+    interactionDumper?.dump(event)
     blacklistCoordinator.handleInteraction(event)
   }
   interactionMonitor.onInteraction(interactionHandler)
