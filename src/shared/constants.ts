@@ -4,6 +4,17 @@ export const VISUAL_DETECTOR_CONFIG = {
   DHASH_THRESHOLD_PERCENT: 8, // Threshold for baseline comparison (1-20%)
 }
 
+// Trailing-frame leak trimming at activity boundaries (ActivityProducer).
+// The real app switch precedes the observer notification (observed 0.5-2s), so
+// the last frame(s) of an activity can visually show the NEXT app.
+export const BOUNDARY_TRIM_CONFIG = {
+  ENABLED: true,
+  CANDIDATE_COUNT: 3, // Trailing frames inspected per finalization
+  REFERENCE_COUNT: 2, // Frames used on each side (own activity / after boundary)
+  AFTER_REFERENCE_WINDOW_MS: 5_000, // Buffered frames this close after the boundary may serve as after-references on flush
+  MIN_LEAK_MARGIN_PERCENT: 0.5, // L1 luminance %: a frame must be this much closer to the after side to be dropped
+}
+
 // User Interaction Monitoring Configuration
 export const INTERACTION_MONITOR_CONFIG = {
   ENABLED: true,

@@ -1,7 +1,7 @@
 import type { EventWindow, InteractionContext } from '../shared/types'
 import type { Frame } from './recorder/screen-capturer'
 import type { Offset } from './streams/stream'
-import { ACTIVITY_CONFIG } from '../shared/constants'
+import { ACTIVITY_CONFIG, BOUNDARY_TRIM_CONFIG } from '../shared/constants'
 
 export interface ActivityFrame {
   offset: Offset
@@ -42,6 +42,7 @@ export interface ActivityProducerConfig {
   frameBufferRetentionMs: number
   eventConsumerId: string
   frameConsumerId: string
+  enableBoundaryTrim: boolean
 }
 
 export function createDefaultActivityProducerConfig(): ActivityProducerConfig {
@@ -53,5 +54,6 @@ export function createDefaultActivityProducerConfig(): ActivityProducerConfig {
     frameBufferRetentionMs: ACTIVITY_CONFIG.MAX_ACTIVITY_DURATION_MS * 2,
     eventConsumerId: 'activity-producer:event-stream',
     frameConsumerId: 'activity-producer:frame-stream',
+    enableBoundaryTrim: BOUNDARY_TRIM_CONFIG.ENABLED,
   }
 }
