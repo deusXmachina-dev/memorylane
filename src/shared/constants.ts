@@ -39,6 +39,8 @@ export const ACTIVITY_CONFIG = {
   MAX_ACTIVITY_DURATION_MS: 5 * 60 * 1000, // Force-split after 5 minutes
   MAX_SCREENSHOTS_FOR_LLM: 6, // Max images sent to LLM
   SEMANTIC_REQUEST_TIMEOUT_MS: 120_000, // Per-model semantic request timeout
+  TRAILING_FRAME_DROP_WINDOW_MS: 1_500, // Only drop a trailing boundary frame captured this close to the app switch
+  STATS_LOG_INTERVAL_MS: 10 * 60 * 1000, // Periodic ActivityProducer stats snapshot while capturing
 }
 
 // Event Capturer Configuration (gap-based session windowing)

@@ -1,5 +1,5 @@
 import type { InteractionContext, EventWindow } from '../shared/types'
-import { SCREENSHOT_CLEANUP_CONFIG } from '../shared/constants'
+import { ACTIVITY_CONFIG, SCREENSHOT_CLEANUP_CONFIG } from '../shared/constants'
 import { EventCapturer } from './event-capturer'
 import { ActivityProducer } from './activity-producer'
 import type { Activity, ActivityProducerConfig } from './activity-types'
@@ -87,6 +87,7 @@ export function createPipelineHarness(params: {
       : undefined
 
   let cleanupTimer: ReturnType<typeof setInterval> | null = null
+  let statsTimer: ReturnType<typeof setInterval> | null = null
   let running = false
   let frameCaptureSuppressed = false
 
@@ -120,6 +121,12 @@ export function createPipelineHarness(params: {
             sweepStaleFiles(params.outputDir)
           }, SCREENSHOT_CLEANUP_CONFIG.CLEANUP_INTERVAL_MS)
         }
+
+        // Periodic visibility into drop/filter counters — they are the
+        // production signal for how often the boundary-leak mechanisms fire.
+        statsTimer = setInterval(() => {
+          log.info('[PipelineHarness] ActivityProducer stats:', activityProducer.getStats())
+        }, ACTIVITY_CONFIG.STATS_LOG_INTERVAL_MS)
       } catch (error) {
         running = false
         throw error
@@ -132,9 +139,15 @@ export function createPipelineHarness(params: {
         clearInterval(cleanupTimer)
         cleanupTimer = null
       }
+      if (statsTimer) {
+        clearInterval(statsTimer)
+        statsTimer = null
+      }
       await screenCapturer.stop()
       await eventCapturer.flushAndWait()
       await activityProducer.stop()
+      // After producer.stop() so flush-time finalization is included.
+      log.info('[PipelineHarness] ActivityProducer final stats:', activityProducer.getStats())
       if (activityExtractor) {
         await activityExtractor.stop()
       }
