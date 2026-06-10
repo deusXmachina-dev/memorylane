@@ -9,19 +9,6 @@ import log from '../logger'
 // State
 let isRunning = false
 
-// Typing session accumulation (counters only; timers/lifecycle live in `typingSession`)
-let typingSessionKeyCount = 0
-
-// Scroll session accumulation
-let scrollSessionAmount = 0
-let scrollSessionEventCount = 0
-let scrollSessionDirection: 'vertical' | 'horizontal' = 'vertical'
-
-// Click session accumulation
-let clickSessionCount = 0
-let lastClickPosition: { x: number; y: number } | null = null
-let lastClickDisplayId: number | undefined
-
 // App change state
 let previousWindow: NonNullable<InteractionContext['activeWindow']> | null = null
 let previousWindowDisplayId: number | null = null
@@ -70,13 +57,18 @@ function notifyInteraction(context: InteractionContext): void {
  *
  * Each emitted sub-window is timestamped at the receipt time of its last raw
  * event (occurrence time) — not at the moment a timer happens to fire.
+ *
+ * The session owns its accumulation state (`A`): it is reset on session start,
+ * after every emit, and on reset(), so callers only fold raw events in via
+ * record()'s accumulate callback.
  */
-class DebouncedSession {
+class DebouncedSession<A> {
   private active = false
   private debounceTimer: NodeJS.Timeout | null = null
   private maxTimer: NodeJS.Timeout | null = null
   private subWindowStart = 0
   private lastEventTime = 0
+  private accumulation: A
 
   constructor(
     // Read lazily so runtime settings changes (capture-settings-manager
@@ -84,39 +76,41 @@ class DebouncedSession {
     private readonly debounceMs: () => number,
     private readonly maxSessionMs: () => number,
     private readonly handlers: {
-      hasActivity: () => boolean
-      emit: (subWindowStart: number, lastEventTime: number) => void
-      resetAccumulation: () => void
+      initialAccumulation: () => A
+      hasActivity: (accumulation: A) => boolean
+      emit: (accumulation: A, subWindowStart: number, lastEventTime: number) => void
       onStart?: () => void
     },
-  ) {}
+  ) {
+    this.accumulation = handlers.initialAccumulation()
+  }
 
-  /** Call synchronously from the raw event handler, with the receipt time. */
-  record(now: number): void {
+  /**
+   * Call synchronously from the raw event handler, with the receipt time.
+   * `accumulate` folds the raw event into the session's accumulation.
+   */
+  record(now: number, accumulate: (accumulation: A) => void): void {
     if (!this.active) {
       this.active = true
       this.subWindowStart = now
-      this.handlers.resetAccumulation()
+      this.accumulation = this.handlers.initialAccumulation()
       this.handlers.onStart?.()
       this.maxTimer = setTimeout(() => this.flushInterim(), this.maxSessionMs())
     }
     this.lastEventTime = now
+    accumulate(this.accumulation)
     if (this.debounceTimer) clearTimeout(this.debounceTimer)
-    this.debounceTimer = setTimeout(() => this.flushFinal(), this.debounceMs())
+    this.debounceTimer = setTimeout(() => this.flush(), this.debounceMs())
   }
 
   private flushInterim(): void {
-    if (this.handlers.hasActivity()) {
-      this.handlers.emit(this.subWindowStart, this.lastEventTime)
-      this.handlers.resetAccumulation()
+    if (this.handlers.hasActivity(this.accumulation)) {
+      this.handlers.emit(this.accumulation, this.subWindowStart, this.lastEventTime)
+      this.accumulation = this.handlers.initialAccumulation()
       this.subWindowStart = this.lastEventTime
     }
     // Re-arm: continuous input keeps emitting at most maxSessionMs apart.
     this.maxTimer = setTimeout(() => this.flushInterim(), this.maxSessionMs())
-  }
-
-  private flushFinal(): void {
-    this.flush()
   }
 
   /**
@@ -126,16 +120,16 @@ class DebouncedSession {
    * the debounce timer with post-switch cached context.
    */
   flush(): void {
-    if (this.active && this.handlers.hasActivity()) {
-      this.handlers.emit(this.subWindowStart, this.lastEventTime)
-      this.handlers.resetAccumulation()
+    if (this.active && this.handlers.hasActivity(this.accumulation)) {
+      this.handlers.emit(this.accumulation, this.subWindowStart, this.lastEventTime)
     }
     this.reset()
   }
 
-  /** Cancel timers and clear lifecycle state without emitting (used on stop). */
+  /** Cancel timers and clear all session state without emitting (used on stop). */
   reset(): void {
     this.active = false
+    this.accumulation = this.handlers.initialAccumulation()
     if (this.maxTimer) {
       clearTimeout(this.maxTimer)
       this.maxTimer = null
@@ -147,24 +141,32 @@ class DebouncedSession {
   }
 }
 
+interface ClickAccumulation {
+  count: number
+  position: { x: number; y: number } | null
+  displayId: number | undefined
+}
+
 const clickSession = new DebouncedSession(
   () => INTERACTION_MONITOR_CONFIG.CLICK_DEBOUNCE_MS,
   () => INTERACTION_MONITOR_CONFIG.MAX_SESSION_MS,
   {
-    hasActivity: () => clickSessionCount > 0,
-    resetAccumulation: () => {
-      clickSessionCount = 0
-    },
+    initialAccumulation: (): ClickAccumulation => ({
+      count: 0,
+      position: null,
+      displayId: undefined,
+    }),
+    hasActivity: (accumulation) => accumulation.count > 0,
     onStart: () => log.info('[Interaction Monitor] Click session started'),
-    emit: (subWindowStart, lastEventTime) => {
+    emit: (accumulation, subWindowStart, lastEventTime) => {
       log.info(
-        `[Interaction Monitor] Click session: ${clickSessionCount} clicks over ${lastEventTime - subWindowStart}ms`,
+        `[Interaction Monitor] Click session: ${accumulation.count} clicks over ${lastEventTime - subWindowStart}ms`,
       )
       notifyInteraction({
         type: 'click',
         timestamp: lastEventTime,
-        displayId: lastClickDisplayId,
-        clickPosition: lastClickPosition ?? undefined,
+        displayId: accumulation.displayId,
+        clickPosition: accumulation.position ?? undefined,
       })
     },
   },
@@ -174,20 +176,18 @@ const typingSession = new DebouncedSession(
   () => INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS,
   () => INTERACTION_MONITOR_CONFIG.MAX_SESSION_MS,
   {
-    hasActivity: () => typingSessionKeyCount > 0,
-    resetAccumulation: () => {
-      typingSessionKeyCount = 0
-    },
+    initialAccumulation: () => ({ keyCount: 0 }),
+    hasActivity: (accumulation) => accumulation.keyCount > 0,
     onStart: () => log.info('[Interaction Monitor] Typing session started'),
-    emit: (subWindowStart, lastEventTime) => {
+    emit: (accumulation, subWindowStart, lastEventTime) => {
       log.info(
-        `[Interaction Monitor] Typing session: ${typingSessionKeyCount} keys over ${lastEventTime - subWindowStart}ms`,
+        `[Interaction Monitor] Typing session: ${accumulation.keyCount} keys over ${lastEventTime - subWindowStart}ms`,
       )
       notifyInteraction({
         type: 'keyboard',
         timestamp: lastEventTime,
         displayId: cachedDisplayId ?? undefined,
-        keyCount: typingSessionKeyCount,
+        keyCount: accumulation.keyCount,
         durationMs: Math.max(0, lastEventTime - subWindowStart),
         windowTitle: cachedWindowTitle ?? undefined,
       })
@@ -195,26 +195,33 @@ const typingSession = new DebouncedSession(
   },
 )
 
+interface ScrollAccumulation {
+  amount: number
+  eventCount: number
+  direction: 'vertical' | 'horizontal'
+}
+
 const scrollSession = new DebouncedSession(
   () => INTERACTION_MONITOR_CONFIG.SCROLL_DEBOUNCE_MS,
   () => INTERACTION_MONITOR_CONFIG.MAX_SESSION_MS,
   {
-    hasActivity: () => scrollSessionEventCount > 0,
-    resetAccumulation: () => {
-      scrollSessionAmount = 0
-      scrollSessionEventCount = 0
-    },
+    initialAccumulation: (): ScrollAccumulation => ({
+      amount: 0,
+      eventCount: 0,
+      direction: 'vertical',
+    }),
+    hasActivity: (accumulation) => accumulation.eventCount > 0,
     onStart: () => log.info('[Interaction Monitor] Scroll session started'),
-    emit: (subWindowStart, lastEventTime) => {
+    emit: (accumulation, subWindowStart, lastEventTime) => {
       log.info(
-        `[Interaction Monitor] Scroll session: ${scrollSessionAmount} rotation over ${lastEventTime - subWindowStart}ms`,
+        `[Interaction Monitor] Scroll session: ${accumulation.amount} rotation over ${lastEventTime - subWindowStart}ms`,
       )
       notifyInteraction({
         type: 'scroll',
         timestamp: lastEventTime,
         displayId: cachedDisplayId ?? undefined,
-        scrollDirection: scrollSessionDirection,
-        scrollAmount: scrollSessionAmount,
+        scrollDirection: accumulation.direction,
+        scrollAmount: accumulation.amount,
         durationMs: Math.max(0, lastEventTime - subWindowStart),
       })
     },
@@ -231,10 +238,11 @@ function handleMouseClick(event: UiohookMouseEvent): void {
     return
   }
 
-  clickSession.record(Date.now())
-  clickSessionCount++
-  lastClickPosition = { x: event.x, y: event.y }
-  lastClickDisplayId = getDisplayIdForPoint(event.x, event.y)
+  clickSession.record(Date.now(), (accumulation) => {
+    accumulation.count++
+    accumulation.position = { x: event.x, y: event.y }
+    accumulation.displayId = getDisplayIdForPoint(event.x, event.y)
+  })
 }
 
 /**
@@ -246,8 +254,9 @@ function handleKeyboard(): void {
     return
   }
 
-  typingSession.record(Date.now())
-  typingSessionKeyCount++
+  typingSession.record(Date.now(), (accumulation) => {
+    accumulation.keyCount++
+  })
 }
 
 /**
@@ -259,10 +268,11 @@ function handleScroll(event: UiohookWheelEvent): void {
     return
   }
 
-  scrollSession.record(Date.now())
-  scrollSessionAmount += event.rotation
-  scrollSessionEventCount++
-  scrollSessionDirection = event.direction === 3 ? 'vertical' : 'horizontal' // WheelDirection.VERTICAL = 3
+  scrollSession.record(Date.now(), (accumulation) => {
+    accumulation.amount += event.rotation
+    accumulation.eventCount++
+    accumulation.direction = event.direction === 3 ? 'vertical' : 'horizontal' // WheelDirection.VERTICAL = 3
+  })
 }
 
 /**
@@ -416,12 +426,6 @@ export function stopInteractionMonitoring(): void {
     clickSession.reset()
     typingSession.reset()
     scrollSession.reset()
-    typingSessionKeyCount = 0
-    scrollSessionAmount = 0
-    scrollSessionEventCount = 0
-    clickSessionCount = 0
-    lastClickPosition = null
-    lastClickDisplayId = undefined
     previousWindow = null
     previousWindowDisplayId = null
     cachedDisplayId = null
