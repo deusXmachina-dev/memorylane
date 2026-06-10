@@ -28,6 +28,32 @@ func fail(_ message: String, exitCode: Int32 = 1) -> Never {
     exit(exitCode)
 }
 
+/// Filesystem-safe slug for an app name so it can go in a screenshot filename,
+/// e.g. "Google Chrome" -> "google-chrome". Lowercases, replaces any run of
+/// non-alphanumeric characters with a single dash, trims dashes, and caps the
+/// length. Returns nil when nothing usable remains.
+func appSlug(_ name: String?) -> String? {
+    guard let name = name else { return nil }
+    let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz0123456789")
+    var slug = ""
+    var lastWasDash = false
+    for scalar in name.lowercased().unicodeScalars {
+        if allowed.contains(scalar) {
+            slug.unicodeScalars.append(scalar)
+            lastWasDash = false
+        } else if !lastWasDash {
+            slug.append("-")
+            lastWasDash = true
+        }
+    }
+    let dashes = CharacterSet(charactersIn: "-")
+    slug = slug.trimmingCharacters(in: dashes)
+    if slug.count > 40 {
+        slug = String(slug.prefix(40)).trimmingCharacters(in: dashes)
+    }
+    return slug.isEmpty ? nil : slug
+}
+
 // MARK: - CLI Argument Parsing
 
 struct DaemonConfig {
@@ -189,6 +215,34 @@ func resolveDisplayId(_ requestedDisplayId: UInt32?) throws -> CGDirectDisplayID
     return displays[0]
 }
 
+// MARK: - Frontmost app tracking
+
+/// Caches the system-wide frontmost app, updated on the main run loop via an
+/// NSWorkspace notification, so the SCStreamOutput callback (which runs on a
+/// background queue) can read it cheaply at the grab instant. Identifiers match
+/// the app-watcher daemon (localizedName + bundleIdentifier) so the downstream
+/// frame/app matching in ActivityProducer compares like-for-like.
+final class FrontmostAppTracker {
+    private let lock = NSLock()
+    private var appName: String?
+    private var bundleId: String?
+
+    func update(_ app: NSRunningApplication?) {
+        lock.lock()
+        defer { lock.unlock() }
+        appName = app?.localizedName
+        bundleId = app?.bundleIdentifier
+    }
+
+    func snapshot() -> (appName: String?, bundleId: String?) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (appName, bundleId)
+    }
+}
+
+let frontmostTracker = FrontmostAppTracker()
+
 // MARK: - Autonomous ScreenCaptureKit Daemon
 
 class AutonomousCapture: NSObject, SCStreamOutput {
@@ -327,6 +381,7 @@ class AutonomousCapture: NSObject, SCStreamOutput {
         let quality = self.config.quality
         let outputDir = self.config.outputDir
         let captureTimestamp = Int(Date().timeIntervalSince1970 * 1000)
+        let frontmost = frontmostTracker.snapshot()
         let droppedFrames = takeDroppedFrameCount()
         shouldReleaseSemaphore = false
 
@@ -335,7 +390,13 @@ class AutonomousCapture: NSObject, SCStreamOutput {
                 self.pendingWriteSemaphore.signal()
             }
 
-            let filename = "frame-\(captureTimestamp).jpg"
+            // Include the grab-time app in the name so raw frames are legible on
+            // disk, e.g. "frame-1781008339005-google-chrome.jpg". Falls back to
+            // the bare timestamped name when the app is unknown.
+            let slug = appSlug(frontmost.appName)
+            let filename =
+                slug.map { "frame-\(captureTimestamp)-\($0).jpg" }
+                ?? "frame-\(captureTimestamp).jpg"
             let filepath = (outputDir as NSString).appendingPathComponent(filename)
 
             do {
@@ -346,13 +407,21 @@ class AutonomousCapture: NSObject, SCStreamOutput {
                     fputs("[daemon] Dropped \(droppedFrames) frame(s) while previous capture was still being written\n", stderr)
                 }
 
-                let payload: [String: Any] = [
+                var payload: [String: Any] = [
                     "filepath": filepath,
                     "timestamp": captureTimestamp,
                     "width": resized.width,
                     "height": resized.height,
                     "displayId": Int(displayId),
                 ]
+                // Stamp the grab-time frontmost app. Omit keys when unknown
+                // (no NSNull) — the consumer treats absent app info as "keep".
+                if let name = frontmost.appName, !name.isEmpty {
+                    payload["appName"] = name
+                }
+                if let bid = frontmost.bundleId, !bid.isEmpty {
+                    payload["bundleId"] = bid
+                }
                 emitJSON(payload)
             } catch {
                 fputs("[daemon] Frame write failed: \(error)\n", stderr)
@@ -411,7 +480,18 @@ try FileManager.default.createDirectory(
 
 let capture = AutonomousCapture(config: config)
 
-let semaphore = DispatchSemaphore(value: 0)
+// Track the frontmost app on the main run loop so every captured frame can be
+// stamped with the app on screen at the grab instant (see FrontmostAppTracker).
+// Same NSWorkspace source as app-watcher.swift, so identifiers match.
+let workspaceCenter = NSWorkspace.shared.notificationCenter
+workspaceCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+                            object: nil, queue: .main) { notification in
+    let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+    frontmostTracker.update(app ?? NSWorkspace.shared.frontmostApplication)
+}
+// Seed with the app focused at launch — NSWorkspace only notifies on *changes*.
+frontmostTracker.update(NSWorkspace.shared.frontmostApplication)
+
 Task {
     do {
         try await capture.startStream()
@@ -422,4 +502,8 @@ Task {
     // Start listening for stdin commands
     listenForCommands(capture: capture)
 }
-semaphore.wait()
+
+// Keep the process alive AND service the main run loop so the workspace observer
+// above fires — NSWorkspace notifications are delivered on the main run loop, and
+// a bare DispatchSemaphore.wait() would block the thread without running it.
+RunLoop.main.run()
