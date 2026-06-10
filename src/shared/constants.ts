@@ -14,6 +14,20 @@ export const INTERACTION_MONITOR_CONFIG = {
   CLICK_DEBOUNCE_MS: 3000, // Wait for clicking to stop before emitting event (500-5000ms)
   TYPING_DEBOUNCE_MS: 2000, // Wait for typing to stop before emitting event (500-5000ms)
   SCROLL_DEBOUNCE_MS: 2000, // Wait for scrolling to stop before emitting event (200-2000ms)
+  // Force-emit an interim event when a continuous session runs longer than this,
+  // so long scroll/typing keeps the event-capturer's window alive instead of
+  // being cut by its idle gap. The binding invariant is
+  // MAX_SESSION_MS < EVENT_CAPTURER_CONFIG.GAP_TIMEOUT_MS — otherwise a continuous
+  // session emits less often than the gap and the downstream window is dropped
+  // (guarded by a test in interaction-monitor.test.ts).
+  //
+  // This is independent of the debounce values above: debounce controls when a
+  // session is considered *finished*, while this caps how long a *running* session
+  // goes between emits. When a user-configured debounce exceeds this (the UI allows
+  // up to 10s), a long session is intentionally split into interim sub-windows —
+  // each stamped at receipt time, with no events lost or double-counted — because
+  // honoring a debounce longer than the gap would let the window die.
+  MAX_SESSION_MS: 4000,
 }
 
 // App Watcher Configuration (platform-native subprocess for app/window change detection)

@@ -492,6 +492,81 @@ describe('ActivityProducer', () => {
     expect(noContextOffset).toBeLessThan(noFrameOffset)
   })
 
+  it('does not split an activity on a frameless incompatible window (quick bounce)', async () => {
+    // Pins the quick-bounce merge: a cmd-tab bounce into another app that
+    // produces no frames must not finalize the surrounding activity. (A
+    // frameless-window finalize was tried and reverted — it split activities
+    // and double-penalized the previous one; see activity-boundary-fixes-v2.)
+    const { producer, frameStream, eventStream, activityStream } = createProducer()
+    const activities: Activity[] = []
+    subscriptions.push(
+      activityStream.subscribe({
+        startAt: { type: 'now' },
+        onRecord: (record) => activities.push(record.payload),
+      }),
+    )
+
+    await producer.start()
+    const codeWindowContext = {
+      title: 'Repo',
+      processName: 'Code',
+      bundleId: 'com.microsoft.VSCode',
+    }
+
+    // App A with frames.
+    await frameStream.append(makeFrame(1_000, 0))
+    await frameStream.append(makeFrame(1_400, 1))
+    await eventStream.append(
+      makeWindow({
+        id: 'code-1',
+        startTimestamp: 900,
+        endTimestamp: 1_500,
+        events: [
+          makeEvent(900, 'app_change', { activeWindow: codeWindowContext }),
+          makeEvent(1_250, 'keyboard'),
+        ],
+      }),
+    )
+
+    // Frameless bounce into app B: no frame falls in its range.
+    await eventStream.append(
+      makeWindow({
+        id: 'mail-bounce',
+        startTimestamp: 2_000,
+        endTimestamp: 2_100,
+        events: [
+          makeEvent(2_000, 'app_change', {
+            activeWindow: { title: 'Inbox', processName: 'Mail', bundleId: 'com.apple.mail' },
+          }),
+        ],
+      }),
+    )
+
+    // Back in app A with another frame; flush-closed to finalize.
+    await frameStream.append(makeFrame(3_000, 2))
+    const lastOffset = await eventStream.append(
+      makeWindow({
+        id: 'code-2',
+        startTimestamp: 2_900,
+        endTimestamp: 3_100,
+        closedBy: 'flush',
+        events: [
+          makeEvent(2_900, 'app_change', { activeWindow: codeWindowContext }),
+          makeEvent(3_000, 'keyboard'),
+        ],
+      }),
+    )
+
+    await waitFor(
+      async () => (await eventStream.getAck('test:event')) === lastOffset,
+      'Expected all windows to be processed and acked',
+    )
+    expect(activities).toHaveLength(1)
+    expect(activities[0].context.appName).toBe('Code')
+    expect(activities[0].frames).toHaveLength(3)
+    expect(producer.getStats().droppedNoFrameWindows).toBe(1)
+  })
+
   it('enforces max activity duration while keeping each emitted activity frame-backed', async () => {
     const { producer, frameStream, eventStream, activityStream } = createProducer({
       maxActivityDurationMs: 60_000,
