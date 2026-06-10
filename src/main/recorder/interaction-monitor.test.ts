@@ -6,7 +6,7 @@ import type { InteractionContext } from '../../shared/types'
 // Defined via vi.hoisted so they are initialized before the hoisted vi.mock
 // factories (and the top-level import of the module under test) run.
 
-const { mockScreen, handlers, mockUiohook } = vi.hoisted(() => {
+const { mockScreen, handlers, mockUiohook, appWatcher } = vi.hoisted(() => {
   const handlers: Record<string, (event: unknown) => void> = {}
   return {
     mockScreen: { getDisplayNearestPoint: vi.fn(() => ({ id: 1 })) },
@@ -19,6 +19,7 @@ const { mockScreen, handlers, mockUiohook } = vi.hoisted(() => {
       stop: vi.fn(),
       removeAllListeners: vi.fn(),
     },
+    appWatcher: { listener: null as ((event: unknown) => void) | null },
   }
 })
 
@@ -29,7 +30,14 @@ vi.mock('uiohook-napi', () => ({
   UiohookWheelEvent: class {},
 }))
 
-vi.mock('./app-watcher', () => ({ addAppWatcherListener: vi.fn(() => () => {}) }))
+vi.mock('./app-watcher', () => ({
+  addAppWatcherListener: vi.fn((listener: (event: unknown) => void) => {
+    appWatcher.listener = listener
+    return () => {
+      appWatcher.listener = null
+    }
+  }),
+}))
 vi.mock('./app-watcher-display', () => ({
   resolveAppWatcherDisplay: vi.fn(() => ({ displayId: 1, source: 'window' })),
 }))
@@ -47,6 +55,10 @@ function wheel(rotation = 1): void {
 
 function key(): void {
   handlers['keydown']?.({})
+}
+
+function appChange(app: string, title: string, timestamp: number): void {
+  appWatcher.listener?.({ type: 'app_change', app, title, timestamp })
 }
 
 describe('interaction-monitor session emission', () => {
@@ -151,6 +163,45 @@ describe('interaction-monitor session emission', () => {
     monitor.stopInteractionMonitoring()
     vi.advanceTimersByTime(60_000)
     expect(emitted).toHaveLength(0)
+  })
+
+  it('flushes a pending typing session on app_change, before the switch context', () => {
+    appChange('Editor', 'Editor — file.ts', 0)
+    vi.advanceTimersByTime(1000) // now = 1000
+    key()
+    vi.advanceTimersByTime(300) // now = 1300, before TYPING_DEBOUNCE_MS elapses
+    appChange('Browser', 'Example — Browser', 1300)
+
+    // Order: initial app_change, then the flushed keyboard session, then the
+    // app_change that triggered the flush.
+    expect(emitted.map((c) => c.type)).toEqual(['app_change', 'keyboard', 'app_change'])
+
+    const keyboard = emitted[1]
+    // Stamped at occurrence time (the raw keydown), not flush time.
+    expect(keyboard.timestamp).toBe(1000)
+    // Carries the pre-switch window title, not the new app's.
+    expect(keyboard.windowTitle).toBe('Editor — file.ts')
+    expect(keyboard.keyCount).toBe(1)
+
+    // The debounce timer was cancelled: no duplicate emit later.
+    vi.advanceTimersByTime(INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS + 1000)
+    expect(emitted).toHaveLength(3)
+  })
+
+  it('does not flush sessions on a deduplicated app_change re-fire', () => {
+    appChange('Editor', 'Editor — file.ts', 0)
+    vi.advanceTimersByTime(1000) // now = 1000
+    key()
+    // Same app/title/display again (e.g. watcher restart double-fire): deduped,
+    // so the pending typing session must NOT be flushed early.
+    appChange('Editor', 'Editor — file.ts', 1100)
+
+    expect(emitted.map((c) => c.type)).toEqual(['app_change'])
+
+    // The session still emits normally once the debounce elapses.
+    vi.advanceTimersByTime(INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS)
+    expect(emitted.map((c) => c.type)).toEqual(['app_change', 'keyboard'])
+    expect(emitted[1].timestamp).toBe(1000)
   })
 })
 

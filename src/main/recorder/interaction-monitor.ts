@@ -116,7 +116,17 @@ class DebouncedSession {
   }
 
   private flushFinal(): void {
-    if (this.handlers.hasActivity()) {
+    this.flush()
+  }
+
+  /**
+   * Emit any pending accumulation now (stamped at occurrence time) and end the
+   * session, cancelling both timers. Called synchronously on app_change so the
+   * sub-window is attributed to the app it happened in — not emitted later by
+   * the debounce timer with post-switch cached context.
+   */
+  flush(): void {
+    if (this.active && this.handlers.hasActivity()) {
       this.handlers.emit(this.subWindowStart, this.lastEventTime)
       this.handlers.resetAccumulation()
     }
@@ -282,9 +292,6 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
     ...(event.url && { url: event.url }),
   }
 
-  // Cache window title for keyboard context enrichment
-  cachedWindowTitle = current.title
-
   const resolvedDisplay = resolveAppWatcherDisplay(event)
   if (resolvedDisplay.source === 'cursor_fallback' && event.windowBounds) {
     log.warn(
@@ -305,6 +312,15 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
     return
   }
 
+  // Flush pending sessions before the cached context below is overwritten, so
+  // their emits carry the pre-switch windowTitle/displayId and reach downstream
+  // consumers ahead of the app_change (no late, misattributed sub-windows).
+  clickSession.flush()
+  typingSession.flush()
+  scrollSession.flush()
+
+  // Cache window title for keyboard context enrichment
+  cachedWindowTitle = current.title
   cachedDisplayId = resolvedDisplayId
 
   log.info(
