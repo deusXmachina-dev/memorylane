@@ -16,6 +16,29 @@ vi.mock('./logger', () => ({
   },
 }))
 
+const { nullLuminance, luminanceDiffs } = vi.hoisted(() => ({
+  nullLuminance: new Set<string>(),
+  luminanceDiffs: new Map<string, number>(),
+}))
+
+// Luminance profile = the filepath itself, with a per-test pair diff table.
+// Unknown pairs default to 50/50: equidistant from both sides of a boundary,
+// so the relative trim rule keeps them and existing tests are unaffected.
+vi.mock('./semantic/visual-diff', () => ({
+  loadImageLuminance: vi.fn(async (filepath: string) => {
+    return nullLuminance.has(filepath) ? null : filepath
+  }),
+  luminanceL1DifferencePercent: vi.fn((left: string, right: string) => {
+    if (left === right) return 0
+    const pair = [left, right].sort().join('|')
+    return luminanceDiffs.get(pair) ?? 50
+  }),
+}))
+
+function setLuminanceDiff(left: string, right: string, value: number): void {
+  luminanceDiffs.set([left, right].sort().join('|'), value)
+}
+
 function makeFrame(timestamp: number, sequenceNumber: number): Frame {
   return {
     filepath: `frame-${sequenceNumber}.png`,
@@ -79,6 +102,8 @@ describe('ActivityProducer', () => {
   afterEach(async () => {
     ACTIVITY_CONFIG.MIN_ACTIVITY_DURATION_MS = originalActivityConfig.min
     ACTIVITY_CONFIG.MAX_ACTIVITY_DURATION_MS = originalActivityConfig.max
+    nullLuminance.clear()
+    luminanceDiffs.clear()
     for (const sub of subscriptions.splice(0)) {
       sub.unsubscribe()
     }
@@ -756,6 +781,181 @@ describe('ActivityProducer', () => {
       'Expected short window to be processed',
     )
     expect(activities).toHaveLength(0)
+  })
+
+  describe('boundary trimming', () => {
+    const codeWindow = {
+      title: 'Repo',
+      processName: 'Code',
+      bundleId: 'com.microsoft.VSCode',
+    }
+    const slackWindow = {
+      title: 'Inbox',
+      processName: 'Slack',
+      bundleId: 'com.tinyspeck.slackmacgap',
+    }
+
+    async function runAppSwitch(producerParams?: { enableBoundaryTrim?: boolean }) {
+      const { producer, frameStream, eventStream, activityStream } = createProducer(producerParams)
+      const activities: Activity[] = []
+      subscriptions.push(
+        activityStream.subscribe({
+          startAt: { type: 'now' },
+          onRecord: (record) => activities.push(record.payload),
+        }),
+      )
+
+      await producer.start()
+      // App A frames; frame-2 is the leak (visually shows app B already).
+      await frameStream.append(makeFrame(1_000, 0))
+      await frameStream.append(makeFrame(1_400, 1))
+      await frameStream.append(makeFrame(1_450, 2))
+      // App B frame.
+      await frameStream.append(makeFrame(2_000, 3))
+
+      await eventStream.append(
+        makeWindow({
+          id: 'code',
+          startTimestamp: 900,
+          endTimestamp: 1_500,
+          closedBy: 'app_change',
+          events: [makeEvent(900, 'app_change', { activeWindow: codeWindow })],
+        }),
+      )
+      await eventStream.append(
+        makeWindow({
+          id: 'slack',
+          startTimestamp: 1_600,
+          endTimestamp: 2_500,
+          closedBy: 'flush',
+          events: [makeEvent(1_600, 'app_change', { activeWindow: slackWindow })],
+        }),
+      )
+
+      await waitFor(() => activities.length === 2, 'Expected two activities')
+      return { producer, activities }
+    }
+
+    it('trims trailing frames closer to the successor on app switch', async () => {
+      // frame-2 is near the successor frame-3 and far (default 50) from its
+      // own activity's frame-0 reference => leaked.
+      setLuminanceDiff('frame-2.png', 'frame-3.png', 5)
+
+      const { producer, activities } = await runAppSwitch()
+
+      const codeActivity = activities.find((a) => a.context.appName === 'Code')!
+      expect(codeActivity.frames.map((f) => f.frame.filepath)).toEqual([
+        'frame-0.png',
+        'frame-1.png',
+      ])
+      expect(codeActivity.provenance.frameOffsets).toEqual([0, 1])
+      expect(codeActivity.endTimestamp).toBe(1_500)
+      expect(producer.getStats().trailingFramesTrimmed).toBe(1)
+    })
+
+    it('keeps all frames when the kill-switch is off', async () => {
+      setLuminanceDiff('frame-2.png', 'frame-3.png', 5)
+
+      const { producer, activities } = await runAppSwitch({ enableBoundaryTrim: false })
+
+      const codeActivity = activities.find((a) => a.context.appName === 'Code')!
+      expect(codeActivity.frames).toHaveLength(3)
+      expect(producer.getStats().trailingFramesTrimmed).toBe(0)
+    })
+
+    it('keeps all frames when the successor luminance is unavailable', async () => {
+      nullLuminance.add('frame-3.png')
+      setLuminanceDiff('frame-2.png', 'frame-3.png', 5)
+
+      const { producer, activities } = await runAppSwitch()
+
+      const codeActivity = activities.find((a) => a.context.appName === 'Code')!
+      expect(codeActivity.frames).toHaveLength(3)
+      expect(producer.getStats().trailingFramesTrimmed).toBe(0)
+    })
+
+    it('does not trim same-app max_duration splits', async () => {
+      // All frames near-identical: same-app splits have no after-boundary
+      // reference, so the trim must not run at all.
+      for (let left = 0; left < 4; left++) {
+        for (let right = left + 1; right < 4; right++) {
+          setLuminanceDiff(`frame-${left}.png`, `frame-${right}.png`, 2)
+        }
+      }
+
+      const { producer, frameStream, eventStream, activityStream } = createProducer({
+        maxActivityDurationMs: 60_000,
+      })
+      const activities: Activity[] = []
+      subscriptions.push(
+        activityStream.subscribe({
+          startAt: { type: 'now' },
+          onRecord: (record) => activities.push(record.payload),
+        }),
+      )
+
+      await producer.start()
+      await frameStream.append(makeFrame(1_000, 0))
+      await frameStream.append(makeFrame(30_000, 1))
+      await frameStream.append(makeFrame(61_000, 2))
+      await frameStream.append(makeFrame(90_000, 3))
+
+      await eventStream.append(
+        makeWindow({
+          id: 'long-window',
+          startTimestamp: 0,
+          endTimestamp: 120_000,
+          closedBy: 'flush',
+          events: [makeEvent(0, 'app_change', { activeWindow: codeWindow })],
+        }),
+      )
+
+      await waitFor(() => activities.length >= 2, 'Expected split activities')
+      const totalFrames = activities.reduce((sum, a) => sum + a.frames.length, 0)
+      expect(totalFrames).toBe(4)
+      expect(producer.getStats().trailingFramesTrimmed).toBe(0)
+    })
+
+    it('trims a leaked tail on flush using buffered post-boundary frames as references', async () => {
+      // Window covers frames 0-4; frame-5 lands after the window end and
+      // stays in the frame buffer => serves as the after-boundary reference.
+      setLuminanceDiff('frame-4.png', 'frame-5.png', 5)
+      setLuminanceDiff('frame-3.png', 'frame-5.png', 8)
+
+      const { producer, frameStream, eventStream, activityStream } = createProducer()
+      const activities: Activity[] = []
+      subscriptions.push(
+        activityStream.subscribe({
+          startAt: { type: 'now' },
+          onRecord: (record) => activities.push(record.payload),
+        }),
+      )
+
+      await producer.start()
+      for (let i = 0; i < 5; i++) {
+        await frameStream.append(makeFrame(1_000 + i * 1_000, i))
+      }
+      await frameStream.append(makeFrame(6_000, 5))
+
+      await eventStream.append(
+        makeWindow({
+          id: 'flushed',
+          startTimestamp: 900,
+          endTimestamp: 5_100,
+          closedBy: 'flush',
+          events: [makeEvent(900, 'app_change', { activeWindow: codeWindow })],
+        }),
+      )
+
+      await waitFor(() => activities.length === 1, 'Expected one activity')
+      expect(activities[0].frames.map((f) => f.frame.filepath)).toEqual([
+        'frame-0.png',
+        'frame-1.png',
+        'frame-2.png',
+      ])
+      expect(activities[0].provenance.frameOffsets).toEqual([0, 1, 2])
+      expect(producer.getStats().trailingFramesTrimmed).toBe(2)
+    })
   })
 
   it('applies updated activity window config at runtime', async () => {

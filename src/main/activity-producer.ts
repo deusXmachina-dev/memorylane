@@ -12,6 +12,8 @@ import {
   type ActivityFrame,
   type ActivityProducerConfig,
 } from './activity-types'
+import { detectTrailingLeakFrames } from './boundary-trim'
+import { BOUNDARY_TRIM_CONFIG } from '../shared/constants'
 
 const ACTIVITY_ID_NAMESPACE = uuidv5('memorylane:v2-activity', uuidv5.DNS)
 
@@ -19,6 +21,7 @@ export interface ActivityProducerStats {
   emittedActivities: number
   droppedNoFrameWindows: number
   droppedUnknownContextWindows: number
+  trailingFramesTrimmed: number
 }
 
 interface ChunkContext {
@@ -65,6 +68,7 @@ export class ActivityProducer {
     emittedActivities: 0,
     droppedNoFrameWindows: 0,
     droppedUnknownContextWindows: 0,
+    trailingFramesTrimmed: 0,
   }
 
   constructor(params: {
@@ -278,14 +282,13 @@ export class ActivityProducer {
       return
     }
 
+    const contextsCompatible = this.canMergeContexts(this.pendingActivity.context, chunk.context)
     const combinedDuration = chunk.endTimestamp - this.pendingActivity.startTimestamp
-    const compatible =
-      this.canMergeContexts(this.pendingActivity.context, chunk.context) &&
-      combinedDuration <= this.config.maxActivityDurationMs
 
-    if (!compatible) {
+    if (!contextsCompatible || combinedDuration > this.config.maxActivityDurationMs) {
       await this.finalizePendingActivity(
         combinedDuration > this.config.maxActivityDurationMs ? 'max_duration' : 'context_change',
+        contextsCompatible ? undefined : { successorFrames: chunk.frames },
       )
       await this.flushDeferredEventAck()
       this.pendingActivity = this.createPendingActivity(chunk)
@@ -350,6 +353,7 @@ export class ActivityProducer {
 
   private async finalizePendingActivity(
     reason: 'context_change' | 'max_duration' | 'flush',
+    options?: { successorFrames?: ActivityFrame[] },
   ): Promise<void> {
     if (this.pendingActivity === null) return
 
@@ -366,9 +370,60 @@ export class ActivityProducer {
       return
     }
 
+    await this.trimTrailingLeakFrames(activityToEmit, reason, options?.successorFrames)
+
     await this.activityStream.append(activityToEmit)
     this.stats.emittedActivities++
     this.deferAckOffsets(eventOffsetsToAck)
+  }
+
+  private async trimTrailingLeakFrames(
+    activity: Activity,
+    reason: 'context_change' | 'max_duration' | 'flush',
+    successorFrames?: ActivityFrame[],
+  ): Promise<void> {
+    if (!this.config.enableBoundaryTrim) return
+    if (activity.frames.length <= 1) return
+
+    // After-boundary reference frames: the successor chunk on a context
+    // change, or buffered post-boundary frames on flush (capture stop / app
+    // quit still delivers a frame or two past the window end). Same-app
+    // max_duration splits get neither — there is no boundary to trim.
+    const afterFrames =
+      successorFrames ?? (reason === 'flush' ? this.getBufferedFramesAfter(activity) : [])
+    if (afterFrames.length === 0) return
+
+    try {
+      const { framesToDrop } = await detectTrailingLeakFrames({
+        frames: activity.frames,
+        afterFrames,
+      })
+      if (framesToDrop.length === 0) return
+
+      const droppedOffsets = new Set(framesToDrop.map((frame) => frame.offset))
+      activity.frames = activity.frames.filter((frame) => !droppedOffsets.has(frame.offset))
+      activity.provenance.frameOffsets = activity.provenance.frameOffsets.filter(
+        (offset) => !droppedOffsets.has(offset),
+      )
+      this.stats.trailingFramesTrimmed += framesToDrop.length
+      log.info(
+        `[ActivityProducer] Trimmed ${framesToDrop.length} trailing boundary frame(s) from activity ${activity.id} (${activity.context.appName}, reason: ${reason}): ${framesToDrop.map((f) => f.frame.filepath).join(', ')}`,
+      )
+    } catch (err) {
+      log.warn('[ActivityProducer] Boundary trim failed; keeping all frames:', err)
+    }
+  }
+
+  private getBufferedFramesAfter(activity: Activity): ActivityFrame[] {
+    const cutoff = activity.endTimestamp + BOUNDARY_TRIM_CONFIG.AFTER_REFERENCE_WINDOW_MS
+    return this.frameBuffer
+      .filter(
+        (record) =>
+          record.payload.timestamp > activity.endTimestamp && record.payload.timestamp <= cutoff,
+      )
+      .sort((a, b) => a.payload.timestamp - b.payload.timestamp)
+      .slice(0, BOUNDARY_TRIM_CONFIG.REFERENCE_COUNT)
+      .map((record) => ({ offset: record.offset, frame: record.payload }))
   }
 
   private deferAckOffsets(offsets: Offset[]): void {
