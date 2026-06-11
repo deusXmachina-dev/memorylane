@@ -24,6 +24,9 @@ export interface RuntimeCaptureController extends RuntimeCapture {
 export function createCaptureController(params: {
   harness: PipelineHarness
   interactionMonitor: InteractionMonitorModule
+  // Optional presence heartbeat, started/stopped with the capture lifecycle so
+  // it only ticks while capture is running.
+  presence?: { start(): void; stop(): void }
   outputDir: string
   onStateChanged: () => void
 }): RuntimeCaptureController {
@@ -58,11 +61,13 @@ export function createCaptureController(params: {
         try {
           await params.harness.start()
           params.interactionMonitor.startInteractionMonitoring()
+          params.presence?.start()
           state = 'running'
           log.info('[Capture] Started')
         } catch (error) {
           state = 'stopped'
           try {
+            params.presence?.stop()
             params.interactionMonitor.stopInteractionMonitoring()
           } catch {
             // best-effort cleanup
@@ -77,6 +82,12 @@ export function createCaptureController(params: {
       notify()
 
       runTransition(async () => {
+        try {
+          params.presence?.stop()
+        } catch (error) {
+          log.error('[Capture] Failed to stop presence monitor:', error)
+        }
+
         try {
           params.interactionMonitor.stopInteractionMonitoring()
         } catch (error) {

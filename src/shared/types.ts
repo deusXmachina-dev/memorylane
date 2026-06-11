@@ -1,7 +1,11 @@
 import type { AppEditionConfig } from './edition'
 
 export interface InteractionContext {
-  type: 'click' | 'keyboard' | 'scroll' | 'app_change'
+  // 'presence' is a synthetic heartbeat emitted while the user is at the machine
+  // but not providing input (reading), so a no-input view keeps its event window
+  // alive instead of dying at the idle gap. It is not a real interaction: it
+  // carries the current activeWindow but never counts toward "active" engagement.
+  type: 'click' | 'keyboard' | 'scroll' | 'app_change' | 'presence'
   timestamp: number
   displayId?: number // Electron Display.id of the screen where the interaction occurred
 

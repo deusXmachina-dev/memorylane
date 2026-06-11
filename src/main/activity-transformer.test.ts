@@ -34,7 +34,10 @@ function makeFrame(index: number): ActivityFrame {
   }
 }
 
-function makeActivity(frameCount: number): Activity {
+function makeActivity(
+  frameCount: number,
+  interactions: Activity['interactions'] = [{ type: 'click', timestamp: 1500 }],
+): Activity {
   return {
     id: 'activity-1',
     startTimestamp: 1000,
@@ -45,7 +48,7 @@ function makeActivity(frameCount: number): Activity {
       windowTitle: 'Editor',
       tld: 'github.com',
     },
-    interactions: [],
+    interactions,
     frames: Array.from({ length: frameCount }, (_, i) => makeFrame(i)),
     provenance: {
       eventWindowOffsets: [],
@@ -200,6 +203,94 @@ describe('DefaultActivityTransformer', () => {
     })
     expect(ocr.extractText).not.toHaveBeenCalled()
     expect(result.ocrText).toBe('')
+  })
+
+  describe('passive view (no clicks/keys/scrolls)', () => {
+    it.each([
+      ['empty interactions', []],
+      ['app_change only', [{ type: 'app_change' as const, timestamp: 1500 }]],
+      [
+        'app_change + presence heartbeats',
+        [
+          { type: 'app_change' as const, timestamp: 1100 },
+          { type: 'presence' as const, timestamp: 1500 },
+          { type: 'presence' as const, timestamp: 1900 },
+        ],
+      ],
+    ])('skips the LLM and labels "Viewed <title>" for %s', async (_name, interactions) => {
+      const { stitcher, ocr, semantic, embedder } = makeDeps()
+      const transformer = new DefaultActivityTransformer(stitcher, ocr, semantic, embedder, {
+        outputDir: OUTPUT_DIR,
+      })
+
+      const activity = makeActivity(3, interactions)
+      const result = await transformer.transform(activity)
+
+      expect(semantic.summarizeFromVideo).not.toHaveBeenCalled()
+      expect(result.summary).toBe('Viewed Editor')
+      expect(result.summaryModel).toBe('heuristic:viewed')
+      // Embeds the on-screen content, not the "Viewed X" label, so it stays findable.
+      expect(embedder.embed).toHaveBeenCalledWith('ocr text')
+      expect(result.ocrText).toBe('ocr text')
+    })
+
+    it('still stitches video so the activity remains viewable', async () => {
+      const { stitcher, ocr, semantic, embedder } = makeDeps()
+      const transformer = new DefaultActivityTransformer(stitcher, ocr, semantic, embedder, {
+        outputDir: OUTPUT_DIR,
+      })
+
+      await transformer.transform(makeActivity(3, []))
+      expect(stitcher.stitch).toHaveBeenCalledOnce()
+    })
+
+    it('sends scroll-only activities to the LLM (scroll is engagement, not passive)', async () => {
+      const { stitcher, ocr, semantic, embedder } = makeDeps()
+      const transformer = new DefaultActivityTransformer(stitcher, ocr, semantic, embedder, {
+        outputDir: OUTPUT_DIR,
+      })
+
+      const result = await transformer.transform(
+        makeActivity(3, [{ type: 'scroll', timestamp: 1500, scrollDirection: 'vertical' }]),
+      )
+
+      expect(semantic.summarizeFromVideo).toHaveBeenCalledOnce()
+      expect(result.summary).toBe('A summary of the activity')
+    })
+
+    it('OCRs a bounded distinct sample of frames for the embedded content', async () => {
+      const { stitcher, ocr, semantic, embedder } = makeDeps()
+      ;(ocr.extractText as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce('alpha')
+        .mockResolvedValueOnce('beta')
+        .mockResolvedValueOnce('alpha')
+        .mockResolvedValueOnce('gamma')
+
+      const transformer = new DefaultActivityTransformer(stitcher, ocr, semantic, embedder, {
+        outputDir: OUTPUT_DIR,
+      })
+
+      const result = await transformer.transform(makeActivity(10, []))
+
+      // PASSIVE_VIEW_MAX_OCR_FRAMES = 4 sampled frames, deduped to distinct text.
+      expect(ocr.extractText).toHaveBeenCalledTimes(4)
+      expect(result.ocrText).toBe('alpha\n\nbeta\n\ngamma')
+      expect(embedder.embed).toHaveBeenCalledWith('alpha\n\nbeta\n\ngamma')
+    })
+
+    it('falls back to the label for embedding when OCR yields nothing', async () => {
+      const { stitcher, ocr, semantic, embedder } = makeDeps()
+      ;(ocr.extractText as ReturnType<typeof vi.fn>).mockResolvedValue('')
+
+      const transformer = new DefaultActivityTransformer(stitcher, ocr, semantic, embedder, {
+        outputDir: OUTPUT_DIR,
+      })
+
+      const result = await transformer.transform(makeActivity(2, []))
+
+      expect(result.ocrText).toBe('')
+      expect(embedder.embed).toHaveBeenCalledWith('Viewed Editor')
+    })
   })
 
   describe('error propagation', () => {

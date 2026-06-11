@@ -73,7 +73,11 @@ export function buildSemanticPrompt(
 }
 
 function buildInteractionTimeline(activity: Activity): string {
-  const interactions = [...activity.interactions].sort((a, b) => a.timestamp - b.timestamp)
+  // Presence heartbeats are synthetic keep-alives with no user-action signal, so
+  // they're excluded from the timeline the model reasons over.
+  const interactions = activity.interactions
+    .filter((interaction) => interaction.type !== 'presence')
+    .sort((a, b) => a.timestamp - b.timestamp)
   if (interactions.length === 0) {
     return '- No interaction events captured.'
   }
