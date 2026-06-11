@@ -258,13 +258,9 @@ describe('DefaultActivityTransformer', () => {
       expect(result.summary).toBe('A summary of the activity')
     })
 
-    it('OCRs a bounded distinct sample of frames for the embedded content', async () => {
+    it('OCRs a single settled frame (no scrolling means the screen is static)', async () => {
       const { stitcher, ocr, semantic, embedder } = makeDeps()
-      ;(ocr.extractText as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce('alpha')
-        .mockResolvedValueOnce('beta')
-        .mockResolvedValueOnce('alpha')
-        .mockResolvedValueOnce('gamma')
+      ;(ocr.extractText as ReturnType<typeof vi.fn>).mockResolvedValue('Reference content')
 
       const transformer = new DefaultActivityTransformer(stitcher, ocr, semantic, embedder, {
         outputDir: OUTPUT_DIR,
@@ -272,10 +268,11 @@ describe('DefaultActivityTransformer', () => {
 
       const result = await transformer.transform(makeActivity(10, []))
 
-      // PASSIVE_VIEW_MAX_OCR_FRAMES = 4 sampled frames, deduped to distinct text.
-      expect(ocr.extractText).toHaveBeenCalledTimes(4)
-      expect(result.ocrText).toBe('alpha\n\nbeta\n\ngamma')
-      expect(embedder.embed).toHaveBeenCalledWith('alpha\n\nbeta\n\ngamma')
+      // Same single-frame OCR as the LLM path: 5th frame from the end.
+      expect(ocr.extractText).toHaveBeenCalledTimes(1)
+      expect(ocr.extractText).toHaveBeenCalledWith('/screenshots/frame-5.png')
+      expect(result.ocrText).toBe('Reference content')
+      expect(embedder.embed).toHaveBeenCalledWith('Reference content')
     })
 
     it('falls back to the label for embedding when OCR yields nothing', async () => {

@@ -95,10 +95,6 @@ export const OCR_CONFIG = {
   MAX_CONCURRENT_ACTIVITIES: 1, // Max activities processing through the pipeline at once
   MAX_CONCURRENT_OCR: 2, // Max parallel OCR subprocesses per activity
   RECOGNITION_MODE: 'accurate' as 'fast' | 'accurate', // macOS Vision recognition level
-  // Passive (no-input) views skip the LLM and instead embed their OCR'd
-  // contents. They're near-static, so a small evenly spaced sample of frames
-  // captures "the whole contents" while bounding the number of subprocesses.
-  PASSIVE_VIEW_MAX_OCR_FRAMES: 4,
 }
 
 // Screen Capturer Configuration

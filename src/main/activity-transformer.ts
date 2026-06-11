@@ -1,4 +1,4 @@
-import type { Activity, ActivityFrame } from './activity-types'
+import type { Activity } from './activity-types'
 import type { ActivityTransformer, ExtractedActivity } from './activity-extraction-types'
 import type {
   ActivityVideoStitcher,
@@ -8,7 +8,6 @@ import type {
   ActivityEmbeddingService,
 } from './activity-transformer-types'
 import type { SemanticPipelinePreference } from './activity-semantic-service'
-import { OCR_CONFIG } from '@constants'
 import log from './logger'
 
 export interface DefaultActivityTransformerConfig {
@@ -46,7 +45,7 @@ export class DefaultActivityTransformer implements ActivityTransformer {
       shouldStitchVideo && outputPath
         ? this.stitcher.stitch({ activityId: activity.id, frames, outputPath })
         : Promise.resolve(null),
-      passiveView ? this.extractPassiveOcrText(activity) : this.extractOcrText(activity),
+      this.extractOcrText(activity),
     ])
 
     // A passive view (no clicks/keystrokes/scrolls — only app focus, or nothing)
@@ -129,51 +128,5 @@ export class DefaultActivityTransformer implements ActivityTransformer {
         interaction.type === 'keyboard' ||
         interaction.type === 'scroll',
     )
-  }
-
-  /**
-   * OCR an evenly spaced sample of frames and concatenate the distinct results.
-   * A passive view is visually near-static, so this captures "the whole
-   * contents" (including anything that changed without input) while bounding the
-   * number of OCR subprocesses. Per-frame failures are skipped, not fatal.
-   */
-  private async extractPassiveOcrText(activity: Activity): Promise<string> {
-    const frames = this.sampleFrames(activity.frames, OCR_CONFIG.PASSIVE_VIEW_MAX_OCR_FRAMES)
-    if (frames.length === 0) return ''
-
-    const texts = await Promise.all(
-      frames.map(async (frame) => {
-        try {
-          return await this.ocr.extractText(frame.frame.filepath)
-        } catch (error) {
-          log.warn(
-            `[ActivityTransformer] OCR failed for passive frame ${frame.frame.filepath} ` +
-              `in activity ${activity.id}:`,
-            error,
-          )
-          return ''
-        }
-      }),
-    )
-
-    const seen = new Set<string>()
-    const distinct: string[] = []
-    for (const text of texts) {
-      const trimmed = text.trim()
-      if (trimmed.length === 0 || seen.has(trimmed)) continue
-      seen.add(trimmed)
-      distinct.push(trimmed)
-    }
-    return distinct.join('\n\n')
-  }
-
-  /** Up to `max` frames spread evenly across the activity (first and last included). */
-  private sampleFrames(frames: ActivityFrame[], max: number): ActivityFrame[] {
-    if (frames.length <= max) return frames
-    const indices = new Set<number>()
-    for (let i = 0; i < max; i++) {
-      indices.add(Math.round((i * (frames.length - 1)) / (max - 1)))
-    }
-    return [...indices].sort((a, b) => a - b).map((index) => frames[index])
   }
 }
