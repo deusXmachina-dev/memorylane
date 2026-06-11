@@ -76,10 +76,7 @@ export function Sidebar({
   return (
     <div className="flex flex-col h-full p-3 gap-3">
       {collapsed ? (
-        <div className="flex flex-col items-center gap-1">
-          <Logo size="sm" iconOnly />
-          {toggleButton}
-        </div>
+        <div className="flex flex-col items-center gap-1">{toggleButton}</div>
       ) : (
         <div className="flex items-center justify-between pl-1.75">
           <Logo size="sm" />
