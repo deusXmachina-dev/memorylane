@@ -28,6 +28,9 @@ import {
   type RuntimeCapture,
   type RuntimeCaptureController,
 } from './capture-controller'
+import { PresenceMonitor } from './presence-monitor'
+import { getSystemIdleSeconds, shouldPause } from './power-monitor'
+import { PRESENCE_MONITOR_CONFIG } from '../shared/constants'
 
 export interface MainRuntime {
   capture: RuntimeCapture
@@ -162,9 +165,23 @@ export async function createMainRuntime(params: {
     retainScreenshots,
   })
 
+  // Keeps a no-input view's event window alive (reading) so it isn't dropped at
+  // the idle gap. A bare heartbeat — it carries no window context (that comes
+  // from the window's app_change) and nothing sensitive — so it goes straight to
+  // the harness as a peer event source, no blacklist routing needed: a blocked
+  // app suppresses frames, so its presence-kept window is dropped for no frames.
+  const presenceMonitor = PRESENCE_MONITOR_CONFIG.ENABLED
+    ? new PresenceMonitor({
+        emit: (event) => harness.handleEvent(event),
+        isPaused: () => shouldPause(),
+        getIdleSeconds: () => getSystemIdleSeconds(),
+      })
+    : undefined
+
   const capture: RuntimeCaptureController = createCaptureController({
     harness,
     interactionMonitor,
+    presence: presenceMonitor,
     outputDir,
     onStateChanged: () => onCaptureStateChanged(),
   })

@@ -66,6 +66,22 @@ export const ACTIVITY_CONFIG = {
   SEMANTIC_REQUEST_TIMEOUT_MS: 120_000, // Per-model semantic request timeout
 }
 
+// Presence Heartbeat Configuration
+// Keeps an event window alive while the user is present but not providing input
+// (reading), so a no-input view isn't dropped when the idle gap fires.
+export const PRESENCE_MONITOR_CONFIG = {
+  ENABLED: true,
+  // Heartbeat cadence. The binding invariant is
+  // HEARTBEAT_INTERVAL_MS < EVENT_CAPTURER_CONFIG.GAP_TIMEOUT_MS — otherwise the
+  // window dies between heartbeats (guarded by a test). Mirrors the
+  // INTERACTION_MONITOR_CONFIG.MAX_SESSION_MS keep-alive for active sessions.
+  HEARTBEAT_INTERVAL_MS: 4_000,
+  // Stop heartbeating once the OS reports this many seconds with no input. Mouse
+  // movement resets the OS idle timer, so a present reader counts as active; a
+  // genuine walk-away is cut roughly this long after their last movement.
+  AWAY_IDLE_SECONDS: 90,
+}
+
 // Event Capturer Configuration (gap-based session windowing)
 export const EVENT_CAPTURER_CONFIG = {
   GAP_TIMEOUT_MS: 5_000,

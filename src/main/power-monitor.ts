@@ -18,6 +18,11 @@ export function shouldThrottle(): boolean {
   return onBattery
 }
 
+/** Seconds since the last system-wide user input (mouse move counts), per the OS. */
+export function getSystemIdleSeconds(): number {
+  return powerMonitor.getSystemIdleTime()
+}
+
 function emitIfNeeded(): void {
   const pause = shouldPause()
   log.info(
