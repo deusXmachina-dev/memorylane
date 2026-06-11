@@ -1,13 +1,16 @@
-# MemoryLane v1.1.0
+# MemoryLane v1.2.0-alpha.1
 
-In-app updates and friendlier custom-endpoint setup, on top of the 1.0 transparency-first foundation.
+Alpha preview. Sharper activity capture — passive reads are now recorded, and several timeline accuracy bugs are fixed.
+
+> This is a prerelease for manual install only. Stable installs will not auto-update to it.
 
 ## What's Changed
 
-- **In-app updates**: when a new version finishes downloading, a "Relaunch to update" banner appears in the sidebar so you can apply it in one click — no need to quit and reopen (#154).
-- **Settings**: custom model `baseURL` now accepts `http://` for private/LAN addresses, so you can point MemoryLane at a self-hosted endpoint on your own network (#153).
-- **Plugin**: pruned and renamed the MemoryLane Claude Code skills (9 → 6) and bumped the plugin to v0.6.1 (#151).
-- **Docs**: added a "Using Your Own Models" guide for running MemoryLane against a self-hosted or third-party model endpoint (#155).
+- **Passive reads are captured**: viewing a page or document with no clicks or typing is now recorded as a "Viewed …" entry and stays searchable via its on-screen text. Previously these no-input reads were dropped (#165).
+- **Long sessions no longer get dropped**: a continuous scroll or typing session is kept alive instead of being cut off mid-session, and sessions are flushed on app switch (#161).
+- **First activity is no longer "Unknown"**: the app already focused when capture starts is now identified correctly (#162).
+- **Cleaner activity boundaries**: trailing frames that briefly leak the next app at an app switch are trimmed (#164).
+- **Debug**: under `DEBUG_PIPELINE`, screenshots and activity videos are retained and dev file logs are written next to the dev DB for inspection (#160).
 
 ## Known Issues & Limitations
 
@@ -24,4 +27,4 @@ In-app updates and friendlier custom-endpoint setup, on top of the 1.0 transpare
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.0.0...v1.1.0
+https://github.com/deusXmachina-dev/memorylane/compare/v1.1.0...v1.2.0-alpha.1
