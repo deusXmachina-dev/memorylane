@@ -10,8 +10,6 @@ export interface PresenceMonitorConfig {
 export interface PresenceMonitorDeps {
   /** Forward a synthetic presence event into the capture pipeline. */
   emit: (event: InteractionContext) => void
-  /** Current frontmost window, or undefined when none is known. */
-  getActiveWindow: () => InteractionContext['activeWindow'] | undefined
   /** True while capture should be paused (screen locked / system suspended). */
   isPaused: () => boolean
   /** Seconds since the last system-wide input (mouse movement counts). */
@@ -30,6 +28,10 @@ export interface PresenceMonitorDeps {
  * than `awayIdleSeconds` without input. Because mouse movement resets the OS
  * idle timer, a present reader keeps the window alive without clicking anything,
  * while a genuine walk-away is cut shortly after their last movement.
+ *
+ * The heartbeat is a bare event: it carries no window context (the read's
+ * app/title comes from the window's own app_change) and nothing sensitive, so
+ * it's emitted directly to the pipeline as a peer event source.
  */
 export class PresenceMonitor {
   private timer: ReturnType<typeof setInterval> | null = null
@@ -66,13 +68,6 @@ export class PresenceMonitor {
     if (this.deps.isPaused()) return
     if (this.deps.getIdleSeconds() >= this.config.awayIdleSeconds) return
 
-    const activeWindow = this.deps.getActiveWindow()
-    if (!activeWindow) return
-
-    this.deps.emit({
-      type: 'presence',
-      timestamp: this.now(),
-      activeWindow,
-    })
+    this.deps.emit({ type: 'presence', timestamp: this.now() })
   }
 }

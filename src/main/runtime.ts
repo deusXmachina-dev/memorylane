@@ -22,10 +22,7 @@ import { InteractionEventDebugDumper } from './interaction-event-debug-dump'
 import { InferenceProviderImpl, type InferenceProvider } from './llm'
 import type { Vendor } from '../shared/types'
 import { VENDOR_PRESETS, buildModelChain } from '../shared/vendor-defaults'
-import {
-  createCaptureBlacklistCoordinator,
-  type CaptureBlacklistCoordinator,
-} from './capture-blacklist-coordinator'
+import { createCaptureBlacklistCoordinator } from './capture-blacklist-coordinator'
 import {
   createCaptureController,
   type RuntimeCapture,
@@ -168,20 +165,14 @@ export async function createMainRuntime(params: {
     retainScreenshots,
   })
 
-  // Assigned just below; the presence monitor's callbacks reference it lazily
-  // (they only fire once capture is running, long after wiring completes). The
-  // `let` breaks a construction cycle — capture ← presence ← coordinator ←
-  // capture — so prefer-const doesn't apply.
-  // eslint-disable-next-line prefer-const
-  let blacklistCoordinator: CaptureBlacklistCoordinator
-
   // Keeps a no-input view's event window alive (reading) so it isn't dropped at
-  // the idle gap. Routed through the blacklist coordinator so heartbeats inherit
-  // the same privacy filtering as real interactions.
+  // the idle gap. A bare heartbeat — it carries no window context (that comes
+  // from the window's app_change) and nothing sensitive — so it goes straight to
+  // the harness as a peer event source, no blacklist routing needed: a blocked
+  // app suppresses frames, so its presence-kept window is dropped for no frames.
   const presenceMonitor = PRESENCE_MONITOR_CONFIG.ENABLED
     ? new PresenceMonitor({
-        emit: (event) => blacklistCoordinator.handleInteraction(event),
-        getActiveWindow: () => blacklistCoordinator.getLastActiveWindow(),
+        emit: (event) => harness.handleEvent(event),
         isPaused: () => shouldPause(),
         getIdleSeconds: () => getSystemIdleSeconds(),
       })
@@ -195,7 +186,7 @@ export async function createMainRuntime(params: {
     onStateChanged: () => onCaptureStateChanged(),
   })
 
-  blacklistCoordinator = createCaptureBlacklistCoordinator({
+  const blacklistCoordinator = createCaptureBlacklistCoordinator({
     initialExcludedApps: params.excludedApps,
     initialExcludedWindowTitlePatterns: params.excludedWindowTitlePatterns,
     initialExcludedUrlPatterns: params.excludedUrlPatterns,

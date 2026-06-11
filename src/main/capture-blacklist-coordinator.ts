@@ -11,8 +11,6 @@ import { getAnonymousModeBrowserMatch } from './capture-anonymous-mode'
 
 export interface CaptureBlacklistCoordinator {
   handleInteraction(event: InteractionContext): void
-  /** The most recent frontmost window seen via an app_change, or undefined. */
-  getLastActiveWindow(): InteractionContext['activeWindow'] | undefined
   updateExclusions(exclusions: {
     apps: string[]
     windowTitlePatterns: string[]
@@ -171,9 +169,6 @@ export function createCaptureBlacklistCoordinator(params: {
         return
       }
       params.forwardInteraction(event)
-    },
-    getLastActiveWindow(): InteractionContext['activeWindow'] | undefined {
-      return lastActiveWindow
     },
     updateExclusions(exclusions): void {
       excludedApps = new Set(normalizeExcludedApps(exclusions.apps))
