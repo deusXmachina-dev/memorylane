@@ -38,7 +38,6 @@ import { judgeSummary, judgeEquivalence } from '../src/main/eval/judge'
 import { priceUsd, sumCosts } from '../src/main/eval/cost'
 import { renderMarkdown, writeReport } from '../src/main/eval/report'
 import { loadGoldenMd, matchSegments, type GoldenActivity } from '../src/main/eval/golden-md'
-import { readJsonl } from '../src/main/eval/jsonl'
 import type {
   EvalReport,
   FixtureScore,
@@ -172,18 +171,6 @@ function resolveFixtureDirs(a: CliArgs): string[] {
   return [...new Set(dirs)]
 }
 
-/**
- * Session zero = the min frame timestamp, i.e. the session.mp4 clock's start.
- * golden.md offsets are authored against that video, so candidate activities
- * must be measured from the same anchor for time-overlap matching to line up.
- */
-function sessionStartFor(fixtureDir: string): number {
-  return readJsonl<{ timestamp: number }>(path.join(fixtureDir, 'frames.jsonl')).reduce(
-    (min, f) => Math.min(min, f.timestamp),
-    Number.POSITIVE_INFINITY,
-  )
-}
-
 function defaultJudgeModel(handle: CliInferenceProviderHandle): string | null {
   const presets = VENDOR_PRESETS[handle.vendor]
   return handle.patternDetectionModel || presets.patternDetection[0]?.id || null
@@ -258,7 +245,11 @@ async function main() {
   )
 
   const fixtures: FixtureScore[] = await runWithConcurrency(cells, concurrency, async (cell) => {
-    const { activities, producerStats } = await replayCell({
+    const {
+      activities,
+      producerStats,
+      sessionStartMs: sessionStart,
+    } = await replayCell({
       provider: handle.provider,
       vendor: handle.vendor,
       fixtureDir: cell.fixtureDir,
@@ -267,7 +258,6 @@ async function main() {
       dumper,
       ocr: a.ocr,
     })
-    const sessionStart = sessionStartFor(cell.fixtureDir)
     const goldens = loadGoldenMd(path.join(cell.fixtureDir, 'golden.md'))
 
     const { segmentation, goldenByActivity } = matchAgainstGolden(activities, goldens, sessionStart)
@@ -314,6 +304,16 @@ async function main() {
     vendor: handle.vendor,
     judgeModel,
     fixtures,
+  }
+
+  // The judge was requested but produced no score anywhere — every call failed or
+  // didn't parse (e.g. the default judge model can't accept images). Surface it
+  // loudly; otherwise the report silently shows "judge —" and looks like a no-op.
+  if (judgeModel && fixtures.every((f) => f.avgJudge10 === null)) {
+    console.warn(
+      `⚠  Judge "${judgeModel}" returned no scores for any summary — it likely can't ` +
+        `accept images, or every call failed. Pass --judge-model <multimodal-model> or --no-llm-judge.`,
+    )
   }
 
   const { runDir, comparePath } = writeReport(a.out, report)

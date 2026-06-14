@@ -1,5 +1,6 @@
 import type { SemanticRunDiagnostics } from '../semantic/types'
 import type { DroppedActivityReason } from '../activity-types'
+import type { ActivityProducerStats } from '../activity-producer'
 
 /**
  * Shared types for the activity-summary eval & replay system.
@@ -156,12 +157,11 @@ export interface SegmentationScore {
   dropViolationIndexes: number[]
 }
 
-export interface ProducerStats {
-  emittedActivities: number
-  droppedNoFrameWindows: number
-  droppedUnknownContextWindows: number
-  trailingFramesTrimmed: number
-}
+/**
+ * Re-exported from the producer so the eval report can't drift from the real
+ * stats shape: a field added/renamed there is picked up here automatically.
+ */
+export type ProducerStats = ActivityProducerStats
 
 /** All scored summaries for one (fixture × model) run. */
 export interface FixtureScore {

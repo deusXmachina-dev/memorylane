@@ -33,7 +33,12 @@ export async function replayCell(params: {
   /** Run real OCR (feeds the judge's ground-truth channel). Off by default —
    *  OCR never affects the summary itself, so eval skips the Vision call. */
   ocr?: boolean
-}): Promise<{ activities: ReplayActivity[]; producerStats: ProducerStats }> {
+}): Promise<{
+  activities: ReplayActivity[]
+  producerStats: ProducerStats
+  /** Session.mp4 clock zero (min frame ts) — golden offsets anchor here. */
+  sessionStartMs: number
+}> {
   // Benchmark each variant IN ISOLATION: the model runs as the sole entry in its
   // pipeline lane, with NO preset fallback chain. A model that can't serve the
   // chosen pipeline (e.g. a snapshot-only model under `--pipeline video`) then
