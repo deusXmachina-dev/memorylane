@@ -1,7 +1,6 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import { VENDOR_PRESETS, buildModelChain } from '../src/shared/vendor-defaults'
 import { DefaultActivityTransformer } from '../src/main/activity-transformer'
 import { FfmpegVideoStitcher } from '../src/main/video/video-stitcher'
 import {
@@ -35,10 +34,14 @@ export async function replayCell(params: {
    *  OCR never affects the summary itself, so eval skips the Vision call. */
   ocr?: boolean
 }): Promise<{ activities: ReplayActivity[]; producerStats: ProducerStats }> {
-  const presets = VENDOR_PRESETS[params.vendor]
-  const videoModels =
-    params.pipeline === 'image' ? [] : buildModelChain(params.model, presets.semanticVideo)
-  const snapshotModels = buildModelChain(params.model, presets.semanticSnapshot)
+  // Benchmark each variant IN ISOLATION: the model runs as the sole entry in its
+  // pipeline lane, with NO preset fallback chain. A model that can't serve the
+  // chosen pipeline (e.g. a snapshot-only model under `--pipeline video`) then
+  // surfaces as an empty summary / failure for that variant — instead of being
+  // silently replaced by the next preset model, which would compare the wrong
+  // thing. Pick the lane with `--pipeline video` or `--pipeline image`.
+  const videoModels = params.pipeline === 'image' ? [] : [params.model]
+  const snapshotModels = params.pipeline === 'video' ? [] : [params.model]
 
   const semantic = new ActivitySemanticService(params.provider, {
     videoModels,

@@ -11,6 +11,11 @@
  * producer config are variables. Needs no live app — just capture-settings.json
  * / vendor-credentials.json + an API key.
  *
+ * Benchmarks run in the VIDEO pipeline by default (production's default), each
+ * model in isolation (no preset fallback). Pass `--pipeline image` to benchmark
+ * snapshot models instead. A/B within one pipeline only: video-vs-video or
+ * image-vs-image — a model that can't serve the lane shows as an empty summary.
+ *
  * Usage:
  *   npm run eval-summaries -- --fixtures vscode-debug --models google/gemini-2.5-flash
  *   npm run eval-summaries -- --fixtures a,b --models m1,m2 --judge-model google/gemini-2.5-pro
@@ -30,6 +35,7 @@ import {
 } from '../src/main/activity-semantic-service'
 import { scoreDeterministic } from '../src/main/eval/deterministic'
 import { judgeSummary, judgeEquivalence } from '../src/main/eval/judge'
+import { priceUsd, sumCosts } from '../src/main/eval/cost'
 import { renderMarkdown, writeReport } from '../src/main/eval/report'
 import { loadGoldenMd, matchSegments, type GoldenActivity } from '../src/main/eval/golden-md'
 import { readJsonl } from '../src/main/eval/jsonl'
@@ -69,7 +75,9 @@ function parseArgs(): CliArgs {
     fixtures: [],
     fixturesDir: null,
     models: [],
-    pipeline: 'auto',
+    // Video is the production default pipeline, so benchmark there by default.
+    // Pass `--pipeline image` to benchmark snapshot models instead.
+    pipeline: 'video',
     judgeModel: null,
     noLlmJudge: false,
     ocr: false,
@@ -221,9 +229,13 @@ async function main() {
   const presets = VENDOR_PRESETS[handle.vendor]
   const judgeModel = a.noLlmJudge ? null : (a.judgeModel ?? defaultJudgeModel(handle))
 
-  const models = a.models.length
-    ? a.models
-    : [presets.semanticSnapshot[0]?.id ?? handle.semanticSnapshotModel].filter(Boolean)
+  // Default model matches the pipeline: the video model for video/auto, the
+  // snapshot model for image — so `--models` can be omitted for a quick run.
+  const defaultModel =
+    a.pipeline === 'image'
+      ? (presets.semanticSnapshot[0]?.id ?? handle.semanticSnapshotModel)
+      : (presets.semanticVideo[0]?.id ?? handle.semanticVideoModel)
+  const models = a.models.length ? a.models : [defaultModel].filter(Boolean)
   if (models.length === 0) throw new Error('No models. Pass --models <id,...>.')
 
   // Round-trip dumping (optional) clobbers a shared dir, so it forces serial runs.
@@ -292,6 +304,8 @@ async function main() {
       avgJudge10: judgeVals.length ? Math.round(mean(judgeVals) * 100) / 100 : null,
       segmentation,
       avgEquivalence: eqVals.length ? Math.round(mean(eqVals) * 1000) / 1000 : null,
+      costUsd: sumCosts(summaries.map((s) => s.summaryCostUsd)),
+      judgeCostUsd: sumCosts(summaries.map((s) => s.judgeCostUsd)),
     }
   })
 
@@ -302,11 +316,12 @@ async function main() {
     fixtures,
   }
 
-  const { jsonPath, mdPath } = writeReport(a.out, report)
+  const { jsonPath, mdPath, comparePath } = writeReport(a.out, report)
   console.log('')
   console.log(renderMarkdown(report).split('\n## Summaries')[0])
   console.log(`Wrote ${jsonPath}`)
   console.log(`Wrote ${mdPath}`)
+  if (comparePath) console.log(`Wrote ${comparePath}  ← side-by-side comparison`)
 }
 
 /** Matches replay activities to golden blocks by time overlap (no LLM). */
@@ -390,6 +405,11 @@ async function scoreActivities(params: {
         })
       : null
 
+    // Eval-time cost: the judge call + (when golden-matched) the equivalence call.
+    const judgeCosts: (number | null)[] = judge
+      ? [priceUsd(judge.judgeModel, judge.tokensIn, judge.tokensOut)]
+      : []
+
     let golden: GoldenMatch | null = null
     const matched = goldenByActivity.get(act.activityId)
     if (matched) {
@@ -402,6 +422,7 @@ async function scoreActivities(params: {
           candidate: act.summary,
         })
         equivalence = eq?.equivalence ?? null
+        if (eq) judgeCosts.push(priceUsd(judgeModel, eq.tokensIn, eq.tokensOut))
       }
       golden = {
         index: matched.golden.index,
@@ -410,6 +431,16 @@ async function scoreActivities(params: {
         equivalence,
       }
     }
+
+    // Summarizer (production) cost: token usage summed over the model-chain
+    // attempts, priced at the model that actually produced the summary.
+    const attempts = act.diagnostics?.attempts ?? []
+    const summaryTokensIn = attempts.reduce((n, at) => n + (at.promptTokens ?? 0), 0)
+    const summaryTokensOut = attempts.reduce((n, at) => n + (at.completionTokens ?? 0), 0)
+    const summaryCostUsd =
+      summaryTokensIn + summaryTokensOut > 0
+        ? priceUsd(act.summaryModel, summaryTokensIn, summaryTokensOut)
+        : null
 
     summaries.push({
       activityId: act.activityId,
@@ -424,6 +455,10 @@ async function scoreActivities(params: {
       deterministic: scoreDeterministic(act.summary),
       judge,
       golden,
+      summaryTokensIn,
+      summaryTokensOut,
+      summaryCostUsd,
+      judgeCostUsd: judge ? sumCosts(judgeCosts) : null,
     })
   }
   return summaries

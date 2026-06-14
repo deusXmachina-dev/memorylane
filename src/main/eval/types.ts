@@ -128,6 +128,13 @@ export interface ScoredSummary {
   judge: JudgeResult | null
   /** Present when the fixture has a golden.md and this activity matched a block. */
   golden: GoldenMatch | null
+  /** Summarizer (production) token usage for this activity, summed over attempts. */
+  summaryTokensIn: number
+  summaryTokensOut: number
+  /** Summarizer cost in USD, or null when the model isn't in the pricing table. */
+  summaryCostUsd: number | null
+  /** Eval-time judge + equivalence cost in USD, or null when unpriced. */
+  judgeCostUsd: number | null
 }
 
 /** How a replay's segmentation lined up with the golden.md blocks. */
@@ -171,6 +178,10 @@ export interface FixtureScore {
   segmentation: SegmentationScore | null
   /** Mean golden equivalence over matched blocks, 0..1, or null. */
   avgEquivalence: number | null
+  /** Total summarizer (production) cost in USD over all activities, or null if unpriced. */
+  costUsd: number | null
+  /** Total eval-time judge + equivalence cost in USD, or null if unpriced. */
+  judgeCostUsd: number | null
 }
 
 export interface EvalReport {

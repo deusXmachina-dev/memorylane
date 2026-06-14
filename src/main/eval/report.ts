@@ -1,11 +1,31 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import type { EvalReport } from './types'
+import { formatOffset } from './golden-md'
+import type { EvalReport, FixtureScore, ScoredSummary } from './types'
 
 /** Renders an EvalReport into a findings-style Markdown scorecard + raw JSON. */
 
 function fmt(n: number | null, digits = 2): string {
   return n === null || Number.isNaN(n) ? '—' : n.toFixed(digits)
+}
+
+/** Escapes free text for a Markdown table cell (pipes, newlines → <br>). */
+function cell(text: string): string {
+  return text.replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>').trim()
+}
+
+/**
+ * The model label for a variant, surfacing model-chain fallback: when the model
+ * that actually produced the summaries differs from the one requested (e.g. a
+ * snapshot-only model requested under the `auto`/`video` pipeline falls through
+ * to the next video-capable model), show `requested → actual` so the row isn't
+ * silently attributed to a model that never ran.
+ */
+function modelLabel(f: FixtureScore): string {
+  const requested = f.model || '-'
+  const actual = [...new Set(f.summaries.map((s) => s.summaryModel).filter(Boolean))]
+  if (actual.length === 0 || (actual.length === 1 && actual[0] === f.model)) return requested
+  return `${requested} → ${actual.join(' / ')}`
 }
 
 export function renderJson(report: EvalReport): string {
@@ -23,17 +43,25 @@ export function renderMarkdown(report: EvalReport): string {
   // Scorecard
   lines.push('## Scorecard')
   lines.push('')
-  lines.push('| Fixture | Model | Acts | Det pass% | Hard fails | Judge/10 | Seg% | Equiv |')
-  lines.push('|---|---|--:|--:|--:|--:|--:|--:|')
+  lines.push(
+    '| Fixture | Model | Acts | Det pass% | Hard fails | Judge/10 | Seg% | Equiv | Cost (USD) |',
+  )
+  lines.push('|---|---|--:|--:|--:|--:|--:|--:|--:|')
   for (const f of report.fixtures) {
     const seg = f.segmentation ? `${fmt(f.segmentation.coverage * 100, 0)}%` : '—'
     lines.push(
-      `| ${f.fixture} | ${f.model || '-'} | ${f.summaries.length} | ` +
+      `| ${f.fixture} | ${modelLabel(f)} | ${f.summaries.length} | ` +
         `${fmt(f.detPassRate * 100, 0)}% | ${f.hardFails} | ${fmt(f.avgJudge10)} | ` +
-        `${seg} | ${fmt(f.avgEquivalence, 2)} |`,
+        `${seg} | ${fmt(f.avgEquivalence, 2)} | ${f.costUsd != null ? `$${fmt(f.costUsd, 4)}` : '—'} |`,
     )
   }
   lines.push('')
+  if (report.fixtures.some((f) => f.costUsd != null)) {
+    lines.push(
+      '> Cost is the **summarizer** (production) spend per run. Eval-time judge cost is separate.',
+    )
+    lines.push('')
+  }
 
   // Per-summary detail
   lines.push('## Summaries')
@@ -81,15 +109,125 @@ export function renderMarkdown(report: EvalReport): string {
   return lines.join('\n')
 }
 
+/**
+ * Side-by-side view for A/B runs: pivots the report so each activity shows the
+ * golden target with every variant's summary + scores beneath it, instead of one
+ * separate section per variant. Returns null when there's nothing to compare
+ * (every fixture has a single variant). The variant is the model label today;
+ * the same pivot serves prompt variants once those run in one report.
+ */
+export function renderComparisonMarkdown(report: EvalReport): string | null {
+  const byFixture = new Map<string, FixtureScore[]>()
+  for (const f of report.fixtures) {
+    const arr = byFixture.get(f.fixture) ?? []
+    arr.push(f)
+    byFixture.set(f.fixture, arr)
+  }
+  if (![...byFixture.values()].some((v) => v.length > 1)) return null
+
+  const lines: string[] = []
+  lines.push(`# Activity-Summary Comparison — ${report.generatedAt}`)
+  lines.push('')
+  lines.push(`- Vendor: ${report.vendor}`)
+  lines.push(`- Judge: ${report.judgeModel ?? '(none — deterministic only)'}`)
+  lines.push('')
+
+  for (const [fixture, scores] of byFixture) {
+    lines.push(`## ${fixture}`)
+    lines.push('')
+
+    // Per-variant rollup.
+    lines.push('| Variant | Acts | Det pass% | Hard fails | Judge/10 | Seg% | Equiv | Cost (USD) |')
+    lines.push('|---|--:|--:|--:|--:|--:|--:|--:|')
+    for (const s of scores) {
+      const seg = s.segmentation ? `${fmt(s.segmentation.coverage * 100, 0)}%` : '—'
+      lines.push(
+        `| ${modelLabel(s)} | ${s.summaries.length} | ${fmt(s.detPassRate * 100, 0)}% | ` +
+          `${s.hardFails} | ${fmt(s.avgJudge10)} | ${seg} | ${fmt(s.avgEquivalence, 2)} | ` +
+          `${s.costUsd != null ? `$${fmt(s.costUsd, 4)}` : '—'} |`,
+      )
+    }
+    lines.push('')
+
+    // Align activities across variants. Golden index is the stable key when the
+    // activity matched a block; otherwise bucket by start second (segmentation is
+    // deterministic across variants, so same-slot activities share a start).
+    interface Slot {
+      order: number
+      app: string
+      title?: string
+      startMs: number
+      endMs: number
+      golden?: string
+      goldenIndex?: number
+      byVariant: Map<string, ScoredSummary>
+    }
+    const slots = new Map<string, Slot>()
+    for (const s of scores) {
+      for (const sum of s.summaries) {
+        const key = sum.golden ? `g${sum.golden.index}` : `t${Math.round(sum.startOffsetMs / 1000)}`
+        let slot = slots.get(key)
+        if (!slot) {
+          slot = {
+            order: sum.startOffsetMs,
+            app: sum.appName,
+            title: sum.windowTitle || undefined,
+            startMs: sum.startOffsetMs,
+            endMs: sum.endOffsetMs,
+            golden: sum.golden?.summary,
+            goldenIndex: sum.golden?.index,
+            byVariant: new Map(),
+          }
+          slots.set(key, slot)
+        }
+        slot.byVariant.set(s.model, sum)
+      }
+    }
+
+    // One row per activity; golden + each variant are columns, so the summaries
+    // sit literally side by side. Score line (bold) sits above the text via <br>.
+    lines.push(`| Activity | golden | ${scores.map((s) => s.model || '-').join(' | ')} |`)
+    lines.push(`|---|---|${scores.map(() => '---').join('|')}|`)
+    for (const slot of [...slots.values()].sort((a, b) => a.order - b.order)) {
+      const range = `${formatOffset(slot.startMs)}–${formatOffset(slot.endMs)}`
+      const head = `**[${range}]**<br>${cell(slot.app + (slot.title ? ` — ${slot.title}` : ''))}`
+      const goldenCell = slot.golden
+        ? `${slot.goldenIndex ? `**#${slot.goldenIndex}**<br>` : ''}${cell(slot.golden)}`
+        : '—'
+      const variantCells = scores.map((s) => {
+        const sum = slot.byVariant.get(s.model)
+        if (!sum) return '_(none)_'
+        const parts = [sum.judge ? `judge ${fmt(sum.judge.score10)}` : 'judge —']
+        if (sum.golden?.equivalence != null) parts.push(`equiv ${fmt(sum.golden.equivalence, 2)}`)
+        if (sum.deterministic.hardFails) parts.push(`${sum.deterministic.hardFails} hard-fail(s)`)
+        // Note the model that actually ran if it differs from the requested one.
+        const ran = sum.summaryModel && sum.summaryModel !== s.model ? ` → ${sum.summaryModel}` : ''
+        return `**${parts.join(' · ')}${ran}**<br>${cell(sum.summary || '_(empty)_')}`
+      })
+      lines.push(`| ${head} | ${goldenCell} | ${variantCells.join(' | ')} |`)
+    }
+    lines.push('')
+  }
+
+  return lines.join('\n')
+}
+
 export function writeReport(
   resultsDir: string,
   report: EvalReport,
-): { jsonPath: string; mdPath: string } {
+): { jsonPath: string; mdPath: string; comparePath: string | null } {
   fs.mkdirSync(resultsDir, { recursive: true })
   const safeId = report.generatedAt.replace(/[:.]/g, '-')
   const jsonPath = path.join(resultsDir, `${safeId}.json`)
   const mdPath = path.join(resultsDir, `${safeId}.md`)
   fs.writeFileSync(jsonPath, renderJson(report), 'utf8')
   fs.writeFileSync(mdPath, renderMarkdown(report), 'utf8')
-  return { jsonPath, mdPath }
+
+  const comparison = renderComparisonMarkdown(report)
+  let comparePath: string | null = null
+  if (comparison) {
+    comparePath = path.join(resultsDir, `${safeId}.compare.md`)
+    fs.writeFileSync(comparePath, comparison, 'utf8')
+  }
+  return { jsonPath, mdPath, comparePath }
 }
