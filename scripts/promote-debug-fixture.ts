@@ -9,9 +9,11 @@
  *
  * Also (unless disabled): stitches all frames into a `session.mp4` for review,
  * and seeds an editable `golden.md` scaffold from the producer's segmentation
- * (real times + apps, blank summaries) — the file you hand-edit into the target
- * for the eval loop. No LLM: the same producer eval replays, so the scaffold's
- * boundaries match what eval-summaries scores.
+ * (real times + apps). Summaries are pre-filled from the dev DB — the debug
+ * session ran the real summarizer and persisted its activities, so those exist
+ * already; the producer is deterministic, so the replay's boundaries line up
+ * with the persisted rows and we match them by time overlap. You then hand-edit
+ * golden.md from a real summary into the target. No LLM is called here.
  *
  * IMPORTANT: hand-review the fixture for private content before committing it.
  * Window titles, URLs, and on-screen text are baked into the events and PNGs.
@@ -22,6 +24,8 @@
  *   npm run promote-debug-fixture -- --name X --downsample            (shrink PNGs -> JPEG)
  *   npm run promote-debug-fixture -- --name X --no-seed --no-video    (skip golden + video)
  *   npm run promote-debug-fixture -- --name X --reseed                (regenerate golden.md scaffold)
+ *   npm run promote-debug-fixture -- --name X --no-db-summaries       (blank summaries, skip DB)
+ *   npm run promote-debug-fixture -- --name X --db-path /path/to.db   (override the dev DB)
  *   npm run promote-debug-fixture -- --name X --debug-dir /path/to/.debug-pipeline
  */
 
@@ -39,6 +43,9 @@ import {
   type FixtureManifest,
   type ReplayActivity,
 } from '../src/main/eval/types'
+import { StorageService } from '../src/main/storage'
+import type { ActivityDetail } from '../src/main/storage/types'
+import { getDefaultDbPath } from '../src/main/paths'
 import type { EventWindow } from '../src/shared/types'
 
 const FIXTURES_ROOT = path.resolve('evals/semantic-summary/fixtures')
@@ -53,6 +60,8 @@ interface CliArgs {
   noSeed: boolean
   reseed: boolean
   noVideo: boolean
+  noDbSummaries: boolean
+  dbPath: string
 }
 
 function parseArgs(): CliArgs {
@@ -67,6 +76,8 @@ function parseArgs(): CliArgs {
     noSeed: false,
     reseed: false,
     noVideo: false,
+    noDbSummaries: false,
+    dbPath: getDefaultDbPath(),
   }
   for (let i = 0; i < args.length; i++) {
     const next = args[i + 1]
@@ -112,6 +123,15 @@ function parseArgs(): CliArgs {
         break
       case '--no-video':
         a.noVideo = true
+        break
+      case '--no-db-summaries':
+        a.noDbSummaries = true
+        break
+      case '--db-path':
+        if (next) {
+          a.dbPath = path.resolve(next)
+          i++
+        }
         break
     }
   }
@@ -301,9 +321,68 @@ async function stitchSessionVideo(
 }
 
 /**
+ * Pre-fills each kept activity's summary from the dev DB. The debug session that
+ * produced this capture ran the real summarizer and persisted its activities, so
+ * those summaries already exist. The producer is deterministic, so a fresh replay
+ * cuts activities at the same timestamps the live run did; we match scaffold
+ * blocks to DB rows by time overlap and copy the persisted summary in — you edit
+ * golden.md from a real summary instead of a blank line.
+ *
+ * Best-effort and mutates `transcript` in place: a missing DB or an unmatched
+ * block just leaves a blank (the original scaffold behavior). Returns the count
+ * of blocks filled. DROPPED blocks were never persisted, so they're skipped.
+ */
+function fillSummariesFromDb(transcript: ReplayActivity[], dbPath: string): number {
+  if (!fs.existsSync(dbPath)) {
+    console.log(`  Golden:        no DB at ${dbPath} — summaries left blank.`)
+    return 0
+  }
+
+  const kept = transcript.filter((t) => !t.dropped)
+  if (kept.length === 0) return 0
+
+  const sessionStart = Math.min(...kept.map((t) => t.startTimestamp))
+  const sessionEnd = Math.max(...kept.map((t) => t.endTimestamp))
+
+  const storage = new StorageService(dbPath)
+  let rows: ActivityDetail[]
+  try {
+    rows = storage.activities.getForDay(sessionStart, sessionEnd)
+  } finally {
+    storage.close()
+  }
+
+  const used = new Set<string>()
+  let filled = 0
+  for (const act of kept) {
+    let best: ActivityDetail | null = null
+    let bestOverlap = 0
+    for (const row of rows) {
+      if (used.has(row.id)) continue
+      const overlap = Math.max(
+        0,
+        Math.min(act.endTimestamp, row.endTimestamp) -
+          Math.max(act.startTimestamp, row.startTimestamp),
+      )
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap
+        best = row
+      }
+    }
+    if (best && best.summary.trim()) {
+      act.summary = best.summary
+      used.add(best.id)
+      filled++
+    }
+  }
+  return filled
+}
+
+/**
  * Writes an editable golden.md scaffold from the producer transcript (emitted
- * activities with blank summaries + DROPPED blocks for everything discarded), on
- * the session.mp4 clock so mm:ss lines up with the review video. No LLM.
+ * activities + DROPPED blocks for everything discarded), on the session.mp4 clock
+ * so mm:ss lines up with the review video. Summaries are pre-filled from the dev
+ * DB (unless --no-db-summaries); no LLM is called.
  */
 function seedGolden(
   fixtureDir: string,
@@ -317,15 +396,18 @@ function seedGolden(
     return
   }
 
+  const dropped = transcript.filter((t) => t.dropped).length
+  const kept = transcript.length - dropped
+  const filled = a.noDbSummaries ? 0 : fillSummariesFromDb(transcript, a.dbPath)
+
   fs.writeFileSync(
     goldenPath,
     renderGoldenMd(path.basename(fixtureDir), transcript, sessionStartMs),
     'utf8',
   )
-  const dropped = transcript.filter((t) => t.dropped).length
-  const kept = transcript.length - dropped
+  const summarySrc = a.noDbSummaries ? 'no summaries' : `${filled}/${kept} summaries from DB`
   console.log(
-    `  Golden:        golden.md scaffolded (${kept} kept + ${dropped} dropped, no LLM) — write each summary.`,
+    `  Golden:        golden.md scaffolded (${kept} kept + ${dropped} dropped, ${summarySrc}) — review each summary.`,
   )
 }
 
