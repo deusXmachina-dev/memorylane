@@ -168,8 +168,35 @@ describe('renderMarkdown', () => {
 })
 
 describe('renderComparisonMarkdown', () => {
-  it('returns null when there is only one variant per fixture', () => {
+  it('returns null when there is one variant and no golden', () => {
     expect(renderComparisonMarkdown(report())).toBeNull()
+  })
+
+  it('renders golden vs a single model side by side when a golden exists', () => {
+    const cmp = renderComparisonMarkdown(
+      report({
+        fixtures: [
+          fixtureScore({
+            model: 'model-a',
+            summaries: [
+              summary({
+                summaryModel: 'model-a',
+                summary: 'A summary from model A.',
+                golden: {
+                  index: 1,
+                  summary: 'Debugged the auth middleware.',
+                  overlapRatio: 0.9,
+                  equivalence: 0.8,
+                },
+              }),
+            ],
+          }),
+        ],
+      }),
+    )!
+    expect(cmp).toContain('| Activity | golden | model-a |')
+    expect(cmp).toContain('**#1**<br>Debugged the auth middleware.')
+    expect(cmp).toContain('**judge 8.00 · equiv 0.80**<br>A summary from model A.')
   })
 
   it('pivots two models of the same fixture side by side, keyed by golden block', () => {

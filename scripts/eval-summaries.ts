@@ -316,12 +316,14 @@ async function main() {
     fixtures,
   }
 
-  const { jsonPath, mdPath, comparePath } = writeReport(a.out, report)
+  const { runDir, comparePath } = writeReport(a.out, report)
   console.log('')
   console.log(renderMarkdown(report).split('\n## Summaries')[0])
-  console.log(`Wrote ${jsonPath}`)
-  console.log(`Wrote ${mdPath}`)
-  if (comparePath) console.log(`Wrote ${comparePath}  ← side-by-side comparison`)
+  console.log(`Wrote ${runDir}/`)
+  console.log(`  report.md     full scorecard + per-summary detail`)
+  console.log(`  report.json   raw data`)
+  if (comparePath) console.log(`  comparison.md ← golden vs models, side by side`)
+  else console.log(`  (no comparison.md — needs a golden.md or 2+ models)`)
 }
 
 /** Matches replay activities to golden blocks by time overlap (no LLM). */

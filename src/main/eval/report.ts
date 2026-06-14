@@ -123,7 +123,11 @@ export function renderComparisonMarkdown(report: EvalReport): string | null {
     arr.push(f)
     byFixture.set(f.fixture, arr)
   }
-  if (![...byFixture.values()].some((v) => v.length > 1)) return null
+  // Worth a side-by-side when there are multiple variants to compare, OR when a
+  // golden exists (so even a single model is shown next to its target).
+  const multiVariant = [...byFixture.values()].some((v) => v.length > 1)
+  const hasGolden = report.fixtures.some((f) => f.summaries.some((s) => s.golden))
+  if (!multiVariant && !hasGolden) return null
 
   const lines: string[] = []
   lines.push(`# Activity-Summary Comparison — ${report.generatedAt}`)
@@ -212,22 +216,29 @@ export function renderComparisonMarkdown(report: EvalReport): string | null {
   return lines.join('\n')
 }
 
+/**
+ * Writes one run into its own timestamped folder under `resultsDir`:
+ *   <resultsDir>/<run-id>/{report.json, report.md, comparison.md}
+ * so each run's artifacts stay together instead of sharing a flat directory.
+ */
 export function writeReport(
   resultsDir: string,
   report: EvalReport,
-): { jsonPath: string; mdPath: string; comparePath: string | null } {
-  fs.mkdirSync(resultsDir, { recursive: true })
-  const safeId = report.generatedAt.replace(/[:.]/g, '-')
-  const jsonPath = path.join(resultsDir, `${safeId}.json`)
-  const mdPath = path.join(resultsDir, `${safeId}.md`)
+): { runDir: string; jsonPath: string; mdPath: string; comparePath: string | null } {
+  const runId = report.generatedAt.replace(/[:.]/g, '-')
+  const runDir = path.join(resultsDir, runId)
+  fs.mkdirSync(runDir, { recursive: true })
+
+  const jsonPath = path.join(runDir, 'report.json')
+  const mdPath = path.join(runDir, 'report.md')
   fs.writeFileSync(jsonPath, renderJson(report), 'utf8')
   fs.writeFileSync(mdPath, renderMarkdown(report), 'utf8')
 
   const comparison = renderComparisonMarkdown(report)
   let comparePath: string | null = null
   if (comparison) {
-    comparePath = path.join(resultsDir, `${safeId}.compare.md`)
+    comparePath = path.join(runDir, 'comparison.md')
     fs.writeFileSync(comparePath, comparison, 'utf8')
   }
-  return { jsonPath, mdPath, comparePath }
+  return { runDir, jsonPath, mdPath, comparePath }
 }
