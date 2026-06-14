@@ -19,6 +19,7 @@ import type {
   ChatContentItem,
   LlmHealthStatus,
   SemanticPipelinePreference,
+  SemanticPromptBuilder,
   ActivitySemanticServiceConfig,
   SemanticRoundTripDump,
   SemanticRunDiagnostics,
@@ -34,6 +35,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
   private readonly usageTracker: ActivitySemanticServiceConfig['usageTracker']
   private readonly debugDumper: ActivitySemanticServiceConfig['debugDumper']
   private readonly fetchImpl: typeof globalThis.fetch | undefined
+  private readonly promptBuilder: SemanticPromptBuilder
   private readonly videoUnsupportedKeys = new Set<string>()
   private readonly unsubscribeProvider: () => void
 
@@ -62,6 +64,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
     this.usageTracker = config?.usageTracker ?? new UsageTracker()
     this.debugDumper = config?.debugDumper
     this.fetchImpl = config?.fetchImpl
+    this.promptBuilder = config?.promptBuilder ?? buildSemanticPrompt
 
     if (!Number.isFinite(this.maxVideoBytes) || this.maxVideoBytes <= 0) {
       throw new Error('maxVideoBytes must be > 0')
@@ -191,7 +194,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
       return { summary: '', model: '' }
     }
 
-    const videoPrompt = buildSemanticPrompt(
+    const videoPrompt = this.promptBuilder(
       input.activity,
       'video',
       this.userContextGetter?.() ?? undefined,
@@ -323,7 +326,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
       return { summary: '', model: '' }
     }
 
-    const snapshotPrompt = buildSemanticPrompt(
+    const snapshotPrompt = this.promptBuilder(
       input.activity,
       'snapshot',
       this.userContextGetter?.() ?? undefined,

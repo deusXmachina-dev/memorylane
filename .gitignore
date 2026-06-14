@@ -160,3 +160,6 @@ packages/cli/node_modules/
 
 # data
 data/
+
+# Activity-summary eval fixtures, results, README (internal only — not published)
+evals/

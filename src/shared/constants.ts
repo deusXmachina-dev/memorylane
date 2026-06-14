@@ -137,7 +137,12 @@ declare const __MEMORYLANE_BACKEND_URL__: string
 export const PURGE_CONFIRMATION_PHRASE = 'delete-memorylane'
 
 export const ENTERPRISE_BACKEND_CONFIG = {
-  BACKEND_URL: __MEMORYLANE_BACKEND_URL__,
+  // `__MEMORYLANE_BACKEND_URL__` is a Vite build-time define (electron.vite.config.ts).
+  // It is absent when this module is imported outside the bundler — e.g. tsx-run
+  // CLI scripts — so guard with `typeof` (safe on an undeclared identifier; under
+  // Vite the define still substitutes here). CLIs don't use the enterprise
+  // backend, so an empty fallback is fine.
+  BACKEND_URL: typeof __MEMORYLANE_BACKEND_URL__ !== 'undefined' ? __MEMORYLANE_BACKEND_URL__ : '',
   POLL_INTERVAL_MS: 2_000,
   ACTIVATION_TIMEOUT_MS: 20_000,
   CONSENT_DECISION_TIMEOUT_MS: 15 * 60 * 1000, // 15 minutes
