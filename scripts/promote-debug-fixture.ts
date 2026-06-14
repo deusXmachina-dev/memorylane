@@ -299,7 +299,10 @@ async function seedGolden(fixtureDir: string, a: CliArgs): Promise<void> {
   }
 
   const presets = VENDOR_PRESETS[handle.vendor]
-  const model = a.model || handle.semanticSnapshotModel || presets.semanticSnapshot[0]?.id || ''
+  // Seeding replays the 'auto' (video) pipeline, so default to a video-capable
+  // model — the snapshot default may not support video input and would 404 then
+  // fall back. Override with --model.
+  const model = a.model || handle.semanticVideoModel || presets.semanticVideo[0]?.id || ''
   if (!model) {
     console.warn('  Golden:        skipped seeding (no snapshot model configured).')
     return
@@ -314,8 +317,14 @@ async function seedGolden(fixtureDir: string, a: CliArgs): Promise<void> {
       pipeline: 'auto',
     })
     fs.writeFileSync(goldenPath, renderGoldenMd(path.basename(fixtureDir), activities), 'utf8')
+    const usedModels = [
+      ...new Set(
+        activities.map((act) => act.summaryModel).filter((m) => m && !m.startsWith('heuristic:')),
+      ),
+    ]
+    const via = usedModels.length ? usedModels.join(', ') : model
     console.log(
-      `  Golden:        golden.md seeded (${activities.length} draft blocks via ${model}) — edit boundaries + summaries.`,
+      `  Golden:        golden.md seeded (${activities.length} draft blocks via ${via}) — edit boundaries + summaries.`,
     )
   } catch (error) {
     console.warn(
