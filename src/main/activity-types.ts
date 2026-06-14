@@ -34,6 +34,25 @@ export interface Activity {
   provenance: ActivityProvenance
 }
 
+/** Why the producer discarded a window/activity instead of emitting it. */
+export type DroppedActivityReason = 'too_short' | 'no_frames' | 'unknown_context'
+
+/**
+ * A window/activity the producer formed but did NOT emit, surfaced (opt-in via
+ * `onActivityDropped`) for diagnostics and eval transcripts. Production ignores
+ * it; the eval replay collects it to render `DROPPED` blocks in golden.md.
+ */
+export interface DroppedActivityInfo {
+  reason: DroppedActivityReason
+  startTimestamp: number
+  endTimestamp: number
+  appName?: string
+  windowTitle?: string
+  tld?: string
+  /** Human-readable detail for debugging, e.g. "2193ms < 3000ms (context_change)". */
+  detail: string
+}
+
 export interface ActivityProducerConfig {
   frameJoinGraceMs: number
   maxFrameWaitMs: number
@@ -43,6 +62,8 @@ export interface ActivityProducerConfig {
   eventConsumerId: string
   frameConsumerId: string
   enableBoundaryTrim: boolean
+  /** Optional sink for dropped windows/activities. No-op in production. */
+  onActivityDropped?: (info: DroppedActivityInfo) => void
 }
 
 export function createDefaultActivityProducerConfig(): ActivityProducerConfig {

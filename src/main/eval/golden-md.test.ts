@@ -69,6 +69,36 @@ describe('renderGoldenMd → parseGoldenMd round-trip', () => {
     })
   })
 
+  it('anchors offsets to sessionStartMs (the video clock), not the first block', () => {
+    // First kept activity starts 10s after the session/video zero.
+    const acts = [replayActivity({ startTimestamp: 1_010_000, endTimestamp: 1_040_000 })]
+    const md = renderGoldenMd('x', acts, 1_000_000)
+    const parsed = parseGoldenMd(md)
+    expect(parsed[0].startOffsetMs).toBe(10_000)
+    expect(parsed[0].endOffsetMs).toBe(40_000)
+  })
+
+  it('renders + parses DROPPED blocks from the producer transcript', () => {
+    const acts = [
+      replayActivity({
+        activityId: 'd1',
+        appName: 'Finder',
+        windowTitle: undefined,
+        startTimestamp: 1_001_000,
+        endTimestamp: 1_003_000,
+        summary: '',
+        dropped: { reason: 'too_short', detail: '2000ms < 3000ms (context_change)' },
+      }),
+      replayActivity({ startTimestamp: 1_010_000, endTimestamp: 1_040_000 }),
+    ]
+    const md = renderGoldenMd('x', acts, 1_000_000)
+    expect(md).toContain('DROPPED — too_short: 2000ms < 3000ms (context_change)')
+
+    const parsed = parseGoldenMd(md)
+    expect(parsed[0]).toMatchObject({ appName: 'Finder', dropped: true, startOffsetMs: 1_000 })
+    expect(parsed[1].dropped).toBeUndefined()
+  })
+
   it('ignores HTML comments and tolerates -> arrows + multi-line summaries', () => {
     const md = [
       '# Golden — x',

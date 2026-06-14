@@ -279,13 +279,22 @@ async function seedGolden(fixtureDir: string, a: CliArgs): Promise<void> {
     return
   }
 
-  const { activities } = await replayFixture({
+  const { activities, droppedActivities, sessionStartMs } = await replayFixture({
     fixtureDir,
     transformer: new ScaffoldTransformer(),
   })
-  fs.writeFileSync(goldenPath, renderGoldenMd(path.basename(fixtureDir), activities), 'utf8')
+  // Exact transcript: emitted activities + everything the producer dropped, on
+  // the session.mp4 clock so mm:ss lines up with the review video.
+  const transcript = [...activities, ...droppedActivities]
+  fs.writeFileSync(
+    goldenPath,
+    renderGoldenMd(path.basename(fixtureDir), transcript, sessionStartMs),
+    'utf8',
+  )
+  const kept = activities.length
+  const dropped = droppedActivities.length
   console.log(
-    `  Golden:        golden.md scaffolded (${activities.length} blocks, no LLM) — write each summary.`,
+    `  Golden:        golden.md scaffolded (${kept} kept + ${dropped} dropped, no LLM) — write each summary.`,
   )
 }
 

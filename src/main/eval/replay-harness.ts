@@ -3,7 +3,7 @@ import * as path from 'path'
 import { InMemoryStream } from '../streams/in-memory-stream'
 import { ActivityProducer, type ActivityProducerStats } from '../activity-producer'
 import { ActivityExtractor } from '../activity-extractor'
-import type { Activity, ActivityProducerConfig } from '../activity-types'
+import type { Activity, ActivityProducerConfig, DroppedActivityInfo } from '../activity-types'
 import type {
   ActivitySink,
   ActivityTransformer,
@@ -101,7 +101,11 @@ export interface ReplayFixtureParams {
 
 export interface ReplayFixtureOutput {
   activities: ReplayActivity[]
+  /** Windows/activities the producer dropped (never emitted). Carry no summary. */
+  droppedActivities: ReplayActivity[]
   producerStats: ActivityProducerStats
+  /** Min frame timestamp = the session.mp4 clock's zero. Anchor golden offsets here. */
+  sessionStartMs: number
 }
 
 export async function replayFixture(params: ReplayFixtureParams): Promise<ReplayFixtureOutput> {
@@ -139,12 +143,16 @@ export async function replayFixture(params: ReplayFixtureParams): Promise<Replay
   const eventStream = new InMemoryStream<EventWindow>()
   const activityStream = new InMemoryStream<Activity>()
 
+  // Collect everything the producer drops so the golden transcript can show it.
+  const droppedInfos: DroppedActivityInfo[] = []
+
   // Determinism keys win over caller overrides so settle/trim never wall-clock wait.
   const config: Partial<ActivityProducerConfig> = {
     ...params.producerConfig,
     frameBufferRetentionMs:
       params.producerConfig?.frameBufferRetentionMs ?? Number.MAX_SAFE_INTEGER,
     maxFrameWaitMs: params.producerConfig?.maxFrameWaitMs ?? 0,
+    onActivityDropped: (info) => droppedInfos.push(info),
   }
 
   const producer = new ActivityProducer({ frameStream, eventStream, activityStream, config })
@@ -196,5 +204,26 @@ export async function replayFixture(params: ReplayFixtureParams): Promise<Replay
     }
   })
 
-  return { activities, producerStats: producer.getStats() }
+  const droppedActivities: ReplayActivity[] = droppedInfos.map((info, i) => ({
+    activityId: `dropped-${i}`,
+    startTimestamp: info.startTimestamp,
+    endTimestamp: info.endTimestamp,
+    durationMs: info.endTimestamp - info.startTimestamp,
+    appName: info.appName ?? 'Unknown',
+    windowTitle: info.windowTitle ?? '',
+    tld: info.tld,
+    interactionCount: 0,
+    summary: '',
+    summaryModel: '',
+    ocrText: '',
+    frameRefs: [],
+    selectedSnapshotPaths: [],
+    diagnostics: null,
+    dropped: { reason: info.reason, detail: info.detail },
+  }))
+
+  // frames are sorted ascending above, so frames[0] is the session.mp4 clock zero.
+  const sessionStartMs = frames.length ? frames[0].timestamp : (windows[0]?.startTimestamp ?? 0)
+
+  return { activities, droppedActivities, producerStats: producer.getStats(), sessionStartMs }
 }

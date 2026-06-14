@@ -1,4 +1,5 @@
 import type { SemanticRunDiagnostics } from '../semantic/types'
+import type { DroppedActivityReason } from '../activity-types'
 
 /**
  * Shared types for the activity-summary eval & replay system.
@@ -61,6 +62,12 @@ export interface ReplayActivity {
   /** Frames the snapshot summarizer actually saw (empty for the video path). */
   selectedSnapshotPaths: string[]
   diagnostics: SemanticRunDiagnostics | null
+  /**
+   * Set when this entry is a window/activity the producer *dropped* (never
+   * emitted). Such entries carry no summary; they exist so the golden transcript
+   * can render a `DROPPED` block. Absent for normally-emitted activities.
+   */
+  dropped?: { reason: DroppedActivityReason; detail: string }
 }
 
 // --------------------------------------------------------------------------
@@ -125,13 +132,21 @@ export interface ScoredSummary {
 
 /** How a replay's segmentation lined up with the golden.md blocks. */
 export interface SegmentationScore {
+  /** Golden blocks expecting a kept activity (excludes DROPPED blocks). */
   goldenCount: number
-  /** matched / goldenCount, 0..1. */
+  /** matched / goldenCount over the kept blocks, 0..1. */
   coverage: number
-  /** Golden blocks with no produced activity (merged/missed boundary). */
+  /** Kept golden blocks with no produced activity (merged/missed boundary). */
   unmatchedGoldenIndexes: number[]
   /** Produced activities with no golden block (over-split). */
   extraActivityCount: number
+  /** Golden blocks marked DROPPED (the pipeline is expected to discard them). */
+  expectedDropCount: number
+  /**
+   * DROPPED golden blocks that a produced activity overlapped anyway — the
+   * pipeline kept/summarized where the target says it should drop. A violation.
+   */
+  dropViolationIndexes: number[]
 }
 
 export interface ProducerStats {

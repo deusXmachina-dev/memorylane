@@ -164,9 +164,14 @@ function resolveFixtureDirs(a: CliArgs): string[] {
   return [...new Set(dirs)]
 }
 
+/**
+ * Session zero = the min frame timestamp, i.e. the session.mp4 clock's start.
+ * golden.md offsets are authored against that video, so candidate activities
+ * must be measured from the same anchor for time-overlap matching to line up.
+ */
 function sessionStartFor(fixtureDir: string): number {
-  return readJsonl<{ startTimestamp: number }>(path.join(fixtureDir, 'event-windows.jsonl')).reduce(
-    (min, w) => Math.min(min, w.startTimestamp),
+  return readJsonl<{ timestamp: number }>(path.join(fixtureDir, 'frames.jsonl')).reduce(
+    (min, f) => Math.min(min, f.timestamp),
     Number.POSITIVE_INFINITY,
   )
 }
@@ -328,14 +333,32 @@ function matchAgainstGolden(
   const byIndex = new Map(goldens.map((g) => [g.index, g]))
   for (const m of report.matches) {
     const g = byIndex.get(m.goldenIndex)
-    if (g) goldenByActivity.set(m.activityId, { golden: g, overlapRatio: m.overlapRatio })
+    // Dropped blocks aren't summaries — don't judge equivalence against them.
+    // The match is surfaced as a violation in dropViolationIndexes instead.
+    if (g && !g.dropped)
+      goldenByActivity.set(m.activityId, { golden: g, overlapRatio: m.overlapRatio })
   }
 
+  // Split goldens into "kept" (expect an activity) and "dropped" (expect none).
+  // A produced activity matching a DROPPED block is a violation, not coverage.
+  const keptGoldens = goldens.filter((g) => !g.dropped)
+  const dropGoldens = goldens.filter((g) => g.dropped)
+  const matchedIndexes = new Set(report.matches.map((m) => m.goldenIndex))
+  const keptMatched = keptGoldens.filter((g) => matchedIndexes.has(g.index)).length
+  const dropViolationIndexes = dropGoldens
+    .filter((g) => matchedIndexes.has(g.index))
+    .map((g) => g.index)
+
   const segmentation: SegmentationScore = {
-    goldenCount: goldens.length,
-    coverage: Math.round(report.coverage * 1000) / 1000,
-    unmatchedGoldenIndexes: report.unmatchedGoldenIndexes,
+    goldenCount: keptGoldens.length,
+    coverage:
+      keptGoldens.length === 0 ? 1 : Math.round((keptMatched / keptGoldens.length) * 1000) / 1000,
+    unmatchedGoldenIndexes: keptGoldens
+      .filter((g) => !matchedIndexes.has(g.index))
+      .map((g) => g.index),
     extraActivityCount: report.unmatchedActivityIds.length,
+    expectedDropCount: dropGoldens.length,
+    dropViolationIndexes,
   }
   return { segmentation, goldenByActivity }
 }

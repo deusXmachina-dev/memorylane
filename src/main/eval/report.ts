@@ -49,6 +49,10 @@ export function renderMarkdown(report: EvalReport): string {
             : '') +
           (seg.extraActivityCount
             ? `; ⚠ ${seg.extraActivityCount} extra activity(ies) (over-split)`
+            : '') +
+          (seg.expectedDropCount ? `; ${seg.expectedDropCount} expected drop(s)` : '') +
+          (seg.dropViolationIndexes.length
+            ? `; ⚠ kept ${seg.dropViolationIndexes.length} block(s) marked DROPPED: ${seg.dropViolationIndexes.join(', ')}`
             : ''),
       )
     }

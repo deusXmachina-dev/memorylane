@@ -38,6 +38,12 @@ export interface GoldenActivity {
   windowTitle?: string
   startOffsetMs: number
   endOffsetMs: number
+  /**
+   * `true` when this block is a `DROPPED` marker, not a summary: the pipeline is
+   * expected to drop (not emit) an activity in this span. A produced activity
+   * overlapping it is a scoring violation. `summary` holds the drop note.
+   */
+  dropped?: boolean
   summary: string
 }
 
@@ -57,17 +63,25 @@ function parseOffset(min: string, sec: string): number {
 
 /** Renders a golden.md scaffold from a replay's activities (summaries left blank
  *  when no LLM ran, so the user fills them in). */
-export function renderGoldenMd(fixture: string, activities: ReplayActivity[]): string {
+export function renderGoldenMd(
+  fixture: string,
+  activities: ReplayActivity[],
+  sessionStartMs?: number,
+): string {
   const sorted = [...activities].sort((a, b) => a.startTimestamp - b.startTimestamp)
-  const sessionStart = sorted.length ? sorted[0].startTimestamp : 0
+  // Anchor to the session.mp4 clock (min frame ts) so mm:ss lines up with the
+  // review video; fall back to the first block when no zero is supplied.
+  const sessionStart = sessionStartMs ?? (sorted.length ? sorted[0].startTimestamp : 0)
 
   const lines: string[] = []
   lines.push(`# Golden — ${fixture}`)
   lines.push('')
-  lines.push('<!-- Scaffolded from the producer (real boundaries, blank summaries).')
-  lines.push('     EDIT this to express the target:')
+  lines.push('<!-- Exact transcript scaffolded from the producer. EDIT into the target:')
   lines.push('     - write each summary to what it SHOULD say.')
-  lines.push('     - fix boundaries by merging/splitting blocks (adjust the mm:ss ranges)')
+  lines.push('     - fix boundaries by merging/splitting blocks (adjust the mm:ss ranges).')
+  lines.push('     DROPPED blocks = the producer discarded this span (reason shown). Leave')
+  lines.push('     them DROPPED to assert "expect no activity here", or replace the DROPPED')
+  lines.push('     line with a real summary to assert it SHOULD be kept (then tune params).')
   lines.push('     Times are mm:ss from session start; the header number is cosmetic. -->')
   lines.push('')
 
@@ -78,7 +92,11 @@ export function renderGoldenMd(fixture: string, activities: ReplayActivity[]): s
       `${formatOffset(act.startTimestamp - sessionStart)} → ${formatOffset(act.endTimestamp - sessionStart)}`,
     )
     lines.push('')
-    lines.push(act.summary || '_(no summary produced — fill in the target)_')
+    if (act.dropped) {
+      lines.push(`DROPPED — ${act.dropped.reason}: ${act.dropped.detail}`)
+    } else {
+      lines.push(act.summary || '_(no summary produced — fill in the target)_')
+    }
     lines.push('')
     if (i < sorted.length - 1) {
       lines.push('---')
@@ -133,6 +151,7 @@ export function parseGoldenMd(text: string): GoldenActivity[] {
       summaryLines.push(block[i])
     }
     const summary = summaryLines.join('\n').trim()
+    const dropped = /^DROPPED\b/i.test(summary)
 
     out.push({
       index: out.length + 1,
@@ -140,6 +159,7 @@ export function parseGoldenMd(text: string): GoldenActivity[] {
       windowTitle,
       startOffsetMs,
       endOffsetMs,
+      dropped: dropped || undefined,
       summary,
     })
   }

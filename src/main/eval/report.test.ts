@@ -129,6 +129,8 @@ describe('renderMarkdown', () => {
               coverage: 0.5,
               unmatchedGoldenIndexes: [2],
               extraActivityCount: 1,
+              expectedDropCount: 0,
+              dropViolationIndexes: [],
             },
             avgEquivalence: 0.82,
             summaries: [
