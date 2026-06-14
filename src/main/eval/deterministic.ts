@@ -60,7 +60,6 @@ const ACTION_VERB_OPENERS = new Set([
   'filled',
   'viewed',
   'watched',
-  'read',
   'scanned',
   'switched',
   'compiled',

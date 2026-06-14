@@ -203,7 +203,7 @@ async function main() {
   console.log(`Promoted fixture "${a.name}" -> ${fixtureDir}`)
   console.log(`  Event windows: ${windows.length}`)
   console.log(
-    `  Frames:        ${promotedFrames.length} copied${missing ? `, ${missing} dropped (PNG cleaned up)` : ''}`,
+    `  Frames:        ${promotedFrames.length} copied${missing ? `, ${missing} dropped (source PNG already gone)` : ''}`,
   )
   console.log(`  App mix:       ${manifest.appMix.join(', ') || '(none)'}`)
   if (a.downsample)
