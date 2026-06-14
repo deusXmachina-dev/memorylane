@@ -9,7 +9,7 @@ import type {
   ActivityTransformer,
   ExtractedActivity,
 } from '../activity-extraction-types'
-import type { ActivityEmbeddingService } from '../activity-transformer-types'
+import type { ActivityEmbeddingService, ActivityOcrService } from '../activity-transformer-types'
 import type { Frame } from '../recorder/screen-capturer'
 import type { EventWindow } from '../../shared/types'
 import type { SemanticRunDiagnostics } from '../semantic/types'
@@ -43,6 +43,17 @@ export class StubEmbeddingService implements ActivityEmbeddingService {
     const vector = new Array(384).fill(0)
     vector[0] = 1
     return vector
+  }
+}
+
+/**
+ * No-op OCR. Eval summaries are produced from video/snapshots, not OCR text, so
+ * OCR never changes the summary being scored — it only feeds the judge's
+ * (opt-in) ground-truth channel. Stubbing it skips the per-activity Vision call.
+ */
+export class StubOcrService implements ActivityOcrService {
+  async extractText(): Promise<string> {
+    return ''
   }
 }
 

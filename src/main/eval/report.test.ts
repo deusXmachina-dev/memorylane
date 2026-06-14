@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { renderMarkdown, cellKey } from './report'
-import type { CellResult, EvalRun, ScoredSummary } from './types'
+import { renderMarkdown } from './report'
+import type { EvalReport, FixtureScore, ScoredSummary } from './types'
 
 function summary(over: Partial<ScoredSummary> = {}): ScoredSummary {
   return {
@@ -14,141 +14,141 @@ function summary(over: Partial<ScoredSummary> = {}): ScoredSummary {
     summaryModel: 'google/gemini-2.5-flash',
     ocrText: '',
     deterministic: { checks: [], hardFails: 0, softWarns: 0, passRate: 1 },
-    rubric: {
-      dimensions: [{ key: 'mediaGrounding', score: 4, rationale: '' }],
-      aggregate10: 8,
-      capped: false,
+    judge: {
+      score10: 8,
+      notes: '',
       flaggedClaims: [],
       judgeModel: 'judge',
-      samples: 1,
       tokensIn: 10,
       tokensOut: 5,
     },
-    goldenId: null,
+    golden: null,
     ...over,
   }
 }
 
-function cell(over: Partial<CellResult> = {}): CellResult {
+function fixtureScore(over: Partial<FixtureScore> = {}): FixtureScore {
   return {
     fixture: 'vscode',
-    videoModel: '',
-    snapshotModel: 'google/gemini-2.5-flash',
-    promptVariant: 'baseline',
-    pipeline: 'auto',
+    model: 'google/gemini-2.5-flash',
     summaries: [summary()],
-    golden: null,
-    cost: {
-      summaryTokensIn: 100,
-      summaryTokensOut: 50,
-      judgeTokensIn: 10,
-      judgeTokensOut: 5,
-      usd: 0.0123,
-    },
-    aggregate: {
-      count: 1,
-      avgRubric10: 8,
-      detPassRate: 1,
-      hardFails: 0,
-      avgGoldenScore: null,
-      p50DurationMs: 10_000,
-    },
     producerStats: {
       emittedActivities: 1,
       droppedNoFrameWindows: 0,
       droppedUnknownContextWindows: 0,
       trailingFramesTrimmed: 0,
     },
+    detPassRate: 1,
+    hardFails: 0,
+    avgJudge10: 8,
+    segmentation: null,
+    avgEquivalence: null,
     ...over,
   }
 }
 
-function run(over: Partial<EvalRun> = {}): EvalRun {
+function report(over: Partial<EvalReport> = {}): EvalReport {
   return {
-    runId: '2026-06-14T10-00-00-000Z',
     generatedAt: '2026-06-14T10:00:00.000Z',
     vendor: 'openrouter',
     judgeModel: 'google/gemini-2.5-flash',
-    judgeTextOnly: false,
-    cells: [cell()],
-    baselineRunId: null,
+    fixtures: [fixtureScore()],
     ...over,
   }
 }
 
-describe('cellKey', () => {
-  it('formats fixture/models/prompt', () => {
-    expect(cellKey(cell())).toBe('vscode | -/google/gemini-2.5-flash | baseline')
-  })
-})
-
 describe('renderMarkdown', () => {
-  it('renders the scorecard with the cell row', () => {
-    const md = renderMarkdown(run())
-    expect(md).toContain('# Activity-Summary Eval — 2026-06-14T10-00-00-000Z')
+  it('renders the scorecard and per-summary detail', () => {
+    const md = renderMarkdown(report())
+    expect(md).toContain('# Activity-Summary Eval — 2026-06-14T10:00:00.000Z')
     expect(md).toContain('## Scorecard')
     expect(md).toContain('vscode')
     expect(md).toContain('Implemented the token-refresh guard.')
+    expect(md).toContain('judge 8.00')
   })
 
   it('handles a deterministic-only run (no judge)', () => {
     const md = renderMarkdown(
-      run({
+      report({
         judgeModel: null,
-        cells: [
-          cell({
-            aggregate: {
-              count: 1,
-              avgRubric10: null,
-              detPassRate: 1,
-              hardFails: 0,
-              avgGoldenScore: null,
-              p50DurationMs: 10_000,
-            },
+        fixtures: [fixtureScore({ avgJudge10: null, summaries: [summary({ judge: null })] })],
+      }),
+    )
+    expect(md).toContain('(none — deterministic only)')
+    expect(md).toContain('## Scorecard')
+    expect(md).toContain('judge —')
+  })
+
+  it('surfaces hard fails and flagged claims', () => {
+    const md = renderMarkdown(
+      report({
+        fixtures: [
+          fixtureScore({
+            hardFails: 1,
+            summaries: [
+              summary({
+                deterministic: {
+                  checks: [
+                    {
+                      id: 'noRawInteractionVocab',
+                      passed: false,
+                      severity: 'hard',
+                      detail: 'Mentions raw interaction: "clicked"',
+                    },
+                  ],
+                  hardFails: 1,
+                  softWarns: 0,
+                  passRate: 0,
+                },
+                judge: {
+                  score10: 3,
+                  notes: '',
+                  flaggedClaims: ['claims a PR was merged'],
+                  judgeModel: 'judge',
+                  tokensIn: 1,
+                  tokensOut: 1,
+                },
+              }),
+            ],
           }),
         ],
       }),
     )
-    expect(md).not.toContain('## Rubric dimensions')
-    expect(md).toContain('## Scorecard')
+    expect(md).toContain('1 hard-fail(s)')
+    expect(md).toContain('noRawInteractionVocab')
+    expect(md).toContain('flagged: claims a PR was merged')
   })
 
-  it('renders a baseline diff with deltas and changed summaries', () => {
-    const current = run({
-      cells: [
-        cell({
-          summaries: [summary({ summary: 'New and improved summary.' })],
-          aggregate: {
-            count: 1,
-            avgRubric10: 9,
-            detPassRate: 1,
-            hardFails: 0,
-            avgGoldenScore: null,
-            p50DurationMs: 10_000,
-          },
-        }),
-      ],
-    })
-    const baseline = run({
-      runId: '2026-06-13T10-00-00-000Z',
-      cells: [
-        cell({
-          summaries: [summary({ summary: 'Old summary.' })],
-          aggregate: {
-            count: 1,
-            avgRubric10: 7,
-            detPassRate: 1,
-            hardFails: 0,
-            avgGoldenScore: null,
-            p50DurationMs: 10_000,
-          },
-        }),
-      ],
-    })
-    const md = renderMarkdown(current, baseline)
-    expect(md).toContain('Δ vs baseline')
-    expect(md).toContain('+2.00') // rubric 9 - 7
-    expect(md).toContain('old: Old summary.')
-    expect(md).toContain('new: New and improved summary.')
+  it('renders segmentation coverage and golden equivalence', () => {
+    const md = renderMarkdown(
+      report({
+        fixtures: [
+          fixtureScore({
+            segmentation: {
+              goldenCount: 2,
+              coverage: 0.5,
+              unmatchedGoldenIndexes: [2],
+              extraActivityCount: 1,
+            },
+            avgEquivalence: 0.82,
+            summaries: [
+              summary({
+                golden: {
+                  index: 1,
+                  summary: 'Debugged the auth middleware.',
+                  overlapRatio: 0.9,
+                  equivalence: 0.82,
+                },
+              }),
+            ],
+          }),
+        ],
+      }),
+    )
+    expect(md).toContain('| 50% | 0.82 |') // Seg% + Equiv columns
+    expect(md).toContain('missed/merged blocks: 2')
+    expect(md).toContain('1 extra activity')
+    expect(md).toContain('equiv 0.82')
+    expect(md).toContain('golden #1: Debugged the auth middleware.')
   })
 })

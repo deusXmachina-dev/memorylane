@@ -47,7 +47,6 @@
     "detect-patterns:prune": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/prune-patterns.ts",
     "build-user-context": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/build-user-context.ts",
     "promote-debug-fixture": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/promote-debug-fixture.ts",
-    "replay-activities": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/replay-activities.ts",
     "eval-summaries": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/eval-summaries.ts",
     "mcpb:pack": "npx @anthropic-ai/mcpb pack mcpb/",
     "cli:build": "cd packages/cli && npm run build",

@@ -7,6 +7,10 @@
  * rewrites frame paths to relative, and synthesizes a manifest. The event-window
  * stream is copied verbatim — it is the replay-critical input.
  *
+ * Also (unless disabled): stitches all frames into a `session.mp4` for review,
+ * and seeds an editable `golden.md` from one real replay (draft segmentation +
+ * summaries) — the file you hand-edit into the target for the eval loop.
+ *
  * IMPORTANT: hand-review the fixture for private content before committing it.
  * Window titles, URLs, and on-screen text are baked into the events and PNGs.
  *
@@ -14,19 +18,29 @@
  *   npm run promote-debug-fixture -- --name vscode-debugging --label "VS Code debug session"
  *   npm run promote-debug-fixture -- --name X --description "..." --expected-activities 2
  *   npm run promote-debug-fixture -- --name X --downsample            (shrink PNGs -> JPEG)
+ *   npm run promote-debug-fixture -- --name X --no-seed --no-video    (skip golden + video)
+ *   npm run promote-debug-fixture -- --name X --reseed --model google/gemini-2.5-flash
  *   npm run promote-debug-fixture -- --name X --debug-dir /path/to/.debug-pipeline
  */
+
+import { config as loadEnv } from 'dotenv'
+loadEnv()
 
 import * as fs from 'fs'
 import * as path from 'path'
 import sharp from 'sharp'
 import { SCREEN_CAPTURER_CONFIG } from '../src/shared/constants'
+import { VENDOR_PRESETS } from '../src/shared/vendor-defaults'
+import { FfmpegVideoStitcher } from '../src/main/video/video-stitcher'
+import { renderGoldenMd } from '../src/main/eval/golden-md'
 import {
   FIXTURE_SCHEMA_VERSION,
   type DumpedFrame,
   type FixtureManifest,
 } from '../src/main/eval/types'
 import type { EventWindow } from '../src/shared/types'
+import { replayCell } from './replay-cell'
+import { loadCliInferenceProvider } from './cli-inference-provider'
 
 const FIXTURES_ROOT = path.resolve('evals/semantic-summary/fixtures')
 
@@ -37,6 +51,10 @@ interface CliArgs {
   debugDir: string
   downsample: boolean
   expectedActivities: number | undefined
+  noSeed: boolean
+  reseed: boolean
+  noVideo: boolean
+  model: string | null
 }
 
 function parseArgs(): CliArgs {
@@ -48,6 +66,10 @@ function parseArgs(): CliArgs {
     debugDir: path.resolve('.debug-pipeline'),
     downsample: false,
     expectedActivities: undefined,
+    noSeed: false,
+    reseed: false,
+    noVideo: false,
+    model: null,
   }
   for (let i = 0; i < args.length; i++) {
     const next = args[i + 1]
@@ -82,6 +104,21 @@ function parseArgs(): CliArgs {
       case '--expected-activities':
         if (next) {
           a.expectedActivities = parseInt(next, 10)
+          i++
+        }
+        break
+      case '--no-seed':
+        a.noSeed = true
+        break
+      case '--reseed':
+        a.reseed = true
+        break
+      case '--no-video':
+        a.noVideo = true
+        break
+      case '--model':
+        if (next) {
+          a.model = next
           i++
         }
         break
@@ -208,10 +245,91 @@ async function main() {
   console.log(`  App mix:       ${manifest.appMix.join(', ') || '(none)'}`)
   if (a.downsample)
     console.log('  PNGs downsampled to JPEG (affects OCR/snapshot pixels uniformly).')
+
+  // Full-session review video: playback time ≈ real elapsed time, so the clock
+  // lines up with the mm:ss offsets in golden.md.
+  if (!a.noVideo) {
+    await stitchSessionVideo(fixtureDir, promotedFrames)
+  }
+
+  // Seed an editable golden.md from one real replay (draft segmentation +
+  // summaries). Skipped offline / when one already exists (unless --reseed).
+  if (!a.noSeed) {
+    await seedGolden(fixtureDir, a)
+  }
+
   console.log('')
   console.log(
     '  ⚠  Hand-review for private content (window titles, URLs, on-screen text) before committing.',
   )
+}
+
+/** Stitches every fixture frame into one session video for golden review. */
+async function stitchSessionVideo(fixtureDir: string, frames: DumpedFrame[]): Promise<void> {
+  if (frames.length === 0) return
+  const outputPath = path.join(fixtureDir, 'session.mp4')
+  try {
+    const asset = await new FfmpegVideoStitcher().stitch({
+      activityId: 'session',
+      frames: frames.map((f) => ({
+        filepath: path.resolve(fixtureDir, f.filepath),
+        timestamp: f.timestamp,
+      })),
+      outputPath,
+    })
+    console.log(`  Video:         session.mp4 (${(asset.durationMs / 1000).toFixed(0)}s)`)
+  } catch (error) {
+    console.warn(
+      `  Video:         skipped (ffmpeg failed: ${error instanceof Error ? error.message : String(error)})`,
+    )
+  }
+}
+
+/** Replays once to pre-fill an editable golden.md (segmentation + draft summaries). */
+async function seedGolden(fixtureDir: string, a: CliArgs): Promise<void> {
+  const goldenPath = path.join(fixtureDir, 'golden.md')
+  if (fs.existsSync(goldenPath) && !a.reseed) {
+    console.log('  Golden:        golden.md exists — not overwriting (use --reseed to regenerate).')
+    return
+  }
+
+  let handle
+  try {
+    handle = loadCliInferenceProvider({})
+  } catch (error) {
+    console.warn(
+      `  Golden:        skipped seeding (no credentials: ${error instanceof Error ? error.message : String(error)}).`,
+    )
+    console.warn(
+      '                 Re-run with --reseed once configured, or author golden.md by hand.',
+    )
+    return
+  }
+
+  const presets = VENDOR_PRESETS[handle.vendor]
+  const model = a.model || handle.semanticSnapshotModel || presets.semanticSnapshot[0]?.id || ''
+  if (!model) {
+    console.warn('  Golden:        skipped seeding (no snapshot model configured).')
+    return
+  }
+
+  try {
+    const { activities } = await replayCell({
+      provider: handle.provider,
+      vendor: handle.vendor,
+      fixtureDir,
+      model,
+      pipeline: 'auto',
+    })
+    fs.writeFileSync(goldenPath, renderGoldenMd(path.basename(fixtureDir), activities), 'utf8')
+    console.log(
+      `  Golden:        golden.md seeded (${activities.length} draft blocks via ${model}) — edit boundaries + summaries.`,
+    )
+  } catch (error) {
+    console.warn(
+      `  Golden:        seeding failed (${error instanceof Error ? error.message : String(error)}).`,
+    )
+  }
 }
 
 main().catch((err) => {

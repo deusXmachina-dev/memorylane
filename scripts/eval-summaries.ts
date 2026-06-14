@@ -1,64 +1,46 @@
 #!/usr/bin/env npx tsx
 /**
- * Runs the activity-summary eval matrix (fixtures × models × prompts): replays
- * each cell through the real pipeline, scores every summary with deterministic
- * checks + an LLM-judge rubric + optional goldens, and writes a findings-style
- * scorecard with an optional baseline diff.
+ * Replays committed activity-summary fixtures through the REAL pipeline
+ * (ActivityProducer -> transformer -> OCR/ffmpeg -> LLM summarizer) and scores
+ * every summary: deterministic rule checks (free) + an optional holistic LLM
+ * judge. When a fixture has a hand-edited `golden.md`, also scores segmentation
+ * (do the boundaries match?) and per-block equivalence (does each summary mean
+ * the same as the target?). Writes a findings-style Markdown scorecard + JSON.
+ *
+ * Deterministic upstream of the LLM (see replay-harness.ts); only the model and
+ * producer config are variables. Needs no live app — just capture-settings.json
+ * / vendor-credentials.json + an API key.
  *
  * Usage:
- *   npm run eval-summaries -- --fixtures vscode-debugging --models google/gemini-2.5-flash --prompts baseline
- *   npm run eval-summaries -- --fixtures a,b --models m1,m2 --prompts baseline,tweaked --baseline latest
+ *   npm run eval-summaries -- --fixtures vscode-debug --models google/gemini-2.5-flash
+ *   npm run eval-summaries -- --fixtures a,b --models m1,m2 --judge-model google/gemini-2.5-pro
  *   npm run eval-summaries -- --fixtures X --no-llm-judge          (deterministic only, free)
- *   npm run eval-summaries -- --replay-json replay.json --judge-model google/gemini-2.5-pro
- *   npm run eval-summaries -- --mark-baseline latest               (set baseline pointer, no run)
+ *   npm run eval-summaries -- --fixtures-dir evals/semantic-summary/fixtures --pipeline image
  */
 
 import { config as loadEnv } from 'dotenv'
 loadEnv()
 
 import * as fs from 'fs'
-import * as os from 'os'
 import * as path from 'path'
-import * as crypto from 'crypto'
-import { VENDOR_PRESETS, buildModelChain } from '../src/shared/vendor-defaults'
-import { DefaultActivityTransformer } from '../src/main/activity-transformer'
-import { FfmpegVideoStitcher } from '../src/main/video/video-stitcher'
-import { ActivitySemanticService } from '../src/main/activity-semantic-service'
-import type { SemanticPipelinePreference } from '../src/main/activity-semantic-service'
-import { EmbeddingService } from '../src/main/processor/embedding'
-import { activityOcrService } from '../src/main/processor/ocr'
-import { replayFixture, StubEmbeddingService } from '../src/main/eval/replay-harness'
-import { getPromptVariant } from '../src/main/eval/prompt-registry'
-import { judgeSummary } from '../src/main/eval/rubric'
+import { VENDOR_PRESETS } from '../src/shared/vendor-defaults'
 import {
-  matchGoldens,
-  combineGoldenScore,
-  judgeGoldenEquivalence,
-  embedSimilarity,
-} from '../src/main/eval/golden'
-import {
-  buildScoredSummary,
-  aggregateCell,
-  computeCellCost,
-  runWithConcurrency,
-} from '../src/main/eval/matrix-runner'
-import {
-  renderMarkdown,
-  writeRun,
-  readRun,
-  readBaselinePointer,
-  writeBaselinePointer,
-  latestRunId,
-} from '../src/main/eval/report'
+  SemanticFileDebugDumper,
+  type SemanticPipelinePreference,
+} from '../src/main/activity-semantic-service'
+import { scoreDeterministic } from '../src/main/eval/deterministic'
+import { judgeSummary, judgeEquivalence } from '../src/main/eval/judge'
+import { renderMarkdown, writeReport } from '../src/main/eval/report'
+import { loadGoldenMd, matchSegments, type GoldenActivity } from '../src/main/eval/golden-md'
 import type {
-  CellResult,
-  EvalRun,
-  GoldenEntry,
-  GoldenReport,
-  ReplayResult,
-  RubricScore,
+  EvalReport,
+  FixtureScore,
+  GoldenMatch,
+  ReplayActivity,
   ScoredSummary,
+  SegmentationScore,
 } from '../src/main/eval/types'
+import { replayCell } from './replay-cell'
 import { loadCliInferenceProvider, type CliInferenceProviderHandle } from './cli-inference-provider'
 
 const FIXTURES_ROOT = path.resolve('evals/semantic-summary/fixtures')
@@ -68,17 +50,12 @@ interface CliArgs {
   fixtures: string[]
   fixturesDir: string | null
   models: string[]
-  prompts: string[]
   pipeline: SemanticPipelinePreference
   judgeModel: string | null
-  judgeTextOnly: boolean
   noLlmJudge: boolean
-  judgeSamples: number
+  ocr: boolean
   concurrency: number
-  replayJson: string | null
-  noCache: boolean
-  baseline: string | null
-  markBaseline: string | null
+  dumpRoundTrips: string | null
   out: string
   apiKey: string | undefined
   userDataPath: string | undefined
@@ -91,17 +68,12 @@ function parseArgs(): CliArgs {
     fixtures: [],
     fixturesDir: null,
     models: [],
-    prompts: ['baseline'],
     pipeline: 'auto',
     judgeModel: null,
-    judgeTextOnly: false,
     noLlmJudge: false,
-    judgeSamples: 1,
+    ocr: false,
     concurrency: 4,
-    replayJson: null,
-    noCache: false,
-    baseline: null,
-    markBaseline: null,
+    dumpRoundTrips: null,
     out: DEFAULT_RESULTS_DIR,
     apiKey: undefined,
     userDataPath: undefined,
@@ -130,10 +102,8 @@ function parseArgs(): CliArgs {
         i = take((v) => (a.fixturesDir = v), i)
         break
       case '--models':
+      case '--model':
         i = take((v) => (a.models = list(v)), i)
-        break
-      case '--prompts':
-        i = take((v) => (a.prompts = list(v)), i)
         break
       case '--pipeline':
         i = take((v) => {
@@ -143,29 +113,17 @@ function parseArgs(): CliArgs {
       case '--judge-model':
         i = take((v) => (a.judgeModel = v), i)
         break
-      case '--judge-text-only':
-        a.judgeTextOnly = true
-        break
       case '--no-llm-judge':
         a.noLlmJudge = true
         break
-      case '--judge-samples':
-        i = take((v) => (a.judgeSamples = Math.max(1, parseInt(v, 10))), i)
+      case '--ocr':
+        a.ocr = true
         break
       case '--concurrency':
         i = take((v) => (a.concurrency = Math.max(1, parseInt(v, 10))), i)
         break
-      case '--replay-json':
-        i = take((v) => (a.replayJson = v), i)
-        break
-      case '--no-cache':
-        a.noCache = true
-        break
-      case '--baseline':
-        i = take((v) => (a.baseline = v), i)
-        break
-      case '--mark-baseline':
-        i = take((v) => (a.markBaseline = v), i)
+      case '--dump-roundtrips':
+        i = take((v) => (a.dumpRoundTrips = v), i)
         break
       case '--out':
         i = take((v) => (a.out = path.resolve(v)), i)
@@ -192,34 +150,27 @@ function resolveFixtureDir(nameOrPath: string): string {
   throw new Error(`Fixture not found: "${nameOrPath}"`)
 }
 
-function readJsonl<T>(filePath: string): T[] {
-  return fs
-    .readFileSync(filePath, 'utf8')
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map((l) => JSON.parse(l) as T)
+function resolveFixtureDirs(a: CliArgs): string[] {
+  const dirs = a.fixtures.map(resolveFixtureDir)
+  if (a.fixturesDir) {
+    const root = path.resolve(a.fixturesDir)
+    for (const entry of fs.readdirSync(root)) {
+      const dir = path.join(root, entry)
+      if (fs.existsSync(path.join(dir, 'event-windows.jsonl'))) dirs.push(dir)
+    }
+  }
+  if (dirs.length === 0) throw new Error('No fixtures. Use --fixtures or --fixtures-dir.')
+  return [...new Set(dirs)]
 }
 
 function sessionStartFor(fixtureDir: string): number {
-  const windows = readJsonl<{ startTimestamp: number }>(
-    path.join(fixtureDir, 'event-windows.jsonl'),
-  )
-  return windows.reduce((min, w) => Math.min(min, w.startTimestamp), Number.POSITIVE_INFINITY)
-}
-
-function loadGoldens(fixtureDir: string): GoldenEntry[] {
-  const p = path.join(fixtureDir, 'goldens.json')
-  if (!fs.existsSync(p)) return []
-  return JSON.parse(fs.readFileSync(p, 'utf8')) as GoldenEntry[]
-}
-
-function fixtureContentHash(fixtureDir: string): string {
-  const h = crypto.createHash('sha256')
-  for (const f of ['event-windows.jsonl', 'frames.jsonl']) {
-    h.update(fs.readFileSync(path.join(fixtureDir, f)))
-  }
-  return h.digest('hex').slice(0, 16)
+  const raw = fs.readFileSync(path.join(fixtureDir, 'event-windows.jsonl'), 'utf8')
+  return raw
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => (JSON.parse(l) as { startTimestamp: number }).startTimestamp)
+    .reduce((min, t) => Math.min(min, t), Number.POSITIVE_INFINITY)
 }
 
 function defaultJudgeModel(handle: CliInferenceProviderHandle): string | null {
@@ -227,26 +178,38 @@ function defaultJudgeModel(handle: CliInferenceProviderHandle): string | null {
   return handle.patternDetectionModel || presets.patternDetection[0]?.id || null
 }
 
-interface CellSpec {
+/** Runs `fn` over items with at most `limit` in flight; preserves input order. */
+async function runWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let cursor = 0
+  async function worker(): Promise<void> {
+    for (;;) {
+      const index = cursor++
+      if (index >= items.length) return
+      results[index] = await fn(items[index])
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, () => worker()),
+  )
+  return results
+}
+
+interface Cell {
   fixtureDir: string
   fixtureName: string
   model: string
-  prompt: string
 }
+
+const mean = (xs: number[]): number => xs.reduce((x, y) => x + y, 0) / xs.length
 
 async function main() {
   const a = parseArgs()
-  const resultsDir = a.out
-
-  // Pure baseline-pointer update, no run.
-  if (a.markBaseline && !a.fixtures.length && !a.fixturesDir && !a.replayJson) {
-    const id = a.markBaseline === 'latest' ? latestRunId(resultsDir) : a.markBaseline
-    if (!id) throw new Error('No run to mark as baseline.')
-    writeBaselinePointer(resultsDir, id)
-    console.log(`Baseline pointer -> ${id}`)
-    return
-  }
-
+  const fixtureDirs = resolveFixtureDirs(a)
   const handle = loadCliInferenceProvider({
     apiKey: a.apiKey,
     userDataPath: a.userDataPath,
@@ -255,307 +218,194 @@ async function main() {
   const presets = VENDOR_PRESETS[handle.vendor]
   const judgeModel = a.noLlmJudge ? null : (a.judgeModel ?? defaultJudgeModel(handle))
 
-  // ---- Phase 1: obtain ReplayResult per cell (run or load) ----
-  let replayResults: ReplayResult[]
-  const fixtureDirByName = new Map<string, string>()
+  const models = a.models.length
+    ? a.models
+    : [presets.semanticSnapshot[0]?.id ?? handle.semanticSnapshotModel].filter(Boolean)
+  if (models.length === 0) throw new Error('No models. Pass --models <id,...>.')
 
-  if (a.replayJson) {
-    replayResults = JSON.parse(
-      fs.readFileSync(path.resolve(a.replayJson), 'utf8'),
-    ) as ReplayResult[]
-    for (const r of replayResults) fixtureDirByName.set(r.fixture, resolveFixtureDir(r.fixture))
-  } else {
-    const fixtureDirs = [
-      ...a.fixtures.map(resolveFixtureDir),
-      ...(a.fixturesDir
-        ? fs
-            .readdirSync(path.resolve(a.fixturesDir))
-            .map((e) => path.join(path.resolve(a.fixturesDir), e))
-            .filter((d) => fs.existsSync(path.join(d, 'event-windows.jsonl')))
-        : []),
-    ]
-    if (fixtureDirs.length === 0) throw new Error('No fixtures. Use --fixtures or --fixtures-dir.')
-
-    const models = a.models.length
-      ? a.models
-      : [presets.semanticSnapshot[0]?.id ?? handle.semanticSnapshotModel].filter(Boolean)
-    if (models.length === 0) throw new Error('No models. Pass --models <id,...>.')
-
-    const specs: CellSpec[] = []
-    for (const dir of fixtureDirs) {
-      const name = path.basename(dir)
-      fixtureDirByName.set(name, dir)
-      for (const model of models)
-        for (const prompt of a.prompts) {
-          specs.push({ fixtureDir: dir, fixtureName: name, model, prompt })
-        }
-    }
-
-    const cacheDir = path.join(resultsDir, '.cache')
-    console.log(
-      `=== Eval (replay) ===  vendor=${handle.vendor} cells=${specs.length} judge=${judgeModel ?? 'none'}`,
-    )
-
-    replayResults = await runWithConcurrency(specs, a.concurrency, async (spec) => {
-      const variant = getPromptVariant(spec.prompt)
-      const cacheKey = crypto
-        .createHash('sha256')
-        .update(
-          `${fixtureContentHash(spec.fixtureDir)}|${spec.model}|${variant.id}|${a.pipeline}|${hashStr(variant.rules)}`,
-        )
-        .digest('hex')
-        .slice(0, 24)
-      const cachePath = path.join(cacheDir, `${cacheKey}.json`)
-      if (!a.noCache && fs.existsSync(cachePath)) {
-        console.log(`  [cache] ${spec.fixtureName} | ${spec.model} | ${variant.id}`)
-        return JSON.parse(fs.readFileSync(cachePath, 'utf8')) as ReplayResult
-      }
-
-      const videoModels =
-        a.pipeline === 'image' ? [] : buildModelChain(spec.model, presets.semanticVideo)
-      const snapshotModels = buildModelChain(spec.model, presets.semanticSnapshot)
-      const semantic = new ActivitySemanticService(handle.provider, {
-        videoModels,
-        snapshotModels,
-        pipelinePreference: a.pipeline,
-        promptBuilder: variant.build,
-        // The default UsageTracker reads Electron's app.getPath, which is absent
-        // under enode; the eval tracks tokens itself from diagnostics.
-        usageTracker: { recordUsage: () => {} },
+  // Round-trip dumping (optional) clobbers a shared dir, so it forces serial runs.
+  const dumper = a.dumpRoundTrips
+    ? new SemanticFileDebugDumper({
+        rootDir: path.resolve(a.dumpRoundTrips),
+        cleanRootDir: true,
+        copyMediaAssets: true,
       })
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memorylane-eval-'))
-      const transformer = new DefaultActivityTransformer(
-        new FfmpegVideoStitcher(),
-        activityOcrService,
-        semantic,
-        new StubEmbeddingService(),
-        { outputDir: tmpDir, getPipelinePreference: () => semantic.getPipelinePreference() },
-      )
-      try {
-        const { activities, producerStats } = await replayFixture({
-          fixtureDir: spec.fixtureDir,
-          transformer,
-          getLastDiagnostics: () => semantic.getLastRunDiagnostics(),
-        })
-        const result: ReplayResult = {
-          fixture: spec.fixtureName,
-          videoModel: videoModels[0] ?? '',
-          snapshotModel: snapshotModels[0] ?? '',
-          promptVariant: variant.id,
-          pipeline: a.pipeline,
-          activities,
-          producerStats,
-          generatedAt: new Date().toISOString(),
-        }
-        if (!a.noCache) {
-          fs.mkdirSync(cacheDir, { recursive: true })
-          fs.writeFileSync(cachePath, JSON.stringify(result), 'utf8')
-        }
-        console.log(
-          `  [done] ${spec.fixtureName} | ${spec.model} | ${variant.id} -> ${activities.length} acts`,
-        )
-        return result
-      } finally {
-        semantic.dispose()
-        fs.rmSync(tmpDir, { recursive: true, force: true })
-      }
-    })
-  }
+    : undefined
+  const concurrency = dumper ? 1 : a.concurrency
 
-  // ---- Phase 2: score each cell ----
-  const goldenEmbedder = new EmbeddingNeededLazy()
-  const cells: CellResult[] = await runWithConcurrency(
-    replayResults,
-    a.concurrency,
-    async (replay) => {
-      const fixtureDir = fixtureDirByName.get(replay.fixture)!
-      const sessionStart = sessionStartFor(fixtureDir)
-      const goldens = loadGoldens(fixtureDir)
-      const variant = getPromptVariant(replay.promptVariant)
+  const cells: Cell[] = []
+  for (const dir of fixtureDirs)
+    for (const model of models)
+      cells.push({ fixtureDir: dir, fixtureName: path.basename(dir), model })
 
-      let judgeTokensIn = 0
-      let judgeTokensOut = 0
-
-      // Golden matching first (so each summary knows its goldenId).
-      let goldenReport: GoldenReport | null = null
-      if (goldens.length) {
-        goldenReport = matchGoldens({
-          activities: replay.activities.map((act) => ({
-            activityId: act.activityId,
-            startTimestamp: act.startTimestamp,
-            endTimestamp: act.endTimestamp,
-            windowTitle: act.windowTitle,
-            tld: act.tld,
-          })),
-          goldens,
-          sessionStartTimestamp: sessionStart,
-        })
-      }
-      const goldenIdByActivity = new Map<string, string>(
-        (goldenReport?.matches ?? []).map((m) => [m.activityId!, m.goldenId]),
-      )
-
-      const summaries: ScoredSummary[] = []
-      for (const act of replay.activities) {
-        let rubric: RubricScore | null = null
-        if (judgeModel) {
-          rubric = await judgeSummary({
-            provider: handle.provider,
-            judgeModel,
-            summary: act.summary,
-            ocrText: act.ocrText,
-            rules: variant.rules,
-            metadata: {
-              appName: act.appName,
-              windowTitle: act.windowTitle,
-              tld: act.tld,
-              durationMs: act.durationMs,
-            },
-            imagePaths: act.selectedSnapshotPaths.length
-              ? act.selectedSnapshotPaths
-              : act.frameRefs,
-            textOnly: a.judgeTextOnly,
-            samples: a.judgeSamples,
-          })
-          if (rubric) {
-            judgeTokensIn += rubric.tokensIn
-            judgeTokensOut += rubric.tokensOut
-          }
-        }
-        summaries.push(
-          buildScoredSummary({
-            activity: act,
-            sessionStartTimestamp: sessionStart,
-            rubric,
-            goldenId: goldenIdByActivity.get(act.activityId) ?? null,
-          }),
-        )
-      }
-
-      // Golden scoring: embedSim (real embeddings) + judge equivalence.
-      if (goldenReport && goldenReport.matches.length) {
-        const goldenById = new Map(goldens.map((g) => [g.id, g]))
-        const summaryById = new Map(summaries.map((s) => [s.activityId, s]))
-        for (const m of goldenReport.matches) {
-          const g = goldenById.get(m.goldenId)
-          const s = m.activityId ? summaryById.get(m.activityId) : undefined
-          if (!g || !s) continue
-          let embedSim: number | null = null
-          try {
-            const embedder = await goldenEmbedder.get()
-            embedSim = embedSimilarity(
-              await embedder.embed(g.summary),
-              await embedder.embed(s.summary),
-            )
-          } catch {
-            embedSim = null
-          }
-          let equivalence: number | null = null
-          if (judgeModel) {
-            const eq = await judgeGoldenEquivalence({
-              provider: handle.provider,
-              model: judgeModel,
-              golden: g.summary,
-              candidate: s.summary,
-            })
-            if (eq) {
-              equivalence = eq.equivalence
-              judgeTokensIn += eq.tokensIn
-              judgeTokensOut += eq.tokensOut
-            }
-          }
-          m.embedSim = embedSim
-          m.judgeEquivalence = equivalence
-          m.score = combineGoldenScore(embedSim, equivalence)
-        }
-      }
-
-      const cost = computeCellCost({
-        activities: replay.activities,
-        judgeModel,
-        judgeTokensIn,
-        judgeTokensOut,
-      })
-
-      return {
-        fixture: replay.fixture,
-        videoModel: replay.videoModel,
-        snapshotModel: replay.snapshotModel,
-        promptVariant: replay.promptVariant,
-        pipeline: replay.pipeline,
-        summaries,
-        golden: goldenReport,
-        cost,
-        aggregate: aggregateCell(summaries, goldenReport),
-        producerStats: replay.producerStats,
-      }
-    },
+  console.log(
+    `=== Eval ===  vendor=${handle.vendor} cells=${cells.length} judge=${judgeModel ?? 'none'}`,
   )
 
-  // ---- Phase 3: assemble + write ----
-  const runId = new Date().toISOString().replace(/[:.]/g, '-')
-  const run: EvalRun = {
-    runId,
+  const fixtures: FixtureScore[] = await runWithConcurrency(cells, concurrency, async (cell) => {
+    const { activities, producerStats } = await replayCell({
+      provider: handle.provider,
+      vendor: handle.vendor,
+      fixtureDir: cell.fixtureDir,
+      model: cell.model,
+      pipeline: a.pipeline,
+      dumper,
+      ocr: a.ocr,
+    })
+    const sessionStart = sessionStartFor(cell.fixtureDir)
+    const goldens = loadGoldenMd(path.join(cell.fixtureDir, 'golden.md'))
+
+    const { segmentation, goldenByActivity } = matchAgainstGolden(activities, goldens, sessionStart)
+    const summaries = await scoreActivities({
+      activities,
+      sessionStart,
+      judgeModel,
+      handle,
+      goldenByActivity,
+    })
+
+    const judgeVals = summaries
+      .map((s) => s.judge?.score10)
+      .filter((n): n is number => typeof n === 'number')
+    const eqVals = summaries
+      .map((s) => s.golden?.equivalence)
+      .filter((n): n is number => typeof n === 'number')
+
+    console.log(
+      `  [done] ${cell.fixtureName} | ${cell.model} -> ${activities.length} acts, ` +
+        `${summaries.reduce((n, s) => n + s.deterministic.hardFails, 0)} hard-fails` +
+        (segmentation ? `, seg ${Math.round(segmentation.coverage * 100)}%` : ''),
+    )
+
+    return {
+      fixture: cell.fixtureName,
+      model: cell.model,
+      summaries,
+      producerStats,
+      detPassRate: summaries.length
+        ? Math.round(mean(summaries.map((s) => s.deterministic.passRate)) * 1000) / 1000
+        : 0,
+      hardFails: summaries.reduce((n, s) => n + s.deterministic.hardFails, 0),
+      avgJudge10: judgeVals.length ? Math.round(mean(judgeVals) * 100) / 100 : null,
+      segmentation,
+      avgEquivalence: eqVals.length ? Math.round(mean(eqVals) * 1000) / 1000 : null,
+    }
+  })
+
+  const report: EvalReport = {
     generatedAt: new Date().toISOString(),
     vendor: handle.vendor,
     judgeModel,
-    judgeTextOnly: a.judgeTextOnly,
-    cells,
-    baselineRunId: null,
+    fixtures,
   }
 
-  let baseline: EvalRun | null = null
-  const baselineId =
-    a.baseline === 'latest'
-      ? (readBaselinePointer(resultsDir) ?? latestRunId(resultsDir))
-      : a.baseline
-  if (baselineId) {
-    baseline = readRun(resultsDir, baselineId)
-    run.baselineRunId = baseline ? baselineId : null
-    if (!baseline) console.warn(`(baseline run ${baselineId} not found; skipping diff)`)
-  }
-
-  const { jsonPath, mdPath } = writeRun(resultsDir, run)
-  fs.writeFileSync(mdPath, renderMarkdown(run, baseline), 'utf8')
-
-  if (a.markBaseline) {
-    const id = a.markBaseline === 'latest' ? runId : a.markBaseline
-    writeBaselinePointer(resultsDir, id)
-    console.log(`Baseline pointer -> ${id}`)
-  }
-
+  const { jsonPath, mdPath } = writeReport(a.out, report)
   console.log('')
+  console.log(renderMarkdown(report).split('\n## Summaries')[0])
   console.log(`Wrote ${jsonPath}`)
   console.log(`Wrote ${mdPath}`)
-  for (const c of cells) {
-    console.log(
-      `  ${c.fixture} | ${c.videoModel || '-'}/${c.snapshotModel || '-'} | ${c.promptVariant}: ` +
-        `rubric ${c.aggregate.avgRubric10 ?? '—'}, det ${(c.aggregate.detPassRate * 100).toFixed(0)}%, ` +
-        `${c.aggregate.hardFails} hard-fails, $${c.cost.usd.toFixed(4)}`,
-    )
+}
+
+/** Matches replay activities to golden blocks by time overlap (no LLM). */
+function matchAgainstGolden(
+  activities: ReplayActivity[],
+  goldens: GoldenActivity[] | null,
+  sessionStart: number,
+): {
+  segmentation: SegmentationScore | null
+  goldenByActivity: Map<string, { golden: GoldenActivity; overlapRatio: number }>
+} {
+  const goldenByActivity = new Map<string, { golden: GoldenActivity; overlapRatio: number }>()
+  if (!goldens || goldens.length === 0) return { segmentation: null, goldenByActivity }
+
+  const report = matchSegments({
+    activities: activities.map((act) => ({
+      activityId: act.activityId,
+      startOffsetMs: act.startTimestamp - sessionStart,
+      endOffsetMs: act.endTimestamp - sessionStart,
+      windowTitle: act.windowTitle,
+    })),
+    goldens,
+  })
+  const byIndex = new Map(goldens.map((g) => [g.index, g]))
+  for (const m of report.matches) {
+    const g = byIndex.get(m.goldenIndex)
+    if (g) goldenByActivity.set(m.activityId, { golden: g, overlapRatio: m.overlapRatio })
   }
+
+  const segmentation: SegmentationScore = {
+    goldenCount: goldens.length,
+    coverage: Math.round(report.coverage * 1000) / 1000,
+    unmatchedGoldenIndexes: report.unmatchedGoldenIndexes,
+    extraActivityCount: report.unmatchedActivityIds.length,
+  }
+  return { segmentation, goldenByActivity }
 }
 
-function hashStr(s: string): string {
-  return crypto.createHash('sha256').update(s).digest('hex').slice(0, 12)
-}
+async function scoreActivities(params: {
+  activities: ReplayActivity[]
+  sessionStart: number
+  judgeModel: string | null
+  handle: CliInferenceProviderHandle
+  goldenByActivity: Map<string, { golden: GoldenActivity; overlapRatio: number }>
+}): Promise<ScoredSummary[]> {
+  const { activities, sessionStart, judgeModel, handle, goldenByActivity } = params
+  const summaries: ScoredSummary[] = []
 
-/** Lazily loads the MiniLM embedder only when goldens actually need embedSim. */
-class EmbeddingNeededLazy {
-  private svc: EmbeddingService | null = null
-  private initPromise: Promise<EmbeddingService> | null = null
-  async get(): Promise<EmbeddingService> {
-    if (this.svc) return this.svc
-    if (!this.initPromise) {
-      this.initPromise = (async () => {
-        const s = new EmbeddingService()
-        await s.init()
-        this.svc = s
-        return s
-      })()
+  for (const act of activities) {
+    const judge = judgeModel
+      ? await judgeSummary({
+          provider: handle.provider,
+          judgeModel,
+          summary: act.summary,
+          ocrText: act.ocrText,
+          metadata: {
+            appName: act.appName,
+            windowTitle: act.windowTitle,
+            tld: act.tld,
+            durationMs: act.durationMs,
+          },
+          imagePaths: act.selectedSnapshotPaths.length ? act.selectedSnapshotPaths : act.frameRefs,
+        })
+      : null
+
+    let golden: GoldenMatch | null = null
+    const matched = goldenByActivity.get(act.activityId)
+    if (matched) {
+      let equivalence: number | null = null
+      if (judgeModel) {
+        const eq = await judgeEquivalence({
+          provider: handle.provider,
+          model: judgeModel,
+          golden: matched.golden.summary,
+          candidate: act.summary,
+        })
+        equivalence = eq?.equivalence ?? null
+      }
+      golden = {
+        index: matched.golden.index,
+        summary: matched.golden.summary,
+        overlapRatio: matched.overlapRatio,
+        equivalence,
+      }
     }
-    return this.initPromise
+
+    summaries.push({
+      activityId: act.activityId,
+      appName: act.appName,
+      windowTitle: act.windowTitle,
+      startOffsetMs: act.startTimestamp - sessionStart,
+      endOffsetMs: act.endTimestamp - sessionStart,
+      durationMs: act.durationMs,
+      summary: act.summary,
+      summaryModel: act.summaryModel,
+      ocrText: act.ocrText,
+      deterministic: scoreDeterministic(act.summary),
+      judge,
+      golden,
+    })
   }
+  return summaries
 }
 
 main().catch((err) => {

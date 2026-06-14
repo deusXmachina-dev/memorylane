@@ -1,12 +1,12 @@
-import type { SemanticPipelinePreference, SemanticRunDiagnostics } from '../semantic/types'
+import type { SemanticRunDiagnostics } from '../semantic/types'
 
 /**
  * Shared types for the activity-summary eval & replay system.
  *
  * Pipeline: a captured session (frames + event windows) is promoted into a
  * committed fixture, replayed through the real ActivityProducer + summarizer to
- * produce ReplayActivity[], then scored (deterministic checks + LLM judge +
- * golden references) into a comparable scorecard.
+ * produce ReplayActivity[], then scored (deterministic rule checks + an optional
+ * LLM judge) into a Markdown scorecard.
  */
 
 export const FIXTURE_SCHEMA_VERSION = 1
@@ -63,26 +63,6 @@ export interface ReplayActivity {
   diagnostics: SemanticRunDiagnostics | null
 }
 
-/** Replay output for one (fixture × model × prompt) cell. */
-export interface ReplayResult {
-  fixture: string
-  /** Requested video model id (or '' when video disabled). */
-  videoModel: string
-  /** Requested snapshot model id. */
-  snapshotModel: string
-  promptVariant: string
-  pipeline: SemanticPipelinePreference
-  activities: ReplayActivity[]
-  producerStats: {
-    emittedActivities: number
-    droppedNoFrameWindows: number
-    droppedUnknownContextWindows: number
-    trailingFramesTrimmed: number
-  }
-  /** ISO timestamp, stamped by the CLI after the run. */
-  generatedAt?: string
-}
-
 // --------------------------------------------------------------------------
 // Scoring
 // --------------------------------------------------------------------------
@@ -90,7 +70,7 @@ export interface ReplayResult {
 export interface DeterministicCheck {
   id: string
   passed: boolean
-  /** 'hard' failures cap quality; 'soft' are warnings only. */
+  /** 'hard' failures are unambiguous rule violations; 'soft' are warnings. */
   severity: 'hard' | 'soft'
   detail?: string
 }
@@ -103,53 +83,28 @@ export interface DeterministicResult {
   passRate: number
 }
 
-export interface RubricDimension {
-  key: string
-  /** 0..5 */
-  score: number
-  rationale: string
-}
-
-export interface RubricScore {
-  dimensions: RubricDimension[]
-  /** Weighted aggregate, 0..10, after the hard cap. */
-  aggregate10: number
-  /** True when the hard cap (hallucination/noRawInteractions <= 2) was applied. */
-  capped: boolean
+/** One holistic LLM-judge verdict for a summary. */
+export interface JudgeResult {
+  /** Overall quality, 0..10. */
+  score10: number
+  /** Short free-text rationale. */
+  notes: string
+  /** Specific claims not supported by the evidence. */
   flaggedClaims: string[]
   judgeModel: string
-  /** Number of judge samples averaged into this score. */
-  samples: number
   tokensIn: number
   tokensOut: number
 }
 
-export interface GoldenEntry {
-  id: string
-  appName: string
-  /** Session-relative match window, ms from fixture start. */
-  startOffsetMs: number
-  endOffsetMs: number
-  windowTitle?: string
-  tld?: string
-  /** The hand-authored ideal summary. */
-  summary: string
-}
-
+/** A summary's match against its golden block (segmentation + equivalence). */
 export interface GoldenMatch {
-  goldenId: string
-  activityId: string | null
+  /** 1-based golden block index. */
+  index: number
+  /** The hand-authored target summary. */
+  summary: string
   overlapRatio: number
-  embedSim: number | null
-  judgeEquivalence: number | null
-  /** 0.4*embedSim + 0.6*judgeEquivalence, or null when not scored. */
-  score: number | null
-}
-
-export interface GoldenReport {
-  matches: GoldenMatch[]
-  unmatchedGoldenIds: string[]
-  unmatchedActivityIds: string[]
+  /** 0..1 equivalence of candidate vs golden, or null when the judge is off. */
+  equivalence: number | null
 }
 
 export interface ScoredSummary {
@@ -163,46 +118,49 @@ export interface ScoredSummary {
   summaryModel: string
   ocrText: string
   deterministic: DeterministicResult
-  rubric: RubricScore | null
-  goldenId: string | null
+  judge: JudgeResult | null
+  /** Present when the fixture has a golden.md and this activity matched a block. */
+  golden: GoldenMatch | null
 }
 
-export interface CellCost {
-  summaryTokensIn: number
-  summaryTokensOut: number
-  judgeTokensIn: number
-  judgeTokensOut: number
-  usd: number
+/** How a replay's segmentation lined up with the golden.md blocks. */
+export interface SegmentationScore {
+  goldenCount: number
+  /** matched / goldenCount, 0..1. */
+  coverage: number
+  /** Golden blocks with no produced activity (merged/missed boundary). */
+  unmatchedGoldenIndexes: number[]
+  /** Produced activities with no golden block (over-split). */
+  extraActivityCount: number
 }
 
-export interface CellAggregate {
-  count: number
-  avgRubric10: number | null
+export interface ProducerStats {
+  emittedActivities: number
+  droppedNoFrameWindows: number
+  droppedUnknownContextWindows: number
+  trailingFramesTrimmed: number
+}
+
+/** All scored summaries for one (fixture × model) run. */
+export interface FixtureScore {
+  fixture: string
+  model: string
+  summaries: ScoredSummary[]
+  producerStats: ProducerStats
+  /** Mean deterministic pass rate, 0..1. */
   detPassRate: number
   hardFails: number
-  avgGoldenScore: number | null
-  p50DurationMs: number
+  /** Mean judge score, 0..10, or null when the judge was disabled. */
+  avgJudge10: number | null
+  /** Segmentation vs golden.md, or null when the fixture has no golden. */
+  segmentation: SegmentationScore | null
+  /** Mean golden equivalence over matched blocks, 0..1, or null. */
+  avgEquivalence: number | null
 }
 
-export interface CellResult {
-  fixture: string
-  videoModel: string
-  snapshotModel: string
-  promptVariant: string
-  pipeline: SemanticPipelinePreference
-  summaries: ScoredSummary[]
-  golden: GoldenReport | null
-  cost: CellCost
-  aggregate: CellAggregate
-  producerStats: ReplayResult['producerStats']
-}
-
-export interface EvalRun {
-  runId: string
+export interface EvalReport {
   generatedAt: string
   vendor: string
   judgeModel: string | null
-  judgeTextOnly: boolean
-  cells: CellResult[]
-  baselineRunId: string | null
+  fixtures: FixtureScore[]
 }

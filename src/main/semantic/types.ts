@@ -1,18 +1,7 @@
-import type { Activity, ActivityFrame } from '../activity-types'
+import type { ActivityFrame } from '../activity-types'
 
 export type SemanticMode = 'video' | 'snapshot'
 export type SemanticPipelinePreference = 'auto' | 'video' | 'image'
-
-/**
- * Builds the summarizer prompt for an activity. Defaults to `buildSemanticPrompt`
- * in production; the eval harness injects named prompt variants to A/B different
- * rule sets against the same fixture.
- */
-export type SemanticPromptBuilder = (
-  activity: Activity,
-  mode: SemanticMode,
-  userContext?: string,
-) => string
 
 export type ChatContentItem =
   | { type: 'text'; text: string }
@@ -52,11 +41,6 @@ export interface ActivitySemanticServiceConfig {
    * tests; production uses globalThis.fetch.
    */
   fetchImpl?: typeof globalThis.fetch
-  /**
-   * Optional override for the summarizer prompt builder. Defaults to
-   * `buildSemanticPrompt`. The eval harness injects prompt variants here.
-   */
-  promptBuilder?: SemanticPromptBuilder
 }
 
 export interface SemanticAttempt {
