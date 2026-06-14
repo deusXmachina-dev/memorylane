@@ -37,6 +37,7 @@ import {
   FIXTURE_SCHEMA_VERSION,
   type DumpedFrame,
   type FixtureManifest,
+  type ReplayActivity,
 } from '../src/main/eval/types'
 import type { EventWindow } from '../src/shared/types'
 
@@ -227,16 +228,26 @@ async function main() {
   if (a.downsample)
     console.log('  PNGs downsampled to JPEG (affects OCR/snapshot pixels uniformly).')
 
-  // Full-session review video: playback time ≈ real elapsed time, so the clock
-  // lines up with the mm:ss offsets in golden.md.
-  if (!a.noVideo) {
-    await stitchSessionVideo(fixtureDir, promotedFrames)
-  }
+  // One no-LLM replay feeds both the review video and the golden transcript, so
+  // they share a clock and the video ends exactly where the transcript does.
+  if (!a.noVideo || !a.noSeed) {
+    const { activities, droppedActivities, sessionStartMs } = await replayFixture({
+      fixtureDir,
+      transformer: new ScaffoldTransformer(),
+    })
+    const transcript = [...activities, ...droppedActivities]
+    const lastBlockEnd =
+      transcript.reduce((max, t) => Math.max(max, t.endTimestamp), 0) || undefined
 
-  // Seed an editable golden.md from one real replay (draft segmentation +
-  // summaries). Skipped offline / when one already exists (unless --reseed).
-  if (!a.noSeed) {
-    await seedGolden(fixtureDir, a)
+    // Review video: playback time ≈ elapsed time; trimmed to the last activity so
+    // its length matches golden.md instead of trailing past it.
+    if (!a.noVideo) {
+      await stitchSessionVideo(fixtureDir, promotedFrames, lastBlockEnd)
+    }
+    // Editable golden.md transcript. Skipped when one exists (unless --reseed).
+    if (!a.noSeed) {
+      seedGolden(fixtureDir, a, transcript, sessionStartMs)
+    }
   }
 
   console.log('')
@@ -245,14 +256,37 @@ async function main() {
   )
 }
 
-/** Stitches every fixture frame into one session video for golden review. */
-async function stitchSessionVideo(fixtureDir: string, frames: DumpedFrame[]): Promise<void> {
+/**
+ * Stitches fixture frames into one session video for golden review. When
+ * `endTimestampMs` is given (the last activity's end), trailing frames past it
+ * are dropped and a terminal marker is pinned at the end so the video stops there
+ * — otherwise the stitcher holds the final real frame for a full inter-frame
+ * interval and the video runs ~1s past the transcript.
+ */
+async function stitchSessionVideo(
+  fixtureDir: string,
+  frames: DumpedFrame[],
+  endTimestampMs?: number,
+): Promise<void> {
   if (frames.length === 0) return
+
+  let clip = frames
+  if (endTimestampMs !== undefined) {
+    const kept = frames.filter((f) => f.timestamp <= endTimestampMs)
+    const last = kept[kept.length - 1]
+    // Pin the final hold to the activity end (re-uses the last frame's image).
+    clip =
+      last && last.timestamp < endTimestampMs
+        ? [...kept, { ...last, timestamp: endTimestampMs }]
+        : kept
+  }
+  if (clip.length === 0) return
+
   const outputPath = path.join(fixtureDir, 'session.mp4')
   try {
     const asset = await new FfmpegVideoStitcher().stitch({
       activityId: 'session',
-      frames: frames.map((f) => ({
+      frames: clip.map((f) => ({
         filepath: path.resolve(fixtureDir, f.filepath),
         timestamp: f.timestamp,
       })),
@@ -267,32 +301,29 @@ async function stitchSessionVideo(fixtureDir: string, frames: DumpedFrame[]): Pr
 }
 
 /**
- * Writes an editable golden.md scaffold: the producer's real segmentation (times
- * + apps + window titles) with blank summaries to fill in by hand. No LLM — the
- * same producer eval replays, so the scaffold's boundaries match what
- * eval-summaries scores.
+ * Writes an editable golden.md scaffold from the producer transcript (emitted
+ * activities with blank summaries + DROPPED blocks for everything discarded), on
+ * the session.mp4 clock so mm:ss lines up with the review video. No LLM.
  */
-async function seedGolden(fixtureDir: string, a: CliArgs): Promise<void> {
+function seedGolden(
+  fixtureDir: string,
+  a: CliArgs,
+  transcript: ReplayActivity[],
+  sessionStartMs: number,
+): void {
   const goldenPath = path.join(fixtureDir, 'golden.md')
   if (fs.existsSync(goldenPath) && !a.reseed) {
     console.log('  Golden:        golden.md exists — not overwriting (use --reseed to regenerate).')
     return
   }
 
-  const { activities, droppedActivities, sessionStartMs } = await replayFixture({
-    fixtureDir,
-    transformer: new ScaffoldTransformer(),
-  })
-  // Exact transcript: emitted activities + everything the producer dropped, on
-  // the session.mp4 clock so mm:ss lines up with the review video.
-  const transcript = [...activities, ...droppedActivities]
   fs.writeFileSync(
     goldenPath,
     renderGoldenMd(path.basename(fixtureDir), transcript, sessionStartMs),
     'utf8',
   )
-  const kept = activities.length
-  const dropped = droppedActivities.length
+  const dropped = transcript.filter((t) => t.dropped).length
+  const kept = transcript.length - dropped
   console.log(
     `  Golden:        golden.md scaffolded (${kept} kept + ${dropped} dropped, no LLM) — write each summary.`,
   )
