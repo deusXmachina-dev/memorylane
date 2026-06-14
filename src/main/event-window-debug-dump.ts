@@ -1,6 +1,4 @@
-import * as fs from 'fs'
-import * as path from 'path'
-import log from './logger'
+import { StreamJsonlDumper } from './stream-jsonl-dumper'
 import type { EventWindow } from '../shared/types'
 
 /**
@@ -16,29 +14,12 @@ import type { EventWindow } from '../shared/types'
  * but hand-review fixtures for private content before committing them. Each
  * record carries `dumpedAt` and `lagMs` (dumpedAt - window.endTimestamp).
  */
-export class EventWindowDebugDumper {
-  private readonly filePath: string
-
+export class EventWindowDebugDumper extends StreamJsonlDumper<EventWindow> {
   constructor(rootDir: string, fileName = 'event-windows.jsonl') {
-    fs.mkdirSync(rootDir, { recursive: true })
-    this.filePath = path.join(rootDir, fileName)
-    log.info(`[EventWindowDebugDumper] Writing event windows to ${this.filePath}`)
+    super(rootDir, fileName, 'EventWindowDebugDumper')
   }
 
-  getFilePath(): string {
-    return this.filePath
-  }
-
-  dump(window: EventWindow): void {
-    try {
-      const dumpedAt = Date.now()
-      const record = { dumpedAt, lagMs: dumpedAt - window.endTimestamp, ...window }
-      fs.appendFileSync(this.filePath, `${JSON.stringify(record)}\n`, 'utf8')
-    } catch (error) {
-      log.warn(
-        '[EventWindowDebugDumper] Failed to write event window',
-        error instanceof Error ? error.message : String(error),
-      )
-    }
+  protected referenceTimestamp(window: EventWindow): number {
+    return window.endTimestamp
   }
 }

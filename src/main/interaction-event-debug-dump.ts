@@ -1,6 +1,4 @@
-import * as fs from 'fs'
-import * as path from 'path'
-import log from './logger'
+import { StreamJsonlDumper } from './stream-jsonl-dumper'
 import type { InteractionContext } from '../shared/types'
 
 /**
@@ -15,29 +13,12 @@ import type { InteractionContext } from '../shared/types'
  * time) and `lagMs` (dumpedAt - event.timestamp) so the debounce delay between
  * when an interaction occurred and when it was emitted is visible at a glance.
  */
-export class InteractionEventDebugDumper {
-  private readonly filePath: string
-
+export class InteractionEventDebugDumper extends StreamJsonlDumper<InteractionContext> {
   constructor(rootDir: string, fileName = 'interaction-events.jsonl') {
-    fs.mkdirSync(rootDir, { recursive: true })
-    this.filePath = path.join(rootDir, fileName)
-    log.info(`[InteractionEventDebugDumper] Writing interaction events to ${this.filePath}`)
+    super(rootDir, fileName, 'InteractionEventDebugDumper')
   }
 
-  getFilePath(): string {
-    return this.filePath
-  }
-
-  dump(event: InteractionContext): void {
-    try {
-      const dumpedAt = Date.now()
-      const record = { dumpedAt, lagMs: dumpedAt - event.timestamp, ...event }
-      fs.appendFileSync(this.filePath, `${JSON.stringify(record)}\n`, 'utf8')
-    } catch (error) {
-      log.warn(
-        '[InteractionEventDebugDumper] Failed to write interaction event',
-        error instanceof Error ? error.message : String(error),
-      )
-    }
+  protected referenceTimestamp(event: InteractionContext): number {
+    return event.timestamp
   }
 }

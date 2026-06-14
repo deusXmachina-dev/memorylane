@@ -1,6 +1,4 @@
-import * as fs from 'fs'
-import * as path from 'path'
-import log from './logger'
+import { StreamJsonlDumper } from './stream-jsonl-dumper'
 import type { Frame } from './recorder/screen-capturer'
 
 /**
@@ -15,29 +13,12 @@ import type { Frame } from './recorder/screen-capturer'
  * blocked apps are suppressed upstream at the capturer and never reach the
  * stream. Each record carries `dumpedAt` and `lagMs` (dumpedAt - frame.timestamp).
  */
-export class FrameDebugDumper {
-  private readonly filePath: string
-
+export class FrameDebugDumper extends StreamJsonlDumper<Frame> {
   constructor(rootDir: string, fileName = 'frames.jsonl') {
-    fs.mkdirSync(rootDir, { recursive: true })
-    this.filePath = path.join(rootDir, fileName)
-    log.info(`[FrameDebugDumper] Writing frame metadata to ${this.filePath}`)
+    super(rootDir, fileName, 'FrameDebugDumper')
   }
 
-  getFilePath(): string {
-    return this.filePath
-  }
-
-  dump(frame: Frame): void {
-    try {
-      const dumpedAt = Date.now()
-      const record = { dumpedAt, lagMs: dumpedAt - frame.timestamp, ...frame }
-      fs.appendFileSync(this.filePath, `${JSON.stringify(record)}\n`, 'utf8')
-    } catch (error) {
-      log.warn(
-        '[FrameDebugDumper] Failed to write frame metadata',
-        error instanceof Error ? error.message : String(error),
-      )
-    }
+  protected referenceTimestamp(frame: Frame): number {
+    return frame.timestamp
   }
 }

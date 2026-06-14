@@ -33,6 +33,7 @@ import { SCREEN_CAPTURER_CONFIG } from '../src/shared/constants'
 import { VENDOR_PRESETS } from '../src/shared/vendor-defaults'
 import { FfmpegVideoStitcher } from '../src/main/video/video-stitcher'
 import { renderGoldenMd } from '../src/main/eval/golden-md'
+import { readJsonl } from '../src/main/eval/jsonl'
 import {
   FIXTURE_SCHEMA_VERSION,
   type DumpedFrame,
@@ -125,15 +126,6 @@ function parseArgs(): CliArgs {
     }
   }
   return a
-}
-
-function readJsonl<T>(filePath: string): T[] {
-  return fs
-    .readFileSync(filePath, 'utf8')
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as T)
 }
 
 async function copyFrame(

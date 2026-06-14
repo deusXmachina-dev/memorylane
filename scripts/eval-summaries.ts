@@ -32,6 +32,7 @@ import { scoreDeterministic } from '../src/main/eval/deterministic'
 import { judgeSummary, judgeEquivalence } from '../src/main/eval/judge'
 import { renderMarkdown, writeReport } from '../src/main/eval/report'
 import { loadGoldenMd, matchSegments, type GoldenActivity } from '../src/main/eval/golden-md'
+import { readJsonl } from '../src/main/eval/jsonl'
 import type {
   EvalReport,
   FixtureScore,
@@ -164,13 +165,10 @@ function resolveFixtureDirs(a: CliArgs): string[] {
 }
 
 function sessionStartFor(fixtureDir: string): number {
-  const raw = fs.readFileSync(path.join(fixtureDir, 'event-windows.jsonl'), 'utf8')
-  return raw
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map((l) => (JSON.parse(l) as { startTimestamp: number }).startTimestamp)
-    .reduce((min, t) => Math.min(min, t), Number.POSITIVE_INFINITY)
+  return readJsonl<{ startTimestamp: number }>(path.join(fixtureDir, 'event-windows.jsonl')).reduce(
+    (min, w) => Math.min(min, w.startTimestamp),
+    Number.POSITIVE_INFINITY,
+  )
 }
 
 function defaultJudgeModel(handle: CliInferenceProviderHandle): string | null {

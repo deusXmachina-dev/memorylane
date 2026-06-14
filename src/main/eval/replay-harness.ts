@@ -14,6 +14,7 @@ import type { Frame } from '../recorder/screen-capturer'
 import type { EventWindow } from '../../shared/types'
 import type { SemanticRunDiagnostics } from '../semantic/types'
 import type { DumpedFrame, ReplayActivity } from './types'
+import { readJsonl } from './jsonl'
 
 /**
  * Replays a captured fixture (frames + event windows) through the *real*
@@ -60,15 +61,6 @@ export class StubOcrService implements ActivityOcrService {
 interface DumpedEventWindow extends EventWindow {
   dumpedAt?: number
   lagMs?: number
-}
-
-function readJsonl<T>(filePath: string): T[] {
-  const raw = fs.readFileSync(filePath, 'utf8')
-  return raw
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .map((line) => JSON.parse(line) as T)
 }
 
 export interface ReplayFixtureParams {
