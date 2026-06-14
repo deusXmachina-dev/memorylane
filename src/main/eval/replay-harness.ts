@@ -58,6 +58,29 @@ export class StubOcrService implements ActivityOcrService {
   }
 }
 
+/**
+ * No-LLM transformer: fills app/title/tld/times straight from the producer's
+ * `activity.context` and leaves the summary blank. Lets us scaffold a golden.md
+ * from the real segmentation boundaries with no credentials, model call, OCR, or
+ * video stitch — the user then writes each summary by hand.
+ */
+export class ScaffoldTransformer implements ActivityTransformer {
+  async transform(activity: Activity): Promise<ExtractedActivity> {
+    return {
+      activityId: activity.id,
+      startTimestamp: activity.startTimestamp,
+      endTimestamp: activity.endTimestamp,
+      appName: activity.context.appName,
+      windowTitle: activity.context.windowTitle ?? '',
+      tld: activity.context.tld,
+      summary: '',
+      summaryModel: '',
+      ocrText: '',
+      vector: [],
+    }
+  }
+}
+
 interface DumpedEventWindow extends EventWindow {
   dumpedAt?: number
   lagMs?: number

@@ -8,8 +8,10 @@
  * stream is copied verbatim — it is the replay-critical input.
  *
  * Also (unless disabled): stitches all frames into a `session.mp4` for review,
- * and seeds an editable `golden.md` from one real replay (draft segmentation +
- * summaries) — the file you hand-edit into the target for the eval loop.
+ * and seeds an editable `golden.md` scaffold from the producer's segmentation
+ * (real times + apps, blank summaries) — the file you hand-edit into the target
+ * for the eval loop. No LLM: the same producer eval replays, so the scaffold's
+ * boundaries match what eval-summaries scores.
  *
  * IMPORTANT: hand-review the fixture for private content before committing it.
  * Window titles, URLs, and on-screen text are baked into the events and PNGs.
@@ -19,20 +21,17 @@
  *   npm run promote-debug-fixture -- --name X --description "..." --expected-activities 2
  *   npm run promote-debug-fixture -- --name X --downsample            (shrink PNGs -> JPEG)
  *   npm run promote-debug-fixture -- --name X --no-seed --no-video    (skip golden + video)
- *   npm run promote-debug-fixture -- --name X --reseed --model google/gemini-2.5-flash
+ *   npm run promote-debug-fixture -- --name X --reseed                (regenerate golden.md scaffold)
  *   npm run promote-debug-fixture -- --name X --debug-dir /path/to/.debug-pipeline
  */
-
-import { config as loadEnv } from 'dotenv'
-loadEnv()
 
 import * as fs from 'fs'
 import * as path from 'path'
 import sharp from 'sharp'
 import { SCREEN_CAPTURER_CONFIG } from '../src/shared/constants'
-import { VENDOR_PRESETS } from '../src/shared/vendor-defaults'
 import { FfmpegVideoStitcher } from '../src/main/video/video-stitcher'
 import { renderGoldenMd } from '../src/main/eval/golden-md'
+import { replayFixture, ScaffoldTransformer } from '../src/main/eval/replay-harness'
 import { readJsonl } from '../src/main/eval/jsonl'
 import {
   FIXTURE_SCHEMA_VERSION,
@@ -40,8 +39,6 @@ import {
   type FixtureManifest,
 } from '../src/main/eval/types'
 import type { EventWindow } from '../src/shared/types'
-import { replayCell } from './replay-cell'
-import { loadCliInferenceProvider } from './cli-inference-provider'
 
 const FIXTURES_ROOT = path.resolve('evals/semantic-summary/fixtures')
 
@@ -55,7 +52,6 @@ interface CliArgs {
   noSeed: boolean
   reseed: boolean
   noVideo: boolean
-  model: string | null
 }
 
 function parseArgs(): CliArgs {
@@ -70,7 +66,6 @@ function parseArgs(): CliArgs {
     noSeed: false,
     reseed: false,
     noVideo: false,
-    model: null,
   }
   for (let i = 0; i < args.length; i++) {
     const next = args[i + 1]
@@ -116,12 +111,6 @@ function parseArgs(): CliArgs {
         break
       case '--no-video':
         a.noVideo = true
-        break
-      case '--model':
-        if (next) {
-          a.model = next
-          i++
-        }
         break
     }
   }
@@ -277,7 +266,12 @@ async function stitchSessionVideo(fixtureDir: string, frames: DumpedFrame[]): Pr
   }
 }
 
-/** Replays once to pre-fill an editable golden.md (segmentation + draft summaries). */
+/**
+ * Writes an editable golden.md scaffold: the producer's real segmentation (times
+ * + apps + window titles) with blank summaries to fill in by hand. No LLM — the
+ * same producer eval replays, so the scaffold's boundaries match what
+ * eval-summaries scores.
+ */
 async function seedGolden(fixtureDir: string, a: CliArgs): Promise<void> {
   const goldenPath = path.join(fixtureDir, 'golden.md')
   if (fs.existsSync(goldenPath) && !a.reseed) {
@@ -285,52 +279,14 @@ async function seedGolden(fixtureDir: string, a: CliArgs): Promise<void> {
     return
   }
 
-  let handle
-  try {
-    handle = loadCliInferenceProvider({})
-  } catch (error) {
-    console.warn(
-      `  Golden:        skipped seeding (no credentials: ${error instanceof Error ? error.message : String(error)}).`,
-    )
-    console.warn(
-      '                 Re-run with --reseed once configured, or author golden.md by hand.',
-    )
-    return
-  }
-
-  const presets = VENDOR_PRESETS[handle.vendor]
-  // Seeding replays the 'auto' (video) pipeline, so default to a video-capable
-  // model — the snapshot default may not support video input and would 404 then
-  // fall back. Override with --model.
-  const model = a.model || handle.semanticVideoModel || presets.semanticVideo[0]?.id || ''
-  if (!model) {
-    console.warn('  Golden:        skipped seeding (no snapshot model configured).')
-    return
-  }
-
-  try {
-    const { activities } = await replayCell({
-      provider: handle.provider,
-      vendor: handle.vendor,
-      fixtureDir,
-      model,
-      pipeline: 'auto',
-    })
-    fs.writeFileSync(goldenPath, renderGoldenMd(path.basename(fixtureDir), activities), 'utf8')
-    const usedModels = [
-      ...new Set(
-        activities.map((act) => act.summaryModel).filter((m) => m && !m.startsWith('heuristic:')),
-      ),
-    ]
-    const via = usedModels.length ? usedModels.join(', ') : model
-    console.log(
-      `  Golden:        golden.md seeded (${activities.length} draft blocks via ${via}) — edit boundaries + summaries.`,
-    )
-  } catch (error) {
-    console.warn(
-      `  Golden:        seeding failed (${error instanceof Error ? error.message : String(error)}).`,
-    )
-  }
+  const { activities } = await replayFixture({
+    fixtureDir,
+    transformer: new ScaffoldTransformer(),
+  })
+  fs.writeFileSync(goldenPath, renderGoldenMd(path.basename(fixtureDir), activities), 'utf8')
+  console.log(
+    `  Golden:        golden.md scaffolded (${activities.length} blocks, no LLM) — write each summary.`,
+  )
 }
 
 main().catch((err) => {

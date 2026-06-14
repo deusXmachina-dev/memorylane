@@ -3,9 +3,9 @@ import type { ReplayActivity } from './types'
 
 /**
  * The golden is a single hand-editable Markdown file per fixture (`golden.md`).
- * It is *seeded* from one real replay (actual segmentation + draft summaries),
- * then the user edits it to express the target: fix the boundaries by
- * merging/splitting blocks, and rewrite each summary to the ideal.
+ * It is *scaffolded* from the producer's segmentation (real boundaries, blank
+ * summaries — no LLM), then the user edits it to express the target: write each
+ * summary to the ideal, and fix the boundaries by merging/splitting blocks.
  *
  * Eval then compares a fresh replay against it on two axes:
  *   - segmentation: are the activities cut at the same boundaries? (time overlap)
@@ -55,7 +55,8 @@ function parseOffset(min: string, sec: string): number {
   return (parseInt(min, 10) * 60 + parseInt(sec, 10)) * 1000
 }
 
-/** Renders a seeded golden.md from a replay's activities (draft summaries). */
+/** Renders a golden.md scaffold from a replay's activities (summaries left blank
+ *  when no LLM ran, so the user fills them in). */
 export function renderGoldenMd(fixture: string, activities: ReplayActivity[]): string {
   const sorted = [...activities].sort((a, b) => a.startTimestamp - b.startTimestamp)
   const sessionStart = sorted.length ? sorted[0].startTimestamp : 0
@@ -63,9 +64,10 @@ export function renderGoldenMd(fixture: string, activities: ReplayActivity[]): s
   const lines: string[] = []
   lines.push(`# Golden — ${fixture}`)
   lines.push('')
-  lines.push('<!-- Seeded from one real replay. EDIT this to express the target:')
+  lines.push('<!-- Scaffolded from the producer (real boundaries, blank summaries).')
+  lines.push('     EDIT this to express the target:')
+  lines.push('     - write each summary to what it SHOULD say.')
   lines.push('     - fix boundaries by merging/splitting blocks (adjust the mm:ss ranges)')
-  lines.push('     - rewrite each summary to what it SHOULD say.')
   lines.push('     Times are mm:ss from session start; the header number is cosmetic. -->')
   lines.push('')
 
