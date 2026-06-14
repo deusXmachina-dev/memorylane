@@ -200,6 +200,12 @@ export class ActivityProducer {
       log.info(
         `[ActivityProducer] Dropping window ${window.id} at offset ${record.offset}: unknown app context`,
       )
+      this.config.onActivityDropped?.({
+        reason: 'unknown_context',
+        startTimestamp: window.startTimestamp,
+        endTimestamp: window.endTimestamp,
+        detail: 'unknown app context',
+      })
       await this.markRecordProcessed(record.offset)
       await this.advanceFrameAck(window.endTimestamp)
       return
@@ -211,6 +217,15 @@ export class ActivityProducer {
       log.info(
         `[ActivityProducer] Dropping window ${window.id} at offset ${record.offset}: no frames in ${window.startTimestamp}-${window.endTimestamp}`,
       )
+      this.config.onActivityDropped?.({
+        reason: 'no_frames',
+        startTimestamp: window.startTimestamp,
+        endTimestamp: window.endTimestamp,
+        appName: windowContext.appName,
+        windowTitle: windowContext.windowTitle,
+        tld: windowContext.tld,
+        detail: 'no screenshots captured during this window',
+      })
       await this.markRecordProcessed(record.offset)
       await this.advanceFrameAck(window.endTimestamp)
       return
@@ -366,6 +381,15 @@ export class ActivityProducer {
       log.info(
         `[ActivityProducer] Dropping short activity ${activityToEmit.id} (${durationMs}ms < ${this.config.minActivityDurationMs}ms, reason: ${reason})`,
       )
+      this.config.onActivityDropped?.({
+        reason: 'too_short',
+        startTimestamp: activityToEmit.startTimestamp,
+        endTimestamp: activityToEmit.endTimestamp,
+        appName: activityToEmit.context.appName,
+        windowTitle: activityToEmit.context.windowTitle,
+        tld: activityToEmit.context.tld,
+        detail: `${durationMs}ms < ${this.config.minActivityDurationMs}ms (${reason})`,
+      })
       this.deferAckOffsets(eventOffsetsToAck)
       return
     }

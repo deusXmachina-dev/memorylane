@@ -48,6 +48,8 @@ export interface CliInferenceProviderHandle {
   patternDetectionModel: string
   /** `semanticSnapshotModel` from settings; empty string if unset. */
   semanticSnapshotModel: string
+  /** `semanticVideoModel` from settings; empty string if unset. */
+  semanticVideoModel: string
   baseURL: string | null
 }
 
@@ -117,12 +119,16 @@ export function loadCliInferenceProvider(
   const semanticSnapshotModel = options.vendorOverride
     ? (vendorSelection?.semanticSnapshotModel ?? '')
     : settings.semanticSnapshotModel
+  const semanticVideoModel = options.vendorOverride
+    ? (vendorSelection?.semanticVideoModel ?? '')
+    : settings.semanticVideoModel
 
   return {
     provider,
     vendor,
     patternDetectionModel,
     semanticSnapshotModel,
+    semanticVideoModel,
     baseURL: status.baseURL,
   }
 }
