@@ -1,4 +1,10 @@
 import type { AppEditionConfig } from './edition'
+import type {
+  EvalFixtureLoad,
+  EvalFixtureSummary,
+  EvalPromoteSummary,
+  EvalRecordingStatus,
+} from './eval-review'
 
 export interface InteractionContext {
   // 'presence' is a synthetic heartbeat emitted while the user is at the machine
@@ -380,6 +386,21 @@ export interface MainWindowAPI {
   onPermissionStatusChanged: (callback: (status: PermissionStatus) => void) => () => void
   // App lifecycle
   restartApp: () => Promise<void>
+  // Eval recorder + fixture review (Developer mode)
+  evalStartRecording: (
+    name: string,
+  ) => Promise<{ success: boolean; status?: EvalRecordingStatus; error?: string }>
+  evalStopRecording: () => Promise<{
+    success: boolean
+    fixture?: EvalPromoteSummary
+    error?: string
+  }>
+  evalRecordingStatus: () => Promise<EvalRecordingStatus>
+  evalListFixtures: () => Promise<EvalFixtureSummary[]>
+  evalLoadFixture: (name: string) => Promise<EvalFixtureLoad | null>
+  evalSaveGolden: (name: string, markdown: string) => Promise<{ success: boolean; error?: string }>
+  evalDeleteFixture: (name: string) => Promise<{ success: boolean; error?: string }>
+  evalExportFixture: (name: string) => Promise<{ success: boolean; path?: string; error?: string }>
   // Host platform (set at preload time; never changes mid-session)
   platform: NodeJS.Platform
 }

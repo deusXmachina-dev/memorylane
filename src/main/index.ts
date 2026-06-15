@@ -34,6 +34,7 @@ import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
 import { DatabaseUploadSync } from './services/database-upload-sync'
 import { createMainRuntime, type MainRuntime } from './runtime'
+import { registerEvalMediaScheme, registerEvalMediaProtocol } from './eval/eval-media-protocol'
 import { createObservationController, type ObservationController } from './observation-controller'
 import { getAppDirectoryName } from './paths'
 import { loadAppEditionConfig } from './edition'
@@ -44,6 +45,10 @@ import { ENTERPRISE_BACKEND_CONFIG } from '../shared/constants'
 if (app.isPackaged && !app.requestSingleInstanceLock()) {
   app.quit()
 }
+
+// Privileged scheme for streaming eval review videos — must be registered
+// before the app `ready` event (the handler is wired after the runtime exists).
+registerEvalMediaScheme()
 
 try {
   if (!app.isPackaged) {
@@ -178,6 +183,9 @@ app.on('ready', async () => {
     initialSnapshotModel: initialCaptureSettings.semanticSnapshotModel,
   })
 
+  // Serve eval review videos from the fixtures dir (Developer mode).
+  registerEvalMediaProtocol(runtime.evalFixturesRoot)
+
   rawDatabaseExportSync = new RawDatabaseExportSync({
     storage: runtime.storage,
     getExportDirectory: () => captureSettingsManager.get().databaseExportDirectory,
@@ -291,6 +299,8 @@ app.on('ready', async () => {
     databaseUploadSync: databaseUploadSync ?? undefined,
     purgeAll: () => runtime?.purgeAll() ?? Promise.reject(new Error('Runtime not initialized')),
     observation,
+    evalRecorder: runtime.evalRecorder,
+    evalFixtureStore: runtime.evalFixtureStore,
   })
 
   runtime.accessProvider.startPeriodicRefresh()

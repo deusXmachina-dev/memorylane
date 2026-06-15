@@ -31,6 +31,8 @@ import { VENDORS } from '../../shared/types'
 import { VENDOR_PRESETS, getVendorDefaults } from '../../shared/vendor-defaults'
 import { applyVendorSwitch } from './vendor-switch'
 import { applyModelSettings } from './model-settings'
+import type { EvalRecorder } from '../eval/eval-recorder'
+import type { EvalFixtureStore } from '../eval/eval-fixture-store'
 import type { AccessProvider } from '../access'
 import type {
   AccessState,
@@ -113,6 +115,8 @@ interface MainWindowDependencies {
     stop: (reason: 'user' | 'timer') => ObservationState
     getState: () => ObservationState
   }
+  evalRecorder: EvalRecorder
+  evalFixtureStore: EvalFixtureStore
 }
 
 let mainWindow: BrowserWindow | null = null
@@ -1029,4 +1033,95 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     log.info('[Updater] Install requested from renderer')
     void quitAndInstall()
   })
+
+  // Eval recorder + fixture review (Developer mode). Handlers ship in every build
+  // and are inert until the hidden UI invokes them.
+  ipcMain.handle('main-window:evalStartRecording', (_event: IpcMainInvokeEvent, name: unknown) => {
+    if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
+    try {
+      const status = deps.evalRecorder.start(typeof name === 'string' ? name : '')
+      return { success: true as const, status }
+    } catch (error) {
+      return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
+    }
+  })
+
+  ipcMain.handle('main-window:evalStopRecording', async () => {
+    if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
+    try {
+      const result = await deps.evalRecorder.stop()
+      return {
+        success: true as const,
+        fixture: {
+          name: path.basename(result.fixtureDir),
+          frameCount: result.frameCount,
+          eventWindowCount: result.eventWindowCount,
+          hasVideo: result.video?.ok ?? false,
+        },
+      }
+    } catch (error) {
+      return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
+    }
+  })
+
+  ipcMain.handle('main-window:evalRecordingStatus', () => {
+    return deps?.evalRecorder.getStatus() ?? { recording: false, name: null, startedAt: null }
+  })
+
+  ipcMain.handle('main-window:evalListFixtures', () => {
+    return deps?.evalFixtureStore.list() ?? []
+  })
+
+  ipcMain.handle('main-window:evalLoadFixture', (_event: IpcMainInvokeEvent, name: unknown) => {
+    if (!deps || typeof name !== 'string') return null
+    return deps.evalFixtureStore.load(name)
+  })
+
+  ipcMain.handle(
+    'main-window:evalSaveGolden',
+    (_event: IpcMainInvokeEvent, name: unknown, markdown: unknown) => {
+      if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
+      if (typeof name !== 'string' || typeof markdown !== 'string') {
+        return { success: false as const, error: 'Invalid arguments' }
+      }
+      try {
+        deps.evalFixtureStore.saveGolden(name, markdown)
+        return { success: true as const }
+      } catch (error) {
+        return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
+      }
+    },
+  )
+
+  ipcMain.handle('main-window:evalDeleteFixture', (_event: IpcMainInvokeEvent, name: unknown) => {
+    if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
+    if (typeof name !== 'string') return { success: false as const, error: 'Invalid arguments' }
+    try {
+      deps.evalFixtureStore.delete(name)
+      return { success: true as const }
+    } catch (error) {
+      return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
+    }
+  })
+
+  ipcMain.handle(
+    'main-window:evalExportFixture',
+    async (_event: IpcMainInvokeEvent, name: unknown) => {
+      if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
+      if (typeof name !== 'string') return { success: false as const, error: 'Invalid arguments' }
+      const result = await dialog.showSaveDialog(getMainWindow() ?? undefined, {
+        title: 'Export Eval Fixture',
+        defaultPath: path.join(app.getPath('desktop'), `${name}.zip`),
+        buttonLabel: 'Export',
+        filters: [{ name: 'ZIP Archives', extensions: ['zip'] }],
+      })
+      if (result.canceled || !result.filePath) return { success: false as const, error: 'Canceled' }
+      try {
+        await deps.evalFixtureStore.exportZip(name, result.filePath)
+        return { success: true as const, path: result.filePath }
+      } catch (error) {
+        return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
+      }
+    },
+  )
 }

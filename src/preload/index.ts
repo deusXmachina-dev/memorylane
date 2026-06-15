@@ -135,6 +135,16 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   },
   // App lifecycle
   restartApp: () => ipcRenderer.invoke('main-window:restartApp'),
+  // Eval recorder + fixture review (Developer mode)
+  evalStartRecording: (name: string) => ipcRenderer.invoke('main-window:evalStartRecording', name),
+  evalStopRecording: () => ipcRenderer.invoke('main-window:evalStopRecording'),
+  evalRecordingStatus: () => ipcRenderer.invoke('main-window:evalRecordingStatus'),
+  evalListFixtures: () => ipcRenderer.invoke('main-window:evalListFixtures'),
+  evalLoadFixture: (name: string) => ipcRenderer.invoke('main-window:evalLoadFixture', name),
+  evalSaveGolden: (name: string, markdown: string) =>
+    ipcRenderer.invoke('main-window:evalSaveGolden', name, markdown),
+  evalDeleteFixture: (name: string) => ipcRenderer.invoke('main-window:evalDeleteFixture', name),
+  evalExportFixture: (name: string) => ipcRenderer.invoke('main-window:evalExportFixture', name),
   // Host platform — read once at preload time; never changes mid-session.
   platform: process.platform,
 })

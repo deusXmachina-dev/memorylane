@@ -33,6 +33,8 @@ import {
 import { PresenceMonitor } from './presence-monitor'
 import { getSystemIdleSeconds, shouldPause } from './power-monitor'
 import { PRESENCE_MONITOR_CONFIG } from '../shared/constants'
+import { EvalRecorder } from './eval/eval-recorder'
+import { EvalFixtureStore } from './eval/eval-fixture-store'
 
 export interface MainRuntime {
   capture: RuntimeCapture
@@ -42,6 +44,9 @@ export interface MainRuntime {
   inferenceProvider: InferenceProvider
   semanticService: ActivitySemanticService
   accessProvider: AccessProvider
+  evalRecorder: EvalRecorder
+  evalFixtureStore: EvalFixtureStore
+  evalFixturesRoot: string
   updateExclusions(exclusions: {
     apps: string[]
     windowTitlePatterns: string[]
@@ -239,6 +244,17 @@ export async function createMainRuntime(params: {
   const deviceIdentity = params.deviceIdentity ?? new DeviceIdentity()
   const accessProvider = createAccessProvider(params.edition, deviceIdentity)
 
+  // In-app eval recorder (Developer mode). Inert until start() is called; ships
+  // in every build but does nothing unless the hidden UI invokes it.
+  const evalFixturesRoot = path.join(userDataPath, 'eval-fixtures')
+  const evalRecorder = new EvalRecorder({
+    harness,
+    capture,
+    storage,
+    fixturesRoot: evalFixturesRoot,
+  })
+  const evalFixtureStore = new EvalFixtureStore(evalFixturesRoot)
+
   let disposePromise: Promise<void> | null = null
 
   return {
@@ -249,6 +265,9 @@ export async function createMainRuntime(params: {
     inferenceProvider,
     semanticService,
     accessProvider,
+    evalRecorder,
+    evalFixtureStore,
+    evalFixturesRoot,
     updateExclusions(exclusions): void {
       blacklistCoordinator.updateExclusions(exclusions)
     },
