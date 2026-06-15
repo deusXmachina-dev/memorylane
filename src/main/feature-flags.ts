@@ -12,6 +12,6 @@
  *   ML_TASK_MINING=1 npm run dev
  *
  * When ON, the TaskMiner runs on the daily schedule INSTEAD of the
- * PatternDetector, and the task-related MCP tools are registered.
+ * PatternDetector.
  */
 export const TASK_MINING_ENABLED = process.env.ML_TASK_MINING === '1'
