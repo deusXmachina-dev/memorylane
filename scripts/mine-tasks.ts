@@ -72,6 +72,10 @@ function parseArgs(): CliArgs {
       i++
     } else if (args[i] === '--days' && args[i + 1]) {
       days = parseInt(args[i + 1], 10)
+      if (isNaN(days) || days < 0) {
+        console.error(`Invalid --days: ${args[i + 1]} (use a non-negative integer)`)
+        process.exit(1)
+      }
       i++
     } else if (args[i] === '--date' && args[i + 1]) {
       const target = new Date(args[i + 1] + 'T00:00:00')

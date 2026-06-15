@@ -127,6 +127,10 @@ export async function runDetection(
   // =========================================================================
 
   const tools = buildVerificationTools(storage, embeddingService, start, end, progress)
+  // The grounding tools (search/browse) can surface activities from other days;
+  // a sighting must stay inside the day being mined, so its final ids are
+  // intersected with this window before the duration is computed.
+  const dayActivityIds = new Set(activities.map((a) => a.id))
   progress(`[Phase 2] Grounding ${candidates.length} candidates with tool access...`)
 
   let candidatesKept = 0
@@ -185,9 +189,18 @@ export async function runDetection(
 
       // Finalize activity_ids and resolve them to real activities. The window
       // and interaction time are computed from these — never LLM-estimated.
-      const finalIds = (parsed.activity_ids as string[] | undefined)?.length
+      const requestedIds = (parsed.activity_ids as string[] | undefined)?.length
         ? (parsed.activity_ids as string[])
         : candidate.activity_ids
+      // Keep only ids inside the day being mined — a sighting can't span days,
+      // and an out-of-window id would inflate the computed duration.
+      const finalIds = requestedIds.filter((id) => dayActivityIds.has(id))
+      const droppedOutOfWindow = requestedIds.length - finalIds.length
+      if (droppedOutOfWindow > 0) {
+        progress(
+          `[Phase 2] "${candidate.title}": dropped ${droppedOutOfWindow} activity id(s) outside ${label}`,
+        )
+      }
       const resolved = storage.activities.getByIds(finalIds)
       if (resolved.length === 0) {
         candidatesRejected++

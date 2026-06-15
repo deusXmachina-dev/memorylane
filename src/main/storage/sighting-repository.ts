@@ -97,7 +97,7 @@ export class SightingRepository {
     return row.count
   }
 
-  /** Delete sightings older than `maxAgeDays`. Re-cluster afterwards. */
+  /** Delete sightings older than `maxAgeDays` (DB hygiene). */
   pruneOlderThan(maxAgeDays = 90, now: number = Date.now()): number {
     const cutoff = now - maxAgeDays * 86_400_000
     return this.db.prepare('DELETE FROM sightings WHERE detected_at < ?').run(cutoff).changes

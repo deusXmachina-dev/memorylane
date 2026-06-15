@@ -1,7 +1,8 @@
 import type Database from 'better-sqlite3'
 
-/** Incremental-mining cursor: records when each run happened so the next run
- *  knows where to resume. Only the latest timestamp is ever read back. */
+/** Once-per-day gate: records when each run happened. The only thing read back
+ *  is MAX(ran_at), which the scheduler compares against `now` to skip running
+ *  more than once a day. Empty runs are recorded too, so the gate still trips. */
 export class MiningRunRepository {
   constructor(private readonly db: Database.Database) {}
 

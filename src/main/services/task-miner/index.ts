@@ -2,17 +2,14 @@
  * Task mining module (in development behind the ML_TASK_MINING flag).
  *
  * Two-phase mining that writes grounded *sightings* (task instances). It does
- * NOT match, dedup, or assign patterns — that is the deterministic clusterer's
- * job, run over the sightings table.
+ * NOT match, dedup, or assign patterns — sightings are append-only and carved
+ * in stone.
  *   Phase 1 (Scan): one LLM call over a full day's activities discovers
  *     discrete task-instance candidates, each grounded in real activity_ids.
  *   Phase 2 (Ground): each candidate gets its own tool-equipped LLM call to
  *     confirm it's a real task and finalize its activity_ids. The time window
  *     and interaction time are then COMPUTED from those activities (never
- *     LLM-estimated), the title/description are embedded, and a sighting is
- *     written.
- * After a successful run the sightings are (re)clustered into process
- * candidates — deterministic and cheap, so it runs inline.
+ *     LLM-estimated) and a sighting is written.
  *
  * Includes built-in scheduling: call scheduleRun() on screen unlock and the
  * service handles interval guards, settle delays, and error isolation.

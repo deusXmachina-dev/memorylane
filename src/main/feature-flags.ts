@@ -6,7 +6,7 @@
  */
 
 /**
- * Task mining (sightings → clusters), in development alongside the existing
+ * Task mining (grounded sightings), in development alongside the existing
  * pattern detector. OFF by default. Enable for a dev session with:
  *
  *   ML_TASK_MINING=1 npm run dev
