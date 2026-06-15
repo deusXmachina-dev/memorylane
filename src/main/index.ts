@@ -204,6 +204,8 @@ app.on('ready', async () => {
         return { detailLevel: level === 'detailed' ? 'detailed' : 'summary' }
       },
       getBackendUrl: () => ENTERPRISE_BACKEND_CONFIG.BACKEND_URL,
+      getLastUploadAt: () => runtime?.storage.uploadRuns.getLastRunTimestamp() ?? null,
+      recordUploadAt: (ts) => runtime?.storage.uploadRuns.record(ts),
     })
     databaseUploadSync.start()
   }
@@ -332,6 +334,8 @@ app.on('ready', async () => {
     },
     onResume: () => {
       captureCoordinator.resumeCaptureIfDesired('resume')
+      // Catch up uploads on wake — the 24h interval doesn't survive sleep.
+      databaseUploadSync?.scheduleUploadIfStale('resume')
     },
   })
 

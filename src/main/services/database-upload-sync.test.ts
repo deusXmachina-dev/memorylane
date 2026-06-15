@@ -42,6 +42,8 @@ describe('DatabaseUploadSync', () => {
       isSyncEnabled: () => true,
       getStripOptions: () => ({ detailLevel: 'summary' as const }),
       getBackendUrl: () => 'http://localhost:8000/',
+      getLastUploadAt: () => null,
+      recordUploadAt: () => {},
     })
 
     sync.start()
@@ -75,6 +77,8 @@ describe('DatabaseUploadSync', () => {
       isSyncEnabled: () => true,
       getStripOptions: () => ({ detailLevel: 'summary' as const }),
       getBackendUrl: () => 'http://localhost:8000/',
+      getLastUploadAt: () => null,
+      recordUploadAt: () => {},
     })
 
     sync.start()
@@ -101,6 +105,8 @@ describe('DatabaseUploadSync', () => {
       isSyncEnabled: () => true,
       getStripOptions: () => ({ detailLevel: 'summary' as const }),
       getBackendUrl: () => 'http://localhost:8000/',
+      getLastUploadAt: () => null,
+      recordUploadAt: () => {},
     })
 
     sync.start()
@@ -126,6 +132,8 @@ describe('DatabaseUploadSync', () => {
       isSyncEnabled: () => true,
       getStripOptions: () => ({ detailLevel: 'summary' as const }),
       getBackendUrl: () => 'http://localhost:8000/',
+      getLastUploadAt: () => null,
+      recordUploadAt: () => {},
     })
 
     sync.start()
@@ -154,6 +162,8 @@ describe('DatabaseUploadSync', () => {
       isSyncEnabled: () => true,
       getStripOptions: () => ({ detailLevel: 'summary' as const }),
       getBackendUrl: () => 'http://localhost:8000/',
+      getLastUploadAt: () => null,
+      recordUploadAt: () => {},
       intervalMs: 1000,
     })
 
@@ -182,6 +192,8 @@ describe('DatabaseUploadSync', () => {
       isSyncEnabled: () => false,
       getStripOptions: () => ({ detailLevel: 'summary' as const }),
       getBackendUrl: () => 'http://localhost:8000/',
+      getLastUploadAt: () => null,
+      recordUploadAt: () => {},
     })
 
     sync.start()
@@ -206,6 +218,8 @@ describe('DatabaseUploadSync', () => {
       isSyncEnabled: () => false,
       getStripOptions: () => ({ detailLevel: 'summary' as const }),
       getBackendUrl: () => 'http://localhost:8000/',
+      getLastUploadAt: () => null,
+      recordUploadAt: () => {},
     })
 
     const result = await sync.triggerUpload()
@@ -237,6 +251,8 @@ describe('DatabaseUploadSync', () => {
       isSyncEnabled: () => syncOn,
       getStripOptions: () => ({ detailLevel: 'summary' as const }),
       getBackendUrl: () => 'http://localhost:8000/',
+      getLastUploadAt: () => null,
+      recordUploadAt: () => {},
       intervalMs: 1000,
     })
 
@@ -253,6 +269,154 @@ describe('DatabaseUploadSync', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
     await sync.stop()
+  })
+
+  it('skips startup upload when already uploaded earlier today', async () => {
+    const fetchMock = mockFetchResponse(201, { ok: true })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const backupToFile = vi.fn(async (dest: string) => {
+      fs.writeFileSync(dest, 'dbcontent')
+    })
+
+    const sync = new DatabaseUploadSync({
+      storage: { backupToFile },
+      getDeviceId: () => 'device-hex-id',
+      isActivated: () => true,
+      isSyncEnabled: () => true,
+      getStripOptions: () => ({ detailLevel: 'summary' as const }),
+      getBackendUrl: () => 'http://localhost:8000/',
+      // Uploaded a few hours ago (same calendar day) — gate should skip.
+      getLastUploadAt: () => Date.now() - 3 * 60 * 60 * 1000,
+      recordUploadAt: () => {},
+    })
+
+    sync.start()
+    await sync.stop()
+
+    expect(backupToFile).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('uploads when the last upload was a previous day', async () => {
+    const fetchMock = mockFetchResponse(201, {
+      ok: true,
+      upload_id: 'up_1',
+      checksum_sha256: 'abc',
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const backupToFile = vi.fn(async (dest: string) => {
+      fs.writeFileSync(dest, 'dbcontent')
+    })
+
+    const sync = new DatabaseUploadSync({
+      storage: { backupToFile },
+      getDeviceId: () => 'device-hex-id',
+      isActivated: () => true,
+      isSyncEnabled: () => true,
+      getStripOptions: () => ({ detailLevel: 'summary' as const }),
+      getBackendUrl: () => 'http://localhost:8000/',
+      // Last upload ~2 days ago — gate should let it through.
+      getLastUploadAt: () => Date.now() - 2 * 24 * 60 * 60 * 1000,
+      recordUploadAt: () => {},
+    })
+
+    sync.start()
+    await sync.stop()
+
+    expect(backupToFile).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('records the timestamp only on a successful upload', async () => {
+    const fetchMock = mockFetchResponse(500, 'server error')
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const backupToFile = vi.fn(async (dest: string) => {
+      fs.writeFileSync(dest, 'dbcontent')
+    })
+    const recordUploadAt = vi.fn()
+
+    const sync = new DatabaseUploadSync({
+      storage: { backupToFile },
+      getDeviceId: () => 'device-hex-id',
+      isActivated: () => true,
+      isSyncEnabled: () => true,
+      getStripOptions: () => ({ detailLevel: 'summary' as const }),
+      getBackendUrl: () => 'http://localhost:8000/',
+      getLastUploadAt: () => null,
+      recordUploadAt,
+    })
+
+    sync.start()
+    await sync.stop()
+
+    // Upload failed (HTTP 500) — timestamp must NOT be recorded, so the next
+    // wake/startup retries.
+    expect(recordUploadAt).not.toHaveBeenCalled()
+  })
+
+  it('records the timestamp after a successful upload', async () => {
+    const fetchMock = mockFetchResponse(201, {
+      ok: true,
+      upload_id: 'up_1',
+      checksum_sha256: 'abc',
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const backupToFile = vi.fn(async (dest: string) => {
+      fs.writeFileSync(dest, 'dbcontent')
+    })
+    const recordUploadAt = vi.fn()
+
+    const sync = new DatabaseUploadSync({
+      storage: { backupToFile },
+      getDeviceId: () => 'device-hex-id',
+      isActivated: () => true,
+      isSyncEnabled: () => true,
+      getStripOptions: () => ({ detailLevel: 'summary' as const }),
+      getBackendUrl: () => 'http://localhost:8000/',
+      getLastUploadAt: () => null,
+      recordUploadAt,
+    })
+
+    sync.start()
+    await sync.stop()
+
+    expect(recordUploadAt).toHaveBeenCalledTimes(1)
+  })
+
+  it('triggerUpload forces an upload even when already uploaded today', async () => {
+    const fetchMock = mockFetchResponse(201, {
+      ok: true,
+      upload_id: 'up_1',
+      checksum_sha256: 'abc',
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const backupToFile = vi.fn(async (dest: string) => {
+      fs.writeFileSync(dest, 'dbcontent')
+    })
+
+    const sync = new DatabaseUploadSync({
+      storage: { backupToFile },
+      getDeviceId: () => 'device-hex-id',
+      isActivated: () => true,
+      isSyncEnabled: () => true,
+      getStripOptions: () => ({ detailLevel: 'summary' as const }),
+      getBackendUrl: () => 'http://localhost:8000/',
+      // Already uploaded today — the gate would skip an automatic upload, but
+      // a manual trigger must bypass it.
+      getLastUploadAt: () => Date.now(),
+      recordUploadAt: () => {},
+    })
+
+    const result = await sync.triggerUpload()
+
+    expect(result).toEqual({ success: true })
+    expect(backupToFile).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('in-flight upload completes even if the gate flips to false mid-flight', async () => {
@@ -282,6 +446,8 @@ describe('DatabaseUploadSync', () => {
       isSyncEnabled: () => syncOn,
       getStripOptions: () => ({ detailLevel: 'summary' as const }),
       getBackendUrl: () => 'http://localhost:8000/',
+      getLastUploadAt: () => null,
+      recordUploadAt: () => {},
       intervalMs: 1000,
     })
 
