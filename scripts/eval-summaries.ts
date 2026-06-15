@@ -8,8 +8,9 @@
  * the same as the target?). Writes a findings-style Markdown scorecard + JSON.
  *
  * Deterministic upstream of the LLM (see replay-harness.ts); only the model and
- * producer config are variables. Needs no live app — just capture-settings.json
- * / vendor-credentials.json + an API key.
+ * pipeline are variables — everything else runs against code defaults. Reads the
+ * app's own settings/credentials (active vendor, API key from env); needs no
+ * live app.
  *
  * Benchmarks run in the VIDEO pipeline by default (production's default), each
  * model in isolation (no preset fallback). Pass `--pipeline image` to benchmark
@@ -17,10 +18,10 @@
  * image-vs-image — a model that can't serve the lane shows as an empty summary.
  *
  * Usage:
- *   npm run eval-summaries -- --fixtures vscode-debug --models google/gemini-2.5-flash
- *   npm run eval-summaries -- --fixtures a,b --models m1,m2 --judge-model google/gemini-2.5-pro
- *   npm run eval-summaries -- --fixtures X --no-llm-judge          (deterministic only, free)
- *   npm run eval-summaries -- --fixtures-dir evals/semantic-summary/fixtures --pipeline image
+ *   npm run eval-summaries                                  (all fixtures, default model, no judge)
+ *   npm run eval-summaries -- --fixture vscode-debug
+ *   npm run eval-summaries -- --model google/gemini-2.5-flash --judge
+ *   npm run eval-summaries -- --pipeline image              (benchmark snapshot models)
  */
 
 import { config as loadEnv } from 'dotenv'
@@ -29,10 +30,7 @@ loadEnv()
 import * as fs from 'fs'
 import * as path from 'path'
 import { VENDOR_PRESETS } from '../src/shared/vendor-defaults'
-import {
-  SemanticFileDebugDumper,
-  type SemanticPipelinePreference,
-} from '../src/main/activity-semantic-service'
+import type { SemanticPipelinePreference } from '../src/main/activity-semantic-service'
 import { scoreDeterministic } from '../src/main/eval/deterministic'
 import { judgeSummary, judgeEquivalence } from '../src/main/eval/judge'
 import { priceUsd, sumCosts } from '../src/main/eval/cost'
@@ -50,43 +48,21 @@ import { replayCell } from './replay-cell'
 import { loadCliInferenceProvider, type CliInferenceProviderHandle } from './cli-inference-provider'
 
 const FIXTURES_ROOT = path.resolve('evals/semantic-summary/fixtures')
-const DEFAULT_RESULTS_DIR = path.resolve('evals/semantic-summary/results')
+const RESULTS_DIR = path.resolve('evals/semantic-summary/results')
+const FIXTURE_FILE = 'event-windows.jsonl'
+const CONCURRENCY = 4
 
 interface CliArgs {
   fixtures: string[]
-  fixturesDir: string | null
   models: string[]
   pipeline: SemanticPipelinePreference
-  judgeModel: string | null
-  noLlmJudge: boolean
-  ocr: boolean
-  concurrency: number
-  dumpRoundTrips: string | null
-  out: string
-  apiKey: string | undefined
-  userDataPath: string | undefined
-  vendorOverride: string | undefined
+  judge: boolean
 }
 
 function parseArgs(): CliArgs {
   const args = process.argv.slice(2)
-  const a: CliArgs = {
-    fixtures: [],
-    fixturesDir: null,
-    models: [],
-    // Video is the production default pipeline, so benchmark there by default.
-    // Pass `--pipeline image` to benchmark snapshot models instead.
-    pipeline: 'video',
-    judgeModel: null,
-    noLlmJudge: false,
-    ocr: false,
-    concurrency: 4,
-    dumpRoundTrips: null,
-    out: DEFAULT_RESULTS_DIR,
-    apiKey: undefined,
-    userDataPath: undefined,
-    vendorOverride: undefined,
-  }
+  // Video is the production default pipeline, so benchmark there by default.
+  const a: CliArgs = { fixtures: [], models: [], pipeline: 'video', judge: false }
   const list = (s: string): string[] =>
     s
       .split(',')
@@ -106,9 +82,6 @@ function parseArgs(): CliArgs {
       case '--fixtures':
         i = take((v) => a.fixtures.push(...list(v)), i)
         break
-      case '--fixtures-dir':
-        i = take((v) => (a.fixturesDir = v), i)
-        break
       case '--models':
       case '--model':
         i = take((v) => (a.models = list(v)), i)
@@ -118,32 +91,8 @@ function parseArgs(): CliArgs {
           if (v === 'auto' || v === 'video' || v === 'image') a.pipeline = v
         }, i)
         break
-      case '--judge-model':
-        i = take((v) => (a.judgeModel = v), i)
-        break
-      case '--no-llm-judge':
-        a.noLlmJudge = true
-        break
-      case '--ocr':
-        a.ocr = true
-        break
-      case '--concurrency':
-        i = take((v) => (a.concurrency = Math.max(1, parseInt(v, 10))), i)
-        break
-      case '--dump-roundtrips':
-        i = take((v) => (a.dumpRoundTrips = v), i)
-        break
-      case '--out':
-        i = take((v) => (a.out = path.resolve(v)), i)
-        break
-      case '--api-key':
-        i = take((v) => (a.apiKey = v), i)
-        break
-      case '--user-data':
-        i = take((v) => (a.userDataPath = v), i)
-        break
-      case '--vendor':
-        i = take((v) => (a.vendorOverride = v), i)
+      case '--judge':
+        a.judge = true
         break
     }
   }
@@ -152,23 +101,21 @@ function parseArgs(): CliArgs {
 
 function resolveFixtureDir(nameOrPath: string): string {
   const asPath = path.resolve(nameOrPath)
-  if (fs.existsSync(path.join(asPath, 'event-windows.jsonl'))) return asPath
+  if (fs.existsSync(path.join(asPath, FIXTURE_FILE))) return asPath
   const asName = path.join(FIXTURES_ROOT, nameOrPath)
-  if (fs.existsSync(path.join(asName, 'event-windows.jsonl'))) return asName
+  if (fs.existsSync(path.join(asName, FIXTURE_FILE))) return asName
   throw new Error(`Fixture not found: "${nameOrPath}"`)
 }
 
+/** Named fixtures, or every fixture in the standard root when none are named. */
 function resolveFixtureDirs(a: CliArgs): string[] {
-  const dirs = a.fixtures.map(resolveFixtureDir)
-  if (a.fixturesDir) {
-    const root = path.resolve(a.fixturesDir)
-    for (const entry of fs.readdirSync(root)) {
-      const dir = path.join(root, entry)
-      if (fs.existsSync(path.join(dir, 'event-windows.jsonl'))) dirs.push(dir)
-    }
-  }
-  if (dirs.length === 0) throw new Error('No fixtures. Use --fixtures or --fixtures-dir.')
-  return [...new Set(dirs)]
+  if (a.fixtures.length) return [...new Set(a.fixtures.map(resolveFixtureDir))]
+  const dirs = fs
+    .readdirSync(FIXTURES_ROOT)
+    .map((entry) => path.join(FIXTURES_ROOT, entry))
+    .filter((dir) => fs.existsSync(path.join(dir, FIXTURE_FILE)))
+  if (dirs.length === 0) throw new Error(`No fixtures in ${FIXTURES_ROOT}.`)
+  return dirs
 }
 
 function defaultJudgeModel(handle: CliInferenceProviderHandle): string | null {
@@ -208,32 +155,18 @@ const mean = (xs: number[]): number => xs.reduce((x, y) => x + y, 0) / xs.length
 async function main() {
   const a = parseArgs()
   const fixtureDirs = resolveFixtureDirs(a)
-  const handle = loadCliInferenceProvider({
-    apiKey: a.apiKey,
-    userDataPath: a.userDataPath,
-    vendorOverride: a.vendorOverride,
-  })
+  const handle = loadCliInferenceProvider()
   const presets = VENDOR_PRESETS[handle.vendor]
-  const judgeModel = a.noLlmJudge ? null : (a.judgeModel ?? defaultJudgeModel(handle))
+  const judgeModel = a.judge ? defaultJudgeModel(handle) : null
 
   // Default model matches the pipeline: the video model for video/auto, the
-  // snapshot model for image — so `--models` can be omitted for a quick run.
+  // snapshot model for image — so `--model` can be omitted for a quick run.
   const defaultModel =
     a.pipeline === 'image'
       ? (presets.semanticSnapshot[0]?.id ?? handle.semanticSnapshotModel)
       : (presets.semanticVideo[0]?.id ?? handle.semanticVideoModel)
   const models = a.models.length ? a.models : [defaultModel].filter(Boolean)
-  if (models.length === 0) throw new Error('No models. Pass --models <id,...>.')
-
-  // Round-trip dumping (optional) clobbers a shared dir, so it forces serial runs.
-  const dumper = a.dumpRoundTrips
-    ? new SemanticFileDebugDumper({
-        rootDir: path.resolve(a.dumpRoundTrips),
-        cleanRootDir: true,
-        copyMediaAssets: true,
-      })
-    : undefined
-  const concurrency = dumper ? 1 : a.concurrency
+  if (models.length === 0) throw new Error('No models. Pass --model <id>.')
 
   const cells: Cell[] = []
   for (const dir of fixtureDirs)
@@ -244,7 +177,7 @@ async function main() {
     `=== Eval ===  vendor=${handle.vendor} cells=${cells.length} judge=${judgeModel ?? 'none'}`,
   )
 
-  const fixtures: FixtureScore[] = await runWithConcurrency(cells, concurrency, async (cell) => {
+  const fixtures: FixtureScore[] = await runWithConcurrency(cells, CONCURRENCY, async (cell) => {
     const {
       activities,
       producerStats,
@@ -255,8 +188,6 @@ async function main() {
       fixtureDir: cell.fixtureDir,
       model: cell.model,
       pipeline: a.pipeline,
-      dumper,
-      ocr: a.ocr,
     })
     const goldens = loadGoldenMd(path.join(cell.fixtureDir, 'golden.md'))
 
@@ -312,11 +243,11 @@ async function main() {
   if (judgeModel && fixtures.every((f) => f.avgJudge10 === null)) {
     console.warn(
       `⚠  Judge "${judgeModel}" returned no scores for any summary — it likely can't ` +
-        `accept images, or every call failed. Pass --judge-model <multimodal-model> or --no-llm-judge.`,
+        `accept images, or every call failed. Drop --judge to skip the judge.`,
     )
   }
 
-  const { runDir, comparePath } = writeReport(a.out, report)
+  const { runDir, comparePath } = writeReport(RESULTS_DIR, report)
   console.log('')
   console.log(renderMarkdown(report).split('\n## Summaries')[0])
   console.log(`Wrote ${runDir}/`)

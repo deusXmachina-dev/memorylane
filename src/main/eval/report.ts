@@ -1,18 +1,10 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { formatOffset } from './golden-md'
+import { num as fmt, pct, usd, cell } from './format'
 import type { EvalReport, FixtureScore, ScoredSummary } from './types'
 
 /** Renders an EvalReport into a findings-style Markdown scorecard + raw JSON. */
-
-function fmt(n: number | null, digits = 2): string {
-  return n === null || Number.isNaN(n) ? '—' : n.toFixed(digits)
-}
-
-/** Escapes free text for a Markdown table cell (pipes, newlines → <br>). */
-function cell(text: string): string {
-  return text.replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>').trim()
-}
 
 /**
  * The model label for a variant, surfacing model-chain fallback: when the model
@@ -48,11 +40,11 @@ export function renderMarkdown(report: EvalReport): string {
   )
   lines.push('|---|---|--:|--:|--:|--:|--:|--:|--:|')
   for (const f of report.fixtures) {
-    const seg = f.segmentation ? `${fmt(f.segmentation.coverage * 100, 0)}%` : '—'
+    const seg = f.segmentation ? pct(f.segmentation.coverage) : '—'
     lines.push(
       `| ${f.fixture} | ${modelLabel(f)} | ${f.summaries.length} | ` +
-        `${fmt(f.detPassRate * 100, 0)}% | ${f.hardFails} | ${fmt(f.avgJudge10)} | ` +
-        `${seg} | ${fmt(f.avgEquivalence, 2)} | ${f.costUsd != null ? `$${fmt(f.costUsd, 4)}` : '—'} |`,
+        `${pct(f.detPassRate)} | ${f.hardFails} | ${fmt(f.avgJudge10)} | ` +
+        `${seg} | ${fmt(f.avgEquivalence, 2)} | ${usd(f.costUsd)} |`,
     )
   }
   lines.push('')
@@ -144,11 +136,11 @@ export function renderComparisonMarkdown(report: EvalReport): string | null {
     lines.push('| Variant | Acts | Det pass% | Hard fails | Judge/10 | Seg% | Equiv | Cost (USD) |')
     lines.push('|---|--:|--:|--:|--:|--:|--:|--:|')
     for (const s of scores) {
-      const seg = s.segmentation ? `${fmt(s.segmentation.coverage * 100, 0)}%` : '—'
+      const seg = s.segmentation ? pct(s.segmentation.coverage) : '—'
       lines.push(
-        `| ${modelLabel(s)} | ${s.summaries.length} | ${fmt(s.detPassRate * 100, 0)}% | ` +
+        `| ${modelLabel(s)} | ${s.summaries.length} | ${pct(s.detPassRate)} | ` +
           `${s.hardFails} | ${fmt(s.avgJudge10)} | ${seg} | ${fmt(s.avgEquivalence, 2)} | ` +
-          `${s.costUsd != null ? `$${fmt(s.costUsd, 4)}` : '—'} |`,
+          `${usd(s.costUsd)} |`,
       )
     }
     lines.push('')

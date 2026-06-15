@@ -8,15 +8,14 @@
  *
  * Each fixture is a whole real day exported from the dev DB (realistic volume),
  * with a hand-authored golden.md listing its useful tasks; see
- * evals/task-mining/README.md. Needs no live app — just capture-settings.json /
- * vendor-credentials.json + an API key.
+ * evals/task-mining/README.md. Reads the app's own settings/credentials (active
+ * vendor, API key from env); needs no live app.
  *
  * Usage:
- *   npm run eval-tasks -- --fixtures 2026-06-10 --label   (append found sightings to golden.md to thumbs)
- *   npm run eval-tasks -- --fixtures 2026-06-10           (score against your keep/reject labels)
- *   npm run eval-tasks -- --fixtures a,b --models m1,m2 --judge-model X
- *   npm run eval-tasks -- --fixtures X --no-llm-judge     (deterministic only, free)
- *   npm run eval-tasks -- --fixtures-dir evals/task-mining/fixtures
+ *   npm run eval-tasks                                    (all fixtures, default model, no judge)
+ *   npm run eval-tasks -- --fixture 2026-06-10 --label   (append found sightings to golden.md to thumbs)
+ *   npm run eval-tasks -- --fixture 2026-06-10           (score against your keep/reject labels)
+ *   npm run eval-tasks -- --model m1 --judge             (semantic-equivalence judge, paid)
  */
 
 import { config as loadEnv } from 'dotenv'
@@ -29,6 +28,7 @@ import { PATTERN_DETECTION_CONFIG } from '../src/shared/constants'
 import { loadTaskFixture, runTaskFixture } from '../src/main/eval/task-replay'
 import { scoreTaskFixture, bestDetectedForGolden } from '../src/main/eval/task-score'
 import { renderLabelBlocks } from '../src/main/eval/task-golden-md'
+import { renderTaskMarkdown, writeTaskReport } from '../src/main/eval/task-report'
 import { judgeSighting } from '../src/main/eval/task-judge'
 import { priceUsd } from '../src/main/eval/cost'
 import type {
@@ -40,37 +40,19 @@ import type {
 import { loadCliInferenceProvider } from './cli-inference-provider'
 
 const FIXTURES_ROOT = path.resolve('evals/task-mining/fixtures')
-const DEFAULT_RESULTS_DIR = path.resolve('evals/task-mining/results')
+const RESULTS_DIR = path.resolve('evals/task-mining/results')
+const LOOKBACK_DAYS = PATTERN_DETECTION_CONFIG.LOOKBACK_DAYS
 
 interface CliArgs {
   fixtures: string[]
-  fixturesDir: string | null
   models: string[]
-  lookback: number
-  judgeModel: string | null
-  noLlmJudge: boolean
+  judge: boolean
   label: boolean
-  out: string
-  apiKey: string | undefined
-  userDataPath: string | undefined
-  vendorOverride: string | undefined
 }
 
 function parseArgs(): CliArgs {
   const args = process.argv.slice(2)
-  const a: CliArgs = {
-    fixtures: [],
-    fixturesDir: null,
-    models: [],
-    lookback: PATTERN_DETECTION_CONFIG.LOOKBACK_DAYS,
-    judgeModel: null,
-    noLlmJudge: false,
-    label: false,
-    out: DEFAULT_RESULTS_DIR,
-    apiKey: undefined,
-    userDataPath: undefined,
-    vendorOverride: undefined,
-  }
+  const a: CliArgs = { fixtures: [], models: [], judge: false, label: false }
   const list = (s: string): string[] =>
     s
       .split(',')
@@ -90,114 +72,28 @@ function parseArgs(): CliArgs {
       case '--fixtures':
         i = take((v) => a.fixtures.push(...list(v)), i)
         break
-      case '--fixtures-dir':
-        i = take((v) => (a.fixturesDir = v), i)
-        break
       case '--models':
       case '--model':
         i = take((v) => (a.models = list(v)), i)
         break
-      case '--lookback':
-        i = take((v) => (a.lookback = parseInt(v, 10)), i)
-        break
-      case '--judge-model':
-        i = take((v) => (a.judgeModel = v), i)
-        break
-      case '--no-llm-judge':
-        a.noLlmJudge = true
+      case '--judge':
+        a.judge = true
         break
       case '--label':
         a.label = true
-        break
-      case '--out':
-        i = take((v) => (a.out = path.resolve(v)), i)
-        break
-      case '--api-key':
-        i = take((v) => (a.apiKey = v), i)
-        break
-      case '--user-data':
-        i = take((v) => (a.userDataPath = v), i)
-        break
-      case '--vendor':
-        i = take((v) => (a.vendorOverride = v), i)
         break
     }
   }
   return a
 }
 
+/** Named fixtures, or every fixture in the standard root when none are named. */
 function resolveFixtureDirs(a: CliArgs): string[] {
-  if (a.fixturesDir) {
-    const root = path.resolve(a.fixturesDir)
-    return fs
-      .readdirSync(root)
-      .map((name) => path.join(root, name))
-      .filter((p) => fs.existsSync(path.join(p, 'manifest.json')))
-  }
-  return a.fixtures.map((name) => path.join(FIXTURES_ROOT, name))
-}
-
-// ---------------------------------------------------------------------------
-// Report rendering (findings-style, mirrors src/main/eval/report.ts)
-// ---------------------------------------------------------------------------
-
-const pct = (x: number | null): string => (x == null ? '—' : `${Math.round(x * 100)}%`)
-const num = (x: number | null, d = 2): string => (x == null ? '—' : x.toFixed(d))
-const usd = (x: number | null): string => (x == null ? '—' : `$${x.toFixed(4)}`)
-
-function renderMarkdown(report: TaskEvalReport): string {
-  const lines: string[] = []
-  lines.push(`# Task-Mining Eval — ${report.generatedAt}`)
-  lines.push('')
-  lines.push(`- Vendor: ${report.vendor}`)
-  lines.push(`- Judge: ${report.judgeModel ?? '(none)'}`)
-  lines.push('')
-  lines.push('## Scorecard')
-  lines.push('')
-  lines.push(
-    '| Fixture | Model | Found (keep) | Recall | Reject reproduced | New | Grounding | Equiv | Cost |',
-  )
-  lines.push('|---|---|--:|--:|--:|--:|--:|--:|--:|')
-  for (const f of report.fixtures) {
-    lines.push(
-      `| ${f.fixture} | ${f.model} | ${f.foundCount}/${f.positiveCount} | ${pct(f.recall)} | ` +
-        `${f.rejectedReproducedCount}/${f.negativeCount} | ${f.newCount} | ` +
-        `${pct(f.avgGroundingRecall)} | ${num(f.avgEquivalence)} | ${usd(f.costUsd)} |`,
-    )
-  }
-  lines.push('')
-  lines.push('## Detail')
-  for (const f of report.fixtures) {
-    lines.push('')
-    lines.push(`### ${f.fixture} | ${f.model}`)
-    lines.push(
-      `> ${f.detectedCount} sighting(s) detected; ${f.foundCount}/${f.positiveCount} keep tasks found; ` +
-        `${f.rejectedReproducedCount} reject(s) reproduced; ${f.newCount} new`,
-    )
-    if (f.rejectedReproducedTitles.length)
-      lines.push(`> ⚠ reproduced rejects: ${f.rejectedReproducedTitles.join('; ')}`)
-    if (f.bundledSightingIds.length)
-      lines.push(`> ⚠ ${f.bundledSightingIds.length} sighting(s) bundled multiple keep tasks`)
-    for (const g of f.goldenScores) {
-      const mark = g.found ? '✅' : '❌'
-      lines.push('')
-      lines.push(`- ${mark} **${g.goldenTitle}** → ${g.matchedTitle ?? '(missed)'}`)
-      lines.push(
-        `  - grounding: recall ${pct(g.grounding.recall)}, precision ${pct(g.grounding.precision)}, ` +
-          `IoU ${pct(g.grounding.iou)} (${g.grounding.matchedIds.length} ids)`,
-      )
-      if (g.equivalence != null) {
-        lines.push(`  - judge: equiv ${num(g.equivalence)}`)
-      }
-    }
-    if (f.newSightings.length) {
-      lines.push('')
-      lines.push('New (unlabeled — thumbs these with `--label`):')
-      for (const n of f.newSightings) lines.push(`  - ${n.title} (${n.activityIds.length} ids)`)
-    }
-  }
-  lines.push('')
-  return lines.join('\n')
+  if (a.fixtures.length) return a.fixtures.map((name) => path.join(FIXTURES_ROOT, name))
+  return fs
+    .readdirSync(FIXTURES_ROOT)
+    .map((name) => path.join(FIXTURES_ROOT, name))
+    .filter((p) => fs.existsSync(path.join(p, 'manifest.json')))
 }
 
 // ---------------------------------------------------------------------------
@@ -208,26 +104,22 @@ async function main() {
   const a = parseArgs()
   const dirs = resolveFixtureDirs(a)
   if (dirs.length === 0) {
-    console.error('No fixtures. Pass --fixtures <name,...> or --fixtures-dir <dir>.')
+    console.error(`No fixtures in ${FIXTURES_ROOT}. Pass --fixture <name> or add fixtures there.`)
     process.exit(1)
   }
 
-  const handle = loadCliInferenceProvider({
-    apiKey: a.apiKey,
-    userDataPath: a.userDataPath,
-    vendorOverride: a.vendorOverride,
-  })
+  const handle = loadCliInferenceProvider()
   const models =
     a.models.length > 0
       ? a.models
       : [handle.patternDetectionModel || PATTERN_DETECTION_CONFIG.MODEL]
-  const judgeModel = a.judgeModel ?? models[0]
+  const judgeModel = models[0]
 
   console.log('=== Task-Mining Eval ===')
   console.log(`Vendor:   ${handle.vendor}${handle.baseURL ? ` (${handle.baseURL})` : ''}`)
   console.log(`Models:   ${models.join(', ')}`)
-  console.log(`Judge:    ${a.noLlmJudge ? '(disabled)' : judgeModel}`)
-  console.log(`Lookback: ${a.lookback}d`)
+  console.log(`Judge:    ${a.judge ? judgeModel : '(disabled)'}`)
+  console.log(`Lookback: ${LOOKBACK_DAYS}d`)
   console.log(`Fixtures: ${dirs.map((d) => path.basename(d)).join(', ')}`)
   console.log('')
 
@@ -254,7 +146,7 @@ async function main() {
         provider: handle.provider,
         fixture,
         model,
-        lookbackDays: a.lookback,
+        lookbackDays: LOOKBACK_DAYS,
         embedder,
         onProgress: (msg) => console.log(`  ${msg}`),
       })
@@ -262,7 +154,7 @@ async function main() {
       const judge = new Map<string, TaskJudgeScore>()
       let judgeTokensIn = 0
       let judgeTokensOut = 0
-      if (!a.noLlmJudge) {
+      if (a.judge) {
         for (const g of fixture.golden.sightings) {
           if (g.verdict !== 'keep') continue
           const best = bestDetectedForGolden(g.activityIds, run.detected)
@@ -286,8 +178,8 @@ async function main() {
         model,
         detected: run.detected,
         tokenUsage: run.tokenUsage,
-        judge: a.noLlmJudge ? undefined : judge,
-        judgeCostUsd: a.noLlmJudge ? null : priceUsd(judgeModel, judgeTokensIn, judgeTokensOut),
+        judge: a.judge ? judge : undefined,
+        judgeCostUsd: a.judge ? priceUsd(judgeModel, judgeTokensIn, judgeTokensOut) : null,
       })
       scores.push(score)
       for (const n of score.newSightings) {
@@ -314,19 +206,13 @@ async function main() {
   const report: TaskEvalReport = {
     generatedAt: new Date().toISOString(),
     vendor: handle.vendor,
-    judgeModel: a.noLlmJudge ? null : judgeModel,
+    judgeModel: a.judge ? judgeModel : null,
     fixtures: scores,
   }
 
-  fs.mkdirSync(a.out, { recursive: true })
-  const stamp = report.generatedAt.replace(/[:.]/g, '-')
-  const jsonPath = path.join(a.out, `${stamp}.json`)
-  const mdPath = path.join(a.out, `${stamp}.md`)
-  fs.writeFileSync(jsonPath, JSON.stringify(report, null, 2), 'utf8')
-  fs.writeFileSync(mdPath, renderMarkdown(report), 'utf8')
-
+  const mdPath = writeTaskReport(RESULTS_DIR, report)
   console.log('\n=== Scorecard ===')
-  console.log(renderMarkdown(report))
+  console.log(renderTaskMarkdown(report))
   console.log(`\nWrote ${path.relative(process.cwd(), mdPath)}`)
 }
 

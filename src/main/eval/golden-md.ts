@@ -1,4 +1,5 @@
 import * as fs from 'fs'
+import { splitMarkdownBlocks } from './markdown-blocks'
 import type { ReplayActivity } from './types'
 
 /**
@@ -109,22 +110,8 @@ export function renderGoldenMd(
 
 /** Parses a golden.md back into structured activities. Lenient on whitespace. */
 export function parseGoldenMd(text: string): GoldenActivity[] {
-  const stripped = text.replace(/<!--[\s\S]*?-->/g, '')
   const out: GoldenActivity[] = []
-
-  // Split into blocks on `## ` headers.
-  const blocks: string[][] = []
-  let current: string[] | null = null
-  for (const rawLine of stripped.split('\n')) {
-    if (HEADER_RE.test(rawLine)) {
-      current = [rawLine]
-      blocks.push(current)
-    } else if (current) {
-      current.push(rawLine)
-    }
-  }
-
-  for (const block of blocks) {
+  for (const block of splitMarkdownBlocks(text, HEADER_RE)) {
     const headerMatch = block[0].match(HEADER_RE)
     if (!headerMatch) continue
     const appName = headerMatch[2].trim()
