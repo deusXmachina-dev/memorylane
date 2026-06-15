@@ -45,7 +45,7 @@
     "sign:win": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/sign-windows.ps1",
     "detect-patterns": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/detect-patterns.ts",
     "detect-patterns:prune": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/prune-patterns.ts",
-    "mine-tasks": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/detect-patterns.ts",
+    "mine-tasks": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/mine-tasks.ts",
     "cluster-tasks": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/cluster-tasks.ts",
     "build-user-context": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/build-user-context.ts",
     "promote-debug-fixture": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/promote-debug-fixture.ts",

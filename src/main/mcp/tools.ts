@@ -21,6 +21,7 @@ import type {
 } from '../storage'
 import type { EmbeddingService } from '../processor/embedding'
 import log from '../logger'
+import { TASK_MINING_ENABLED } from '../feature-flags'
 
 export interface MCPServices {
   storage: StorageService
@@ -200,73 +201,78 @@ export function registerTools(
 
   // ---------------------------------------------------------------------------
   // Task tools (sightings = task instances; clusters = recurring process candidates)
+  // Gated behind the ML_TASK_MINING dev flag while the pipeline is in development.
   // ---------------------------------------------------------------------------
 
-  server.registerTool(
-    'list_clusters',
-    {
-      description:
-        'List recurring process candidates — groups of similar task instances ("sightings") that look automatable. ' +
-        'Each cluster reports how many times it recurred, across how many days, and the total measured time spent (interaction minutes). ' +
-        'Only non-one-off processes (seen at least twice) are returned, ranked by total time spent. ' +
-        'Use get_cluster_details to drill into the underlying sightings and their evidence.',
-      inputSchema: {
-        minDistinctDays: z
-          .number()
-          .int()
-          .min(1)
-          .optional()
-          .describe('Only return processes seen on at least this many distinct days (default 1)'),
+  if (TASK_MINING_ENABLED) {
+    server.registerTool(
+      'list_clusters',
+      {
+        description:
+          'List recurring process candidates — groups of similar task instances ("sightings") that look automatable. ' +
+          'Each cluster reports how many times it recurred, across how many days, and the total measured time spent (interaction minutes). ' +
+          'Only non-one-off processes (seen at least twice) are returned, ranked by total time spent. ' +
+          'Use get_cluster_details to drill into the underlying sightings and their evidence.',
+        inputSchema: {
+          minDistinctDays: z
+            .number()
+            .int()
+            .min(1)
+            .optional()
+            .describe('Only return processes seen on at least this many distinct days (default 1)'),
+        },
       },
-    },
-    (params) => handleListClusters(getServices(), params),
-  )
+      (params) => handleListClusters(getServices(), params),
+    )
 
-  server.registerTool(
-    'get_cluster_details',
-    {
-      description:
-        'Fetch a process candidate by ID with its member sightings (task instances). ' +
-        'Each sighting carries its title, computed time window, interaction minutes, and the activity IDs that ground it — ' +
-        'pass those IDs to get_activity_details to reconstruct exactly what was on screen and verify the process.',
-      inputSchema: {
-        clusterId: z.string().describe('Cluster ID (from list_clusters results)'),
+    server.registerTool(
+      'get_cluster_details',
+      {
+        description:
+          'Fetch a process candidate by ID with its member sightings (task instances). ' +
+          'Each sighting carries its title, computed time window, interaction minutes, and the activity IDs that ground it — ' +
+          'pass those IDs to get_activity_details to reconstruct exactly what was on screen and verify the process.',
+        inputSchema: {
+          clusterId: z.string().describe('Cluster ID (from list_clusters results)'),
+        },
       },
-    },
-    (params) => handleGetClusterDetails(getServices(), params),
-  )
+      (params) => handleGetClusterDetails(getServices(), params),
+    )
 
-  server.registerTool(
-    'search_sightings',
-    {
-      description:
-        'Search individual task instances ("sightings") by keyword (matches title, description, or apps), ' +
-        'optionally within a time range. Each sighting is a grounded task instance with activity IDs for recall. ' +
-        'Use list_clusters for recurring processes; use this to query the raw task log directly.',
-      inputSchema: {
-        query: z.string().describe('Keyword to match against sighting title, description, or apps'),
-        startTime: z
-          .string()
-          .optional()
-          .describe('Optional ISO 8601 or relative start time (e.g. "yesterday")'),
-        endTime: z.string().optional().describe('Optional ISO 8601 or relative end time'),
+    server.registerTool(
+      'search_sightings',
+      {
+        description:
+          'Search individual task instances ("sightings") by keyword (matches title, description, or apps), ' +
+          'optionally within a time range. Each sighting is a grounded task instance with activity IDs for recall. ' +
+          'Use list_clusters for recurring processes; use this to query the raw task log directly.',
+        inputSchema: {
+          query: z
+            .string()
+            .describe('Keyword to match against sighting title, description, or apps'),
+          startTime: z
+            .string()
+            .optional()
+            .describe('Optional ISO 8601 or relative start time (e.g. "yesterday")'),
+          endTime: z.string().optional().describe('Optional ISO 8601 or relative end time'),
+        },
       },
-    },
-    (params) => handleSearchSightings(getServices(), params),
-  )
+      (params) => handleSearchSightings(getServices(), params),
+    )
 
-  server.registerTool(
-    'get_sighting_details',
-    {
-      description:
-        'Fetch task instances ("sightings") by ID, each with its hydrated activity timeline (summaries + on-screen OCR text). ' +
-        'This is the "tell me more about this task" recall path: it reconstructs what actually happened from the grounding activities.',
-      inputSchema: {
-        ids: z.array(z.string()).min(1).max(50).describe('Sighting IDs to fetch (1-50)'),
+    server.registerTool(
+      'get_sighting_details',
+      {
+        description:
+          'Fetch task instances ("sightings") by ID, each with its hydrated activity timeline (summaries + on-screen OCR text). ' +
+          'This is the "tell me more about this task" recall path: it reconstructs what actually happened from the grounding activities.',
+        inputSchema: {
+          ids: z.array(z.string()).min(1).max(50).describe('Sighting IDs to fetch (1-50)'),
+        },
       },
-    },
-    (params) => handleGetSightingDetails(getServices(), params),
-  )
+      (params) => handleGetSightingDetails(getServices(), params),
+    )
+  }
 
   server.registerTool(
     'set_db_path',

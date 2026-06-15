@@ -4,12 +4,12 @@ import { PATTERN_DETECTION_CONFIG } from '../../../shared/constants'
 // Config
 // ---------------------------------------------------------------------------
 
-export interface PatternDetectorConfig {
+export interface TaskMinerConfig {
   model: string
   lookbackDays: number
 }
 
-export const DEFAULT_DETECTOR_CONFIG: PatternDetectorConfig = {
+export const DEFAULT_MINER_CONFIG: TaskMinerConfig = {
   model: PATTERN_DETECTION_CONFIG.MODEL,
   lookbackDays: PATTERN_DETECTION_CONFIG.LOOKBACK_DAYS,
 }
@@ -18,43 +18,31 @@ export const DEFAULT_DETECTOR_CONFIG: PatternDetectorConfig = {
 // Types
 // ---------------------------------------------------------------------------
 
+/** A discrete task instance proposed by the broad scan. */
 export interface Candidate {
-  name: string
+  title: string
   description: string
   apps: string[]
   activity_ids: string[]
   confidence: number
-  automation_idea?: string
-  evidence?: string
-  existing_pattern_id?: string
 }
 
-export interface VerifiedFinding {
-  verdict: 'new' | 'sighting'
-  name: string
+/** Outcome of grounding a candidate against the real activities. */
+export interface GroundedTask {
+  verdict: 'keep' | 'reject'
+  title: string
   description: string
   apps: string[]
-  automation_idea: string
-  duration_estimate_min: number | null
-  confidence: number
-  evidence: string
-  existing_pattern_id?: string
   activity_ids: string[]
-  updates?: {
-    name?: string
-    description?: string
-    apps?: string[]
-    automation_idea?: string
-  }
+  confidence: number
+  reason?: string
 }
 
-export interface DetectionRunResult {
+export interface MiningRunResult {
   runId: string
-  newPatterns: number
-  updatedPatterns: number
-  totalFindings: number
+  sightingsFound: number
   candidatesFromScan: number
-  candidatesVerified: number
+  candidatesKept: number
   candidatesRejected: number
   tokenUsage: {
     scan: { input: number; output: number }

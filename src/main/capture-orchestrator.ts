@@ -1,5 +1,4 @@
 import log from './logger'
-import type { PatternDetector } from './services/pattern-detector'
 import type { UserContextBuilder } from './services/user-context-builder'
 import type { CaptureStateManager } from './settings/capture-state-manager'
 import type { RuntimeCapture } from './capture-controller'
@@ -21,7 +20,11 @@ export function createCaptureCoordinator(params: {
   captureStateManager: CaptureStateManager
   isPaused: () => boolean
   userContextBuilder: UserContextBuilder | null
-  patternDetector: PatternDetector | null
+  /**
+   * The scheduled background miner. Structural so either PatternDetector or
+   * TaskMiner (selected by the ML_TASK_MINING flag) can be passed in.
+   */
+  patternDetector: { scheduleRun(): void } | null
 }): {
   controls: CaptureCoordinatorControls
   resumeCaptureIfDesired(reason: 'startup' | 'resume'): void

@@ -1,44 +1,24 @@
 import { v4 as uuidv4 } from 'uuid'
 import { generateText, stepCountIs } from 'ai'
 import type { StorageService } from '../../storage'
-import type { Sighting } from '../../storage/sighting-repository'
+import type { Pattern, PatternSighting } from '../../storage/pattern-repository'
 import type { EmbeddingService } from '../../processor/embedding'
 import type { InferenceProvider } from '../../llm'
 import log from '../../logger'
-import type { PatternDetectorConfig, MiningRunResult, ProgressCallback } from './types'
+import type { PatternDetectorConfig, DetectionRunResult, ProgressCallback } from './types'
 import { DEFAULT_DETECTOR_CONFIG } from './types'
 import {
   getDayBoundaries,
   serializeActivities,
-  computeEpisodeWindow,
   extractJsonArray,
   extractJsonObject,
+  generatePatternId,
 } from './helpers'
 import { normalizeScanCandidates } from './candidate-normalizer'
-import { buildScanSystemPrompt, buildGroundingSystemPrompt } from './prompts'
+import { buildScanSystemPrompt, buildVerificationSystemPrompt } from './prompts'
 import { buildVerificationTools } from './tools'
 
-const GROUNDING_MAX_STEPS = 8
-const SIGHTING_MAX_AGE_DAYS = 90
-
-function emptyResult(
-  runId: string,
-  candidatesFromScan: number,
-  tokens: { scanIn: number; scanOut: number; verifyIn: number; verifyOut: number },
-): MiningRunResult {
-  return {
-    runId,
-    sightingsFound: 0,
-    candidatesFromScan,
-    candidatesKept: 0,
-    candidatesRejected: 0,
-    tokenUsage: {
-      scan: { input: tokens.scanIn, output: tokens.scanOut },
-      verify: { input: tokens.verifyIn, output: tokens.verifyOut },
-      total: { input: tokens.scanIn + tokens.verifyIn, output: tokens.scanOut + tokens.verifyOut },
-    },
-  }
-}
+const VERIFICATION_MAX_STEPS = 8
 
 export async function runDetection(
   provider: InferenceProvider,
@@ -46,7 +26,7 @@ export async function runDetection(
   embeddingService: EmbeddingService,
   config: Partial<PatternDetectorConfig> = {},
   onProgress?: ProgressCallback,
-): Promise<MiningRunResult> {
+): Promise<DetectionRunResult> {
   const cfg = { ...DEFAULT_DETECTOR_CONFIG, ...config }
   const runId = uuidv4()
   const now = Date.now()
@@ -56,16 +36,17 @@ export async function runDetection(
   let verifyOutputTokens = 0
 
   const progress = (msg: string) => {
-    log.info(`[TaskMiner] ${msg}`)
+    log.info(`[PatternDetector] ${msg}`)
     onProgress?.(msg)
   }
 
   progress(`Starting run ${runId} (model=${cfg.model}, lookback=${cfg.lookbackDays}d)`)
 
-  // 0. Prune very old sightings (DB hygiene; clusters rebuild from what remains)
-  const prunedSightings = storage.sightings.pruneOlderThan(SIGHTING_MAX_AGE_DAYS, now)
-  if (prunedSightings)
-    progress(`Pruned ${prunedSightings} sightings older than ${SIGHTING_MAX_AGE_DAYS}d`)
+  // 0. Prune stale sightings/patterns (>30 days old)
+  const pruned = storage.patterns.pruneStale(30)
+  if (pruned.sightings || pruned.patterns) {
+    progress(`Pruned ${pruned.sightings} stale sightings, ${pruned.patterns} orphaned patterns`)
+  }
 
   // 1. Query activities for the target day
   const { start, end, label } = getDayBoundaries(cfg.lookbackDays)
@@ -74,22 +55,42 @@ export async function runDetection(
 
   if (activities.length === 0) {
     progress('No activities for this day, skipping')
-    storage.miningRuns.record(runId, 0, now)
-    return emptyResult(runId, 0, { scanIn: 0, scanOut: 0, verifyIn: 0, verifyOut: 0 })
+    storage.patterns.recordRun(runId, 0)
+    return {
+      runId,
+      newPatterns: 0,
+      updatedPatterns: 0,
+      totalFindings: 0,
+      candidatesFromScan: 0,
+      candidatesVerified: 0,
+      candidatesRejected: 0,
+      tokenUsage: {
+        scan: { input: 0, output: 0 },
+        verify: { input: 0, output: 0 },
+        total: { input: 0, output: 0 },
+      },
+    }
   }
 
-  // 2. User context (optional flavor for the scan)
+  // 2. Load rejected patterns (negative examples for scan) and existing patterns (for verification)
+  const rejectedPatterns = storage.patterns.getRejectedPatterns(3)
+  const existingPatterns = storage.patterns.getAllPatterns()
+  progress(
+    `Loaded ${rejectedPatterns.length} rejected (negative examples), ${existingPatterns.length} existing patterns`,
+  )
+
+  // 3. Load user context
   const userCtx = storage.userContext.get()
   const userContextStr = userCtx
     ? `${userCtx.shortSummary}\n\n${userCtx.detailedSummary}`
     : undefined
 
   // =========================================================================
-  // Phase 1: Scan — discover discrete task instances
+  // Phase 1: Scan — broad candidate discovery
   // =========================================================================
 
   const serialized = serializeActivities(activities)
-  const scanPrompt = buildScanSystemPrompt(label, userContextStr)
+  const scanPrompt = buildScanSystemPrompt(label, rejectedPatterns, userContextStr)
   const scanUserMessage = `Here are all ${activities.length} activities from ${label}:\n\n\`\`\`json\n${JSON.stringify(serialized, null, 2)}\n\`\`\``
 
   progress(`[Phase 1] Sending ${activities.length} activities to ${cfg.model}...`)
@@ -99,70 +100,95 @@ export async function runDetection(
     prompt: scanUserMessage,
   })
 
+  const scanContent = scanResult.text
   scanInputTokens = scanResult.usage.inputTokens ?? 0
   scanOutputTokens = scanResult.usage.outputTokens ?? 0
   progress(`[Phase 1] Response received (${scanInputTokens} in / ${scanOutputTokens} out tokens)`)
 
-  const rawCandidates = extractJsonArray<unknown>(scanResult.text)
-  const { candidates, malformedCount, droppedNoActivityIds } =
+  const rawCandidates = extractJsonArray<unknown>(scanContent)
+  const { candidates, malformedCount, missingActivityIdsCount } =
     normalizeScanCandidates(rawCandidates)
   progress(
-    `[Phase 1] Parsed ${rawCandidates.length} candidates (${candidates.length} valid, ${malformedCount} malformed, ${droppedNoActivityIds} dropped for no activity_ids)`,
+    `[Phase 1] Parsed ${rawCandidates.length} candidates (${candidates.length} valid, ${malformedCount} malformed)`,
   )
+  if (missingActivityIdsCount > 0) {
+    progress(
+      `[Phase 1] ${missingActivityIdsCount} valid candidates missing activity_ids; verification will rely more on tool search`,
+    )
+  }
 
   if (candidates.length === 0) {
-    progress('No grounded candidates, done')
-    storage.miningRuns.record(runId, 0, now)
-    return emptyResult(runId, rawCandidates.length, {
-      scanIn: scanInputTokens,
-      scanOut: scanOutputTokens,
-      verifyIn: 0,
-      verifyOut: 0,
-    })
+    progress('No valid candidates to verify, done')
+    storage.patterns.recordRun(runId, 0)
+    return {
+      runId,
+      newPatterns: 0,
+      updatedPatterns: 0,
+      totalFindings: 0,
+      candidatesFromScan: rawCandidates.length,
+      candidatesVerified: 0,
+      candidatesRejected: 0,
+      tokenUsage: {
+        scan: { input: scanInputTokens, output: scanOutputTokens },
+        verify: { input: verifyInputTokens, output: verifyOutputTokens },
+        total: {
+          input: scanInputTokens + verifyInputTokens,
+          output: scanOutputTokens + verifyOutputTokens,
+        },
+      },
+    }
   }
 
   // =========================================================================
-  // Phase 2: Ground — per-candidate confirmation with tool use, then write
-  // a grounded sighting (computed window + embedding). No pattern matching.
+  // Phase 2: Verify — sequential per-candidate deep investigation with tool use
+  // Sequential so each verifier sees patterns created by previous candidates.
   // =========================================================================
 
   const tools = buildVerificationTools(storage, embeddingService, start, end, progress)
-  progress(`[Phase 2] Grounding ${candidates.length} candidates with tool access...`)
 
-  let candidatesKept = 0
+  progress(`[Phase 2] Verifying ${candidates.length} candidates with tool access...`)
+
+  let newPatterns = 0
+  let updatedPatterns = 0
+  let candidatesVerified = 0
   let candidatesRejected = 0
 
   for (const candidate of candidates) {
-    try {
-      const groundPrompt = buildGroundingSystemPrompt(candidate)
+    // Re-fetch existing patterns each iteration so the verifier sees newly created ones
+    const currentPatterns = storage.patterns.getAllPatterns()
 
-      const candidateActivities = storage.activities.getByIds(candidate.activity_ids)
+    try {
+      const verifyPrompt = buildVerificationSystemPrompt(candidate, currentPatterns)
+
+      // Enrich candidate with full activity details
+      const candidateActivities = candidate.activity_ids?.length
+        ? storage.activities.getByIds(candidate.activity_ids)
+        : []
       const enrichedActivities = candidateActivities.map((a) => ({
         id: a.id,
         app: a.appName,
         window_title: a.windowTitle,
         time: new Date(a.startTimestamp).toISOString(),
         end_time: new Date(a.endTimestamp).toISOString(),
+        duration_min: Math.round((a.endTimestamp - a.startTimestamp) / 60000),
         summary: a.summary,
       }))
 
-      const candidateInput = `Investigate this candidate task:\n\n\`\`\`json\n${JSON.stringify(
-        {
-          title: candidate.title,
-          description: candidate.description,
-          apps: candidate.apps,
-          activities: enrichedActivities,
-        },
-        null,
-        2,
-      )}\n\`\`\``
+      const candidateWithActivities = {
+        ...candidate,
+        activities: enrichedActivities,
+      }
+      // Remove raw activity_ids from the input since we're providing full details
+      delete (candidateWithActivities as Record<string, unknown>).activity_ids
+
+      const candidateInput = `Investigate this candidate pattern:\n\n\`\`\`json\n${JSON.stringify(candidateWithActivities, null, 2)}\n\`\`\``
 
       const verifyResult = await generateText({
         model: provider.languageModel(cfg.model),
-        system: groundPrompt,
+        system: verifyPrompt,
         prompt: candidateInput,
         tools,
-        stopWhen: stepCountIs(GROUNDING_MAX_STEPS),
+        stopWhen: stepCountIs(VERIFICATION_MAX_STEPS),
       })
 
       verifyInputTokens += verifyResult.usage.inputTokens ?? 0
@@ -171,77 +197,115 @@ export async function runDetection(
       const parsed = extractJsonObject<Record<string, unknown>>(verifyResult.text)
       if (!parsed) {
         candidatesRejected++
-        progress(`[Phase 2] Rejected "${candidate.title}": could not parse response`)
+        progress(`[Phase 2] Error verifying "${candidate.name}": Could not parse response`)
         continue
       }
 
-      if ((parsed.verdict as string) === 'reject') {
+      const verdict = parsed.verdict as string
+
+      if (verdict === 'reject') {
         candidatesRejected++
         progress(
-          `[Phase 2] Rejected: ${candidate.title} — ${(parsed.reason as string) || 'rejected'}`,
+          `[Phase 2] Rejected: ${candidate.name} — ${(parsed.reason as string) || 'rejected by verifier'}`,
         )
         continue
       }
 
-      // Finalize activity_ids and resolve them to real activities. The window
-      // and interaction time are computed from these — never LLM-estimated.
-      const finalIds = (parsed.activity_ids as string[] | undefined)?.length
-        ? (parsed.activity_ids as string[])
-        : candidate.activity_ids
-      const resolved = storage.activities.getByIds(finalIds)
-      if (resolved.length === 0) {
-        candidatesRejected++
-        progress(`[Phase 2] Rejected "${candidate.title}": no resolvable activities`)
-        continue
+      // -- Persist immediately so next iteration sees this pattern --
+
+      const sightingId = uuidv4()
+
+      if (verdict === 'sighting') {
+        const existingId = parsed.existing_pattern_id as string
+        const existing = existingId ? storage.patterns.getPatternById(existingId) : null
+
+        if (existing) {
+          storage.patterns.addSighting({
+            id: sightingId,
+            patternId: existingId,
+            detectedAt: now,
+            runId,
+            evidence: (parsed.evidence as string) || '',
+            activityIds: (parsed.activity_ids as string[]) || candidate.activity_ids,
+            confidence: (parsed.confidence as number) ?? candidate.confidence,
+            durationEstimateMin: (parsed.duration_estimate_min as number) ?? null,
+          } satisfies PatternSighting)
+
+          const updates = parsed.updates as Record<string, unknown> | undefined
+          if (updates) {
+            storage.patterns.updatePattern(existingId, {
+              name: updates.name as string | undefined,
+              description: updates.description as string | undefined,
+              apps: updates.apps as string[] | undefined,
+              automationIdea: updates.automation_idea as string | undefined,
+            })
+          }
+
+          updatedPatterns++
+          candidatesVerified++
+          progress(`[Phase 2] Verified (sighting): ${candidate.name}`)
+          continue
+        }
       }
 
-      const title = (parsed.title as string) || candidate.title
-      const description = (parsed.description as string) || candidate.description
-      const apps = (parsed.apps as string[]) || candidate.apps
-      const confidence = (parsed.confidence as number) ?? candidate.confidence
-      const { startedAt, endedAt, interactionMin } = computeEpisodeWindow(resolved)
-      const vector = await embeddingService.generateEmbedding(`${title}\n${description}`)
+      // verdict === 'new' or sighting with invalid ID → create new pattern
+      const finding = {
+        name: (parsed.name as string) || candidate.name,
+        description: (parsed.description as string) || candidate.description,
+        apps: (parsed.apps as string[]) || candidate.apps,
+        automationIdea: (parsed.automation_idea as string) || '',
+        durationEstimateMin: (parsed.duration_estimate_min as number) ?? null,
+        confidence: (parsed.confidence as number) ?? candidate.confidence,
+        evidence: (parsed.evidence as string) || '',
+        activityIds: (parsed.activity_ids as string[]) || candidate.activity_ids,
+      }
 
-      storage.sightings.add(
-        {
-          id: uuidv4(),
-          title,
-          description,
-          apps,
-          activityIds: resolved.map((a) => a.id),
-          startedAt,
-          endedAt,
-          interactionMin,
-          confidence,
-          runId,
-          detectedAt: now,
-        } satisfies Sighting,
-        vector,
-      )
+      const patternId = generatePatternId(finding.name)
+      storage.patterns.addPattern({
+        id: patternId,
+        name: finding.name,
+        description: finding.description,
+        apps: finding.apps,
+        automationIdea: finding.automationIdea,
+        createdAt: now,
+        rejectedAt: null,
+        promptCopiedAt: null,
+        approvedAt: null,
+      } satisfies Pattern)
 
-      candidatesKept++
-      progress(
-        `[Phase 2] Kept: ${title} (${interactionMin} min across ${resolved.length} activities)`,
-      )
+      storage.patterns.addSighting({
+        id: sightingId,
+        patternId,
+        detectedAt: now,
+        runId,
+        evidence: finding.evidence,
+        activityIds: finding.activityIds,
+        confidence: finding.confidence,
+        durationEstimateMin: finding.durationEstimateMin,
+      } satisfies PatternSighting)
+
+      newPatterns++
+      candidatesVerified++
+      progress(`[Phase 2] Verified (new): ${candidate.name}`)
     } catch (error) {
       candidatesRejected++
       progress(
-        `[Phase 2] Error grounding "${candidate.title}": ${error instanceof Error ? error.message : String(error)}`,
+        `[Phase 2] Error verifying "${candidate.name}": ${error instanceof Error ? error.message : String(error)}`,
       )
     }
   }
 
-  storage.miningRuns.record(runId, candidatesKept, now)
-
   progress(
-    `Run complete: ${candidates.length} candidates → ${candidatesKept} sightings (${candidatesRejected} rejected)`,
+    `[Phase 2] ${candidatesVerified} verified, ${candidatesRejected} rejected out of ${candidates.length} candidates`,
   )
 
-  return {
+  const result: DetectionRunResult = {
     runId,
-    sightingsFound: candidatesKept,
+    newPatterns,
+    updatedPatterns,
+    totalFindings: candidatesVerified,
     candidatesFromScan: rawCandidates.length,
-    candidatesKept,
+    candidatesVerified,
     candidatesRejected,
     tokenUsage: {
       scan: { input: scanInputTokens, output: scanOutputTokens },
@@ -252,4 +316,13 @@ export async function runDetection(
       },
     },
   }
+
+  storage.patterns.recordRun(runId, result.totalFindings)
+
+  progress(
+    `Run complete: ${candidates.length} candidates → ${result.totalFindings} verified findings ` +
+      `(${result.newPatterns} new, ${result.updatedPatterns} updated)`,
+  )
+
+  return result
 }

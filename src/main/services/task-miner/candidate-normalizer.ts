@@ -2,7 +2,10 @@ import { z } from 'zod'
 import type { Candidate } from './types'
 
 const scanCandidateSchema = z.object({
-  name: z.preprocess((value) => (typeof value === 'string' ? value.trim() : ''), z.string().min(1)),
+  title: z.preprocess(
+    (value) => (typeof value === 'string' ? value.trim() : ''),
+    z.string().min(1),
+  ),
   description: z.preprocess(
     (value) => (typeof value === 'string' ? value.trim() : ''),
     z.string().min(1),
@@ -39,28 +42,16 @@ const scanCandidateSchema = z.object({
       return 0.5
     }, z.number())
     .default(0.5),
-  automation_idea: z.preprocess(
-    (value) => (typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined),
-    z.string().optional(),
-  ),
-  evidence: z.preprocess(
-    (value) => (typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined),
-    z.string().optional(),
-  ),
-  existing_pattern_id: z.preprocess(
-    (value) => (typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined),
-    z.string().optional(),
-  ),
 })
 
 export function normalizeScanCandidates(raw: unknown[]): {
   candidates: Candidate[]
   malformedCount: number
-  missingActivityIdsCount: number
+  droppedNoActivityIds: number
 } {
   const candidates: Candidate[] = []
   let malformedCount = 0
-  let missingActivityIdsCount = 0
+  let droppedNoActivityIds = 0
 
   for (const item of raw) {
     const parsed = scanCandidateSchema.safeParse(item)
@@ -70,11 +61,14 @@ export function normalizeScanCandidates(raw: unknown[]): {
     }
 
     const candidate: Candidate = parsed.data
+    // A sighting must be grounded in real activities — that's the verifiable
+    // recall handle. Drop candidates the scan couldn't anchor to any activity.
     if (candidate.activity_ids.length === 0) {
-      missingActivityIdsCount++
+      droppedNoActivityIds++
+      continue
     }
     candidates.push(candidate)
   }
 
-  return { candidates, malformedCount, missingActivityIdsCount }
+  return { candidates, malformedCount, droppedNoActivityIds }
 }
