@@ -1,9 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import { generateText } from 'ai'
-import log from '../logger'
 import type { InferenceProvider } from '../llm'
-import { extractJsonObject } from '../services/pattern-detector/helpers'
+import { callJsonJudge, type JudgeContent } from './llm-judge'
 import type { JudgeResult } from './types'
 
 /**
@@ -84,47 +82,31 @@ function buildPrompt(params: JudgeParams): string {
 }
 
 export async function judgeSummary(params: JudgeParams): Promise<JudgeResult | null> {
-  const promptText = buildPrompt(params)
-  const content: Array<
-    { type: 'text'; text: string } | { type: 'file'; data: string; mediaType: string }
-  > = [{ type: 'text', text: promptText }]
-
+  const content: JudgeContent[] = [{ type: 'text', text: buildPrompt(params) }]
   for (const p of sampleEvenly(params.imagePaths, params.maxImages ?? DEFAULT_MAX_IMAGES)) {
     const img = encodeImage(p)
     if (img) content.push(img)
   }
 
-  let result
-  try {
-    result = await generateText({
-      model: params.provider.languageModel(params.judgeModel),
-      messages: [{ role: 'user', content }],
-      abortSignal: params.signal,
-    })
-  } catch (err) {
-    log.warn('[judge] call failed:', err instanceof Error ? err.message : String(err))
-    return null
-  }
+  const res = await callJsonJudge<{ score?: number; notes?: string; flaggedClaims?: string[] }>({
+    provider: params.provider,
+    model: params.judgeModel,
+    content,
+    tag: 'judge',
+    signal: params.signal,
+  })
+  if (!res || typeof res.parsed.score !== 'number') return null
 
-  const parsed = extractJsonObject<{
-    score?: number
-    notes?: string
-    flaggedClaims?: string[]
-  }>(result.text)
-  if (!parsed || typeof parsed.score !== 'number') {
-    log.warn('[judge] could not parse judge JSON; raw text:', result.text.slice(0, 200))
-    return null
-  }
-
+  const { parsed } = res
   return {
-    score10: Math.max(0, Math.min(10, Math.round(parsed.score * 100) / 100)),
+    score10: Math.max(0, Math.min(10, Math.round(parsed.score! * 100) / 100)),
     notes: typeof parsed.notes === 'string' ? parsed.notes : '',
     flaggedClaims: Array.isArray(parsed.flaggedClaims)
       ? parsed.flaggedClaims.filter((c): c is string => typeof c === 'string')
       : [],
     judgeModel: params.judgeModel,
-    tokensIn: result.usage.inputTokens ?? 0,
-    tokensOut: result.usage.outputTokens ?? 0,
+    tokensIn: res.tokensIn,
+    tokensOut: res.tokensOut,
   }
 }
 
@@ -155,21 +137,17 @@ export async function judgeEquivalence(params: {
     'Respond with ONLY JSON: {"equivalence": <0.0-1.0>}',
   ].join('\n')
 
-  try {
-    const result = await generateText({
-      model: params.provider.languageModel(params.model),
-      messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
-      abortSignal: params.signal,
-    })
-    const parsed = extractJsonObject<{ equivalence?: number }>(result.text)
-    if (!parsed || typeof parsed.equivalence !== 'number') return null
-    return {
-      equivalence: Math.max(0, Math.min(1, parsed.equivalence)),
-      tokensIn: result.usage.inputTokens ?? 0,
-      tokensOut: result.usage.outputTokens ?? 0,
-    }
-  } catch (err) {
-    log.warn('[judge] equivalence call failed:', err instanceof Error ? err.message : String(err))
-    return null
+  const res = await callJsonJudge<{ equivalence?: number }>({
+    provider: params.provider,
+    model: params.model,
+    content: [{ type: 'text', text: prompt }],
+    tag: 'judge:equivalence',
+    signal: params.signal,
+  })
+  if (!res || typeof res.parsed.equivalence !== 'number') return null
+  return {
+    equivalence: Math.max(0, Math.min(1, res.parsed.equivalence)),
+    tokensIn: res.tokensIn,
+    tokensOut: res.tokensOut,
   }
 }

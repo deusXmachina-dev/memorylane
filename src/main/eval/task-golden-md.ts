@@ -1,4 +1,5 @@
 import * as fs from 'fs'
+import { splitMarkdownBlocks } from './markdown-blocks'
 import type {
   GoldenSighting,
   GoldenVerdict,
@@ -119,21 +120,8 @@ export function renderLabelBlocks(sightings: NewSighting[]): string {
 
 /** Parses golden.md into labeled sightings. Lenient on whitespace. */
 export function parseTaskGoldenMd(text: string): TaskGolden {
-  const stripped = text.replace(/<!--[\s\S]*?-->/g, '')
-
-  const blocks: string[][] = []
-  let current: string[] | null = null
-  for (const rawLine of stripped.split('\n')) {
-    if (HEADER_RE.test(rawLine)) {
-      current = [rawLine]
-      blocks.push(current)
-    } else if (current) {
-      current.push(rawLine)
-    }
-  }
-
   const sightings: GoldenSighting[] = []
-  for (const block of blocks) {
+  for (const block of splitMarkdownBlocks(text, HEADER_RE)) {
     const headerMatch = block[0].match(HEADER_RE)
     if (!headerMatch) continue
     const title = headerMatch[1].trim()

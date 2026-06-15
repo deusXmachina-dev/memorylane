@@ -1,7 +1,5 @@
-import { generateText } from 'ai'
-import log from '../logger'
 import type { InferenceProvider } from '../llm'
-import { extractJsonObject } from '../services/pattern-detector/helpers'
+import { callJsonJudge } from './llm-judge'
 import type { DetectedSighting, GoldenSighting } from './task-types'
 
 /**
@@ -51,24 +49,18 @@ export async function judgeSighting(params: {
     'Respond with ONLY JSON: {"equivalence": <0.0-1.0>, "notes": "<short>"}',
   ].join('\n')
 
-  try {
-    const result = await generateText({
-      model: params.provider.languageModel(params.model),
-      messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
-      abortSignal: params.signal,
-    })
-    const parsed = extractJsonObject<{ equivalence?: number; notes?: string }>(result.text)
-    if (!parsed) {
-      log.warn('[task-judge] could not parse JSON; raw:', result.text.slice(0, 200))
-      return null
-    }
-    return {
-      equivalence: typeof parsed.equivalence === 'number' ? clamp(0, 1, parsed.equivalence) : null,
-      tokensIn: result.usage.inputTokens ?? 0,
-      tokensOut: result.usage.outputTokens ?? 0,
-    }
-  } catch (err) {
-    log.warn('[task-judge] call failed:', err instanceof Error ? err.message : String(err))
-    return null
+  const res = await callJsonJudge<{ equivalence?: number; notes?: string }>({
+    provider: params.provider,
+    model: params.model,
+    content: [{ type: 'text', text: prompt }],
+    tag: 'task-judge',
+    signal: params.signal,
+  })
+  if (!res) return null
+  return {
+    equivalence:
+      typeof res.parsed.equivalence === 'number' ? clamp(0, 1, res.parsed.equivalence) : null,
+    tokensIn: res.tokensIn,
+    tokensOut: res.tokensOut,
   }
 }
