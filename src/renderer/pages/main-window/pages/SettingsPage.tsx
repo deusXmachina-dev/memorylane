@@ -8,12 +8,14 @@ import type { CaptureSettings, SemanticPipelineMode, Vendor, VendorStatus } from
 import { AiModelsSection } from '../components/advanced-settings/AiModelsSection'
 import { CapturePrivacySection } from '../components/advanced-settings/CapturePrivacySection'
 import { DataTabPanel } from '../components/advanced-settings/DataTabPanel'
+import { DeveloperSection } from '../components/advanced-settings/DeveloperSection'
 import { IntegrationsTabPanel } from '../components/advanced-settings/IntegrationsTabPanel'
 import type { NumericCaptureSetting } from '../components/advanced-settings/types'
 import { PageLayout } from '../components/shell/PageLayout'
 import { detectHotkeyPlatform, toRecordedAccelerator } from '../hotkey-utils'
+import { setDevMode, useDevMode, useTapUnlock } from '@/renderer/lib/dev-mode'
 
-export type SettingsTab = 'privacy' | 'data' | 'ai-models' | 'integrations'
+export type SettingsTab = 'privacy' | 'data' | 'ai-models' | 'integrations' | 'developer'
 
 export function SettingsPage({
   initialTab,
@@ -260,10 +262,16 @@ export function SettingsPage({
   }, [api, load, recordingHotkey, setCaptureHotkeyAccelerator])
 
   const showAiModels = editionConfig?.edition !== 'enterprise'
+  const devMode = useDevMode()
+  const handleTitleTap = useTapUnlock(() => {
+    setDevMode(true)
+    toast.success('Developer mode enabled')
+  })
 
   return (
     <PageLayout
       title="Settings"
+      onTitleClick={handleTitleTap}
       headerBefore={
         onBack && (
           <Button variant="ghost" size="sm" onClick={onBack}>
@@ -279,6 +287,7 @@ export function SettingsPage({
             <TabsTab value="data">Data</TabsTab>
             {showAiModels && <TabsTab value="ai-models">AI models</TabsTab>}
             <TabsTab value="integrations">Integrations</TabsTab>
+            {devMode && <TabsTab value="developer">Developer</TabsTab>}
           </TabsList>
 
           <TabsPanel value="privacy" className="pt-2">
@@ -326,6 +335,12 @@ export function SettingsPage({
           <TabsPanel value="integrations" className="pt-2">
             <IntegrationsTabPanel api={api} />
           </TabsPanel>
+
+          {devMode && (
+            <TabsPanel value="developer" className="pt-2">
+              <DeveloperSection api={api} />
+            </TabsPanel>
+          )}
         </Tabs>
       )}
     </PageLayout>

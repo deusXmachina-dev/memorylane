@@ -30,6 +30,15 @@ export interface PipelineHarness {
     minActivityDurationMs: number
     maxActivityDurationMs: number
   }): void
+  /**
+   * Toggle screenshot/video retention at runtime. While true, processed
+   * activities' frames/videos are NOT deleted and the periodic stale sweep is
+   * skipped, so frames survive (e.g. for the in-app eval recorder). The
+   * screenshots dir grows until set back to false (then call `sweepNow`).
+   */
+  setRetainScreenshots(value: boolean): void
+  /** Run the stale-file sweep immediately (e.g. to reclaim after retention off). */
+  sweepNow(): void
 }
 
 export function createPipelineHarness(params: {
@@ -44,7 +53,9 @@ export function createPipelineHarness(params: {
   // inspection. Lets the screenshots dir grow unbounded — dev use only.
   retainScreenshots?: boolean
 }): PipelineHarness {
-  const retainScreenshots = params.retainScreenshots ?? false
+  // Mutable so the eval recorder can hold retention open for a recording and
+  // release it afterwards, without a restart. Read live at the cleanup callsites.
+  let retainScreenshots = params.retainScreenshots ?? false
   const frameStream = new InMemoryStream<Frame>()
   const eventStream = new InMemoryStream<EventWindow>()
   const activityStream = new InMemoryStream<Activity>()
@@ -115,11 +126,12 @@ export function createPipelineHarness(params: {
             '[PipelineHarness] retainScreenshots enabled — activity frames/videos are kept and the ' +
               'stale-file sweep is disabled. The screenshots dir will grow unbounded (debug only).',
           )
-        } else {
-          cleanupTimer = setInterval(() => {
-            sweepStaleFiles(params.outputDir)
-          }, SCREENSHOT_CLEANUP_CONFIG.CLEANUP_INTERVAL_MS)
         }
+        // Timer always runs; the sweep itself is skipped while retention is on,
+        // so toggling `setRetainScreenshots` at runtime takes effect immediately.
+        cleanupTimer = setInterval(() => {
+          if (!retainScreenshots) sweepStaleFiles(params.outputDir)
+        }, SCREENSHOT_CLEANUP_CONFIG.CLEANUP_INTERVAL_MS)
       } catch (error) {
         running = false
         throw error
@@ -168,6 +180,13 @@ export function createPipelineHarness(params: {
         ...input,
         frameBufferRetentionMs: Math.max(input.maxActivityDurationMs * 2, 1),
       })
+    },
+    setRetainScreenshots(value: boolean) {
+      retainScreenshots = value
+      log.info(`[PipelineHarness] retainScreenshots set to ${value}`)
+    },
+    sweepNow() {
+      sweepStaleFiles(params.outputDir)
     },
   }
 }
