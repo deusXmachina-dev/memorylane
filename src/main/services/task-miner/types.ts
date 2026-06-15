@@ -1,0 +1,52 @@
+import { PATTERN_DETECTION_CONFIG } from '../../../shared/constants'
+
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+
+export interface TaskMinerConfig {
+  model: string
+  lookbackDays: number
+}
+
+export const DEFAULT_MINER_CONFIG: TaskMinerConfig = {
+  model: PATTERN_DETECTION_CONFIG.MODEL,
+  lookbackDays: PATTERN_DETECTION_CONFIG.LOOKBACK_DAYS,
+}
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+/** A discrete task instance proposed by the broad scan. */
+export interface Candidate {
+  title: string
+  description: string
+  apps: string[]
+  activity_ids: string[]
+}
+
+/** Outcome of grounding a candidate against the real activities. */
+export interface GroundedTask {
+  verdict: 'keep' | 'reject'
+  title: string
+  description: string
+  apps: string[]
+  activity_ids: string[]
+  reason?: string
+}
+
+export interface MiningRunResult {
+  runId: string
+  sightingsFound: number
+  candidatesFromScan: number
+  candidatesKept: number
+  candidatesRejected: number
+  tokenUsage: {
+    scan: { input: number; output: number }
+    verify: { input: number; output: number }
+    total: { input: number; output: number }
+  }
+}
+
+export type ProgressCallback = (message: string) => void
