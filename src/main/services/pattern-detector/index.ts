@@ -1,15 +1,16 @@
 /**
- * Pattern detection module.
+ * Task mining module.
  *
- * Two-phase agentic detection:
- *   Phase 1 (Scan): Sends a full day's activities in a single LLM call to
- *     discover candidate patterns. Includes top rejected patterns as negative
- *     examples but does NOT include existing patterns (that's Phase 2's job).
- *   Phase 2 (Verify): Each candidate gets its own LLM call with tool access
- *     to OCR text and semantic search. The verifier also receives all existing
- *     patterns and decides whether the candidate is a re-sighting, a new
- *     pattern, or should be discarded. Runs sequentially so each verifier
- *     sees patterns created by previous candidates.
+ * Two-phase mining that writes grounded *sightings* (task instances). It does
+ * NOT match, dedup, or assign patterns — that is the deterministic clusterer's
+ * job, run separately over the sightings table.
+ *   Phase 1 (Scan): one LLM call over a full day's activities discovers
+ *     discrete task-instance candidates, each grounded in real activity_ids.
+ *   Phase 2 (Ground): each candidate gets its own tool-equipped LLM call to
+ *     confirm it's a real task and finalize its activity_ids. The time window
+ *     and interaction time are then COMPUTED from those activities (never
+ *     LLM-estimated), the title/description are embedded, and a sighting is
+ *     written.
  *
  * Includes built-in scheduling: call scheduleRun() on screen unlock and the
  * service handles interval guards, settle delays, and error isolation.
@@ -20,14 +21,13 @@ import type { InferenceProvider } from '../../llm'
 import { PATTERN_DETECTION_CONFIG } from '../../../shared/constants'
 import log from '../../logger'
 import { EmbeddingService } from '../../processor/embedding'
-import type { PatternDetectorConfig, DetectionRunResult, ProgressCallback } from './types'
+import type { PatternDetectorConfig, MiningRunResult, ProgressCallback } from './types'
 import { DEFAULT_DETECTOR_CONFIG } from './types'
 import { isSameDay, formatApiError } from './helpers'
 import { runDetection } from './run-detection'
 
-export type { PatternDetectorConfig, DetectionRunResult, ProgressCallback }
+export type { PatternDetectorConfig, MiningRunResult, ProgressCallback }
 export { DEFAULT_DETECTOR_CONFIG }
-export { extractFindingsFromResponse } from './helpers'
 
 export class PatternDetector {
   private running = false
@@ -63,7 +63,7 @@ export class PatternDetector {
       return
     }
 
-    const lastRun = this.storage.patterns.getLastRunTimestamp()
+    const lastRun = this.storage.miningRuns.getLastRunTimestamp()
     if (lastRun && isSameDay(lastRun, Date.now())) {
       log.info('[PatternDetector] Already ran today, skipping')
       return
@@ -94,7 +94,7 @@ export class PatternDetector {
     provider: InferenceProvider,
     config: Partial<PatternDetectorConfig> = {},
     onProgress?: ProgressCallback,
-  ): Promise<DetectionRunResult> {
+  ): Promise<MiningRunResult> {
     return runDetection(
       provider,
       this.storage,
@@ -111,12 +111,12 @@ export class PatternDetector {
         model: this.model,
       })
       log.info(
-        `[PatternDetector] Run complete: ${result.totalFindings} findings ` +
-          `(${result.newPatterns} new, ${result.updatedPatterns} updated), ` +
+        `[TaskMiner] Run complete: ${result.sightingsFound} sightings ` +
+          `(${result.candidatesRejected} rejected), ` +
           `tokens: ${result.tokenUsage.total.input}in/${result.tokenUsage.total.output}out`,
       )
     } catch (error) {
-      log.error('[PatternDetector] Run failed:', formatApiError(error))
+      log.error('[TaskMiner] Run failed:', formatApiError(error))
     } finally {
       this.running = false
     }

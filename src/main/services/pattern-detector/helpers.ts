@@ -1,8 +1,4 @@
-import { v5 as uuidv5 } from 'uuid'
 import type { ActivityDetail } from '../../storage'
-import type { VerifiedFinding } from './types'
-
-const PATTERN_NAMESPACE = uuidv5('memorylane:pattern', uuidv5.DNS)
 
 export function isSameDay(a: number, b: number): boolean {
   const da = new Date(a)
@@ -39,8 +35,41 @@ export function serializeActivities(activities: ActivityDetail[]): object[] {
   }))
 }
 
-export function generatePatternId(name: string): string {
-  return uuidv5(name.toLowerCase().trim(), PATTERN_NAMESPACE)
+interface TimeBounded {
+  startTimestamp: number
+  endTimestamp: number
+}
+
+/**
+ * Compute a sighting's time window and on-task interaction time directly from
+ * its constituent activities — never from an LLM estimate.
+ *
+ * - `startedAt` / `endedAt`: min start / max end across the activities.
+ * - `interactionMin`: Σ of each activity's own duration (actual interaction
+ *   time, excludes idle gaps between activities). Wall-clock span is just
+ *   `endedAt - startedAt` and is derived on read, not stored.
+ */
+export function computeEpisodeWindow(activities: TimeBounded[]): {
+  startedAt: number
+  endedAt: number
+  interactionMin: number
+} {
+  if (activities.length === 0) {
+    return { startedAt: 0, endedAt: 0, interactionMin: 0 }
+  }
+  let startedAt = Infinity
+  let endedAt = -Infinity
+  let interactionMs = 0
+  for (const a of activities) {
+    if (a.startTimestamp < startedAt) startedAt = a.startTimestamp
+    if (a.endTimestamp > endedAt) endedAt = a.endTimestamp
+    interactionMs += Math.max(0, a.endTimestamp - a.startTimestamp)
+  }
+  return {
+    startedAt,
+    endedAt,
+    interactionMin: Math.round((interactionMs / 60000) * 10) / 10,
+  }
 }
 
 export function extractJsonArray<T>(content: string): T[] {
@@ -83,11 +112,6 @@ export function extractJsonObject<T>(content: string): T | null {
     }
     return null
   }
-}
-
-// Keep for backwards compatibility with tests
-export function extractFindingsFromResponse(content: string): VerifiedFinding[] {
-  return extractJsonArray<VerifiedFinding>(content)
 }
 
 /**

@@ -6,12 +6,20 @@ import { getDefaultDbPath } from '../paths'
 import log from '../logger'
 import { ActivityRepository } from './activity-repository'
 import { PatternRepository } from './pattern-repository'
+import { SightingRepository } from './sighting-repository'
+import { ClusterRepository } from './cluster-repository'
+import { MiningRunRepository } from './mining-run-repository'
 import { UserContextRepository } from './user-context-repository'
 
 export { ActivityRepository } from './activity-repository'
 export { PatternRepository } from './pattern-repository'
+export { SightingRepository } from './sighting-repository'
+export { ClusterRepository } from './cluster-repository'
+export { MiningRunRepository } from './mining-run-repository'
 export { UserContextRepository } from './user-context-repository'
 export type { Pattern, PatternSighting, PatternWithStats } from './pattern-repository'
+export type { Sighting, SightingClusterInput } from './sighting-repository'
+export type { Cluster, ClusterMember, ClusterDetail } from './cluster-repository'
 export type { UserContext } from './user-context-repository'
 export type { StoredActivity, ActivitySummary, ActivityDetail } from './types'
 
@@ -62,6 +70,9 @@ export class StorageService {
   private db: Database.Database | null = null
   readonly activities: ActivityRepository
   readonly patterns: PatternRepository
+  readonly sightings: SightingRepository
+  readonly clusters: ClusterRepository
+  readonly miningRuns: MiningRunRepository
   readonly userContext: UserContextRepository
 
   constructor(dbPath?: string) {
@@ -87,6 +98,9 @@ export class StorageService {
       this.db = db
       this.activities = new ActivityRepository(db)
       this.patterns = new PatternRepository(db)
+      this.sightings = new SightingRepository(db)
+      this.clusters = new ClusterRepository(db)
+      this.miningRuns = new MiningRunRepository(db)
       this.userContext = new UserContextRepository(db)
       log.info('SQLite database initialized successfully')
     } catch (error) {

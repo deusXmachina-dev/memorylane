@@ -1,0 +1,150 @@
+import type Database from 'better-sqlite3'
+import { vectorToBlob, blobToVector } from './utils'
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+/**
+ * A single task instance mined from activities. Carved in stone: append-only,
+ * never rewritten by clustering. `activityIds` is explicit membership (the
+ * verifiable recall handle); `interactionMin` is the summed on-task time of
+ * those activities (wall-clock span is `endedAt - startedAt`, derived on read).
+ */
+export interface Sighting {
+  id: string
+  title: string
+  description: string
+  apps: string[]
+  activityIds: string[]
+  startedAt: number
+  endedAt: number
+  interactionMin: number
+  confidence: number
+  runId: string
+  detectedAt: number
+}
+
+/** Minimal sighting shape the deterministic clusterer needs. */
+export interface SightingClusterInput {
+  id: string
+  apps: string[]
+  startedAt: number
+  interactionMin: number
+  vector: number[]
+}
+
+export class SightingRepository {
+  constructor(private readonly db: Database.Database) {}
+
+  /** Insert a mined sighting. The embedding is stored as a BLOB for clustering. */
+  add(sighting: Sighting, vector: number[]): void {
+    this.db
+      .prepare(
+        `INSERT INTO sightings
+           (id, title, description, apps, activity_ids, started_at, ended_at, interaction_min, confidence, vector, run_id, detected_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        sighting.id,
+        sighting.title,
+        sighting.description,
+        JSON.stringify(sighting.apps),
+        JSON.stringify(sighting.activityIds),
+        sighting.startedAt,
+        sighting.endedAt,
+        sighting.interactionMin,
+        sighting.confidence,
+        vectorToBlob(vector),
+        sighting.runId,
+        sighting.detectedAt,
+      )
+  }
+
+  getById(id: string): Sighting | null {
+    const row = this.db.prepare(`SELECT * FROM sightings WHERE id = ?`).get(id) as
+      | Record<string, unknown>
+      | undefined
+    return row ? this.rowToSighting(row) : null
+  }
+
+  getByIds(ids: readonly string[]): Sighting[] {
+    if (ids.length === 0) return []
+    const placeholders = ids.map(() => '?').join(', ')
+    const rows = this.db
+      .prepare(`SELECT * FROM sightings WHERE id IN (${placeholders})`)
+      .all(...ids) as Record<string, unknown>[]
+    return rows.map((r) => this.rowToSighting(r))
+  }
+
+  getByRunId(runId: string): Sighting[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM sightings WHERE run_id = ? ORDER BY started_at ASC`)
+      .all(runId) as Record<string, unknown>[]
+    return rows.map((r) => this.rowToSighting(r))
+  }
+
+  getAll(): Sighting[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM sightings ORDER BY started_at DESC`)
+      .all() as Record<string, unknown>[]
+    return rows.map((r) => this.rowToSighting(r))
+  }
+
+  search(query: string): Sighting[] {
+    const like = `%${query}%`
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM sightings
+         WHERE title LIKE ? OR description LIKE ? OR apps LIKE ?
+         ORDER BY started_at DESC`,
+      )
+      .all(like, like, like) as Record<string, unknown>[]
+    return rows.map((r) => this.rowToSighting(r))
+  }
+
+  /** All sightings with their embedding vectors, for the deterministic clusterer. */
+  getAllForClustering(): SightingClusterInput[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, apps, started_at, interaction_min, vector FROM sightings ORDER BY id ASC`,
+      )
+      .all() as Record<string, unknown>[]
+    return rows.map((row) => ({
+      id: row.id as string,
+      apps: JSON.parse((row.apps as string) || '[]') as string[],
+      startedAt: row.started_at as number,
+      interactionMin: row.interaction_min as number,
+      vector: row.vector ? blobToVector(row.vector as Buffer) : [],
+    }))
+  }
+
+  count(): number {
+    const row = this.db.prepare('SELECT COUNT(*) AS count FROM sightings').get() as {
+      count: number
+    }
+    return row.count
+  }
+
+  /** Delete sightings older than `maxAgeDays`. Re-cluster afterwards. */
+  pruneOlderThan(maxAgeDays = 90, now: number = Date.now()): number {
+    const cutoff = now - maxAgeDays * 86_400_000
+    return this.db.prepare('DELETE FROM sightings WHERE detected_at < ?').run(cutoff).changes
+  }
+
+  private rowToSighting(row: Record<string, unknown>): Sighting {
+    return {
+      id: row.id as string,
+      title: row.title as string,
+      description: row.description as string,
+      apps: JSON.parse((row.apps as string) || '[]') as string[],
+      activityIds: JSON.parse((row.activity_ids as string) || '[]') as string[],
+      startedAt: row.started_at as number,
+      endedAt: row.ended_at as number,
+      interactionMin: row.interaction_min as number,
+      confidence: row.confidence as number,
+      runId: row.run_id as string,
+      detectedAt: row.detected_at as number,
+    }
+  }
+}

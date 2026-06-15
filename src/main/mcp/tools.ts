@@ -12,7 +12,13 @@ import {
 import { setDbPath, clearDbPath, type DbPathSource } from './config'
 import { getDefaultDbPath } from '../paths'
 import type { AppEdition } from '../../shared/edition'
-import type { StorageService, PatternWithStats, PatternSighting } from '../storage'
+import type {
+  StorageService,
+  PatternWithStats,
+  PatternSighting,
+  Cluster,
+  Sighting,
+} from '../storage'
 import type { EmbeddingService } from '../processor/embedding'
 import log from '../logger'
 
@@ -190,6 +196,76 @@ export function registerTools(
       },
     },
     (params) => handleGetPatternDetails(getServices(), params),
+  )
+
+  // ---------------------------------------------------------------------------
+  // Task tools (sightings = task instances; clusters = recurring process candidates)
+  // ---------------------------------------------------------------------------
+
+  server.registerTool(
+    'list_clusters',
+    {
+      description:
+        'List recurring process candidates — groups of similar task instances ("sightings") that look automatable. ' +
+        'Each cluster reports how many times it recurred, across how many days, and the total measured time spent (interaction minutes). ' +
+        'Only non-one-off processes (seen at least twice) are returned, ranked by total time spent. ' +
+        'Use get_cluster_details to drill into the underlying sightings and their evidence.',
+      inputSchema: {
+        minDistinctDays: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe('Only return processes seen on at least this many distinct days (default 1)'),
+      },
+    },
+    (params) => handleListClusters(getServices(), params),
+  )
+
+  server.registerTool(
+    'get_cluster_details',
+    {
+      description:
+        'Fetch a process candidate by ID with its member sightings (task instances). ' +
+        'Each sighting carries its title, computed time window, interaction minutes, and the activity IDs that ground it — ' +
+        'pass those IDs to get_activity_details to reconstruct exactly what was on screen and verify the process.',
+      inputSchema: {
+        clusterId: z.string().describe('Cluster ID (from list_clusters results)'),
+      },
+    },
+    (params) => handleGetClusterDetails(getServices(), params),
+  )
+
+  server.registerTool(
+    'search_sightings',
+    {
+      description:
+        'Search individual task instances ("sightings") by keyword (matches title, description, or apps), ' +
+        'optionally within a time range. Each sighting is a grounded task instance with activity IDs for recall. ' +
+        'Use list_clusters for recurring processes; use this to query the raw task log directly.',
+      inputSchema: {
+        query: z.string().describe('Keyword to match against sighting title, description, or apps'),
+        startTime: z
+          .string()
+          .optional()
+          .describe('Optional ISO 8601 or relative start time (e.g. "yesterday")'),
+        endTime: z.string().optional().describe('Optional ISO 8601 or relative end time'),
+      },
+    },
+    (params) => handleSearchSightings(getServices(), params),
+  )
+
+  server.registerTool(
+    'get_sighting_details',
+    {
+      description:
+        'Fetch task instances ("sightings") by ID, each with its hydrated activity timeline (summaries + on-screen OCR text). ' +
+        'This is the "tell me more about this task" recall path: it reconstructs what actually happened from the grounding activities.',
+      inputSchema: {
+        ids: z.array(z.string()).min(1).max(50).describe('Sighting IDs to fetch (1-50)'),
+      },
+    },
+    (params) => handleGetSightingDetails(getServices(), params),
   )
 
   server.registerTool(
@@ -593,6 +669,19 @@ function formatSightingLine(s: PatternSighting): string {
   return `- ${s.id} | ${time} | confidence: ${confidence}${duration} | run: ${s.runId}\n  Evidence: ${s.evidence}\n  Activity IDs: ${s.activityIds.join(', ')}`
 }
 
+function formatClusterLine(c: Cluster): string {
+  const perWeek = c.perWeek != null ? `, ~${c.perWeek}×/week` : ''
+  const span = `seen ${c.sightingCount}× over ${c.distinctDays} day${c.distinctDays !== 1 ? 's' : ''}`
+  const time = `${Math.round(c.totalInteractionMin)} min total`
+  return `- ${c.id} | ${c.label} [${c.apps.join(', ')}] (${span}${perWeek}, ${time})\n  ${c.description}`
+}
+
+function formatTaskSightingLine(s: Sighting): string {
+  const start = new Date(s.startedAt).toLocaleString()
+  const confidence = `${(s.confidence * 100).toFixed(0)}%`
+  return `- ${s.id} | ${start} | ~${s.interactionMin} min | confidence: ${confidence}\n  ${s.title}: ${s.description}\n  Activity IDs: ${s.activityIds.join(', ')}`
+}
+
 async function handleListPatterns(services: MCPServices | null) {
   if (!services) {
     return {
@@ -767,6 +856,199 @@ async function handleGetPatternDetails(
         {
           type: 'text' as const,
           text: `Error fetching pattern details: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+      isError: true,
+    }
+  }
+}
+
+async function handleListClusters(
+  services: MCPServices | null,
+  { minDistinctDays }: { minDistinctDays?: number | undefined },
+) {
+  if (!services) {
+    return {
+      content: [{ type: 'text' as const, text: 'Error: Services not initialized.' }],
+      isError: true,
+    }
+  }
+
+  try {
+    const clusters = services.storage.clusters.getClusters({
+      minDistinctDays: minDistinctDays ?? 1,
+    })
+
+    if (clusters.length === 0) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: 'No recurring processes found yet. Processes emerge once the task miner has recorded the same kind of task more than once.',
+          },
+        ],
+      }
+    }
+
+    const formatted = clusters.map(formatClusterLine).join('\n\n')
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `${clusters.length} recurring process candidate${clusters.length !== 1 ? 's' : ''} (ranked by time spent):\n\n${formatted}`,
+        },
+      ],
+    }
+  } catch (error) {
+    log.error('Error listing clusters:', error)
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Error listing clusters: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+      isError: true,
+    }
+  }
+}
+
+async function handleGetClusterDetails(
+  services: MCPServices | null,
+  { clusterId }: { clusterId: string },
+) {
+  if (!services) {
+    return {
+      content: [{ type: 'text' as const, text: 'Error: Services not initialized.' }],
+      isError: true,
+    }
+  }
+
+  try {
+    const detail = services.storage.clusters.getClusterDetail(clusterId)
+    if (!detail) {
+      return {
+        content: [{ type: 'text' as const, text: `No process found with ID "${clusterId}".` }],
+      }
+    }
+
+    const header = formatClusterLine(detail.cluster)
+    const sightingsSection =
+      detail.sightings.length > 0
+        ? `\n\nSightings (${detail.sightings.length}):\n\n${detail.sightings.map(formatTaskSightingLine).join('\n\n')}`
+        : '\n\nNo member sightings.'
+
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Process details:\n\n${header}${sightingsSection}\n\nTo verify any sighting, pass its Activity IDs to get_activity_details.`,
+        },
+      ],
+    }
+  } catch (error) {
+    log.error('Error fetching cluster details:', error)
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Error fetching cluster details: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+      isError: true,
+    }
+  }
+}
+
+async function handleSearchSightings(
+  services: MCPServices | null,
+  {
+    query,
+    startTime: startTimeStr,
+    endTime: endTimeStr,
+  }: { query: string; startTime?: string | undefined; endTime?: string | undefined },
+) {
+  if (!services) {
+    return {
+      content: [{ type: 'text' as const, text: 'Error: Services not initialized.' }],
+      isError: true,
+    }
+  }
+
+  try {
+    const startTime = startTimeStr ? parseTimeString(startTimeStr) : null
+    const endTime = endTimeStr ? parseTimeString(endTimeStr) : null
+    let sightings = services.storage.sightings.search(query)
+    if (startTime !== null) sightings = sightings.filter((s) => s.endedAt >= startTime)
+    if (endTime !== null) sightings = sightings.filter((s) => s.startedAt <= endTime)
+
+    if (sightings.length === 0) {
+      return {
+        content: [{ type: 'text' as const, text: `No task instances matching "${query}".` }],
+      }
+    }
+
+    const formatted = sightings.map(formatTaskSightingLine).join('\n\n')
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `${sightings.length} task instance${sightings.length !== 1 ? 's' : ''} matching "${query}":\n\n${formatted}`,
+        },
+      ],
+    }
+  } catch (error) {
+    log.error('Error searching sightings:', error)
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Error searching sightings: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+      isError: true,
+    }
+  }
+}
+
+async function handleGetSightingDetails(services: MCPServices | null, { ids }: { ids: string[] }) {
+  if (!services) {
+    return {
+      content: [{ type: 'text' as const, text: 'Error: Services not initialized.' }],
+      isError: true,
+    }
+  }
+
+  try {
+    const storage = services.storage
+    const sightings = storage.sightings.getByIds(ids)
+    if (sightings.length === 0) {
+      return {
+        content: [{ type: 'text' as const, text: 'No sightings found for the given IDs.' }],
+      }
+    }
+
+    const blocks = sightings.map((s) => {
+      const activities = storage.activities.getByIds(s.activityIds)
+      const activityLines = activities
+        .map(
+          (a) =>
+            `    - ${a.id} | ${new Date(a.startTimestamp).toLocaleString()} | ${a.appName} — ${a.windowTitle}\n      ${a.summary}\n      OCR: ${(a.ocrText || '(none)').slice(0, 500)}`,
+        )
+        .join('\n')
+      return `${formatTaskSightingLine(s)}\n  Activities:\n${activityLines || '    (none resolvable)'}`
+    })
+
+    return {
+      content: [{ type: 'text' as const, text: blocks.join('\n\n') }],
+    }
+  } catch (error) {
+    log.error('Error fetching sighting details:', error)
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Error fetching sighting details: ${error instanceof Error ? error.message : String(error)}`,
         },
       ],
       isError: true,

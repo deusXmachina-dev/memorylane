@@ -106,7 +106,7 @@ async function main() {
   targetDay.setDate(targetDay.getDate() - days)
   const dateLabel = targetDay.toISOString().slice(0, 10)
 
-  console.log('=== Pattern Detector ===')
+  console.log('=== Task Miner ===')
   console.log(`Database: ${dbPath}`)
   console.log(`Vendor:   ${handle.vendor}${handle.baseURL ? ` (${handle.baseURL})` : ''}`)
   console.log(`Model:    ${model}`)
@@ -140,11 +140,9 @@ async function main() {
     console.log('\n=== RESULTS ===')
     console.log(`Run ID:           ${result.runId}`)
     console.log(
-      `Candidates:       ${result.candidatesFromScan} scanned → ${result.candidatesVerified} verified, ${result.candidatesRejected} rejected`,
+      `Candidates:       ${result.candidatesFromScan} scanned → ${result.candidatesKept} kept, ${result.candidatesRejected} rejected`,
     )
-    console.log(`Total findings:   ${result.totalFindings}`)
-    console.log(`New patterns:     ${result.newPatterns}`)
-    console.log(`Updated patterns: ${result.updatedPatterns}`)
+    console.log(`Sightings mined:  ${result.sightingsFound}`)
     console.log(
       `Tokens (scan):    ${result.tokenUsage.scan.input} in / ${result.tokenUsage.scan.output} out`,
     )
@@ -155,18 +153,22 @@ async function main() {
       `Tokens (total):   ${result.tokenUsage.total.input} in / ${result.tokenUsage.total.output} out`,
     )
 
-    // Print active patterns
-    const all = storageService.patterns.getAllPatterns()
-    if (all.length > 0) {
-      console.log(`\n=== Patterns (${all.length}) ===`)
-      for (const p of all) {
-        console.log(`\n  ${p.name} (${p.sightingCount} sighting(s))`)
-        console.log(`    Apps: ${p.apps.join(', ')}`)
-        console.log(`    Automation: ${p.automationIdea}`)
-        if (p.lastSeenAt) {
-          console.log(`    Last seen: ${new Date(p.lastSeenAt).toISOString()}`)
-        }
+    // Print the sightings mined in this run, with their computed windows.
+    const mined = storageService.sightings.getByRunId(result.runId)
+    if (mined.length > 0) {
+      console.log(`\n=== Sightings this run (${mined.length}) ===`)
+      for (const s of mined) {
+        const spanMin = Math.round((s.endedAt - s.startedAt) / 60000)
+        console.log(`\n  ${s.title}`)
+        console.log(`    Apps: ${s.apps.join(', ')}`)
+        console.log(
+          `    ${s.interactionMin} min interaction / ${spanMin} min span | ${s.activityIds.length} activities | conf ${(s.confidence * 100).toFixed(0)}%`,
+        )
+        console.log(
+          `    ${new Date(s.startedAt).toISOString()} → ${new Date(s.endedAt).toISOString()}`,
+        )
       }
+      console.log('\nRun `npm run cluster-tasks` to group these into process candidates.')
     }
   } finally {
     storageService.close()
