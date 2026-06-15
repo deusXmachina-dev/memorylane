@@ -2,6 +2,7 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import log from '../logger'
+import { isSameDay } from './pattern-detector/helpers'
 import { stripDatabaseForUpload, type StripOptions } from './strip-database-for-upload'
 
 const DEFAULT_UPLOAD_INTERVAL_MS = 24 * 60 * 60 * 1000
@@ -17,6 +18,10 @@ export interface DatabaseUploadSyncParams {
   isSyncEnabled: () => boolean
   getStripOptions: () => StripOptions
   getBackendUrl: () => string
+  /** Timestamp (ms) of the last successful upload, or null if never. */
+  getLastUploadAt: () => number | null
+  /** Persist the timestamp (ms) of a successful upload. */
+  recordUploadAt: (ts: number) => void
   intervalMs?: number
 }
 
@@ -27,6 +32,8 @@ export class DatabaseUploadSync {
   private readonly isSyncEnabled: () => boolean
   private readonly getStripOptions: () => StripOptions
   private readonly getBackendUrl: () => string
+  private readonly getLastUploadAt: () => number | null
+  private readonly recordUploadAt: (ts: number) => void
   private readonly intervalMs: number
   private timer: ReturnType<typeof setInterval> | null = null
   private uploadRunning = false
@@ -40,6 +47,8 @@ export class DatabaseUploadSync {
     this.isSyncEnabled = params.isSyncEnabled
     this.getStripOptions = params.getStripOptions
     this.getBackendUrl = params.getBackendUrl
+    this.getLastUploadAt = params.getLastUploadAt
+    this.recordUploadAt = params.recordUploadAt
     this.intervalMs = params.intervalMs ?? DEFAULT_UPLOAD_INTERVAL_MS
   }
 
@@ -49,11 +58,26 @@ export class DatabaseUploadSync {
     }
 
     this.timer = setInterval(() => {
-      void this.queueUpload('interval')
+      this.scheduleUploadIfStale('interval')
     }, this.intervalMs)
     this.timer.unref?.()
 
-    void this.queueUpload('startup')
+    this.scheduleUploadIfStale('startup')
+  }
+
+  /**
+   * Upload if we haven't already uploaded today, otherwise skip. Call this on
+   * startup and on power resume so uploads catch up regardless of how the
+   * sleep-fragile 24h interval drifts. Unlike `triggerUpload`, this is gated —
+   * it never forces a duplicate same-day upload.
+   */
+  public scheduleUploadIfStale(reason: string): void {
+    const lastUploadAt = this.getLastUploadAt()
+    if (lastUploadAt !== null && isSameDay(lastUploadAt, Date.now())) {
+      log.debug(`[DatabaseUploadSync] Skipping upload (${reason}) — already uploaded today`)
+      return
+    }
+    void this.queueUpload(reason)
   }
 
   public async triggerUpload(): Promise<{ success: boolean; error?: string }> {
@@ -142,6 +166,7 @@ export class DatabaseUploadSync {
         upload_id: string
         checksum_sha256: string
       }
+      this.recordUploadAt(Date.now())
       log.info(
         `[DatabaseUploadSync] Upload succeeded (${reason}): upload_id=${data.upload_id} checksum=${data.checksum_sha256}`,
       )

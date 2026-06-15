@@ -8,12 +8,14 @@ import { ActivityRepository } from './activity-repository'
 import { PatternRepository } from './pattern-repository'
 import { SightingRepository } from './sighting-repository'
 import { MiningRunRepository } from './mining-run-repository'
+import { UploadRunRepository } from './upload-run-repository'
 import { UserContextRepository } from './user-context-repository'
 
 export { ActivityRepository } from './activity-repository'
 export { PatternRepository } from './pattern-repository'
 export { SightingRepository } from './sighting-repository'
 export { MiningRunRepository } from './mining-run-repository'
+export { UploadRunRepository } from './upload-run-repository'
 export { UserContextRepository } from './user-context-repository'
 export type { Pattern, PatternSighting, PatternWithStats } from './pattern-repository'
 export type { Sighting } from './sighting-repository'
@@ -69,6 +71,7 @@ export class StorageService {
   readonly patterns: PatternRepository
   readonly sightings: SightingRepository
   readonly miningRuns: MiningRunRepository
+  readonly uploadRuns: UploadRunRepository
   readonly userContext: UserContextRepository
 
   constructor(dbPath?: string) {
@@ -96,6 +99,7 @@ export class StorageService {
       this.patterns = new PatternRepository(db)
       this.sightings = new SightingRepository(db)
       this.miningRuns = new MiningRunRepository(db)
+      this.uploadRuns = new UploadRunRepository(db)
       this.userContext = new UserContextRepository(db)
       log.info('SQLite database initialized successfully')
     } catch (error) {
