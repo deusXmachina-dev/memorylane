@@ -92,7 +92,6 @@ export interface DetectedSighting {
   apps: string[]
   activityIds: string[]
   interactionMin: number
-  confidence: number
 }
 
 export interface TaskRunResult {
@@ -126,7 +125,6 @@ export interface GoldenSightingScore {
   matchedSightingId: string | null
   matchedTitle: string | null
   grounding: Grounding
-  confidence: number | null
   /** LLM-judge: 0..1 semantic equivalence with the golden (null if no judge). */
   equivalence: number | null
 }
@@ -160,7 +158,6 @@ export interface TaskFixtureScore {
   bundledSightingIds: string[]
   avgGroundingRecall: number | null
   avgGroundingPrecision: number | null
-  avgConfidence: number | null
   avgEquivalence: number | null
   detectedCount: number
   costUsd: number | null

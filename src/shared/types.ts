@@ -306,44 +306,6 @@ export interface PatternDetailInfo {
   sightings: PatternSightingInfo[]
 }
 
-// ---------------------------------------------------------------------------
-// Task mining: sightings (carved in stone) + clusters (derived process candidates)
-// ---------------------------------------------------------------------------
-
-/** A single mined task instance. Wall-clock span = endedAt - startedAt. */
-export interface SightingInfo {
-  id: string
-  title: string
-  description: string
-  apps: string[]
-  activityIds: string[]
-  startedAt: number
-  endedAt: number
-  interactionMin: number
-  confidence: number
-  detectedAt: number
-}
-
-/** A process candidate: a group of sightings, with computed ROI stats. */
-export interface ClusterInfo {
-  id: string
-  label: string
-  description: string
-  apps: string[]
-  sightingCount: number
-  distinctDays: number
-  totalInteractionMin: number
-  firstSeenAt: number
-  lastSeenAt: number
-  perWeek: number | null
-}
-
-export interface ClusterDetailInfo {
-  cluster: ClusterInfo
-  /** Member sightings, each with its hydrated activity timeline for recall. */
-  sightings: (SightingInfo & { activities: PatternActivityRef[] })[]
-}
-
 export interface MainWindowAPI {
   getEditionConfig: () => Promise<AppEditionConfig>
   getAccessState: () => Promise<AccessState>

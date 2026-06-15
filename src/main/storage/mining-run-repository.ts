@@ -1,13 +1,12 @@
 import type Database from 'better-sqlite3'
 
-/** Provenance for mining runs (parallels the legacy pattern_detection_runs). */
+/** Incremental-mining cursor: records when each run happened so the next run
+ *  knows where to resume. Only the latest timestamp is ever read back. */
 export class MiningRunRepository {
   constructor(private readonly db: Database.Database) {}
 
-  record(runId: string, sightingsCount: number, ranAt: number = Date.now()): void {
-    this.db
-      .prepare('INSERT INTO mining_runs (id, ran_at, sightings_count) VALUES (?, ?, ?)')
-      .run(runId, ranAt, sightingsCount)
+  record(ranAt: number = Date.now()): void {
+    this.db.prepare('INSERT INTO mining_runs (ran_at) VALUES (?)').run(ranAt)
   }
 
   getLastRunTimestamp(): number | null {

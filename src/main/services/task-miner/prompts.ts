@@ -51,7 +51,6 @@ Output your findings as a JSON array:
     "title": "Short name for the task",
     "description": "What I did, step by step",
     "apps": ["App1", "App2"],
-    "confidence": 0.0-1.0,
     "activity_ids": ["IDs of the activities that make up this task instance"]
   }
 ]
@@ -76,7 +75,6 @@ export function buildGroundingSystemPrompt(candidate: Candidate): string {
 - Description: ${candidate.description}
 - Apps: ${appList}
 - Activity IDs from scan: ${activityIdList}
-- Initial confidence: ${candidate.confidence}
 
 ## Your task
 
@@ -98,7 +96,6 @@ If this is a genuine, discrete, automatable task instance:
   "title": "Refined title",
   "description": "What I did, step by step — informed by the OCR and timeline",
   "apps": ["App1", "App2"],
-  "confidence": 0.0-1.0,
   "activity_ids": ["the exact, finalized set of supporting activity IDs"]
 }
 \`\`\`

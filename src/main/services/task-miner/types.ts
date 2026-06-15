@@ -24,7 +24,6 @@ export interface Candidate {
   description: string
   apps: string[]
   activity_ids: string[]
-  confidence: number
 }
 
 /** Outcome of grounding a candidate against the real activities. */
@@ -34,7 +33,6 @@ export interface GroundedTask {
   description: string
   apps: string[]
   activity_ids: string[]
-  confidence: number
   reason?: string
 }
 

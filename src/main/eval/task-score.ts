@@ -108,7 +108,6 @@ export function scoreTaskFixture(params: ScoreParams): TaskFixtureScore {
         matchedSightingId: null,
         matchedTitle: null,
         grounding: { precision: 0, recall: 0, iou: 0, matchedIds: [] },
-        confidence: null,
         equivalence: j?.equivalence ?? null,
       }
     }
@@ -132,7 +131,6 @@ export function scoreTaskFixture(params: ScoreParams): TaskFixtureScore {
       matchedSightingId: best.sighting.id,
       matchedTitle: best.sighting.title,
       grounding: { precision, recall, iou, matchedIds },
-      confidence: best.sighting.confidence,
       equivalence: j?.equivalence ?? null,
     }
   })
@@ -179,7 +177,6 @@ export function scoreTaskFixture(params: ScoreParams): TaskFixtureScore {
     bundledSightingIds,
     avgGroundingRecall: mean(found.map((s) => s.grounding.recall)),
     avgGroundingPrecision: mean(found.map((s) => s.grounding.precision)),
-    avgConfidence: mean(found.map((s) => s.confidence)),
     avgEquivalence: mean(found.map((s) => s.equivalence)),
     detectedCount: detected.length,
     costUsd: priceUsd(params.model, params.tokenUsage.total.input, params.tokenUsage.total.output),

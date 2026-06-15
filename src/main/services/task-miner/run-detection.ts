@@ -62,7 +62,7 @@ export async function runDetection(
 
   progress(`Starting run ${runId} (model=${cfg.model}, lookback=${cfg.lookbackDays}d)`)
 
-  // 0. Prune very old sightings (DB hygiene; clusters rebuild from what remains)
+  // 0. Prune very old sightings (DB hygiene)
   const prunedSightings = storage.sightings.pruneOlderThan(SIGHTING_MAX_AGE_DAYS, now)
   if (prunedSightings)
     progress(`Pruned ${prunedSightings} sightings older than ${SIGHTING_MAX_AGE_DAYS}d`)
@@ -74,7 +74,7 @@ export async function runDetection(
 
   if (activities.length === 0) {
     progress('No activities for this day, skipping')
-    storage.miningRuns.record(runId, 0, now)
+    storage.miningRuns.record(now)
     return emptyResult(runId, 0, { scanIn: 0, scanOut: 0, verifyIn: 0, verifyOut: 0 })
   }
 
@@ -112,7 +112,7 @@ export async function runDetection(
 
   if (candidates.length === 0) {
     progress('No grounded candidates, done')
-    storage.miningRuns.record(runId, 0, now)
+    storage.miningRuns.record(now)
     return emptyResult(runId, rawCandidates.length, {
       scanIn: scanInputTokens,
       scanOut: scanOutputTokens,
@@ -123,7 +123,7 @@ export async function runDetection(
 
   // =========================================================================
   // Phase 2: Ground — per-candidate confirmation with tool use, then write
-  // a grounded sighting (computed window + embedding). No pattern matching.
+  // a grounded sighting (computed window). No pattern matching.
   // =========================================================================
 
   const tools = buildVerificationTools(storage, embeddingService, start, end, progress)
@@ -198,26 +198,20 @@ export async function runDetection(
       const title = (parsed.title as string) || candidate.title
       const description = (parsed.description as string) || candidate.description
       const apps = (parsed.apps as string[]) || candidate.apps
-      const confidence = (parsed.confidence as number) ?? candidate.confidence
       const { startedAt, endedAt, interactionMin } = computeEpisodeWindow(resolved)
-      const vector = await embeddingService.generateEmbedding(`${title}\n${description}`)
 
-      storage.sightings.add(
-        {
-          id: uuidv4(),
-          title,
-          description,
-          apps,
-          activityIds: resolved.map((a) => a.id),
-          startedAt,
-          endedAt,
-          interactionMin,
-          confidence,
-          runId,
-          detectedAt: now,
-        } satisfies Sighting,
-        vector,
-      )
+      storage.sightings.add({
+        id: uuidv4(),
+        title,
+        description,
+        apps,
+        activityIds: resolved.map((a) => a.id),
+        startedAt,
+        endedAt,
+        interactionMin,
+        runId,
+        detectedAt: now,
+      } satisfies Sighting)
 
       candidatesKept++
       progress(
@@ -231,7 +225,7 @@ export async function runDetection(
     }
   }
 
-  storage.miningRuns.record(runId, candidatesKept, now)
+  storage.miningRuns.record(now)
 
   progress(
     `Run complete: ${candidates.length} candidates → ${candidatesKept} sightings (${candidatesRejected} rejected)`,

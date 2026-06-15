@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 /**
- * CLI wrapper for the task miner (sightings → clusters).
+ * CLI wrapper for the task miner.
  *
  * Reads the active vendor + per-vendor model selection from
  * capture-settings.json (same as the GUI) and routes through
@@ -11,8 +11,7 @@
  * an Electron app context. openai-compatible vendors that don't need a
  * key (e.g. Ollama) work as-is once the GUI has saved a baseURL.
  *
- * Mines grounded sightings for a day. Run `npm run cluster-tasks` afterwards
- * to (re)group them into process candidates.
+ * Mines grounded sightings for a day.
  *
  * Usage:
  *   npm run mine-tasks
@@ -165,13 +164,12 @@ async function main() {
         console.log(`\n  ${s.title}`)
         console.log(`    Apps: ${s.apps.join(', ')}`)
         console.log(
-          `    ${s.interactionMin} min interaction / ${spanMin} min span | ${s.activityIds.length} activities | conf ${(s.confidence * 100).toFixed(0)}%`,
+          `    ${s.interactionMin} min interaction / ${spanMin} min span | ${s.activityIds.length} activities`,
         )
         console.log(
           `    ${new Date(s.startedAt).toISOString()} → ${new Date(s.endedAt).toISOString()}`,
         )
       }
-      console.log('\nRun `npm run cluster-tasks` to group these into process candidates.')
     }
   } finally {
     storageService.close()

@@ -184,7 +184,7 @@ function renderMarkdown(report: TaskEvalReport): string {
       lines.push(`- ${mark} **${g.goldenTitle}** → ${g.matchedTitle ?? '(missed)'}`)
       lines.push(
         `  - grounding: recall ${pct(g.grounding.recall)}, precision ${pct(g.grounding.precision)}, ` +
-          `IoU ${pct(g.grounding.iou)} (${g.grounding.matchedIds.length} ids), conf ${num(g.confidence)}`,
+          `IoU ${pct(g.grounding.iou)} (${g.grounding.matchedIds.length} ids)`,
       )
       if (g.equivalence != null) {
         lines.push(`  - judge: equiv ${num(g.equivalence)}`)

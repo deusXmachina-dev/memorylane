@@ -119,15 +119,6 @@ export const PATTERN_DETECTION_CONFIG = {
   SETTLE_DELAY_MS: 60 * 1000, // 1 min after unlock before running
 }
 
-// Task Clustering Configuration (deterministic, no LLM — tunable via evals)
-export const TASK_CLUSTER_CONFIG = {
-  // Two sightings are linked into the same process if their embeddings are
-  // close AND they share enough apps. Single-linkage (connected components).
-  COS_THRESHOLD: 0.82, // cosine similarity of title+description embeddings
-  APP_THRESHOLD: 0.3, // Jaccard overlap of app sets
-  MIN_CLUSTER_SIZE: 2, // singletons (one-offs) are not surfaced as clusters
-}
-
 // Managed Key / Subscription Configuration
 export const MANAGED_KEY_CONFIG = {
   BACKEND_URL:

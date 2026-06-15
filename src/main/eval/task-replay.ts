@@ -94,7 +94,6 @@ function collectDetected(storage: StorageService, runId: string): DetectedSighti
     apps: s.apps,
     activityIds: s.activityIds,
     interactionMin: s.interactionMin,
-    confidence: s.confidence,
   }))
 }
 

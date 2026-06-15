@@ -34,14 +34,6 @@ const scanCandidateSchema = z.object({
       z.array(z.string()),
     )
     .default([]),
-  confidence: z
-    .preprocess((value) => {
-      if (typeof value === 'number' && Number.isFinite(value)) {
-        return Math.max(0, Math.min(1, value))
-      }
-      return 0.5
-    }, z.number())
-    .default(0.5),
 })
 
 export function normalizeScanCandidates(raw: unknown[]): {

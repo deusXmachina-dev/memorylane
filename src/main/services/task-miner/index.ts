@@ -28,7 +28,6 @@ import { PATTERN_DETECTION_CONFIG } from '../../../shared/constants'
 import log from '../../logger'
 import { EmbeddingService } from '../../processor/embedding'
 import { isSameDay, formatApiError } from '../pattern-detector/helpers'
-import { runClustering } from '../task-clusterer'
 import type { TaskMinerConfig, MiningRunResult, ProgressCallback } from './types'
 import { DEFAULT_MINER_CONFIG } from './types'
 import { runDetection } from './run-detection'
@@ -119,12 +118,6 @@ export class TaskMiner {
         `[TaskMiner] Run complete: ${result.sightingsFound} sightings ` +
           `(${result.candidatesRejected} rejected), ` +
           `tokens: ${result.tokenUsage.total.input}in/${result.tokenUsage.total.output}out`,
-      )
-      // Re-derive process candidates from the updated sightings table.
-      // Deterministic + LLM-free, so it's safe to run on every mining pass.
-      const clustering = runClustering(this.storage)
-      log.info(
-        `[TaskMiner] Clustered ${clustering.sightingsConsidered} sightings → ${clustering.clustersFound} process candidates`,
       )
     } catch (error) {
       log.error('[TaskMiner] Run failed:', formatApiError(error))

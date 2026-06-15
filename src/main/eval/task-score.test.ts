@@ -25,13 +25,8 @@ function fixture(sightings: GoldenSighting[]): TaskFixture {
   }
 }
 
-function detected(
-  id: string,
-  title: string,
-  activityIds: string[],
-  confidence = 0.8,
-): DetectedSighting {
-  return { id, title, description: '', apps: [], activityIds, interactionMin: 5, confidence }
+function detected(id: string, title: string, activityIds: string[]): DetectedSighting {
+  return { id, title, description: '', apps: [], activityIds, interactionMin: 5 }
 }
 
 const ZERO_TOKENS = { total: { input: 0, output: 0 } }
