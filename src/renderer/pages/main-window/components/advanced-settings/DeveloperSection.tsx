@@ -276,34 +276,34 @@ function FixtureReview({
           <ArrowLeftIcon /> Back
         </Button>
         <div className="text-sm font-medium">{fixture.label || fixture.name}</div>
+        <Button className="ml-auto" size="sm" onClick={onSave} disabled={!dirty}>
+          <FloppyDiskIcon /> Save golden
+        </Button>
       </div>
 
+      {/* Video on top (kept small), then events + golden.md as scrollable columns. */}
+      <Card>
+        <CardContent className="flex justify-center p-3">
+          {fixture.videoUrl ? (
+            <video
+              ref={videoRef}
+              src={fixture.videoUrl}
+              controls
+              className="max-h-[40vh] w-auto rounded-md bg-black"
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">No video for this fixture.</p>
+          )}
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-2 gap-4 items-start">
-        {/* Video sticks in view while the golden.md editor scrolls beside it. */}
-        <Card className="sticky top-2 self-start">
-          <CardContent className="p-3">
-            {fixture.videoUrl ? (
-              <video
-                ref={videoRef}
-                src={fixture.videoUrl}
-                controls
-                className="w-full rounded-md bg-black"
-              />
-            ) : (
-              <p className="text-sm text-muted-foreground">No video for this fixture.</p>
-            )}
-          </CardContent>
-        </Card>
+        <EventTimeline windows={fixture.eventWindows} />
 
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              golden.md
-            </span>
-            <Button size="sm" onClick={onSave} disabled={!dirty}>
-              <FloppyDiskIcon /> Save golden
-            </Button>
-          </div>
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            golden.md
+          </span>
           <Textarea
             value={goldenDraft}
             onChange={(e) => onGoldenChange(e.target.value)}
@@ -311,6 +311,60 @@ function FixtureReview({
             className="h-[70vh] resize-none overflow-auto font-mono text-xs leading-relaxed"
           />
         </div>
+      </div>
+    </div>
+  )
+}
+
+/** m:ss from a ms offset — same shape as golden.md timestamps. */
+function formatOffset(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000))
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
+/** Read-only timeline of captured interaction events, grouped by EventWindow. */
+function EventTimeline({
+  windows,
+}: {
+  windows: EvalFixtureLoad['eventWindows']
+}): React.JSX.Element {
+  return (
+    <div className="space-y-2">
+      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        events
+      </span>
+      <div className="h-[70vh] overflow-auto rounded-md border p-3 font-mono text-xs leading-relaxed">
+        {windows.length === 0 ? (
+          <p className="text-muted-foreground">No interaction events.</p>
+        ) : (
+          windows.map((w, i) => (
+            <div key={i} className="mb-3 last:mb-0">
+              <div className="flex items-baseline gap-2">
+                <span className="font-medium">
+                  {formatOffset(w.startOffsetMs)} → {formatOffset(w.endOffsetMs)}
+                </span>
+                {w.appLabel && <span className="truncate text-muted-foreground">{w.appLabel}</span>}
+                <span className="ml-auto text-[10px] uppercase text-muted-foreground/70">
+                  {w.closedBy}
+                </span>
+              </div>
+              {w.events.length === 0 ? (
+                <div className="pl-2 text-muted-foreground">(no events)</div>
+              ) : (
+                w.events.map((e, j) => (
+                  <div key={j} className="flex gap-2 pl-2">
+                    <span className="shrink-0 text-muted-foreground">
+                      {formatOffset(e.offsetMs)}
+                    </span>
+                    <span>{e.text}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          ))
+        )}
       </div>
     </div>
   )
