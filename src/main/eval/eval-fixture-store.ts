@@ -10,8 +10,11 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as yazl from 'yazl'
 import log from '../logger'
-import type { FixtureManifest } from './types'
-import type { EvalFixtureLoad, EvalFixtureSummary } from '../../shared/eval-review'
+import type { DumpedFrame, FixtureManifest } from './types'
+import type { EvalEventWindow, EvalFixtureLoad, EvalFixtureSummary } from '../../shared/eval-review'
+import type { EventWindow, InteractionContext } from '../../shared/types'
+import { readJsonl } from './jsonl'
+import { describeInteraction } from '../semantic/prompt'
 import { evalMediaUrl } from './eval-media-protocol'
 
 /** Staging dir for in-progress recordings — never listed as a fixture. */
@@ -68,7 +71,52 @@ export class EvalFixtureStore {
     const hasVideo = fs.existsSync(path.join(dir, 'session.mp4'))
     const videoUrl = hasVideo ? evalMediaUrl(path.basename(name)) : null
 
-    return { name: path.basename(name), label: manifest.label, goldenMd, videoUrl }
+    const eventWindows = this.loadEventWindows(dir)
+
+    return { name: path.basename(name), label: manifest.label, goldenMd, videoUrl, eventWindows }
+  }
+
+  /**
+   * Reads `event-windows.jsonl` into a display-ready, window-grouped timeline.
+   * Offsets anchor to the same session-start clock as the video and golden mm:ss
+   * (min frame timestamp, falling back to the earliest window start), so the
+   * review UI lines up across all three columns. Presence heartbeats are
+   * synthetic keep-alives with no user-action signal, so they're dropped — same
+   * as the model's prompt timeline.
+   */
+  private loadEventWindows(dir: string): EvalEventWindow[] {
+    const windowsPath = path.join(dir, 'event-windows.jsonl')
+    if (!fs.existsSync(windowsPath)) return []
+    const windows = readJsonl<EventWindow>(windowsPath)
+    if (windows.length === 0) return []
+
+    const sessionStartMs = this.sessionStartMs(dir, windows)
+    return windows.map((w) => {
+      const events = w.events
+        .filter((e) => e.type !== 'presence')
+        .sort((a, b) => a.timestamp - b.timestamp)
+      return {
+        startOffsetMs: w.startTimestamp - sessionStartMs,
+        endOffsetMs: w.endTimestamp - sessionStartMs,
+        closedBy: w.closedBy,
+        appLabel: appLabelOf(events),
+        events: events.map((e) => ({
+          offsetMs: e.timestamp - sessionStartMs,
+          type: e.type,
+          text: describeInteraction(e),
+        })),
+      }
+    })
+  }
+
+  /** Video/golden clock zero: earliest frame timestamp, else earliest window. */
+  private sessionStartMs(dir: string, windows: EventWindow[]): number {
+    const framesPath = path.join(dir, 'frames.jsonl')
+    if (fs.existsSync(framesPath)) {
+      const frames = readJsonl<DumpedFrame>(framesPath)
+      if (frames.length > 0) return Math.min(...frames.map((f) => f.timestamp))
+    }
+    return Math.min(...windows.map((w) => w.startTimestamp))
   }
 
   saveGolden(name: string, markdown: string): void {
@@ -113,4 +161,11 @@ export class EvalFixtureStore {
     })
     log.info(`[EvalFixtureStore] Exported "${name}" (${files.length} files) -> ${destPath}`)
   }
+}
+
+/** First app/window context in a window, as "processName — title" (or null). */
+function appLabelOf(events: InteractionContext[]): string | null {
+  const win = events.find((e) => e.activeWindow)?.activeWindow
+  if (!win) return null
+  return win.title ? `${win.processName} — ${win.title}` : win.processName
 }

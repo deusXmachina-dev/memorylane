@@ -67,6 +67,59 @@ describe('EvalFixtureStore', () => {
     expect(noVideo?.videoUrl).toBeNull()
   })
 
+  it('loads interaction events grouped by window, anchored to the first frame', () => {
+    writeFixture('alpha')
+    const dir = path.join(root, 'alpha')
+    // Earliest frame is the session-clock zero; events offset from it.
+    fs.writeFileSync(
+      path.join(dir, 'frames.jsonl'),
+      [
+        JSON.stringify({ filepath: 'frames/f2.png', timestamp: T0 + 5_000 }),
+        JSON.stringify({ filepath: 'frames/f1.png', timestamp: T0 + 1_000 }),
+      ].join('\n'),
+      'utf8',
+    )
+    fs.writeFileSync(
+      path.join(dir, 'event-windows.jsonl'),
+      [
+        JSON.stringify({
+          id: 'w1',
+          startTimestamp: T0 + 1_000,
+          endTimestamp: T0 + 4_000,
+          closedBy: 'gap',
+          events: [
+            { type: 'presence', timestamp: T0 + 1_000 },
+            {
+              type: 'click',
+              timestamp: T0 + 3_000,
+              activeWindow: { title: 'github.com', processName: 'Chrome' },
+            },
+            { type: 'keyboard', timestamp: T0 + 2_000, keyCount: 45 },
+          ],
+        }),
+      ].join('\n'),
+      'utf8',
+    )
+
+    const loaded = store.load('alpha')
+    expect(loaded?.eventWindows).toHaveLength(1)
+    const w = loaded!.eventWindows[0]
+    expect(w.closedBy).toBe('gap')
+    expect(w.startOffsetMs).toBe(0) // T0+1000 - sessionStart(T0+1000)
+    expect(w.endOffsetMs).toBe(3_000)
+    expect(w.appLabel).toBe('Chrome — github.com')
+    // Presence dropped; remaining sorted by timestamp; text matches the prompt formatter.
+    expect(w.events).toEqual([
+      { offsetMs: 1_000, type: 'keyboard', text: 'typing session (45 keys)' },
+      { offsetMs: 2_000, type: 'click', text: 'mouse click' },
+    ])
+  })
+
+  it('returns [] event windows when the file is absent', () => {
+    writeFixture('alpha')
+    expect(store.load('alpha')?.eventWindows).toEqual([])
+  })
+
   it('returns null when loading a missing fixture', () => {
     expect(store.load('nope')).toBeNull()
   })

@@ -96,7 +96,7 @@ function buildInteractionTimeline(activity: Activity): string {
   return items.join('\n')
 }
 
-function describeInteraction(interaction: InteractionContext): string {
+export function describeInteraction(interaction: InteractionContext): string {
   switch (interaction.type) {
     case 'app_change': {
       const processName = interaction.activeWindow?.processName ?? 'unknown app'

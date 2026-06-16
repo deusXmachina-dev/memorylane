@@ -4,6 +4,8 @@
  * of any `src/main` imports so the renderer's tsconfig can compile it.
  */
 
+import type { EventWindow, InteractionContext } from './types'
+
 export interface EvalRecordingStatus {
   recording: boolean
   name: string | null
@@ -22,6 +24,26 @@ export interface EvalFixtureSummary {
   hasVideo: boolean
 }
 
+/** One captured interaction, formatted for display. Offsets anchor to the
+ *  video/golden clock zero (session start). */
+export interface EvalEvent {
+  /** ms from session start (same zero as the video and golden mm:ss offsets). */
+  offsetMs: number
+  type: InteractionContext['type']
+  /** Human text, identical to what the model's prompt timeline shows. */
+  text: string
+}
+
+/** One EventWindow's interactions, grouped for the review timeline. */
+export interface EvalEventWindow {
+  startOffsetMs: number
+  endOffsetMs: number
+  closedBy: EventWindow['closedBy']
+  /** App/window context for the window (e.g. "Chrome — github.com"), or null. */
+  appLabel: string | null
+  events: EvalEvent[]
+}
+
 /** A fixture loaded for review: the editable golden + the review video. */
 export interface EvalFixtureLoad {
   name: string
@@ -29,6 +51,8 @@ export interface EvalFixtureLoad {
   goldenMd: string
   /** `mlmedia://` URL streaming `session.mp4` off disk (seekable), or null. */
   videoUrl: string | null
+  /** Captured interaction events, window-grouped; `[]` when none on disk. */
+  eventWindows: EvalEventWindow[]
 }
 
 /** Result of stopping a recording (the freshly promoted fixture). */
