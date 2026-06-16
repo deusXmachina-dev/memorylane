@@ -12,10 +12,37 @@ import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Textarea } from '@components/ui/textarea'
 import { Card, CardContent } from '@components/ui/card'
+import { Tabs, TabsList, TabsTab, TabsPanel } from '@components/ui/tabs'
 import type { MainWindowAPI } from '@types'
 import type { EvalFixtureLoad, EvalFixtureSummary } from '@/shared/eval-review'
 import { setDevMode } from '@/renderer/lib/dev-mode'
 import { SettingsSection } from './SettingsSection'
+import { TaskGoldenSection } from './TaskGoldenSection'
+
+export function DeveloperSection({ api }: { api: MainWindowAPI }): React.JSX.Element {
+  return (
+    <div className="space-y-6">
+      <Tabs defaultValue="recorder">
+        <TabsList>
+          <TabsTab value="recorder">Recorder</TabsTab>
+          <TabsTab value="tasks">Tasks</TabsTab>
+        </TabsList>
+        <TabsPanel value="recorder" className="pt-2">
+          <RecorderSection api={api} />
+        </TabsPanel>
+        <TabsPanel value="tasks" className="pt-2">
+          <TaskGoldenSection api={api} />
+        </TabsPanel>
+      </Tabs>
+
+      <div className="pt-2">
+        <Button variant="outline" size="sm" onClick={() => setDevMode(false)}>
+          Disable Developer mode
+        </Button>
+      </div>
+    </div>
+  )
+}
 
 /** mm:ss elapsed from a start epoch. */
 function elapsed(startedAt: number, now: number): string {
@@ -28,7 +55,7 @@ function defaultName(): string {
   return new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
 }
 
-export function DeveloperSection({ api }: { api: MainWindowAPI }): React.JSX.Element {
+function RecorderSection({ api }: { api: MainWindowAPI }): React.JSX.Element {
   const [recording, setRecording] = useState(false)
   const [startedAt, setStartedAt] = useState<number | null>(null)
   const [now, setNow] = useState(() => Date.now())
@@ -221,12 +248,6 @@ export function DeveloperSection({ api }: { api: MainWindowAPI }): React.JSX.Ele
           </div>
         )}
       </SettingsSection>
-
-      <div className="pt-2">
-        <Button variant="outline" size="sm" onClick={() => setDevMode(false)}>
-          Disable Developer mode
-        </Button>
-      </div>
     </div>
   )
 }

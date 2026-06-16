@@ -145,6 +145,23 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
     ipcRenderer.invoke('main-window:evalSaveGolden', name, markdown),
   evalDeleteFixture: (name: string) => ipcRenderer.invoke('main-window:evalDeleteFixture', name),
   evalExportFixture: (name: string) => ipcRenderer.invoke('main-window:evalExportFixture', name),
+  // Task-mining goldens (Developer → Tasks tab)
+  evalListTaskSightings: () => ipcRenderer.invoke('main-window:evalListTaskSightings'),
+  evalPreviewTaskGolden: (sightingId: string, beforeMin: number, afterMin: number) =>
+    ipcRenderer.invoke('main-window:evalPreviewTaskGolden', sightingId, beforeMin, afterMin),
+  evalPromoteTaskSighting: (
+    sightingId: string,
+    opts: { beforeMin: number; afterMin: number; goldenMd: string; name: string },
+  ) => ipcRenderer.invoke('main-window:evalPromoteTaskSighting', sightingId, opts),
+  evalListTaskFixtures: () => ipcRenderer.invoke('main-window:evalListTaskFixtures'),
+  evalLoadTaskFixture: (name: string) =>
+    ipcRenderer.invoke('main-window:evalLoadTaskFixture', name),
+  evalSaveTaskGolden: (name: string, markdown: string) =>
+    ipcRenderer.invoke('main-window:evalSaveTaskGolden', name, markdown),
+  evalDeleteTaskFixture: (name: string) =>
+    ipcRenderer.invoke('main-window:evalDeleteTaskFixture', name),
+  evalExportTaskFixture: (name: string) =>
+    ipcRenderer.invoke('main-window:evalExportTaskFixture', name),
   // Host platform — read once at preload time; never changes mid-session.
   platform: process.platform,
 })

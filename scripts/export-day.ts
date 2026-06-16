@@ -28,11 +28,8 @@ import * as path from 'path'
 import { StorageService } from '../src/main/storage'
 import { getDefaultDbPath } from '../src/main/paths'
 import { renderTaskGoldenMd } from '../src/main/eval/task-golden-md'
-import {
-  TASK_FIXTURE_SCHEMA_VERSION,
-  type TaskFixtureActivity,
-  type TaskFixtureManifest,
-} from '../src/main/eval/task-types'
+import { toFixtureActivity } from '../src/main/eval/task-fixture-build'
+import { TASK_FIXTURE_SCHEMA_VERSION, type TaskFixtureManifest } from '../src/main/eval/task-types'
 import type { StoredActivity } from '../src/main/storage/types'
 
 const FIXTURES_ROOT = path.resolve('evals/task-mining/fixtures')
@@ -119,20 +116,6 @@ function hhmmToMin(s: string): number {
     process.exit(1)
   }
   return parseInt(m[1], 10) * 60 + parseInt(m[2], 10)
-}
-
-function toFixtureActivity(s: StoredActivity, dayStart: number): TaskFixtureActivity {
-  return {
-    id: s.id,
-    // Preserve real time-of-day so spacing/order matches the recorded day.
-    offsetMin: Math.round((s.startTimestamp - dayStart) / 60_000),
-    durationMin: Math.max(1, Math.round((s.endTimestamp - s.startTimestamp) / 60_000)),
-    app: s.appName,
-    windowTitle: s.windowTitle,
-    tld: s.tld,
-    summary: s.summary,
-    ocrText: s.ocrText,
-  }
 }
 
 function main() {

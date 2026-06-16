@@ -33,6 +33,14 @@ import { applyVendorSwitch } from './vendor-switch'
 import { applyModelSettings } from './model-settings'
 import type { EvalRecorder } from '../eval/eval-recorder'
 import type { EvalFixtureStore } from '../eval/eval-fixture-store'
+import type { TaskFixtureStore } from '../eval/task-fixture-store'
+import {
+  buildWindowedActivities,
+  dayString,
+  renderSightingGoldenMd,
+} from '../eval/task-fixture-build'
+import { TASK_FIXTURE_SCHEMA_VERSION } from '../eval/task-types'
+import type { TaskSightingSummary } from '../../shared/eval-review'
 import type { AccessProvider } from '../access'
 import type {
   AccessState,
@@ -117,6 +125,7 @@ interface MainWindowDependencies {
   }
   evalRecorder: EvalRecorder
   evalFixtureStore: EvalFixtureStore
+  taskFixtureStore: TaskFixtureStore
 }
 
 let mainWindow: BrowserWindow | null = null
@@ -1118,6 +1127,169 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       if (result.canceled || !result.filePath) return { success: false as const, error: 'Canceled' }
       try {
         await deps.evalFixtureStore.exportZip(name, result.filePath)
+        return { success: true as const, path: result.filePath }
+      } catch (error) {
+        return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
+      }
+    },
+  )
+
+  // Task-mining goldens (Developer → Tasks tab). Source: legacy pattern-detection
+  // sightings; output: {userData}/task-fixtures via taskFixtureStore.
+  ipcMain.handle('main-window:evalListTaskSightings', () => {
+    if (!deps) return []
+    const sightings = deps.storage.patterns.getAllSightings()
+    const allActivityIds = Array.from(new Set(sightings.flatMap((s) => s.activityIds)))
+    const activities = deps.storage.activities.getByIds(allActivityIds)
+    const spanById = new Map(activities.map((a) => [a.id, a]))
+    return sightings.map((s): TaskSightingSummary => {
+      const acts = s.activityIds
+        .map((id) => spanById.get(id))
+        .filter((a): a is NonNullable<typeof a> => a !== undefined)
+      const startedAt = acts.length ? Math.min(...acts.map((a) => a.startTimestamp)) : null
+      const endedAt = acts.length ? Math.max(...acts.map((a) => a.endTimestamp)) : null
+      return {
+        id: s.id,
+        patternName: s.patternName,
+        evidence: s.evidence,
+        apps: s.patternApps,
+        activityIds: s.activityIds,
+        detectedAt: s.detectedAt,
+        startedAt,
+        endedAt,
+        activityCount: s.activityIds.length,
+      }
+    })
+  })
+
+  ipcMain.handle(
+    'main-window:evalPreviewTaskGolden',
+    (_event: IpcMainInvokeEvent, sightingId: unknown, beforeMin: unknown, afterMin: unknown) => {
+      if (!deps || typeof sightingId !== 'string') return null
+      const before = typeof beforeMin === 'number' ? beforeMin : 60
+      const after = typeof afterMin === 'number' ? afterMin : 60
+      const sighting = deps.storage.patterns.getAllSightings().find((s) => s.id === sightingId)
+      if (!sighting) return null
+      try {
+        const { activities, dayStart, windowFrom, windowTo } = buildWindowedActivities(
+          deps.storage,
+          sighting.activityIds,
+          before,
+          after,
+        )
+        const name = `${sighting.patternName}-${dayString(dayStart)}`
+        const goldenMd = renderSightingGoldenMd(
+          name,
+          {
+            title: sighting.patternName,
+            apps: sighting.patternApps,
+            activityIds: sighting.activityIds,
+            description: sighting.evidence,
+          },
+          activities,
+        )
+        return { name, goldenMd, activityCount: activities.length, windowFrom, windowTo }
+      } catch {
+        return null
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'main-window:evalPromoteTaskSighting',
+    (_event: IpcMainInvokeEvent, sightingId: unknown, opts: unknown) => {
+      if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
+      if (typeof sightingId !== 'string' || typeof opts !== 'object' || opts === null) {
+        return { success: false as const, error: 'Invalid arguments' }
+      }
+      const { beforeMin, afterMin, goldenMd, name } = opts as {
+        beforeMin?: unknown
+        afterMin?: unknown
+        goldenMd?: unknown
+        name?: unknown
+      }
+      const before = typeof beforeMin === 'number' ? beforeMin : 60
+      const after = typeof afterMin === 'number' ? afterMin : 60
+      if (typeof goldenMd !== 'string' || typeof name !== 'string') {
+        return { success: false as const, error: 'Invalid arguments' }
+      }
+      const sighting = deps.storage.patterns.getAllSightings().find((s) => s.id === sightingId)
+      if (!sighting) return { success: false as const, error: 'Sighting not found' }
+      try {
+        const { activities, dayStart } = buildWindowedActivities(
+          deps.storage,
+          sighting.activityIds,
+          before,
+          after,
+        )
+        const fixture = deps.taskFixtureStore.write(name, activities, goldenMd, {
+          name,
+          label: name,
+          description: `Built from sighting "${sighting.patternName}"; ${activities.length} activities (±${before}/${after} min).`,
+          activityCount: activities.length,
+          sourceDay: dayString(dayStart),
+          schemaVersion: TASK_FIXTURE_SCHEMA_VERSION,
+        })
+        return { success: true as const, fixture }
+      } catch (error) {
+        return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
+      }
+    },
+  )
+
+  ipcMain.handle('main-window:evalListTaskFixtures', () => {
+    return deps?.taskFixtureStore.list() ?? []
+  })
+
+  ipcMain.handle('main-window:evalLoadTaskFixture', (_event: IpcMainInvokeEvent, name: unknown) => {
+    if (!deps || typeof name !== 'string') return null
+    return deps.taskFixtureStore.load(name)
+  })
+
+  ipcMain.handle(
+    'main-window:evalSaveTaskGolden',
+    (_event: IpcMainInvokeEvent, name: unknown, markdown: unknown) => {
+      if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
+      if (typeof name !== 'string' || typeof markdown !== 'string') {
+        return { success: false as const, error: 'Invalid arguments' }
+      }
+      try {
+        deps.taskFixtureStore.saveGolden(name, markdown)
+        return { success: true as const }
+      } catch (error) {
+        return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'main-window:evalDeleteTaskFixture',
+    (_event: IpcMainInvokeEvent, name: unknown) => {
+      if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
+      if (typeof name !== 'string') return { success: false as const, error: 'Invalid arguments' }
+      try {
+        deps.taskFixtureStore.delete(name)
+        return { success: true as const }
+      } catch (error) {
+        return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'main-window:evalExportTaskFixture',
+    async (_event: IpcMainInvokeEvent, name: unknown) => {
+      if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
+      if (typeof name !== 'string') return { success: false as const, error: 'Invalid arguments' }
+      const result = await dialog.showSaveDialog(getMainWindow() ?? undefined, {
+        title: 'Export Task Golden',
+        defaultPath: path.join(app.getPath('desktop'), `${name}.zip`),
+        buttonLabel: 'Export',
+        filters: [{ name: 'ZIP Archives', extensions: ['zip'] }],
+      })
+      if (result.canceled || !result.filePath) return { success: false as const, error: 'Canceled' }
+      try {
+        await deps.taskFixtureStore.exportZip(name, result.filePath)
         return { success: true as const, path: result.filePath }
       } catch (error) {
         return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }

@@ -4,6 +4,10 @@ import type {
   EvalFixtureSummary,
   EvalPromoteSummary,
   EvalRecordingStatus,
+  TaskFixtureLoad,
+  TaskFixtureSummary,
+  TaskGoldenDraft,
+  TaskSightingSummary,
 } from './eval-review'
 
 export interface InteractionContext {
@@ -401,6 +405,27 @@ export interface MainWindowAPI {
   evalSaveGolden: (name: string, markdown: string) => Promise<{ success: boolean; error?: string }>
   evalDeleteFixture: (name: string) => Promise<{ success: boolean; error?: string }>
   evalExportFixture: (name: string) => Promise<{ success: boolean; path?: string; error?: string }>
+  // Task-mining goldens (Developer → Tasks tab)
+  evalListTaskSightings: () => Promise<TaskSightingSummary[]>
+  evalPreviewTaskGolden: (
+    sightingId: string,
+    beforeMin: number,
+    afterMin: number,
+  ) => Promise<TaskGoldenDraft | null>
+  evalPromoteTaskSighting: (
+    sightingId: string,
+    opts: { beforeMin: number; afterMin: number; goldenMd: string; name: string },
+  ) => Promise<{ success: boolean; fixture?: TaskFixtureSummary; error?: string }>
+  evalListTaskFixtures: () => Promise<TaskFixtureSummary[]>
+  evalLoadTaskFixture: (name: string) => Promise<TaskFixtureLoad | null>
+  evalSaveTaskGolden: (
+    name: string,
+    markdown: string,
+  ) => Promise<{ success: boolean; error?: string }>
+  evalDeleteTaskFixture: (name: string) => Promise<{ success: boolean; error?: string }>
+  evalExportTaskFixture: (
+    name: string,
+  ) => Promise<{ success: boolean; path?: string; error?: string }>
   // Host platform (set at preload time; never changes mid-session)
   platform: NodeJS.Platform
 }

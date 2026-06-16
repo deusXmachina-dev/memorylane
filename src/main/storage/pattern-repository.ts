@@ -41,6 +41,12 @@ export interface PatternDetail {
   sightings: PatternSighting[]
 }
 
+/** A sighting joined with its parent pattern's name + apps (for flat listing). */
+export interface PatternSightingWithPattern extends PatternSighting {
+  patternName: string
+  patternApps: string[]
+}
+
 // ---------------------------------------------------------------------------
 // Scoring
 // ---------------------------------------------------------------------------
@@ -287,6 +293,25 @@ export class PatternRepository {
       .all(patternId, limit) as Record<string, unknown>[]
 
     return rows.map((row) => this.rowToSighting(row))
+  }
+
+  /** All sightings across patterns, newest first, with parent name + apps. */
+  getAllSightings(limit = 200): PatternSightingWithPattern[] {
+    const rows = this.db
+      .prepare(
+        `SELECT s.*, p.name AS pattern_name, p.apps AS pattern_apps
+         FROM pattern_sightings s
+         JOIN patterns p ON p.id = s.pattern_id
+         ORDER BY s.detected_at DESC
+         LIMIT ?`,
+      )
+      .all(limit) as Record<string, unknown>[]
+
+    return rows.map((row) => ({
+      ...this.rowToSighting(row),
+      patternName: row.pattern_name as string,
+      patternApps: JSON.parse((row.pattern_apps as string) || '[]') as string[],
+    }))
   }
 
   getSightingsByRunId(runId: string): PatternSighting[] {
