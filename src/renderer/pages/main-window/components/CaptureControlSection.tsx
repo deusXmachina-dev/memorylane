@@ -19,7 +19,7 @@ export function CaptureControlSection({
     <Button
       className="w-full"
       variant={capturing ? 'destructive' : 'default'}
-      size={compact ? 'icon' : 'lg'}
+      size={compact ? 'icon-lg' : 'lg'}
       disabled={toggling}
       onClick={onToggle}
       aria-label={label}

@@ -21,7 +21,7 @@ export function UpdateBanner({
         aria-label="Relaunch to update"
         title={version ? `Relaunch to update · v${version}` : 'Relaunch to update'}
         className={cn(
-          'flex items-center justify-center size-9 rounded-md',
+          'flex items-center justify-center w-full h-9 rounded-md',
           'bg-primary/15 text-primary hover:bg-primary/25 transition-colors',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
         )}
