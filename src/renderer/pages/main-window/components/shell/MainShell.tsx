@@ -16,7 +16,7 @@ export function MainShell({
     <div className="h-screen flex bg-background antialiased select-none">
       <aside
         className={cn(
-          'shrink-0 flex flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-[width] duration-200',
+          'shrink-0 flex flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border',
           sidebarCollapsed ? 'w-16' : 'w-56',
         )}
       >

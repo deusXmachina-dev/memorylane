@@ -64,7 +64,7 @@ export function LlmStatusPanel({
         aria-label={`LLM ${state} — open AI Models settings`}
         title={`${VENDOR_LABELS[vendor]} · ${state}`}
         className={cn(
-          'flex items-center justify-center size-9 rounded-md',
+          'flex items-center justify-center w-full h-9 rounded-md',
           'hover:bg-sidebar-accent/70 transition-colors',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
         )}
@@ -78,7 +78,7 @@ export function LlmStatusPanel({
       type="button"
       onClick={onClick}
       className={cn(
-        'flex items-center gap-2 w-full text-left px-3 py-2 rounded-lg',
+        'flex items-center gap-2 w-full text-left px-3 h-9 rounded-lg',
         'border border-sidebar-border bg-sidebar-accent/40',
         'hover:bg-sidebar-accent/70 transition-colors',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',

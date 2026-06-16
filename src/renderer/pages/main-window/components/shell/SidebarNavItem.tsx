@@ -26,7 +26,7 @@ export function SidebarNavItem({
       title={collapsed ? label : undefined}
       className={cn(
         'flex items-center rounded-md text-sm text-left transition-colors',
-        collapsed ? 'justify-center size-9' : 'gap-2.5 w-full px-3 py-1.5',
+        collapsed ? 'justify-center w-full h-9' : 'gap-2.5 w-full px-3 h-9',
         active
           ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
           : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
