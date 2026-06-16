@@ -278,36 +278,39 @@ function FixtureReview({
         <div className="text-sm font-medium">{fixture.label || fixture.name}</div>
       </div>
 
-      <Card>
-        <CardContent className="p-3">
-          {fixture.videoUrl ? (
-            <video
-              ref={videoRef}
-              src={fixture.videoUrl}
-              controls
-              className="w-full rounded-md bg-black"
-            />
-          ) : (
-            <p className="text-sm text-muted-foreground">No video for this fixture.</p>
-          )}
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-2 gap-4 items-start">
+        {/* Video sticks in view while the golden.md editor scrolls beside it. */}
+        <Card className="sticky top-2 self-start">
+          <CardContent className="p-3">
+            {fixture.videoUrl ? (
+              <video
+                ref={videoRef}
+                src={fixture.videoUrl}
+                controls
+                className="w-full rounded-md bg-black"
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">No video for this fixture.</p>
+            )}
+          </CardContent>
+        </Card>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            golden.md
-          </span>
-          <Button size="sm" onClick={onSave} disabled={!dirty}>
-            <FloppyDiskIcon /> Save golden
-          </Button>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              golden.md
+            </span>
+            <Button size="sm" onClick={onSave} disabled={!dirty}>
+              <FloppyDiskIcon /> Save golden
+            </Button>
+          </div>
+          <Textarea
+            value={goldenDraft}
+            onChange={(e) => onGoldenChange(e.target.value)}
+            spellCheck={false}
+            className="h-[70vh] resize-none overflow-auto font-mono text-xs leading-relaxed"
+          />
         </div>
-        <Textarea
-          value={goldenDraft}
-          onChange={(e) => onGoldenChange(e.target.value)}
-          spellCheck={false}
-          className="min-h-[420px] font-mono text-xs leading-relaxed"
-        />
       </div>
     </div>
   )

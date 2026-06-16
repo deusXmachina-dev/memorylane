@@ -2,18 +2,19 @@
  * Streams eval fixture videos to the renderer. A base64 `data:` URL in a
  * `<video>` fails in Electron — media playback needs HTTP range requests for
  * seeking, which `data:` URLs can't serve — so we register a privileged
- * `mlmedia://` scheme and stream `session.mp4` off disk via `net.fetch`, which
- * honors Range requests (206 partial content) for free.
+ * `mlmedia://` scheme and stream `session.mp4` off disk, serving Range
+ * requests as 206 partial content ourselves (Electron's `net.fetch` over
+ * `file://` ignores Range and returns the whole file, which breaks seeking).
  *
  * URL shape: `mlmedia://eval/<fixtureName>/session.mp4`. The fixture name is the
  * only variable; we `basename()` it and confine the served path to the fixtures
  * root, so the scheme can never read outside `{userData}/eval-fixtures`.
  */
 
-import { protocol, net } from 'electron'
+import { protocol } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
-import { pathToFileURL } from 'url'
+import { Readable } from 'stream'
 
 export const EVAL_MEDIA_SCHEME = 'mlmedia'
 
@@ -55,10 +56,43 @@ export function registerEvalMediaProtocol(fixturesRoot: string): void {
       if (!filePath.startsWith(root + path.sep) || !fs.existsSync(filePath)) {
         return new Response('Not found', { status: 404 })
       }
-      // Forward the Range header so seeking yields 206 partial content.
-      const range = request.headers.get('range')
-      return net.fetch(pathToFileURL(filePath).toString(), {
-        headers: range ? { range } : undefined,
+
+      const size = fs.statSync(filePath).size
+      const toWebBody = (start: number, end: number): ReadableStream =>
+        Readable.toWeb(fs.createReadStream(filePath, { start, end })) as ReadableStream
+
+      // Serve Range requests as 206 partial content so the <video> can seek.
+      const rangeHeader = request.headers.get('range')
+      const match = rangeHeader && /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim())
+      if (match) {
+        let start = match[1] ? parseInt(match[1], 10) : 0
+        let end = match[2] ? parseInt(match[2], 10) : size - 1
+        if (Number.isNaN(start)) start = 0
+        if (Number.isNaN(end) || end >= size) end = size - 1
+        if (start > end || start >= size) {
+          return new Response(null, {
+            status: 416,
+            headers: { 'Content-Range': `bytes */${size}` },
+          })
+        }
+        return new Response(toWebBody(start, end), {
+          status: 206,
+          headers: {
+            'Content-Type': 'video/mp4',
+            'Content-Length': String(end - start + 1),
+            'Content-Range': `bytes ${start}-${end}/${size}`,
+            'Accept-Ranges': 'bytes',
+          },
+        })
+      }
+
+      return new Response(toWebBody(0, size - 1), {
+        status: 200,
+        headers: {
+          'Content-Type': 'video/mp4',
+          'Content-Length': String(size),
+          'Accept-Ranges': 'bytes',
+        },
       })
     } catch {
       return new Response('Bad request', { status: 400 })
