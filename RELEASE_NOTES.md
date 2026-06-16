@@ -1,14 +1,13 @@
-# MemoryLane v1.2.0-alpha.2
+# MemoryLane v1.2.0-alpha.3
 
-Alpha preview. Builds on alpha.1 with reworked task mining and internal eval tooling.
+Alpha preview. Builds on alpha.2 with an enterprise sync fix and more internal eval tooling.
 
 > This is a prerelease for manual install only. Stable installs will not auto-update to it.
 
 ## What's Changed
 
-- **More reliable task mining**: recurring-task detection now treats individual sightings as the source of truth and derives clusters from them, so patterns stay consistent as new sessions are recorded (#168).
-- **Sidebar fix**: the logo is now hidden when the sidebar is collapsed (#166).
-- **Internal (Developer mode)**: an in-app eval recorder captures a real session and turns it into a replay fixture for tuning activity summaries — hidden behind Developer mode and inert otherwise (#167, #169, #170).
+- **Enterprise DB upload reliability**: enterprise database uploads now run on a regular catch-up schedule, so a missed window is retried rather than skipped (#171).
+- **Internal (Developer mode)**: a Tasks tab in the in-app eval tooling builds task-mining goldens from real detected sightings — hidden behind Developer mode and inert otherwise (#172).
 
 ## Known Issues & Limitations
 
@@ -25,4 +24,4 @@ Alpha preview. Builds on alpha.1 with reworked task mining and internal eval too
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.2.0-alpha.1...v1.2.0-alpha.2
+https://github.com/deusXmachina-dev/memorylane/compare/v1.2.0-alpha.2...v1.2.0-alpha.3
