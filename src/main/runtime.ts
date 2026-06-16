@@ -35,6 +35,7 @@ import { getSystemIdleSeconds, shouldPause } from './power-monitor'
 import { PRESENCE_MONITOR_CONFIG } from '../shared/constants'
 import { EvalRecorder } from './eval/eval-recorder'
 import { EvalFixtureStore } from './eval/eval-fixture-store'
+import { TaskFixtureStore } from './eval/task-fixture-store'
 
 export interface MainRuntime {
   capture: RuntimeCapture
@@ -46,6 +47,7 @@ export interface MainRuntime {
   accessProvider: AccessProvider
   evalRecorder: EvalRecorder
   evalFixtureStore: EvalFixtureStore
+  taskFixtureStore: TaskFixtureStore
   evalFixturesRoot: string
   updateExclusions(exclusions: {
     apps: string[]
@@ -254,6 +256,7 @@ export async function createMainRuntime(params: {
     fixturesRoot: evalFixturesRoot,
   })
   const evalFixtureStore = new EvalFixtureStore(evalFixturesRoot)
+  const taskFixtureStore = new TaskFixtureStore(path.join(userDataPath, 'task-fixtures'))
 
   let disposePromise: Promise<void> | null = null
 
@@ -267,6 +270,7 @@ export async function createMainRuntime(params: {
     accessProvider,
     evalRecorder,
     evalFixtureStore,
+    taskFixtureStore,
     evalFixturesRoot,
     updateExclusions(exclusions): void {
       blacklistCoordinator.updateExclusions(exclusions)

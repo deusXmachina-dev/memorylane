@@ -303,6 +303,7 @@ app.on('ready', async () => {
     observation,
     evalRecorder: runtime.evalRecorder,
     evalFixtureStore: runtime.evalFixtureStore,
+    taskFixtureStore: runtime.taskFixtureStore,
   })
 
   runtime.accessProvider.startPeriodicRefresh()
