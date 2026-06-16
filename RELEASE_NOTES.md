@@ -1,13 +1,13 @@
-# MemoryLane v1.2.0-alpha.3
+# MemoryLane v1.2.0-alpha.4
 
-Alpha preview. Builds on alpha.2 with an enterprise sync fix and more internal eval tooling.
+Alpha preview. Builds on alpha.3 with a UI fix and improved internal eval review tooling.
 
 > This is a prerelease for manual install only. Stable installs will not auto-update to it.
 
 ## What's Changed
 
-- **Enterprise DB upload reliability**: enterprise database uploads now run on a regular catch-up schedule, so a missed window is retried rather than skipped (#171).
-- **Internal (Developer mode)**: a Tasks tab in the in-app eval tooling builds task-mining goldens from real detected sightings — hidden behind Developer mode and inert otherwise (#172).
+- **Sidebar layout**: removed the layout jitter when collapsing the sidebar (#173).
+- **Internal (Developer mode)**: eval fixture review now has a seekable video, a two-column layout, and a captured interaction-events timeline beside golden.md — hidden behind Developer mode and inert otherwise (#174).
 
 ## Known Issues & Limitations
 
@@ -24,4 +24,4 @@ Alpha preview. Builds on alpha.2 with an enterprise sync fix and more internal e
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.2.0-alpha.2...v1.2.0-alpha.3
+https://github.com/deusXmachina-dev/memorylane/compare/v1.2.0-alpha.3...v1.2.0-alpha.4
