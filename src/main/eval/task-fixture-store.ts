@@ -27,9 +27,10 @@ export function sanitizeFixtureName(name: string): string {
 export class TaskFixtureStore {
   constructor(private readonly root: string) {}
 
-  /** Guard against path traversal — names are single path segments. */
+  /** Resolve a fixture's directory. Sanitizing keeps names single, safe path
+   *  segments — also guards against path traversal. */
   private dirFor(name: string): string {
-    return path.join(this.root, path.basename(name))
+    return path.join(this.root, sanitizeFixtureName(name))
   }
 
   /**
@@ -44,7 +45,7 @@ export class TaskFixtureStore {
     manifest: TaskFixtureManifest,
   ): TaskFixtureSummary {
     const safe = sanitizeFixtureName(name)
-    const dir = path.join(this.root, safe)
+    const dir = this.dirFor(name)
     fs.mkdirSync(dir, { recursive: true })
     fs.writeFileSync(
       path.join(dir, 'activities.jsonl'),
@@ -109,7 +110,7 @@ export class TaskFixtureStore {
     if (!manifest) return null
     const goldenPath = path.join(dir, 'golden.md')
     const goldenMd = fs.existsSync(goldenPath) ? fs.readFileSync(goldenPath, 'utf8') : ''
-    return { name: path.basename(name), label: manifest.label, goldenMd }
+    return { name: sanitizeFixtureName(name), label: manifest.label, goldenMd }
   }
 
   saveGolden(name: string, markdown: string): void {
@@ -136,7 +137,7 @@ export class TaskFixtureStore {
         else if (e.isFile()) files.push({ real, entry })
       }
     }
-    walk(dir, path.basename(name))
+    walk(dir, sanitizeFixtureName(name))
 
     await fs.promises.mkdir(path.dirname(destPath), { recursive: true })
     await new Promise<void>((resolve, reject) => {
