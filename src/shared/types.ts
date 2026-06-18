@@ -370,6 +370,7 @@ export interface MainWindowAPI {
   setDatabaseExportDirectory: (directoryPath: string) => Promise<SaveResult>
   // Database export
   exportDatabaseZip: () => Promise<DatabaseExportResult>
+  exportLogsZip: () => Promise<DatabaseExportResult>
   importDatabase: () => Promise<DatabaseImportResult>
   syncDatabaseToRemote: () => Promise<{ success: boolean; error?: string }>
   purgeDatabase: (confirmation: string) => Promise<{ success: boolean; error?: string }>
