@@ -202,9 +202,15 @@ export class CustomerAccessProvider extends BaseAccessProvider {
     }
 
     if (!response.ok) {
-      const bodyExcerpt = await response.text().catch(() => '')
+      // Only a structured (JSON) error body carries signal. HTML error pages —
+      // e.g. a backend 404 "Page not found" — are noise, so for those we log
+      // just the status + content-type rather than dumping a slab of markup.
+      const contentType = response.headers?.get('content-type') ?? ''
+      const bodyExcerpt = contentType.includes('json')
+        ? `: ${(await response.text().catch(() => '')).slice(0, 200)}`
+        : ''
       log.warn(
-        `[CustomerAccess] /v2/subscription/key returned ${response.status} for device ${deviceIdHint}: ${bodyExcerpt.slice(0, 200)}`,
+        `[CustomerAccess] /v2/subscription/key returned ${response.status} (${contentType || 'no content-type'}) for device ${deviceIdHint}${bodyExcerpt}`,
       )
       if (response.status === 401 || response.status === 403) {
         return { kind: 'no_key' }

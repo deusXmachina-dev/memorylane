@@ -477,10 +477,16 @@ export class ActivitySemanticService implements SemanticServiceContract {
 
   private recordLlmSuccess(): void {
     const now = Date.now()
+    const recoveredFrom = this.llmHealth.consecutiveFailures
     this.llmHealth.consecutiveFailures = 0
     this.llmHealth.lastError = null
     this.llmHealth.lastAttemptAt = now
     this.llmHealth.lastSuccessAt = now
+    if (recoveredFrom > 0) {
+      log.info(
+        `[ActivitySemanticService] LLM recovered after ${recoveredFrom} consecutive failure(s)`,
+      )
+    }
   }
 
   private updateLlmHealthFromDiagnostics(diagnostics: SemanticRunDiagnostics): void {
@@ -491,10 +497,15 @@ export class ActivitySemanticService implements SemanticServiceContract {
       return
     }
 
+    const wasHealthy = this.llmHealth.consecutiveFailures === 0
     const lastFailure = actionableFailures[actionableFailures.length - 1]
     this.llmHealth.consecutiveFailures += 1
     this.llmHealth.lastError = lastFailure?.error ?? 'Unknown LLM error'
     this.llmHealth.lastAttemptAt = Date.now()
+    // Log only the passing→failing transition; per-request failures would be noise.
+    if (wasHealthy) {
+      log.warn(`[ActivitySemanticService] LLM started failing: ${this.llmHealth.lastError}`)
+    }
   }
 
   private async runConnectionTest(): Promise<void> {

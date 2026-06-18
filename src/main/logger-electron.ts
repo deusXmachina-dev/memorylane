@@ -5,7 +5,11 @@ import { setLogger } from './logger'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const electronLog = require('electron-log/main')
 const isDev = !app.isPackaged
-const level = isDev ? 'debug' : 'info'
+// Dev logs at debug, packaged at info. Override with MEMORYLANE_LOG_LEVEL to
+// simulate the production filter locally — e.g. `MEMORYLANE_LOG_LEVEL=info
+// npm run dev` raises the console (and the dev file, when MEMORYLANE_DEV_FILE_LOG
+// is also set) to the prod stream, so you can see what packaged builds record.
+const level = process.env.MEMORYLANE_LOG_LEVEL ?? (isDev ? 'debug' : 'info')
 
 // File logging is normally off in dev (console is primary). Enable it when
 // debugging the pipeline so the run's logs — including otherwise console-only

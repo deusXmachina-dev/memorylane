@@ -364,12 +364,76 @@ async function buildStats(): Promise<MainWindowStats> {
 }
 
 /**
+ * Log user-initiated capture-settings changes as a concise per-field timeline.
+ * Only fields that actually changed are logged; arrays are reported by entry
+ * count so a single line stays readable. High-signal, low-frequency — exactly
+ * the breadcrumbs needed when debugging "why did X stop working".
+ */
+function logCaptureSettingsChanges(previous: CaptureSettings, updated: CaptureSettings): void {
+  const scalarFields: (keyof CaptureSettings)[] = [
+    'autoStartEnabled',
+    'visualThreshold',
+    'maxScreenshotsForLlm',
+    'minActivityDurationMs',
+    'maxActivityDurationMs',
+    'semanticRequestTimeoutMs',
+    'semanticPipelineMode',
+    'captureHotkeyAccelerator',
+    'excludePrivateBrowsing',
+    'activeVendor',
+    'semanticVideoModel',
+    'semanticSnapshotModel',
+    'patternDetectionModel',
+    'patternDetectionEnabled',
+    'uploadDetailLevel',
+  ]
+  for (const field of scalarFields) {
+    if (previous[field] !== updated[field]) {
+      log.info(
+        `[Settings] user changed ${field}: ${String(previous[field])} → ${String(updated[field])}`,
+      )
+    }
+  }
+  const arrayFields: (keyof CaptureSettings)[] = [
+    'excludedApps',
+    'excludedWindowTitlePatterns',
+    'excludedUrlPatterns',
+  ]
+  for (const field of arrayFields) {
+    const before = previous[field] as string[]
+    const after = updated[field] as string[]
+    if (JSON.stringify(before) !== JSON.stringify(after)) {
+      log.info(`[Settings] user changed ${field}: ${before.length} → ${after.length} entries`)
+    }
+  }
+}
+
+/**
  * Initialize IPC handlers for the main window
  */
 export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   deps = dependencies
 
   log.info('[MainWindow] Initializing IPC handlers...')
+
+  // Wrap an IPC handler so an otherwise-silent throw/rejection is logged in the
+  // main process before it propagates to the renderer as a rejected invoke().
+  // Use for handlers that don't already shape errors into their own
+  // { success, error } result.
+  const handle = (
+    channel: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    fn: (event: IpcMainInvokeEvent, ...args: any[]) => unknown,
+  ): void => {
+    ipcMain.handle(channel, async (event, ...args) => {
+      try {
+        return await fn(event, ...args)
+      } catch (error) {
+        log.error(`[MainWindow] IPC '${channel}' failed:`, error)
+        throw error
+      }
+    })
+  }
 
   ipcMain.handle(
     'main-window:getEditionConfig',
@@ -387,7 +451,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
     return deps.accessProvider.getAccessState()
   })
-  ipcMain.handle('main-window:refreshAccessState', async () => {
+  handle('main-window:refreshAccessState', async () => {
     if (!deps) {
       return {
         edition: DEFAULT_EDITION,
@@ -413,6 +477,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         return { success: true }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Activation failed'
+        log.warn('[MainWindow] Enterprise license activation failed:', error)
         return { success: false, error: message }
       }
     },
@@ -437,6 +502,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Consent request failed'
+      log.warn(`[MainWindow] Consent decision (${outcome}) failed:`, error)
       return { success: false, error: message }
     }
   })
@@ -455,11 +521,11 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
   })
 
-  ipcMain.handle('main-window:getStatus', () => {
+  handle('main-window:getStatus', () => {
     return buildStatus()
   })
 
-  ipcMain.handle('main-window:toggleCapture', () => {
+  handle('main-window:toggleCapture', () => {
     if (!deps) {
       return {
         capturing: false,
@@ -468,8 +534,10 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
 
     if (deps.capture.isCapturingNow()) {
+      log.info('[Settings] user stopped capture')
       deps.capture.requestStopCapture()
     } else {
+      log.info('[Settings] user started capture')
       deps.capture.requestStartCapture()
     }
 
@@ -528,6 +596,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
+      log.warn(`[MainWindow] Failed to delete credentials for ${vendor}:`, error)
       return { success: false, error: message }
     }
   })
@@ -540,11 +609,16 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: false, error: `Unknown vendor: ${vendor}` }
     }
     try {
+      const previousVendor = deps.captureSettingsManager.get().activeVendor
       deps.captureSettingsManager.setActiveVendor(vendor)
       applyVendorSwitch(deps, deps.captureSettingsManager.get())
+      if (previousVendor !== vendor) {
+        log.info(`[Settings] user changed active vendor: ${previousVendor} → ${vendor}`)
+      }
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
+      log.warn(`[MainWindow] Failed to set active vendor to ${vendor}:`, error)
       return { success: false, error: message }
     }
   })
@@ -575,7 +649,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     return deps.semanticService.getLlmHealthStatus()
   })
 
-  ipcMain.handle('main-window:testLlmConnection', async () => {
+  handle('main-window:testLlmConnection', async () => {
     if (!deps) return
     await deps.semanticService.testConnection()
   })
@@ -627,28 +701,28 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
   })
 
-  ipcMain.handle('main-window:startCheckout', async (_event, plan: SubscriptionPlan) => {
+  handle('main-window:startCheckout', async (_event, plan: SubscriptionPlan) => {
     if (!deps) return
     await deps.accessProvider.startCheckout(plan)
   })
 
-  ipcMain.handle('main-window:openSubscriptionPortal', async () => {
+  handle('main-window:openSubscriptionPortal', async () => {
     if (!deps) return
     await deps.accessProvider.openSubscriptionPortal()
   })
 
-  ipcMain.handle('main-window:getSubscriptionStatus', () => {
+  handle('main-window:getSubscriptionStatus', () => {
     if (!deps) return 'idle'
     return deps.accessProvider.getAccessState().customerSubscriptionStatus ?? 'idle'
   })
 
   // Patterns
-  ipcMain.handle('main-window:getPatterns', () => {
+  handle('main-window:getPatterns', () => {
     if (!deps) return []
     return deps.storage.patterns.getAllPatterns()
   })
 
-  ipcMain.handle('main-window:getPatternDetail', (_event: IpcMainInvokeEvent, id: string) => {
+  handle('main-window:getPatternDetail', (_event: IpcMainInvokeEvent, id: string) => {
     if (!deps) return null
     const detail = deps.storage.patterns.getPatternDetail(id)
     if (!detail) return null
@@ -692,6 +766,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
+      log.warn(`[MainWindow] Failed to approve pattern ${id}:`, error)
       return { success: false, error: message }
     }
   })
@@ -703,6 +778,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
+      log.warn(`[MainWindow] Failed to reject pattern ${id}:`, error)
       return { success: false, error: message }
     }
   })
@@ -714,6 +790,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
+      log.warn(`[MainWindow] Failed to complete pattern ${id}:`, error)
       return { success: false, error: message }
     }
   })
@@ -725,6 +802,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
+      log.warn(`[MainWindow] Failed to uncomplete pattern ${id}:`, error)
       return { success: false, error: message }
     }
   })
@@ -909,6 +987,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         deps.captureSettingsManager.save(sanitized)
         deps.captureSettingsManager.applyToConstants()
         const updated = deps.captureSettingsManager.get()
+        logCaptureSettingsChanges(previous, updated)
         syncAutoStartSetting(updated.autoStartEnabled)
         deps.capture.updateActivityWindowConfig({
           minActivityDurationMs: updated.minActivityDurationMs,

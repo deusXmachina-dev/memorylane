@@ -39,7 +39,7 @@ export function createCaptureCoordinator(params: {
       params.captureStateManager.setCaptureEnabled(enabled)
       return true
     } catch (error) {
-      log.error('[Main] Failed to persist capture preference:', error)
+      log.error(`[Main] Failed to persist capture preference (enabled=${enabled}):`, error)
       return false
     }
   }

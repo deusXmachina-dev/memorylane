@@ -132,8 +132,10 @@ export function createPipelineHarness(params: {
         cleanupTimer = setInterval(() => {
           if (!retainScreenshots) sweepStaleFiles(params.outputDir)
         }, SCREENSHOT_CLEANUP_CONFIG.CLEANUP_INTERVAL_MS)
+        log.info('[PipelineHarness] Pipeline started')
       } catch (error) {
         running = false
+        log.error('[PipelineHarness] Failed to start pipeline:', error)
         throw error
       }
     },
@@ -151,6 +153,7 @@ export function createPipelineHarness(params: {
         await activityExtractor.stop()
       }
       eventCapturer.destroy()
+      log.info('[PipelineHarness] Pipeline stopped')
     },
     handleEvent(event: InteractionContext) {
       if (event.type === 'app_change' && event.displayId !== undefined) {

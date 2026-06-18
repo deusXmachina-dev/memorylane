@@ -36,6 +36,7 @@ export function cleanupActivityFiles(activity: Activity, videoOutputDir: string)
 export function sweepStaleFiles(outputDir: string): void {
   const now = Date.now()
   let deleted = 0
+  let skipped = 0
   try {
     for (const file of fs.readdirSync(outputDir)) {
       if (!file.endsWith('.png') && !file.endsWith('.jpg') && !file.endsWith('.mp4')) continue
@@ -46,11 +47,14 @@ export function sweepStaleFiles(outputDir: string): void {
           deleted++
         }
       } catch {
-        // ignore per-file errors
+        skipped++
       }
     }
   } catch (err) {
     log.warn('[ActivityCleanup] File cleanup sweep failed:', err)
   }
   if (deleted > 0) log.info(`[ActivityCleanup] Swept ${deleted} stale file(s)`)
+  if (skipped > 0) {
+    log.warn(`[ActivityCleanup] Skipped ${skipped} file(s) during sweep (stat/unlink failed)`)
+  }
 }

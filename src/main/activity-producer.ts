@@ -197,7 +197,7 @@ export class ActivityProducer {
     const windowContext = this.deriveWindowContext(window.events)
     if (windowContext === null) {
       this.stats.droppedUnknownContextWindows++
-      log.info(
+      log.debug(
         `[ActivityProducer] Dropping window ${window.id} at offset ${record.offset}: unknown app context`,
       )
       this.config.onActivityDropped?.({
@@ -214,7 +214,7 @@ export class ActivityProducer {
     const candidateFrames = this.getFramesInRange(window.startTimestamp, window.endTimestamp)
     if (candidateFrames.length === 0) {
       this.stats.droppedNoFrameWindows++
-      log.info(
+      log.debug(
         `[ActivityProducer] Dropping window ${window.id} at offset ${record.offset}: no frames in ${window.startTimestamp}-${window.endTimestamp}`,
       )
       this.config.onActivityDropped?.({
@@ -378,7 +378,7 @@ export class ActivityProducer {
     this.pendingActivity = null
 
     if (durationMs < this.config.minActivityDurationMs) {
-      log.info(
+      log.debug(
         `[ActivityProducer] Dropping short activity ${activityToEmit.id} (${durationMs}ms < ${this.config.minActivityDurationMs}ms, reason: ${reason})`,
       )
       this.config.onActivityDropped?.({
@@ -430,7 +430,7 @@ export class ActivityProducer {
         (offset) => !droppedOffsets.has(offset),
       )
       this.stats.trailingFramesTrimmed += framesToDrop.length
-      log.info(
+      log.debug(
         `[ActivityProducer] Trimmed ${framesToDrop.length} trailing boundary frame(s) from activity ${activity.id} (${activity.context.appName}, reason: ${reason}): ${framesToDrop.map((f) => f.frame.filepath).join(', ')}`,
       )
     } catch (err) {

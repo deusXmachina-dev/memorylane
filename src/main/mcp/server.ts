@@ -130,10 +130,10 @@ export class MemoryLaneMCPServer {
 
     if (!fs.existsSync(resolvedPath)) {
       // Just a warning, not an error - database might be created on first write
-      log.error(`Warning: Database path does not exist: ${resolvedPath}`)
+      log.warn(`Database path does not exist: ${resolvedPath}`)
     }
 
-    log.error(`Initializing services with DB path: ${resolvedPath}`)
+    log.info(`Initializing services with DB path: ${resolvedPath}`)
 
     const storage = new StorageService(resolvedPath)
 
@@ -143,7 +143,7 @@ export class MemoryLaneMCPServer {
 
     this.services = { storage, embeddingService }
     this.editionContext = { ...this.editionContext, currentDbPath: resolvedPath }
-    log.error('Services initialized successfully')
+    log.info('Services initialized successfully')
   }
 
   /**
@@ -169,7 +169,7 @@ export class MemoryLaneMCPServer {
     const transport = new StdioServerTransport(process.stdin, stdout ?? process.stdout)
     await this.server.connect(transport)
 
-    log.error(`${SERVER_NAME} MCP server started`)
+    log.info(`${SERVER_NAME} MCP server started`)
   }
 
   /**
@@ -180,8 +180,8 @@ export class MemoryLaneMCPServer {
     if (this.services) {
       try {
         this.services.storage.close()
-      } catch {
-        // ignore close errors
+      } catch (err) {
+        log.warn('Failed to close storage during MCP reinitialization:', err)
       }
     }
     this.services = null
