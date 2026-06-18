@@ -79,7 +79,9 @@ export async function exportLogsZip({
     }
 
     outputPath = ensureZipExtension(saveResult.filePath)
-    await createZipWithFiles(logFiles, outputPath)
+    // Snapshot: the active log file is appended to while we zip, and yazl's
+    // streaming addFile would throw on the resulting size mismatch.
+    await createZipWithFiles(logFiles, outputPath, { snapshot: true })
 
     return { success: true, outputPath }
   } catch (error) {
