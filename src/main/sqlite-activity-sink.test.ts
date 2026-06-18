@@ -40,6 +40,9 @@ function makeExtracted(activityId: string): ExtractedActivity {
     tld: undefined,
     summary: 'Edited source file',
     summaryModel: 'test-model-id',
+    summaryMode: 'video',
+    summaryReason: 'video',
+    summaryFailureDetail: '',
     ocrText: 'function test() {}',
     vector: [0.1, 0.2, 0.3],
   }
@@ -65,6 +68,9 @@ describe('SqliteActivitySink', () => {
       tld: null,
       summary: 'Edited source file',
       summaryModel: 'test-model-id',
+      summaryMode: 'video',
+      summaryReason: 'video',
+      summaryFailureDetail: '',
       ocrText: 'function test() {}',
       vector: [0.1, 0.2, 0.3],
     })

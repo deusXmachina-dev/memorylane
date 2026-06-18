@@ -77,6 +77,9 @@ export async function seedFixtureDb(
       tld: a.tld,
       summary: a.summary,
       summaryModel: 'fixture',
+      summaryMode: '',
+      summaryReason: '',
+      summaryFailureDetail: '',
       ocrText: a.ocrText,
       vector,
     } satisfies StoredActivity)

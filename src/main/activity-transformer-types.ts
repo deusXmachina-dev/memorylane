@@ -26,6 +26,12 @@ export interface ActivityOcrService {
 export interface SemanticSummary {
   summary: string
   model: string
+  /** Which pipeline produced the summary: 'video' | 'snapshot' | '' (none). */
+  mode: string
+  /** Canonical reason the mode was chosen (e.g. 'video', 'video_timeout'). */
+  reason: string
+  /** Raw error of the deciding failed video attempt; '' when video succeeded. */
+  failureDetail: string
 }
 
 export interface ActivitySemanticService {

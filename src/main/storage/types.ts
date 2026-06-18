@@ -7,6 +7,9 @@ export interface StoredActivity {
   tld: string | null
   summary: string
   summaryModel: string
+  summaryMode: string
+  summaryReason: string
+  summaryFailureDetail: string
   ocrText: string
   vector: number[]
 }

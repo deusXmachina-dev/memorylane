@@ -67,6 +67,9 @@ describe('StorageService', () => {
         tld: null,
         summary: 'test',
         summaryModel: '',
+        summaryMode: '',
+        summaryReason: '',
+        summaryFailureDetail: '',
         ocrText: 'text',
         vector: v(0.1),
       })
@@ -86,6 +89,31 @@ describe('StorageService', () => {
       expect(() => storage.close()).not.toThrow()
     })
 
+    it('round-trips summary mode/reason/failure-detail columns', () => {
+      storage = new StorageService(TEST_DB_PATH)
+      applyMigrations(storage.getDatabase())
+      storage.activities.add({
+        id: 'mode-1',
+        startTimestamp: 1000,
+        endTimestamp: 2000,
+        appName: 'App',
+        windowTitle: 'Win',
+        tld: null,
+        summary: 'fell back to snapshot',
+        summaryModel: 'mistralai/mistral-small-3.2-24b-instruct',
+        summaryMode: 'snapshot',
+        summaryReason: 'video_timeout',
+        summaryFailureDetail: 'semantic model request timed out after 120000ms',
+        ocrText: 'text',
+        vector: v(0.1),
+      })
+
+      const [row] = storage.activities.getByIds(['mode-1'])
+      expect(row.summaryMode).toBe('snapshot')
+      expect(row.summaryReason).toBe('video_timeout')
+      expect(row.summaryFailureDetail).toBe('semantic model request timed out after 120000ms')
+    })
+
     describe('purge', () => {
       it('removes all activities, vectors, FTS entries, patterns, sightings, and user context', () => {
         storage = new StorageService(TEST_DB_PATH)
@@ -100,6 +128,9 @@ describe('StorageService', () => {
           tld: null,
           summary: 'editing code',
           summaryModel: '',
+          summaryMode: '',
+          summaryReason: '',
+          summaryFailureDetail: '',
           ocrText: 'function hello',
           vector: v(0.1, 0.2, 0.3),
         })
@@ -159,6 +190,9 @@ describe('StorageService', () => {
           tld: null,
           summary: 'pre',
           summaryModel: '',
+          summaryMode: '',
+          summaryReason: '',
+          summaryFailureDetail: '',
           ocrText: 'pre',
           vector: v(0.5),
         })
@@ -177,6 +211,9 @@ describe('StorageService', () => {
           tld: null,
           summary: 'post',
           summaryModel: '',
+          summaryMode: '',
+          summaryReason: '',
+          summaryFailureDetail: '',
           ocrText: 'post',
           vector: v(0.6),
         })
@@ -204,6 +241,9 @@ describe('StorageService', () => {
         tld: null,
         summary: 'backup summary',
         summaryModel: '',
+        summaryMode: '',
+        summaryReason: '',
+        summaryFailureDetail: '',
         ocrText: 'backup text',
         vector: v(0.25),
       })

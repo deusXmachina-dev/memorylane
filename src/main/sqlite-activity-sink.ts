@@ -27,6 +27,9 @@ export class SqliteActivitySink implements ActivitySink {
         tld: extracted.tld ?? null,
         summary: extracted.summary,
         summaryModel: extracted.summaryModel,
+        summaryMode: extracted.summaryMode,
+        summaryReason: extracted.summaryReason,
+        summaryFailureDetail: extracted.summaryFailureDetail,
         ocrText: extracted.ocrText,
         vector: extracted.vector,
       })

@@ -5,27 +5,37 @@ import { LLM_IMAGE_MAX_WIDTH } from './constants'
 import type { EncodedImage, VideoAssetData } from './types'
 import type { ActivityFrame } from '../activity-types'
 
-export function tryLoadVideoAsDataUrl(
-  videoPath: string,
-  maxVideoBytes: number,
-): VideoAssetData | null {
+/** Why a stitched video could not be loaded for the video pipeline. */
+export type VideoLoadRejection = 'missing' | 'empty' | 'oversize'
+
+export type VideoLoadResult =
+  | { ok: true; asset: VideoAssetData }
+  | { ok: false; reason: VideoLoadRejection }
+
+export function tryLoadVideoAsDataUrl(videoPath: string, maxVideoBytes: number): VideoLoadResult {
   let stat: fs.Stats
   try {
     stat = fs.statSync(videoPath)
   } catch {
-    return null
+    return { ok: false, reason: 'missing' }
   }
 
-  if (!stat.isFile() || stat.size <= 0 || stat.size > maxVideoBytes) {
-    return null
+  if (!stat.isFile() || stat.size <= 0) {
+    return { ok: false, reason: 'empty' }
+  }
+  if (stat.size > maxVideoBytes) {
+    return { ok: false, reason: 'oversize' }
   }
 
   const mimeType = mimeTypeForPath(videoPath)
   const videoBuffer = fs.readFileSync(videoPath)
   return {
-    dataUrl: `data:${mimeType};base64,${videoBuffer.toString('base64')}`,
-    sizeBytes: stat.size,
-    mimeType,
+    ok: true,
+    asset: {
+      dataUrl: `data:${mimeType};base64,${videoBuffer.toString('base64')}`,
+      sizeBytes: stat.size,
+      mimeType,
+    },
   }
 }
 
