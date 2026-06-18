@@ -340,6 +340,8 @@ app.on('ready', async () => {
     },
   })
 
-  log.info(`[Startup] Running ${editionConfig.edition} edition`)
+  log.info(
+    `[Startup] MemoryLane v${app.getVersion()} (${editionConfig.edition} edition, ${app.isPackaged ? 'packaged' : 'dev'})`,
+  )
   log.info('MemoryLane started. Frame output dir:', runtime.capture.getScreenshotsDir())
 })

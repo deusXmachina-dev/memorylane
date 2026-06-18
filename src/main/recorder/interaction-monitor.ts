@@ -157,9 +157,9 @@ const clickSession = new DebouncedSession(
       displayId: undefined,
     }),
     hasActivity: (accumulation) => accumulation.count > 0,
-    onStart: () => log.info('[Interaction Monitor] Click session started'),
+    onStart: () => log.debug('[Interaction Monitor] Click session started'),
     emit: (accumulation, subWindowStart, lastEventTime) => {
-      log.info(
+      log.debug(
         `[Interaction Monitor] Click session: ${accumulation.count} clicks over ${lastEventTime - subWindowStart}ms`,
       )
       notifyInteraction({
@@ -178,9 +178,9 @@ const typingSession = new DebouncedSession(
   {
     initialAccumulation: () => ({ keyCount: 0 }),
     hasActivity: (accumulation) => accumulation.keyCount > 0,
-    onStart: () => log.info('[Interaction Monitor] Typing session started'),
+    onStart: () => log.debug('[Interaction Monitor] Typing session started'),
     emit: (accumulation, subWindowStart, lastEventTime) => {
-      log.info(
+      log.debug(
         `[Interaction Monitor] Typing session: ${accumulation.keyCount} keys over ${lastEventTime - subWindowStart}ms`,
       )
       notifyInteraction({
@@ -211,9 +211,9 @@ const scrollSession = new DebouncedSession(
       direction: 'vertical',
     }),
     hasActivity: (accumulation) => accumulation.eventCount > 0,
-    onStart: () => log.info('[Interaction Monitor] Scroll session started'),
+    onStart: () => log.debug('[Interaction Monitor] Scroll session started'),
     emit: (accumulation, subWindowStart, lastEventTime) => {
-      log.info(
+      log.debug(
         `[Interaction Monitor] Scroll session: ${accumulation.amount} rotation over ${lastEventTime - subWindowStart}ms`,
       )
       notifyInteraction({
@@ -333,7 +333,7 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
   cachedWindowTitle = current.title
   cachedDisplayId = resolvedDisplayId
 
-  log.info(
+  log.debug(
     `[Interaction Monitor] App changed from ${previousWindow?.processName ?? '(none)'} to ${current.processName}`,
   )
 
@@ -452,7 +452,7 @@ export function stopInteractionMonitoring(): void {
  */
 export function onInteraction(callback: OnInteractionCallback): void {
   interactionCallbacks.push(callback)
-  log.info(`[Interaction Monitor] Callback registered (total: ${interactionCallbacks.length})`)
+  log.debug(`[Interaction Monitor] Callback registered (total: ${interactionCallbacks.length})`)
 }
 
 /**
@@ -466,7 +466,7 @@ export function clearInteractionCallback(callback: OnInteractionCallback): void 
     return
   }
   interactionCallbacks.splice(interactionCallbacks.indexOf(callback), 1)
-  log.info(`[Interaction Monitor] Callback removed (total: ${interactionCallbacks.length})`)
+  log.debug(`[Interaction Monitor] Callback removed (total: ${interactionCallbacks.length})`)
 }
 
 /**

@@ -32,6 +32,7 @@ export function runMigrations(db: Database.Database): void {
   const appliedRows = db.prepare('SELECT name FROM schema_migrations').all() as { name: string }[]
   const applied = new Set(appliedRows.map((r) => r.name))
 
+  let appliedCount = 0
   for (const migration of migrations) {
     if (applied.has(migration.name)) continue
 
@@ -44,6 +45,13 @@ export function runMigrations(db: Database.Database): void {
       )
     })()
     log.info(`Migration applied: ${migration.name}`)
+    appliedCount++
+  }
+
+  if (appliedCount > 0) {
+    log.info(`Database schema: applied ${appliedCount} migration(s), now at ${migrations.length}`)
+  } else {
+    log.debug(`Database schema up to date (${migrations.length} migrations)`)
   }
 }
 

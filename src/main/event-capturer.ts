@@ -281,7 +281,7 @@ export class EventCapturer {
       closedBy: pendingWindow.closedBy,
     }
 
-    log.info(
+    log.debug(
       `[EventCapturer] Window closed (${window.closedBy}): ${window.events.length} events, ` +
         `${window.endTimestamp - window.startTimestamp}ms`,
     )
