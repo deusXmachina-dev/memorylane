@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
-import { AlertTriangle, Database, Share2 } from 'lucide-react'
+import { AlertTriangle, Database, ScrollText, Share2 } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Label } from '@components/ui/label'
@@ -10,6 +10,7 @@ import type { MainWindowAPI } from '@types'
 import { DatabaseExportSection } from '../DatabaseExportSection'
 import { DatabaseImportSection } from '../DatabaseImportSection'
 import { DatabaseSyncSection } from '../DatabaseSyncSection'
+import { LogsExportSection } from '../LogsExportSection'
 import { SegmentedControl } from './SegmentedControl'
 import { SettingsRow } from './SettingsRow'
 import { SettingsSection } from './SettingsSection'
@@ -175,6 +176,14 @@ export function DataTabPanel({
           )}
         </SettingsSection>
       )}
+
+      <SettingsSection title="Diagnostics" icon={<ScrollText className="h-4 w-4" />}>
+        <SettingsRow
+          label="Export logs"
+          description="Download a ZIP of the app logs to share for debugging."
+          control={<LogsExportSection api={api} />}
+        />
+      </SettingsSection>
 
       <SettingsSection title="Danger zone" icon={<AlertTriangle className="h-4 w-4" />}>
         {!isPurgeExpanded ? (
