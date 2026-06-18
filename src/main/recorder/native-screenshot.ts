@@ -143,8 +143,14 @@ export class ScreenshotDaemon implements ScreenCaptureBackend {
 
     proc.stderr?.on('data', (chunk) => {
       const msg = chunk.toString().trim()
-      if (msg) {
+      if (!msg) return
+      // The daemon uses stderr for all diagnostics, including normal lifecycle
+      // chatter ("Stream started"). Only surface genuine problems at warn; the
+      // rest is debug. Hard crashes still surface via the 'close'/'error' handlers.
+      if (/fail|error|invalid|dropped/i.test(msg)) {
         log.warn(`[ScreenshotDaemon:stderr] ${msg}`)
+      } else {
+        log.debug(`[ScreenshotDaemon:stderr] ${msg}`)
       }
     })
 
