@@ -390,7 +390,7 @@ function logCaptureSettingsChanges(previous: CaptureSettings, updated: CaptureSe
   for (const field of scalarFields) {
     if (previous[field] !== updated[field]) {
       log.info(
-        `[settings] user changed ${field}: ${String(previous[field])} → ${String(updated[field])}`,
+        `[Settings] user changed ${field}: ${String(previous[field])} → ${String(updated[field])}`,
       )
     }
   }
@@ -403,7 +403,7 @@ function logCaptureSettingsChanges(previous: CaptureSettings, updated: CaptureSe
     const before = previous[field] as string[]
     const after = updated[field] as string[]
     if (JSON.stringify(before) !== JSON.stringify(after)) {
-      log.info(`[settings] user changed ${field}: ${before.length} → ${after.length} entries`)
+      log.info(`[Settings] user changed ${field}: ${before.length} → ${after.length} entries`)
     }
   }
 }
@@ -534,10 +534,10 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
 
     if (deps.capture.isCapturingNow()) {
-      log.info('[settings] user stopped capture')
+      log.info('[Settings] user stopped capture')
       deps.capture.requestStopCapture()
     } else {
-      log.info('[settings] user started capture')
+      log.info('[Settings] user started capture')
       deps.capture.requestStartCapture()
     }
 
@@ -613,7 +613,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       deps.captureSettingsManager.setActiveVendor(vendor)
       applyVendorSwitch(deps, deps.captureSettingsManager.get())
       if (previousVendor !== vendor) {
-        log.info(`[settings] user changed active vendor: ${previousVendor} → ${vendor}`)
+        log.info(`[Settings] user changed active vendor: ${previousVendor} → ${vendor}`)
       }
       return { success: true }
     } catch (error) {
