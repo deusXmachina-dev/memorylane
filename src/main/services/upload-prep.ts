@@ -10,6 +10,11 @@ function workerScriptPath(): string {
   return path.join(app.getAppPath(), 'out', 'main', 'upload-prep-worker.js')
 }
 
+// Generous upper bound for strip + VACUUM + gzip. If the worker exceeds this it
+// is almost certainly hung; we kill it and reject so a stuck child can't leave
+// the upload `inFlight` promise unresolved (which would wedge every later run).
+const WORKER_TIMEOUT_MS = 2 * 60 * 1000
+
 /**
  * Run the upload prep (strip + VACUUM + gzip) in a short-lived utilityProcess
  * so the heavy synchronous SQLite work never blocks the main thread. The child
@@ -26,9 +31,15 @@ export function prepareUploadInWorker(
     const settle = (fn: () => void): void => {
       if (settled) return
       settled = true
+      clearTimeout(timer)
       fn()
       child.kill()
     }
+
+    const timer = setTimeout(() => {
+      settle(() => reject(new Error(`upload-prep worker timed out after ${WORKER_TIMEOUT_MS}ms`)))
+    }, WORKER_TIMEOUT_MS)
+    timer.unref?.()
 
     child.on('message', (msg: UploadPrepResponse) => {
       if (msg.ok) settle(() => resolve(Buffer.from(msg.gzip)))
@@ -36,10 +47,7 @@ export function prepareUploadInWorker(
     })
 
     child.on('exit', (code) => {
-      if (!settled) {
-        settled = true
-        reject(new Error(`upload-prep worker exited before responding (code ${code})`))
-      }
+      settle(() => reject(new Error(`upload-prep worker exited before responding (code ${code})`)))
     })
 
     // Send the task once the child is ready to receive messages.
