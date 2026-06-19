@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
+import * as zlib from 'zlib'
 import log from '../logger'
 import { isSameDay } from './pattern-detector/helpers'
 import { stripDatabaseForUpload, type StripOptions } from './strip-database-for-upload'
@@ -144,9 +145,14 @@ export class DatabaseUploadSync {
       await this.storage.backupToFile(tempPath)
       stripDatabaseForUpload(tempPath, this.getStripOptions())
 
+      // gzip the (already stripped + VACUUMed) DB before upload. SQLite
+      // compresses ~5-10x, which shrinks the request body and shortens the
+      // transfer. The server detects gzip by magic bytes and inflates it, so
+      // no Content-Encoding header is needed and older raw uploads still work.
       const fileBuffer = fs.readFileSync(tempPath)
+      const gzipped = zlib.gzipSync(fileBuffer)
       const formData = new FormData()
-      formData.append('file', new Blob([fileBuffer]), 'memorylane.db')
+      formData.append('file', new Blob([gzipped]), 'memorylane.db.gz')
 
       const base = this.getBackendUrl().replace(/\/?$/, '/')
       const url = new URL('api/device/upload', base)
