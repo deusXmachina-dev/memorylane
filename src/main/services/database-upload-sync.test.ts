@@ -7,6 +7,18 @@ vi.mock('./strip-database-for-upload', () => ({
   stripDatabaseForUpload: vi.fn(),
 }))
 
+// Resolve gzip via a microtask (using the real gzipSync output) so it stays
+// deterministic under fake timers, while still producing genuine gzip bytes.
+vi.mock('zlib', async (importActual) => {
+  const actual = await importActual<typeof import('zlib')>()
+  return {
+    ...actual,
+    gzip: (buf: Buffer, cb: (err: Error | null, res: Buffer) => void) => {
+      cb(null, actual.gzipSync(buf))
+    },
+  }
+})
+
 function mockFetchResponse(status: number, body: object | string) {
   return vi.fn(async () => ({
     ok: status >= 200 && status < 300,

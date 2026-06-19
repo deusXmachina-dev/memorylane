@@ -1,12 +1,17 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
+import { promisify } from 'util'
 import * as zlib from 'zlib'
 import log from '../logger'
 import { isSameDay } from './pattern-detector/helpers'
 import { stripDatabaseForUpload, type StripOptions } from './strip-database-for-upload'
 
 const DEFAULT_UPLOAD_INTERVAL_MS = 24 * 60 * 60 * 1000
+
+// Async gzip so compressing the DB runs on libuv's threadpool, not the main
+// thread — a synchronous gzip of a large DB freezes the app (blocks IPC + UI).
+const gzipAsync = promisify(zlib.gzip)
 
 export interface DatabaseUploadStorage {
   backupToFile(destinationPath: string): Promise<void>
@@ -149,8 +154,9 @@ export class DatabaseUploadSync {
       // compresses ~5-10x, which shrinks the request body and shortens the
       // transfer. The server detects gzip by magic bytes and inflates it, so
       // no Content-Encoding header is needed and older raw uploads still work.
+      // Compress async so a large DB doesn't block the main thread.
       const fileBuffer = fs.readFileSync(tempPath)
-      const gzipped = zlib.gzipSync(fileBuffer)
+      const gzipped = await gzipAsync(fileBuffer)
       const formData = new FormData()
       formData.append('file', new Blob([gzipped]), 'memorylane.db.gz')
 
