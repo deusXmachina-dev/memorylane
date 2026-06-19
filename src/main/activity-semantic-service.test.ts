@@ -62,7 +62,6 @@ vi.mock('sharp', () => ({
 const DEFAULT_VIDEO_MODELS = [
   'google/gemini-2.5-flash-lite-preview-09-2025',
   'google/gemini-2.5-flash',
-  'allenai/molmo-2-8b',
 ]
 
 const DEFAULT_SNAPSHOT_MODELS = [
@@ -442,9 +441,7 @@ describe('ActivitySemanticService', () => {
     const { service, fetchMock } = setupService()
     fetchMock.setHandler(({ body }) => {
       if (body.model === DEFAULT_VIDEO_MODELS[0]) return httpError(500, { error: 'primary failed' })
-      if (body.model === DEFAULT_VIDEO_MODELS[1])
-        return httpError(500, { error: 'secondary failed' })
-      return chatCompletionResponse('third model summary')
+      return chatCompletionResponse('fallback model summary')
     })
 
     const result = await service.summarizeFromVideo({
@@ -452,7 +449,7 @@ describe('ActivitySemanticService', () => {
       videoPath,
     })
 
-    expect(result.summary).toBe('third model summary')
+    expect(result.summary).toBe('fallback model summary')
     expect(fetchMock.calls.map((c) => c.body.model)).toEqual(DEFAULT_VIDEO_MODELS)
     expect(service.getLlmHealthStatus().state).toBe('active')
   })
@@ -605,7 +602,9 @@ describe('ActivitySemanticService', () => {
     expect(fetchMock.calls.map((c) => c.body.model)).toEqual(DEFAULT_VIDEO_MODELS)
     const diagnostics = service.getLastRunDiagnostics()
     expect(diagnostics?.pipelinePreference).toBe('video')
-    expect(diagnostics?.attempts.map((a) => a.mode)).toEqual(['video', 'video', 'video'])
+    expect(diagnostics?.attempts.map((a) => a.mode)).toEqual(
+      DEFAULT_VIDEO_MODELS.map(() => 'video'),
+    )
     expect(diagnostics?.chosenMode).toBeNull()
   })
 
