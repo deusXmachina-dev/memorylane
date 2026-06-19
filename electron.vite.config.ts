@@ -26,6 +26,7 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
           'mcp-entry': resolve(__dirname, 'src/main/mcp-entry.ts'),
+          'upload-prep-worker': resolve(__dirname, 'src/main/services/upload-prep-worker.ts'),
         },
         external: [
           'uiohook-napi',

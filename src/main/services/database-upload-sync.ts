@@ -1,17 +1,23 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import { promisify } from 'util'
-import * as zlib from 'zlib'
 import log from '../logger'
 import { isSameDay } from './pattern-detector/helpers'
-import { stripDatabaseForUpload, type StripOptions } from './strip-database-for-upload'
+import { type StripOptions } from './strip-database-for-upload'
 
 const DEFAULT_UPLOAD_INTERVAL_MS = 24 * 60 * 60 * 1000
 
-// Async gzip so compressing the DB runs on libuv's threadpool, not the main
-// thread — a synchronous gzip of a large DB freezes the app (blocks IPC + UI).
-const gzipAsync = promisify(zlib.gzip)
+/** Strip + VACUUM + gzip a backup DB into the bytes to upload. */
+export type PrepareUpload = (tempPath: string, stripOptions: StripOptions) => Promise<Buffer>
+
+// The default runs the prep in a short-lived utilityProcess: VACUUM and the
+// column-drop rewrite are synchronous, CPU-heavy SQLite work and would freeze
+// the UI if run on the main thread. Lazily imported so unit tests (which inject
+// their own prepareUpload) never pull in electron.
+const defaultPrepareUpload: PrepareUpload = async (tempPath, stripOptions) => {
+  const { prepareUploadInWorker } = await import('./upload-prep')
+  return prepareUploadInWorker(tempPath, stripOptions)
+}
 
 export interface DatabaseUploadStorage {
   backupToFile(destinationPath: string): Promise<void>
@@ -29,6 +35,9 @@ export interface DatabaseUploadSyncParams {
   /** Persist the timestamp (ms) of a successful upload. */
   recordUploadAt: (ts: number) => void
   intervalMs?: number
+  /** Strip + compress the backup DB. Defaults to a utilityProcess worker;
+   *  injectable so tests don't spawn a process. */
+  prepareUpload?: PrepareUpload
 }
 
 export class DatabaseUploadSync {
@@ -41,6 +50,7 @@ export class DatabaseUploadSync {
   private readonly getLastUploadAt: () => number | null
   private readonly recordUploadAt: (ts: number) => void
   private readonly intervalMs: number
+  private readonly prepareUpload: PrepareUpload
   private timer: ReturnType<typeof setInterval> | null = null
   private uploadRunning = false
   private rerunRequested = false
@@ -56,6 +66,7 @@ export class DatabaseUploadSync {
     this.getLastUploadAt = params.getLastUploadAt
     this.recordUploadAt = params.recordUploadAt
     this.intervalMs = params.intervalMs ?? DEFAULT_UPLOAD_INTERVAL_MS
+    this.prepareUpload = params.prepareUpload ?? defaultPrepareUpload
   }
 
   public start(): void {
@@ -148,15 +159,13 @@ export class DatabaseUploadSync {
 
     try {
       await this.storage.backupToFile(tempPath)
-      stripDatabaseForUpload(tempPath, this.getStripOptions())
 
-      // gzip the (already stripped + VACUUMed) DB before upload. SQLite
-      // compresses ~5-10x, which shrinks the request body and shortens the
-      // transfer. The server detects gzip by magic bytes and inflates it, so
-      // no Content-Encoding header is needed and older raw uploads still work.
-      // Compress async so a large DB doesn't block the main thread.
-      const fileBuffer = fs.readFileSync(tempPath)
-      const gzipped = await gzipAsync(fileBuffer)
+      // Strip (drop sensitive columns/tables + VACUUM) and gzip the backup in a
+      // worker process — that work is synchronous, CPU-heavy SQLite I/O and
+      // would freeze the UI if it ran on the main thread. gzip shrinks the body
+      // ~5-10x; the server detects gzip by magic bytes and inflates it, so no
+      // Content-Encoding header is needed and older raw uploads still work.
+      const gzipped = await this.prepareUpload(tempPath, this.getStripOptions())
       const formData = new FormData()
       formData.append('file', new Blob([gzipped]), 'memorylane.db.gz')
 

@@ -3,21 +3,16 @@ import * as zlib from 'zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DatabaseUploadSync } from './database-upload-sync'
 
-vi.mock('./strip-database-for-upload', () => ({
-  stripDatabaseForUpload: vi.fn(),
+// The real prep runs in a utilityProcess (electron) and does SQLite work;
+// stub it with an in-process gzip of the backup file so the upload flow stays
+// deterministic and produces genuine gzip bytes for the round-trip assertion.
+vi.mock('./upload-prep', () => ({
+  prepareUploadInWorker: async (tempPath: string) => {
+    const fs = await import('fs')
+    const zlib = await import('zlib')
+    return zlib.gzipSync(fs.readFileSync(tempPath))
+  },
 }))
-
-// Resolve gzip via a microtask (using the real gzipSync output) so it stays
-// deterministic under fake timers, while still producing genuine gzip bytes.
-vi.mock('zlib', async (importActual) => {
-  const actual = await importActual<typeof import('zlib')>()
-  return {
-    ...actual,
-    gzip: (buf: Buffer, cb: (err: Error | null, res: Buffer) => void) => {
-      cb(null, actual.gzipSync(buf))
-    },
-  }
-})
 
 function mockFetchResponse(status: number, body: object | string) {
   return vi.fn(async () => ({
