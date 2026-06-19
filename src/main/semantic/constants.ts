@@ -12,10 +12,6 @@ export const MODEL_PRICING_USD_PER_MILLION: Record<
     input_tokens_per_million: 0.3,
     completion_tokens_per_million: 2.5,
   },
-  'allenai/molmo-2-8b': {
-    input_tokens_per_million: 0.2,
-    completion_tokens_per_million: 0.2,
-  },
   'mistralai/mistral-small-3.2-24b-instruct': {
     input_tokens_per_million: 0.08,
     completion_tokens_per_million: 0.2,
