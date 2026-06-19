@@ -1,9 +1,17 @@
 import * as fs from 'fs'
+import * as zlib from 'zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DatabaseUploadSync } from './database-upload-sync'
 
-vi.mock('./strip-database-for-upload', () => ({
-  stripDatabaseForUpload: vi.fn(),
+// The real prep runs in a utilityProcess (electron) and does SQLite work;
+// stub it with an in-process gzip of the backup file so the upload flow stays
+// deterministic and produces genuine gzip bytes for the round-trip assertion.
+vi.mock('./upload-prep', () => ({
+  prepareUploadInWorker: async (tempPath: string) => {
+    const fs = await import('fs')
+    const zlib = await import('zlib')
+    return zlib.gzipSync(fs.readFileSync(tempPath))
+  },
 }))
 
 function mockFetchResponse(status: number, body: object | string) {
@@ -60,6 +68,45 @@ describe('DatabaseUploadSync', () => {
     expect(init.body).toBeInstanceOf(FormData)
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer device-hex-id')
     expect((init.body as FormData).has('device_id')).toBe(false)
+  })
+
+  it('gzip-compresses the uploaded database', async () => {
+    const fetchMock = mockFetchResponse(201, {
+      ok: true,
+      upload_id: 'up_123',
+      checksum_sha256: 'abc',
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const backupToFile = vi.fn(async (dest: string) => {
+      fs.writeFileSync(dest, 'dbcontent')
+    })
+
+    const sync = new DatabaseUploadSync({
+      storage: { backupToFile },
+      getDeviceId: () => 'device-hex-id',
+      isActivated: () => true,
+      isSyncEnabled: () => true,
+      getStripOptions: () => ({ detailLevel: 'summary' as const }),
+      getBackendUrl: () => 'http://localhost:8000/',
+      getLastUploadAt: () => null,
+      recordUploadAt: () => {},
+    })
+
+    sync.start()
+    await vi.advanceTimersByTimeAsync?.(0).catch(() => undefined)
+    await sync.stop()
+
+    const [, init] = fetchMock.mock.calls[0]
+    const part = (init.body as FormData).get('file') as Blob
+    expect(part).toBeInstanceOf(Blob)
+
+    const bytes = Buffer.from(await part.arrayBuffer())
+    // gzip magic bytes — the server detects compression by these.
+    expect(bytes[0]).toBe(0x1f)
+    expect(bytes[1]).toBe(0x8b)
+    // and it round-trips back to the exact backup content.
+    expect(zlib.gunzipSync(bytes).toString()).toBe('dbcontent')
   })
 
   it('skips upload when not activated', async () => {
