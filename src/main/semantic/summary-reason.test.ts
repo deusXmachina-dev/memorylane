@@ -67,7 +67,7 @@ describe('deriveSummaryOutcome', () => {
         attempts: [videoFail('empty summary')],
       }),
     )
-    expect(out.reason).toBe('video_empty')
+    expect(out.reason).toBe('video_empty_summary')
   })
 
   it('uses the first video failure as the deciding cause', () => {

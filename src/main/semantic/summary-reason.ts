@@ -18,7 +18,9 @@ export interface SummaryOutcome {
 function classifyVideoError(error: string): string {
   const e = error.toLowerCase()
   if (e.includes('timed out') || e.includes('timeout')) return 'video_timeout'
-  if (e.includes('empty summary')) return 'video_empty'
+  // The video model ran but returned an empty summary — distinct from a
+  // zero-byte video file (video_empty_file), which never reaches the model.
+  if (e.includes('empty summary')) return 'video_empty_summary'
   if (
     /\b\d{3}\b/.test(error) ||
     e.includes('not found') ||
