@@ -24,6 +24,13 @@ export interface PipelineHarness {
   activityExtractor?: ActivityExtractor
   start(): Promise<void>
   stop(): Promise<void>
+  /**
+   * Drain the producer→extractor pipeline without stopping capture: close the
+   * open event window, finalize the pending activity, and wait until the
+   * extractor has summarized + persisted everything queued. Used by the in-app
+   * eval recorder so a session's final activity is captured before promotion.
+   */
+  drainActivities(): Promise<void>
   handleEvent(event: InteractionContext): void
   setFrameCaptureSuppressed(suppressed: boolean): Promise<void>
   updateActivityWindowConfig(input: {
@@ -154,6 +161,14 @@ export function createPipelineHarness(params: {
       }
       eventCapturer.destroy()
       log.info('[PipelineHarness] Pipeline stopped')
+    },
+    async drainActivities() {
+      if (!running) return
+      await eventCapturer.flushAndWait()
+      await activityProducer.flush()
+      if (activityExtractor) {
+        await activityExtractor.waitForIdle()
+      }
     },
     handleEvent(event: InteractionContext) {
       if (event.type === 'app_change' && event.displayId !== undefined) {

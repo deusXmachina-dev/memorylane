@@ -1,15 +1,15 @@
 /**
- * Promotes a captured session (the debug-pipeline JSONL streams + their PNGs)
- * into a committed replay fixture. Shared by the `promote-debug-fixture` CLI and
- * the in-app eval recorder — both hand it a directory containing
- * `event-windows.jsonl` + `frames.jsonl` (the CLI's `.debug-pipeline`, or the
- * recorder's per-session staging dir) and get back a self-contained fixture.
+ * Promotes a captured session (the in-app eval recorder's staging dir) into a
+ * committed replay fixture. The recorder hands over a directory containing
+ * `event-windows.jsonl` + `frames.jsonl` + `activities.jsonl` and gets back a
+ * self-contained fixture.
  *
  * The fixture is: event windows copied verbatim (the replay-critical input),
  * referenced PNGs copied in with paths rewritten to relative, a `manifest.json`,
  * an optional `session.mp4` for review, and an optional editable `golden.md`
- * scaffold seeded from a deterministic no-LLM replay (summaries pre-filled from
- * the live DB when available). No LLM is called here.
+ * scaffold. Kept-block summaries come straight from the live pipeline's
+ * `activities.jsonl` (real capture-time output); a deterministic no-LLM replay
+ * supplies only the DROPPED spans + the session clock. No LLM is called here.
  */
 
 import * as fs from 'fs'
@@ -17,14 +17,13 @@ import * as path from 'path'
 import sharp from 'sharp'
 import { SCREEN_CAPTURER_CONFIG } from '../../shared/constants'
 import { FfmpegVideoStitcher } from '../video/video-stitcher'
-import { StorageService } from '../storage'
-import type { ActivityDetail } from '../storage/types'
 import type { EventWindow } from '../../shared/types'
 import { renderGoldenMd } from './golden-md'
 import { replayFixture, ScaffoldTransformer } from './replay-harness'
 import { readJsonl } from './jsonl'
 import {
   FIXTURE_SCHEMA_VERSION,
+  type DumpedActivity,
   type DumpedFrame,
   type FixtureManifest,
   type ReplayActivity,
@@ -46,12 +45,6 @@ export interface PromoteCaptureOptions {
   seed?: boolean
   reseed?: boolean
   expectedActivities?: number
-  /** Pre-fill golden summaries from the DB. Default true (when a DB is reachable). */
-  dbSummaries?: boolean
-  /** Live storage to read summaries from (in-app). Not closed by this function. */
-  storage?: StorageService
-  /** DB path to open for summaries (CLI). Ignored when `storage` is given. */
-  dbPath?: string
 }
 
 export interface PromoteCaptureResult {
@@ -144,62 +137,34 @@ async function stitchSessionVideo(
   }
 }
 
-/**
- * Pre-fills each kept activity's summary from the DB. The session that produced
- * this capture ran the real summarizer and persisted its activities, so those
- * summaries already exist. The producer is deterministic, so a fresh replay cuts
- * activities at the same timestamps the live run did; we match scaffold blocks to
- * DB rows by time overlap and copy the persisted summary in. Mutates `transcript`
- * in place; an unmatched block just leaves a blank. DROPPED blocks were never
- * persisted, so they're skipped. Returns the count of blocks filled.
- */
-function fillSummariesFromDb(transcript: ReplayActivity[], storage: StorageService): number {
-  const kept = transcript.filter((t) => !t.dropped)
-  if (kept.length === 0) return 0
-
-  const sessionStart = Math.min(...kept.map((t) => t.startTimestamp))
-  const sessionEnd = Math.max(...kept.map((t) => t.endTimestamp))
-  const rows: ActivityDetail[] = storage.activities.getForDay(sessionStart, sessionEnd)
-
-  const used = new Set<string>()
-  let filled = 0
-  for (const act of kept) {
-    let best: ActivityDetail | null = null
-    let bestOverlap = 0
-    for (const row of rows) {
-      if (used.has(row.id)) continue
-      const overlap = Math.max(
-        0,
-        Math.min(act.endTimestamp, row.endTimestamp) -
-          Math.max(act.startTimestamp, row.startTimestamp),
-      )
-      if (overlap > bestOverlap) {
-        bestOverlap = overlap
-        best = row
-      }
-    }
-    if (best && best.summary.trim()) {
-      act.summary = best.summary
-      used.add(best.id)
-      filled++
-    }
-  }
-  return filled
+/** Reads the live activities the in-app recorder dumped — each carries the
+ *  summary the pipeline actually produced at capture time. These become the
+ *  golden's kept blocks directly; no replay output or DB lookup is consulted. */
+function readLiveActivities(sourceDir: string): DumpedActivity[] {
+  const filePath = path.join(sourceDir, 'activities.jsonl')
+  if (!fs.existsSync(filePath)) return []
+  return readJsonl<DumpedActivity>(filePath)
 }
 
-/** Resolves a storage handle for summary pre-fill: the injected one (not owned),
- *  or one opened from `dbPath` (owned → caller closes via the returned `close`). */
-function resolveStorage(opts: PromoteCaptureOptions): {
-  storage: StorageService | null
-  close: () => void
-} {
-  if (opts.dbSummaries === false) return { storage: null, close: () => undefined }
-  if (opts.storage) return { storage: opts.storage, close: () => undefined }
-  if (opts.dbPath && fs.existsSync(opts.dbPath)) {
-    const storage = new StorageService(opts.dbPath)
-    return { storage, close: () => storage.close() }
+/** Adapts a dumped live activity to the `ReplayActivity` shape `renderGoldenMd`
+ *  consumes (it reads app/title/times/summary; the rest are inert defaults). */
+function liveToReplayActivity(a: DumpedActivity): ReplayActivity {
+  return {
+    activityId: a.id,
+    startTimestamp: a.startTimestamp,
+    endTimestamp: a.endTimestamp,
+    durationMs: a.endTimestamp - a.startTimestamp,
+    appName: a.appName,
+    windowTitle: a.windowTitle,
+    tld: a.tld,
+    interactionCount: 0,
+    summary: a.summary,
+    summaryModel: a.summaryModel,
+    ocrText: '',
+    frameRefs: [],
+    selectedSnapshotPaths: [],
+    diagnostics: null,
   }
-  return { storage: null, close: () => undefined }
 }
 
 export async function promoteCapture(opts: PromoteCaptureOptions): Promise<PromoteCaptureResult> {
@@ -271,13 +236,14 @@ export async function promoteCapture(opts: PromoteCaptureOptions): Promise<Promo
   const wantSeed = opts.seed ?? true
   if (!wantVideo && !wantSeed) return result
 
-  // One no-LLM replay feeds both the review video and the golden transcript, so
-  // they share a clock and the video ends exactly where the transcript does.
-  const { activities, droppedActivities, sessionStartMs } = await replayFixture({
+  // The no-LLM replay supplies the DROPPED spans (drops are never persisted) and
+  // the session clock; kept blocks come from the live recording's summaries.
+  const { droppedActivities, sessionStartMs } = await replayFixture({
     fixtureDir,
     transformer: new ScaffoldTransformer(),
   })
-  const transcript = [...activities, ...droppedActivities]
+  const keptActivities = readLiveActivities(opts.sourceDir).map(liveToReplayActivity)
+  const transcript = [...keptActivities, ...droppedActivities]
   const lastBlockEnd = transcript.reduce((max, t) => Math.max(max, t.endTimestamp), 0) || undefined
 
   if (wantVideo) {
@@ -289,21 +255,17 @@ export async function promoteCapture(opts: PromoteCaptureOptions): Promise<Promo
     if (fs.existsSync(goldenPath) && !opts.reseed) {
       result.golden = { seeded: false, kept: 0, dropped: 0, summariesFilled: 0 }
     } else {
-      const dropped = transcript.filter((t) => t.dropped).length
-      const kept = transcript.length - dropped
-      const { storage, close } = resolveStorage(opts)
-      let filled = 0
-      try {
-        if (storage) filled = fillSummariesFromDb(transcript, storage)
-      } finally {
-        close()
-      }
       fs.writeFileSync(
         goldenPath,
         renderGoldenMd(path.basename(fixtureDir), transcript, sessionStartMs),
         'utf8',
       )
-      result.golden = { seeded: true, kept, dropped, summariesFilled: filled }
+      result.golden = {
+        seeded: true,
+        kept: keptActivities.length,
+        dropped: droppedActivities.length,
+        summariesFilled: keptActivities.filter((a) => a.summary.trim()).length,
+      }
     }
   }
 

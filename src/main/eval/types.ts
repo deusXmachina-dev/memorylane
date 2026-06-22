@@ -44,6 +44,26 @@ export interface DumpedFrame {
   lagMs?: number
 }
 
+/**
+ * One activity as the *live* pipeline summarized it during an in-app recording,
+ * tapped off the extractor and written to the staging `activities.jsonl`. The
+ * recorder dumps these so a fixture's golden can be seeded from the real
+ * summaries produced at capture time — no replay, no DB join. `dumpedAt`/`lagMs`
+ * are stamped by the dumper.
+ */
+export interface DumpedActivity {
+  id: string
+  startTimestamp: number
+  endTimestamp: number
+  appName: string
+  windowTitle: string
+  tld?: string
+  summary: string
+  summaryModel: string
+  dumpedAt?: number
+  lagMs?: number
+}
+
 /** One activity produced by replaying a fixture through the real pipeline. */
 export interface ReplayActivity {
   activityId: string

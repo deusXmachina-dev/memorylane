@@ -5,15 +5,27 @@ import * as path from 'path'
 import sharp from 'sharp'
 import { promoteCapture } from './promote-fixture'
 import { parseGoldenMd } from './golden-md'
-import type { StorageService } from '../storage'
 
 vi.mock('../logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
-const storageStub = {
-  activities: { getForDay: () => [] },
-} as unknown as StorageService
+/** Writes one live activity to the staging dir, as the in-app recorder would. */
+function writeLiveActivity(dir: string, summary: string): void {
+  fs.writeFileSync(
+    path.join(dir, 'activities.jsonl'),
+    JSON.stringify({
+      id: 'live-1',
+      startTimestamp: T0,
+      endTimestamp: T0 + 1000,
+      appName: 'Code',
+      windowTitle: 'auth.ts',
+      tld: '',
+      summary,
+      summaryModel: 'video',
+    }) + '\n',
+  )
+}
 
 let tmp: string
 let sourceDir: string
@@ -115,23 +127,34 @@ describe('promoteCapture', () => {
     expect(copied).toBe(original)
   })
 
-  it('seeds an editable golden.md that round-trips through parseGoldenMd', async () => {
+  it('seeds an editable golden.md from the live summaries, round-trips, no comment', async () => {
+    writeLiveActivity(sourceDir, 'Live captured summary.')
+
     const result = await promoteCapture({
       sourceDir,
       fixturesRoot,
       name: 'demo2',
       seed: true,
       video: false,
-      storage: storageStub,
     })
 
     expect(result.golden?.seeded).toBe(true)
+    expect(result.golden?.summariesFilled).toBe(1)
+
     const golden = fs.readFileSync(path.join(fixturesRoot, 'demo2', 'golden.md'), 'utf8')
     expect(golden.startsWith('# Golden — demo2')).toBe(true)
-    expect(() => parseGoldenMd(golden)).not.toThrow()
+    // Kept block carries the real capture-time summary, not a placeholder.
+    expect(golden).toContain('Live captured summary.')
+    expect(golden).not.toContain('no summary produced')
+    // The confusing scaffold instruction comment is gone.
+    expect(golden).not.toContain('Exact transcript scaffolded')
+
+    const kept = parseGoldenMd(golden).find((b) => !b.dropped)
+    expect(kept?.summary).toBe('Live captured summary.')
   })
 
   it('does not overwrite an existing golden.md unless reseed', async () => {
+    writeLiveActivity(sourceDir, 'Live captured summary.')
     const fxDir = path.join(fixturesRoot, 'demo3')
     fs.mkdirSync(fxDir, { recursive: true })
     fs.writeFileSync(path.join(fxDir, 'golden.md'), 'CUSTOM EDIT', 'utf8')
@@ -142,7 +165,6 @@ describe('promoteCapture', () => {
       name: 'demo3',
       seed: true,
       video: false,
-      storage: storageStub,
     })
 
     expect(result.golden?.seeded).toBe(false)
