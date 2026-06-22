@@ -1,9 +1,14 @@
 import { ACTIVITY_CONFIG, VISUAL_DETECTOR_CONFIG } from '@constants'
 import log from '../logger'
 import { UsageTracker } from '../services/usage-tracker'
+import { SummaryModeTracker } from '../services/summary-mode-tracker'
 import type { Activity } from '../activity-types'
-import type { ActivitySemanticService as SemanticServiceContract } from '../activity-transformer-types'
+import type {
+  ActivitySemanticService as SemanticServiceContract,
+  SemanticSummary,
+} from '../activity-transformer-types'
 import type { InferenceProvider } from '../llm'
+import { deriveSummaryOutcome } from './summary-reason'
 import {
   isLikelyVideoUnsupportedError,
   videoUnsupportedCacheKey,
@@ -22,6 +27,7 @@ import type {
   ActivitySemanticServiceConfig,
   SemanticRoundTripDump,
   SemanticRunDiagnostics,
+  SummaryModeTrackerLike,
 } from './types'
 
 export class ActivitySemanticService implements SemanticServiceContract {
@@ -32,6 +38,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
   private requestTimeoutMs: number
   private pipelinePreference: SemanticPipelinePreference
   private readonly usageTracker: ActivitySemanticServiceConfig['usageTracker']
+  private readonly summaryModeTracker: SummaryModeTrackerLike
   private readonly debugDumper: ActivitySemanticServiceConfig['debugDumper']
   private readonly fetchImpl: typeof globalThis.fetch | undefined
   private readonly videoUnsupportedKeys = new Set<string>()
@@ -60,6 +67,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
     this.requestTimeoutMs = config?.requestTimeoutMs ?? ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS
     this.pipelinePreference = this.normalizePipelinePreference(config?.pipelinePreference)
     this.usageTracker = config?.usageTracker ?? new UsageTracker()
+    this.summaryModeTracker = config?.summaryModeTracker ?? new SummaryModeTracker()
     this.debugDumper = config?.debugDumper
     this.fetchImpl = config?.fetchImpl
 
@@ -169,7 +177,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
   async summarizeFromVideo(input: {
     activity: Activity
     videoPath?: string
-  }): Promise<{ summary: string; model: string }> {
+  }): Promise<SemanticSummary> {
     this.assertInput(input)
 
     const diagnostics: SemanticRunDiagnostics = {
@@ -186,9 +194,18 @@ export class ActivitySemanticService implements SemanticServiceContract {
     }
     this.lastRunDiagnostics = diagnostics
 
+    // Record the chosen mode + the reason it was chosen (the video-failure cause
+    // for fallbacks) into the aggregate counter on every return, derived from the
+    // final diagnostics state. Every return path routes through finish(), so each
+    // outcome is counted exactly once.
+    const finish = (summary: string, model: string): SemanticSummary => {
+      this.summaryModeTracker.record(deriveSummaryOutcome(diagnostics))
+      return { summary, model }
+    }
+
     if (!this.provider.isConfigured()) {
       diagnostics.fallbackReason = 'semantic service is not configured'
-      return { summary: '', model: '' }
+      return finish('', '')
     }
 
     const videoPrompt = buildSemanticPrompt(
@@ -214,8 +231,9 @@ export class ActivitySemanticService implements SemanticServiceContract {
           }),
         )
       } else if (typeof input.videoPath === 'string' && input.videoPath.trim().length > 0) {
-        const videoAsset = tryLoadVideoAsDataUrl(input.videoPath, this.maxVideoBytes)
-        if (videoAsset) {
+        const videoLoad = tryLoadVideoAsDataUrl(input.videoPath, this.maxVideoBytes)
+        if (videoLoad.ok) {
+          const videoAsset = videoLoad.asset
           diagnostics.videoSizeBytes = videoAsset.sizeBytes
           diagnostics.videoMimeType = videoAsset.mimeType
 
@@ -264,12 +282,17 @@ export class ActivitySemanticService implements SemanticServiceContract {
             diagnostics.chosenMode = 'video'
             diagnostics.chosenModel = videoResult.model
             this.recordLlmSuccess()
-            return { summary: videoResult.summary, model: videoResult.model }
+            return finish(videoResult.summary, videoResult.model)
           }
 
           diagnostics.fallbackReason = 'all video models failed'
         } else {
-          diagnostics.fallbackReason = 'video unavailable or exceeds configured size limit'
+          diagnostics.fallbackReason =
+            videoLoad.reason === 'oversize'
+              ? 'video exceeds configured size limit'
+              : videoLoad.reason === 'empty'
+                ? 'video file empty (zero bytes)'
+                : 'video file missing'
         }
       } else {
         diagnostics.fallbackReason = 'video unavailable'
@@ -288,7 +311,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
             : 'snapshot pipeline disabled by preference'
       }
       this.updateLlmHealthFromDiagnostics(diagnostics)
-      return { summary: '', model: '' }
+      return finish('', '')
     }
 
     const snapshotCap = this.resolveSnapshotCap()
@@ -306,7 +329,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
 
     if (selectedSnapshots.length === 0) {
       this.updateLlmHealthFromDiagnostics(diagnostics)
-      return { summary: '', model: '' }
+      return finish('', '')
     }
 
     const encodedSnapshots = await encodeSnapshots({
@@ -320,7 +343,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
     })
     if (encodedSnapshots.length === 0) {
       this.updateLlmHealthFromDiagnostics(diagnostics)
-      return { summary: '', model: '' }
+      return finish('', '')
     }
 
     const snapshotPrompt = buildSemanticPrompt(
@@ -361,7 +384,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
       diagnostics.chosenMode = 'snapshot'
       diagnostics.chosenModel = snapshotResult.model
       this.recordLlmSuccess()
-      return { summary: snapshotResult.summary, model: snapshotResult.model }
+      return finish(snapshotResult.summary, snapshotResult.model)
     }
 
     if (!diagnostics.fallbackReason) {
@@ -370,7 +393,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
 
     this.updateLlmHealthFromDiagnostics(diagnostics)
 
-    return { summary: '', model: '' }
+    return finish('', '')
   }
 
   getLastRunDiagnostics(): SemanticRunDiagnostics | null {

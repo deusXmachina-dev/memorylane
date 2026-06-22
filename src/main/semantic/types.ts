@@ -1,4 +1,5 @@
 import type { ActivityFrame } from '../activity-types'
+import type { SummaryOutcome } from './summary-reason'
 
 export type SemanticMode = 'video' | 'snapshot'
 export type SemanticPipelinePreference = 'auto' | 'video' | 'image'
@@ -10,6 +11,10 @@ export type ChatContentItem =
 
 export interface UsageTrackerLike {
   recordUsage(usage: { prompt_tokens: number; completion_tokens: number; cost?: number }): void
+}
+
+export interface SummaryModeTrackerLike {
+  record(outcome: SummaryOutcome): void
 }
 
 export interface EncodedImage {
@@ -35,6 +40,7 @@ export interface ActivitySemanticServiceConfig {
   maxVideoBytes?: number
   requestTimeoutMs?: number
   usageTracker?: UsageTrackerLike
+  summaryModeTracker?: SummaryModeTrackerLike
   debugDumper?: SemanticDebugDumper
   /**
    * Optional fetch override used by the raw-HTTP video pipeline. Mostly for
