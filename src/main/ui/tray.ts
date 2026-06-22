@@ -7,7 +7,7 @@ import path from 'node:path'
 import log from '../logger'
 import { formatBytes, formatNumber } from '../utils/formatters'
 import type { StorageService } from '../storage'
-import { sendStatusToRenderer, openMainWindow } from './main-window'
+import { openMainWindow } from './main-window'
 import { getUpdateState, quitAndInstall } from '../updater'
 import { createTrayPrivacyState } from './tray-privacy-state'
 import { CAPTURE_PAUSE_CONFIG } from '../../shared/constants'
@@ -127,20 +127,14 @@ const buildCaptureMenuItems = (state: {
   isUserPaused: boolean
   pausedUntilMs: number | null
 }): Electron.MenuItemConstructorOptions[] => {
-  const refresh = (): void => {
-    void updateTrayMenu()
-    void sendStatusToRenderer()
-  }
-
+  // Click handlers only invoke a coordinator control; the resulting
+  // onStateChanged refreshes the tray menu and renderer.
   if (state.isUserPaused && state.pausedUntilMs !== null) {
     return [
       { label: `Paused — resumes ${formatRemaining(state.pausedUntilMs)}`, enabled: false },
       {
         label: 'Resume Capture Now',
-        click: () => {
-          deps!.capture.resumeCapture()
-          refresh()
-        },
+        click: () => deps!.capture.resumeCapture(),
       },
     ]
   }
@@ -151,18 +145,12 @@ const buildCaptureMenuItems = (state: {
         label: 'Pause Capture',
         submenu: CAPTURE_PAUSE_CONFIG.PRESETS_MINUTES.map((minutes) => ({
           label: `Pause for ${formatDuration(minutes)}`,
-          click: () => {
-            deps!.capture.pauseCapture(minutes * 60_000)
-            refresh()
-          },
+          click: () => deps!.capture.pauseCapture(minutes * 60_000),
         })),
       },
       {
         label: 'Turn Off Capture',
-        click: () => {
-          deps!.capture.requestStopCapture()
-          refresh()
-        },
+        click: () => deps!.capture.requestStopCapture(),
       },
     ]
   }
@@ -170,10 +158,7 @@ const buildCaptureMenuItems = (state: {
   return [
     {
       label: 'Start Capture',
-      click: () => {
-        deps!.capture.requestStartCapture()
-        refresh()
-      },
+      click: () => deps!.capture.requestStartCapture(),
     },
   ]
 }

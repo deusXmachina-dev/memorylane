@@ -251,8 +251,7 @@ app.on('ready', async () => {
         captureCoordinator.controls.requestStartCapture()
         log.info(`[Main] Capture started by hotkey (${accelerator})`)
       }
-      void updateTrayMenu()
-      void sendStatusToRenderer()
+      // Tray + renderer are refreshed by the coordinator's onStateChanged.
     },
   })
 

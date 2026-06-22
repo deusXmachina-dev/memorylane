@@ -540,16 +540,18 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       deps.capture.requestStartCapture()
     }
 
-    void updateTrayMenu()
-
+    // Tray + renderer are refreshed by the coordinator's onStateChanged.
     return buildStatus()
   })
 
   handle('main-window:pauseCapture', (_event, durationMs: number) => {
     if (!deps) return buildStatus()
-    log.info(`[Settings] user paused capture for ${Math.round((durationMs ?? 0) / 1000)}s`)
+    if (!Number.isFinite(durationMs) || durationMs <= 0) {
+      log.warn(`[Settings] ignoring pauseCapture with invalid duration: ${durationMs}`)
+      return buildStatus()
+    }
+    log.info(`[Settings] user paused capture for ${Math.round(durationMs / 1000)}s`)
     deps.capture.pauseCapture(durationMs)
-    void updateTrayMenu()
     return buildStatus()
   })
 
@@ -557,7 +559,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     if (!deps) return buildStatus()
     log.info('[Settings] user resumed capture from pause')
     deps.capture.resumeCapture()
-    void updateTrayMenu()
     return buildStatus()
   })
 

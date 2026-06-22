@@ -36,9 +36,11 @@ export function createCaptureCoordinator(params: {
    */
   patternDetector: { scheduleRun(): void } | null
   /**
-   * Notifies the UI (tray + renderer) after a pause/resume so the displayed
-   * state stays in sync even on paths with no direct caller (e.g. the
-   * auto-resume timer firing). Optional so tests can omit it.
+   * Notifies the UI (tray + renderer) after any capture-state transition
+   * (start/stop/pause/resume) so the displayed state stays in sync — including
+   * on paths with no direct caller (e.g. the auto-resume timer firing). This is
+   * the single sync point: callers should not refresh the tray/renderer
+   * themselves. Optional so tests can omit it.
    */
   onStateChanged?: () => void
 }): {
@@ -84,21 +86,30 @@ export function createCaptureCoordinator(params: {
   const requestStartCapture = (): void => {
     // Starting un-pauses: a manual start overrides any active timed pause.
     clearPauseTimer()
-    if (!persistCaptureEnabled(true)) return
+    if (!persistCaptureEnabled(true)) {
+      notifyStateChanged()
+      return
+    }
     if (params.isPaused()) {
       log.info('[Main] Capture preference enabled while paused; will start on resume')
+      notifyStateChanged()
       return
     }
     params.capture.startCapture()
     scheduleBackgroundAnalyzers()
+    notifyStateChanged()
   }
 
   const requestStopCapture = (): void => {
     // Indefinite "turn off": cancel any timed pause so it can't auto-resume.
     clearPauseTimer()
-    if (!persistCaptureEnabled(false)) return
+    if (!persistCaptureEnabled(false)) {
+      notifyStateChanged()
+      return
+    }
     void params.capture.forceClose()
     params.capture.stopCapture()
+    notifyStateChanged()
   }
 
   // Resume from a timed pause: start capture if it's still the desired state.
