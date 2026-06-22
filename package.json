@@ -47,7 +47,6 @@
     "detect-patterns:prune": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/prune-patterns.ts",
     "mine-tasks": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/mine-tasks.ts",
     "build-user-context": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/build-user-context.ts",
-    "promote-debug-fixture": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/promote-debug-fixture.ts",
     "eval-summaries": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/eval-summaries.ts",
     "eval-tasks": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/eval-tasks.ts",
     "export-day": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/export-day.ts",

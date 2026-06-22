@@ -9,7 +9,6 @@ import type { Frame } from '../recorder/screen-capturer'
 import type { EventWindow } from '../../shared/types'
 import type { PipelineHarness } from '../pipeline-harness'
 import type { RuntimeCaptureController } from '../capture-controller'
-import type { StorageService } from '../storage'
 
 vi.mock('../logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -23,10 +22,6 @@ vi.mock('../video/video-stitcher', () => ({
     }
   },
 }))
-
-const storageStub = {
-  activities: { getForDay: () => [] },
-} as unknown as StorageService
 
 const T0 = 1_700_000_000_000
 
@@ -115,7 +110,7 @@ describe('sanitizeFixtureName', () => {
 
 describe('EvalRecorder', () => {
   it('holds retention, starts capture if off, and promotes on stop', async () => {
-    const recorder = new EvalRecorder({ harness, capture, storage: storageStub, fixturesRoot })
+    const recorder = new EvalRecorder({ harness, capture, fixturesRoot })
 
     const status = recorder.start('rec1')
     expect(status.recording).toBe(true)
@@ -142,7 +137,7 @@ describe('EvalRecorder', () => {
 
   it('leaves capture running when it was already on', async () => {
     capturing = true
-    const recorder = new EvalRecorder({ harness, capture, storage: storageStub, fixturesRoot })
+    const recorder = new EvalRecorder({ harness, capture, fixturesRoot })
     recorder.start('rec2')
     expect(startCapture).not.toHaveBeenCalled()
 
@@ -155,7 +150,7 @@ describe('EvalRecorder', () => {
   })
 
   it('rejects a second concurrent recording', () => {
-    const recorder = new EvalRecorder({ harness, capture, storage: storageStub, fixturesRoot })
+    const recorder = new EvalRecorder({ harness, capture, fixturesRoot })
     recorder.start('rec3')
     expect(() => recorder.start('rec4')).toThrow(/already in progress/)
   })

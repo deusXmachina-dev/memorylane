@@ -3,13 +3,13 @@
  * the normal app and turn it into a committed replay fixture — no `DEBUG_PIPELINE`
  * env var, no CLI, no restart.
  *
- * It reuses the exact debug-pipeline machinery the CLI fixtures already trust:
- *   - the `FrameDebugDumper` / `EventWindowDebugDumper` tap the producer's input
- *     streams to a per-session staging dir, and
+ * It taps the producer's streams to a per-session staging dir:
+ *   - `FrameDebugDumper` / `EventWindowDebugDumper` capture the producer's input,
+ *   - `ActivityDebugDumper` captures each activity's live summary at the source, and
  *   - the harness's runtime `setRetainScreenshots(true)` holds the frame PNGs on
  *     disk for the duration so the cleanup sweep can't delete them mid-session.
  *
- * On stop it drains capture (so the final activity is summarized + persisted),
+ * On stop it drains the pipeline (so the final activity is summarized + dumped),
  * runs `promoteCapture()` over the staging dir, then releases retention and
  * sweeps to reclaim the screenshots dir. Inert until `start()` is called.
  */
@@ -17,7 +17,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import log from '../logger'
-import type { StorageService } from '../storage'
 import type { StreamSubscription } from '../streams/stream'
 import type { PipelineHarness } from '../pipeline-harness'
 import type { RuntimeCaptureController } from '../capture-controller'
@@ -44,7 +43,6 @@ export function sanitizeFixtureName(name: string): string {
 export class EvalRecorder {
   private readonly harness: PipelineHarness
   private readonly capture: RuntimeCaptureController
-  private readonly storage: StorageService
   private readonly fixturesRoot: string
 
   private activeName: string | null = null
@@ -58,12 +56,10 @@ export class EvalRecorder {
   constructor(deps: {
     harness: PipelineHarness
     capture: RuntimeCaptureController
-    storage: StorageService
     fixturesRoot: string
   }) {
     this.harness = deps.harness
     this.capture = deps.capture
-    this.storage = deps.storage
     this.fixturesRoot = deps.fixturesRoot
   }
 
@@ -165,7 +161,6 @@ export class EvalRecorder {
         sourceDir: stagingDir,
         fixturesRoot: this.fixturesRoot,
         name,
-        storage: this.storage,
         video: true,
         seed: true,
         // Always refresh the golden — re-recording the same name should reflect

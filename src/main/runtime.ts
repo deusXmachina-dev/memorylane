@@ -20,8 +20,6 @@ import { FfmpegVideoStitcher } from './video/video-stitcher'
 import { ActivitySemanticService, SemanticFileDebugDumper } from './activity-semantic-service'
 import type { SemanticPipelinePreference } from './activity-semantic-service'
 import { InteractionEventDebugDumper } from './interaction-event-debug-dump'
-import { FrameDebugDumper } from './frame-debug-dump'
-import { EventWindowDebugDumper } from './event-window-debug-dump'
 import { InferenceProviderImpl, type InferenceProvider } from './llm'
 import type { Vendor } from '../shared/types'
 import { VENDOR_PRESETS, buildModelChain } from '../shared/vendor-defaults'
@@ -108,11 +106,6 @@ export async function createMainRuntime(params: {
   const interactionDumper = debugDumper
     ? new InteractionEventDebugDumper(debugPipelineDir)
     : undefined
-  // Replay-fixture inputs: the frame metadata + the producer's actual input
-  // stream (event windows). Captured so a session can be promoted into a
-  // committed eval fixture and re-run through the real pipeline.
-  const frameDumper = debugDumper ? new FrameDebugDumper(debugPipelineDir) : undefined
-  const eventWindowDumper = debugDumper ? new EventWindowDebugDumper(debugPipelineDir) : undefined
 
   // Debug-only: keep screenshots (skip per-activity cleanup + the stale sweep)
   // so frames survive for inspection. On by default whenever the debug pipeline
@@ -182,24 +175,6 @@ export async function createMainRuntime(params: {
     retainScreenshots,
   })
 
-  // Debug-only: tap the producer's two input streams to disk so a session can
-  // later be promoted into a replay fixture. Subscribed at `now` (before capture
-  // starts) so we record exactly the records the producer will consume. The
-  // event-window dump is the replay-critical one (it embeds the raw events);
-  // frame metadata pairs with the retained PNGs on disk.
-  if (frameDumper) {
-    harness.frameStream.subscribe({
-      startAt: { type: 'now' },
-      onRecord: (record) => frameDumper.dump(record.payload),
-    })
-  }
-  if (eventWindowDumper) {
-    harness.eventStream.subscribe({
-      startAt: { type: 'now' },
-      onRecord: (record) => eventWindowDumper.dump(record.payload),
-    })
-  }
-
   // Keeps a no-input view's event window alive (reading) so it isn't dropped at
   // the idle gap. A bare heartbeat — it carries no window context (that comes
   // from the window's app_change) and nothing sensitive — so it goes straight to
@@ -255,7 +230,6 @@ export async function createMainRuntime(params: {
   const evalRecorder = new EvalRecorder({
     harness,
     capture,
-    storage,
     fixturesRoot: evalFixturesRoot,
   })
   const evalFixtureStore = new EvalFixtureStore(evalFixturesRoot)
