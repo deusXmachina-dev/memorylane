@@ -156,7 +156,74 @@ describe('FfmpegVideoStitcher', () => {
     expect(manifestContent).toContain('duration 1.500000')
 
     mockChild.emit('close', 0)
-    await expect(promise).resolves.toMatchObject({ durationMs: 3_500 })
+    // Real inter-frame gaps 500 + 1500, plus a trailing hold capped to the 1000ms
+    // default (the last gap was 1500ms but the final-frame hold is bounded).
+    await expect(promise).resolves.toMatchObject({ durationMs: 3_000 })
+  })
+
+  it('caps the trailing hold so a long final idle gap does not inflate duration', async () => {
+    const childProcess = await import('child_process')
+    const tempDir = createTempDir()
+    const frameA = createFrame(tempDir, 'a.png')
+    const frameB = createFrame(tempDir, 'b.png')
+
+    const mockChild = createMockChildProcess()
+    vi.mocked(childProcess.spawn).mockReturnValue(
+      mockChild as unknown as ReturnType<typeof childProcess.spawn>,
+    )
+
+    const stitcher = new FfmpegVideoStitcher()
+    const promise = stitcher.stitch({
+      activityId: 'activity-cap',
+      frames: [
+        { filepath: frameA, timestamp: 0 },
+        { filepath: frameB, timestamp: 10_000 },
+      ],
+      outputPath: path.join(tempDir, 'out.mp4'),
+    })
+
+    mockChild.emit('close', 0)
+    // 10s real gap (frame A held while screen was static) + a 1s capped trailing
+    // hold for the final frame — not 10s + 10s (the over-run bug).
+    await expect(promise).resolves.toMatchObject({ durationMs: 11_000 })
+  })
+
+  it('normalizes mixed-resolution frames to the modal canvas with letterbox padding', async () => {
+    const childProcess = await import('child_process')
+    const tempDir = createTempDir()
+    const work1 = createFrame(tempDir, 'w1.png')
+    const work2 = createFrame(tempDir, 'w2.png')
+    const work3 = createFrame(tempDir, 'w3.png')
+    const offDisplay = createFrame(tempDir, 'off.png')
+
+    const mockChild = createMockChildProcess()
+    vi.mocked(childProcess.spawn).mockReturnValue(
+      mockChild as unknown as ReturnType<typeof childProcess.spawn>,
+    )
+
+    const stitcher = new FfmpegVideoStitcher()
+    const promise = stitcher.stitch({
+      activityId: 'activity-canvas',
+      frames: [
+        // The off-display frame is first by timestamp; without normalization it
+        // would lock the canvas to 1920x1248 and stretch the work frames.
+        { filepath: offDisplay, timestamp: 1_000, width: 1920, height: 1248 },
+        { filepath: work1, timestamp: 2_000, width: 1920, height: 1080 },
+        { filepath: work2, timestamp: 3_000, width: 1920, height: 1080 },
+        { filepath: work3, timestamp: 4_000, width: 1920, height: 1080 },
+      ],
+      outputPath: path.join(tempDir, 'out.mp4'),
+    })
+
+    const [, args] = vi.mocked(childProcess.spawn).mock.calls[0]
+    const vfValue = args[args.indexOf('-vf') + 1]
+    // Modal resolution is 1920x1080 (3 work frames vs 1 off-display frame).
+    expect(vfValue).toBe(
+      'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1',
+    )
+
+    mockChild.emit('close', 0)
+    await promise
   })
 
   it('sorts frames by timestamp before writing concat manifest', async () => {

@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EVENT_CAPTURER_CONFIG, INTERACTION_MONITOR_CONFIG } from '@constants'
 import type { InteractionContext } from '../../shared/types'
+import { resolveAppWatcherDisplay } from './app-watcher-display'
 
 // --- Mocks -----------------------------------------------------------------
 // Defined via vi.hoisted so they are initialized before the hoisted vi.mock
@@ -202,6 +203,45 @@ describe('interaction-monitor session emission', () => {
     vi.advanceTimersByTime(INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS)
     expect(emitted.map((c) => c.type)).toEqual(['app_change', 'keyboard'])
     expect(emitted[1].timestamp).toBe(1000)
+  })
+
+  it('suppresses a same-window display flap (same identity, different display, ~same ts)', () => {
+    // One macOS focus change emits app_change + window_change; each recomputes
+    // displayId from a transiently-stale AX frame, so they disagree (2 then 1)
+    // while sharing a near-identical timestamp. The second must be dropped so it
+    // neither re-steers capture to the blank display nor opens a 0ms window.
+    vi.mocked(resolveAppWatcherDisplay).mockReturnValueOnce({
+      displayId: 2,
+      source: 'event_display_id',
+    })
+    appChange('Chrome', 'Doc — Chrome', 1000)
+    vi.mocked(resolveAppWatcherDisplay).mockReturnValueOnce({
+      displayId: 1,
+      source: 'event_display_id',
+    })
+    appChange('Chrome', 'Doc — Chrome', 1001)
+
+    // Only the first read propagates; capture stays on display 2.
+    expect(emitted.map((c) => c.type)).toEqual(['app_change'])
+    expect(emitted[0].displayId).toBe(2)
+  })
+
+  it('does NOT suppress a genuine cross-display move (same identity, different display, seconds apart)', () => {
+    // A real window/focus move to another display is well outside the coalesce
+    // window, so it must still switch capture.
+    vi.mocked(resolveAppWatcherDisplay).mockReturnValueOnce({
+      displayId: 2,
+      source: 'event_display_id',
+    })
+    appChange('Chrome', 'Doc — Chrome', 1000)
+    vi.mocked(resolveAppWatcherDisplay).mockReturnValueOnce({
+      displayId: 1,
+      source: 'event_display_id',
+    })
+    appChange('Chrome', 'Doc — Chrome', 1000 + 600) // 600ms later > DISPLAY_FLAP_COALESCE_MS
+
+    expect(emitted.map((c) => c.type)).toEqual(['app_change', 'app_change'])
+    expect(emitted[1].displayId).toBe(1)
   })
 })
 

@@ -3,6 +3,11 @@ import type { Activity } from './activity-types'
 export interface ActivityVideoFrameInput {
   filepath: string
   timestamp: number
+  // Source frame resolution, when known. Used to normalize the stitched video to
+  // the dominant (work-display) resolution and letterbox off-display frames of a
+  // different size, instead of letting the first frame stretch the whole canvas.
+  width?: number
+  height?: number
 }
 
 export interface ActivityVideoAsset {

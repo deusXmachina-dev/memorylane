@@ -6,12 +6,22 @@ import { addAppWatcherListener, AppWatcherEvent } from './app-watcher'
 import { resolveAppWatcherDisplay } from './app-watcher-display'
 import log from '../logger'
 
+// A single macOS focus change fires two+ native emissions (app_change +
+// window_change), each recomputing displayId from a transiently-stale AX frame,
+// so they can disagree on which display the window is on while sharing a
+// truncated-ms timestamp. Within this window, a same-identity app_change whose
+// displayId differs from the one we just propagated is treated as that spurious
+// flap and suppressed. A genuine cross-display move is seconds apart, so it is
+// well outside this window and still switches capture.
+const DISPLAY_FLAP_COALESCE_MS = 500
+
 // State
 let isRunning = false
 
 // App change state
 let previousWindow: NonNullable<InteractionContext['activeWindow']> | null = null
 let previousWindowDisplayId: number | null = null
+let previousWindowTimestamp: number | null = null
 
 // Display resolution state (used by keyboard/scroll handlers)
 let cachedDisplayId: number | null = null
@@ -310,15 +320,32 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
   }
   const resolvedDisplayId = resolvedDisplay.displayId
 
-  // Skip if nothing actually changed
-  if (
-    previousWindow &&
+  // A single focus change can emit twice with the same window identity. If the
+  // two reads also agree on display, it is a plain duplicate; if they disagree
+  // within the coalesce window, it is the display flap (see DISPLAY_FLAP_COALESCE_MS).
+  // Either way the re-fire carries no new information — suppress it so it neither
+  // re-steers capture (blank monitor) nor opens a 0ms event window.
+  const sameWindowIdentity =
+    previousWindow !== null &&
     previousWindow.title === current.title &&
     previousWindow.processName === current.processName &&
     previousWindow.hwnd === current.hwnd &&
-    previousWindowDisplayId === resolvedDisplayId
-  ) {
+    previousWindow.bundleId === current.bundleId
+
+  if (sameWindowIdentity && previousWindowDisplayId === resolvedDisplayId) {
     log.debug(`[Interaction Monitor] Skipping duplicate: ${current.processName} "${current.title}"`)
+    return
+  }
+
+  if (
+    sameWindowIdentity &&
+    previousWindowTimestamp !== null &&
+    Math.abs(event.timestamp - previousWindowTimestamp) <= DISPLAY_FLAP_COALESCE_MS
+  ) {
+    log.debug(
+      `[Interaction Monitor] Skipping display flap: ${current.processName} "${current.title}" ` +
+        `display ${previousWindowDisplayId}->${resolvedDisplayId} within ${DISPLAY_FLAP_COALESCE_MS}ms`,
+    )
     return
   }
 
@@ -347,6 +374,7 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
 
   previousWindow = current
   previousWindowDisplayId = resolvedDisplayId
+  previousWindowTimestamp = event.timestamp
 
   // Notify all callbacks
   log.debug(
@@ -428,6 +456,7 @@ export function stopInteractionMonitoring(): void {
     scrollSession.reset()
     previousWindow = null
     previousWindowDisplayId = null
+    previousWindowTimestamp = null
     cachedDisplayId = null
     cachedWindowTitle = null
 

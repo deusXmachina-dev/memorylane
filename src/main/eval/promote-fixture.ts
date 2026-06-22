@@ -105,9 +105,9 @@ function deriveAppMix(windows: EventWindow[]): string[] {
 /**
  * Stitches fixture frames into one session video for golden review. When
  * `endTimestampMs` is given (the last activity's end), trailing frames past it
- * are dropped and a terminal marker is pinned at the end so the video stops there
- * — otherwise the stitcher holds the final real frame for a full inter-frame
- * interval and the video runs ~1s past the transcript.
+ * are dropped and the final real frame is pinned to that end so the video stops
+ * at the transcript end. The stitcher caps its own trailing hold, so the video
+ * runs at most one frame-duration past `endTimestampMs`.
  */
 async function stitchSessionVideo(
   fixtureDir: string,
@@ -135,6 +135,8 @@ async function stitchSessionVideo(
       frames: clip.map((f) => ({
         filepath: path.resolve(fixtureDir, f.filepath),
         timestamp: f.timestamp,
+        width: f.width,
+        height: f.height,
       })),
       outputPath,
     })

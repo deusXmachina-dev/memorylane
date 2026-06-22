@@ -34,6 +34,8 @@ export class DefaultActivityTransformer implements ActivityTransformer {
     const frames: ActivityVideoFrameInput[] = activity.frames.map((f) => ({
       filepath: f.frame.filepath,
       timestamp: f.frame.timestamp,
+      width: f.frame.width,
+      height: f.frame.height,
     }))
 
     const shouldStitchVideo = this.config.getPipelinePreference?.() !== 'image'

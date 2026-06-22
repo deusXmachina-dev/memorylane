@@ -102,9 +102,9 @@ describe('DefaultActivityTransformer', () => {
     expect(stitcher.stitch).toHaveBeenCalledWith({
       activityId: 'activity-1',
       frames: [
-        { filepath: '/screenshots/frame-0.png', timestamp: 1000 },
-        { filepath: '/screenshots/frame-1.png', timestamp: 1100 },
-        { filepath: '/screenshots/frame-2.png', timestamp: 1200 },
+        { filepath: '/screenshots/frame-0.png', timestamp: 1000, width: 1920, height: 1080 },
+        { filepath: '/screenshots/frame-1.png', timestamp: 1100, width: 1920, height: 1080 },
+        { filepath: '/screenshots/frame-2.png', timestamp: 1200, width: 1920, height: 1080 },
       ],
       outputPath: '/output/activity-1.mp4',
     })

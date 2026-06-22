@@ -193,7 +193,12 @@ func buildEvent(type: String, app: NSRunningApplication, title: String) -> [Stri
         dict["url"] = url
     }
 
-    if let frame = focusedWindowFrame(forPid: pid) {
+    // A degenerate AX frame (zero/negative size) shows up transiently mid focus
+    // transition and would classify onto the primary (often idle) display. Omit
+    // bounds/displayId entirely so downstream keeps the prior display instead of
+    // flapping to a blank monitor.
+    if let frame = focusedWindowFrame(forPid: pid),
+       frame.size.width > 0, frame.size.height > 0 {
         dict["windowBounds"] = [
             "x": frame.origin.x,
             "y": frame.origin.y,
@@ -206,6 +211,43 @@ func buildEvent(type: String, app: NSRunningApplication, title: String) -> [Stri
     }
 
     return dict
+}
+
+// MARK: - Coalesced emission
+
+// A single focus change fires several native notifications in quick succession
+// (didActivateApplication + kAXFocusedWindowChanged + kAXTitleChanged), and the
+// focused window's AX frame is transiently stale/partial mid-transition — so
+// reading displayId per-notification produces duplicate, display-flapping
+// events. We coalesce: every notification (re)schedules a single emit after a
+// short settle delay; only the last one survives, and it reads the now-settled
+// frontmost window once. A genuine app/tab change still emits once the focus
+// holds past the settle delay.
+let settleDelayMs = 120
+var pendingEmitWork: DispatchWorkItem?
+var pendingEmitType = "window_change"
+
+func scheduleEmit(type: String) {
+    // app_change is the stronger signal (an app switch); a window_change that
+    // lands in the same settle window must not downgrade it.
+    if type == "app_change" {
+        pendingEmitType = "app_change"
+    } else if pendingEmitWork == nil {
+        pendingEmitType = type
+    }
+
+    pendingEmitWork?.cancel()
+
+    let work = DispatchWorkItem {
+        pendingEmitWork = nil
+        let emitType = pendingEmitType
+        pendingEmitType = "window_change"
+        guard let app = NSWorkspace.shared.frontmostApplication else { return }
+        let title = windowTitle(forPid: app.processIdentifier) ?? ""
+        emit(buildEvent(type: emitType, app: app, title: title))
+    }
+    pendingEmitWork = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(settleDelayMs), execute: work)
 }
 
 // MARK: - AXObserver for focused-window changes within an app
@@ -245,19 +287,10 @@ func tearDownTitleObserver() {
 }
 
 /// Callback fired when the focused window's title changes (e.g. browser tab switch).
-let titleCallback: AXObserverCallback = { _, element, _, _ in
-    guard let app = NSWorkspace.shared.frontmostApplication else { return }
-
-    var titleValue: AnyObject?
-    let title: String
-    if AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &titleValue) == .success,
-       let t = titleValue as? String {
-        title = t
-    } else {
-        title = ""
-    }
-
-    emit(buildEvent(type: "window_change", app: app, title: title))
+let titleCallback: AXObserverCallback = { _, _, _, _ in
+    // The settled emit re-reads the focused window's title, so we only need to
+    // (re)schedule here.
+    scheduleEmit(type: "window_change")
 }
 
 func setupTitleObserver(forPid pid: pid_t) {
@@ -283,19 +316,10 @@ func setupTitleObserver(forPid pid: pid_t) {
 }
 
 /// Callback fired when the focused window changes within the observed app.
-let axCallback: AXObserverCallback = { _, element, _, _ in
+let axCallback: AXObserverCallback = { _, _, _, _ in
     guard let app = NSWorkspace.shared.frontmostApplication else { return }
 
-    var titleValue: AnyObject?
-    let title: String
-    if AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &titleValue) == .success,
-       let t = titleValue as? String {
-        title = t
-    } else {
-        title = windowTitle(forPid: app.processIdentifier) ?? ""
-    }
-
-    emit(buildEvent(type: "window_change", app: app, title: title))
+    scheduleEmit(type: "window_change")
 
     // Re-target title observer to the newly focused window
     setupTitleObserver(forPid: app.processIdentifier)
@@ -333,8 +357,9 @@ nc.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
                object: nil, queue: .main) { notification in
     guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
 
-    let title = windowTitle(forPid: app.processIdentifier) ?? ""
-    emit(buildEvent(type: "app_change", app: app, title: title))
+    // Coalesce the activation with the AX focus/title notifications it triggers
+    // into a single settled emit.
+    scheduleEmit(type: "app_change")
 
     // Set up AX observer for window changes within this new app
     setupAXObserver(forPid: app.processIdentifier)

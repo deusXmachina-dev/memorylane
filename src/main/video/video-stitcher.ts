@@ -24,14 +24,81 @@ function escapeConcatPath(filepath: string): string {
 
 function sortFramesByTimestamp(frames: ActivityVideoFrameInput[]): ActivityVideoFrameInput[] {
   return frames
-    .map((frame, index) => ({ ...frame, index }))
+    .map((frame, index) => ({ frame, index }))
     .sort((left, right) => {
-      if (left.timestamp !== right.timestamp) {
-        return left.timestamp - right.timestamp
+      if (left.frame.timestamp !== right.frame.timestamp) {
+        return left.frame.timestamp - right.frame.timestamp
       }
       return left.index - right.index
     })
-    .map(({ filepath, timestamp }) => ({ filepath, timestamp }))
+    .map(({ frame }) => frame)
+}
+
+/**
+ * Pick the canvas resolution for the stitched video: the most-common frame size
+ * among the inputs. The work display dominates the frame count, so transient
+ * off-display frames (captured at a different resolution) get letterboxed to the
+ * work resolution instead of stretching the whole video. Returns null when no
+ * frame carries dimensions, in which case the caller keeps the legacy filter.
+ */
+function targetCanvasSize(
+  frames: ActivityVideoFrameInput[],
+): { width: number; height: number } | null {
+  const counts = new Map<string, { width: number; height: number; count: number }>()
+  for (const frame of frames) {
+    if (
+      typeof frame.width !== 'number' ||
+      typeof frame.height !== 'number' ||
+      frame.width <= 0 ||
+      frame.height <= 0
+    ) {
+      continue
+    }
+    const key = `${frame.width}x${frame.height}`
+    const existing = counts.get(key)
+    if (existing) {
+      existing.count++
+    } else {
+      counts.set(key, { width: frame.width, height: frame.height, count: 1 })
+    }
+  }
+
+  let best: { width: number; height: number; count: number } | null = null
+  for (const entry of counts.values()) {
+    if (
+      best === null ||
+      entry.count > best.count ||
+      // Deterministic tie-break: prefer the larger area.
+      (entry.count === best.count && entry.width * entry.height > best.width * best.height)
+    ) {
+      best = entry
+    }
+  }
+  if (best === null) {
+    return null
+  }
+
+  // yuv420p requires even dimensions.
+  return {
+    width: Math.max(2, Math.floor(best.width / 2) * 2),
+    height: Math.max(2, Math.floor(best.height / 2) * 2),
+  }
+}
+
+/**
+ * Build the ffmpeg `-vf` value. With known dimensions, scale each frame to fit
+ * the target canvas preserving aspect ratio, then pad (letterbox) to the exact
+ * canvas — no stretching. Without dimensions, fall back to the legacy
+ * round-to-even scale.
+ */
+function buildScaleFilter(canvas: { width: number; height: number } | null): string {
+  if (canvas === null) {
+    return 'scale=trunc(iw/2)*2:trunc(ih/2)*2'
+  }
+  return (
+    `scale=${canvas.width}:${canvas.height}:force_original_aspect_ratio=decrease,` +
+    `pad=${canvas.width}:${canvas.height}:(ow-iw)/2:(oh-ih)/2,setsar=1`
+  )
 }
 
 function assertFrames(frames: ActivityVideoFrameInput[]): void {
@@ -57,7 +124,11 @@ function deriveFrameDurationsMs(frames: ActivityVideoFrameInput[]): number[] {
     durationsMs.push(delta > 0 ? delta : DEFAULT_FRAME_DURATION_MS)
   }
 
-  durationsMs.push(durationsMs[durationsMs.length - 1] ?? DEFAULT_FRAME_DURATION_MS)
+  // The final frame has no successor to bound its on-screen time. Hold it for the
+  // last inter-frame gap, but cap the hold so a long idle gap before the last
+  // frame can't tack seconds of frozen video onto the end (the over-run bug).
+  const lastGapMs = durationsMs[durationsMs.length - 1] ?? DEFAULT_FRAME_DURATION_MS
+  durationsMs.push(Math.min(lastGapMs, DEFAULT_FRAME_DURATION_MS))
   return durationsMs
 }
 
@@ -187,6 +258,7 @@ export class FfmpegVideoStitcher implements ActivityVideoStitcher {
     const frames = sortFramesByTimestamp(input.frames)
     const frameDurationsMs = deriveFrameDurationsMs(frames)
     const durationMs = frameDurationsMs.reduce((sum, value) => sum + value, 0)
+    const scaleFilter = buildScaleFilter(targetCanvasSize(frames))
 
     const outputPath = path.resolve(input.outputPath)
     fs.mkdirSync(path.dirname(outputPath), { recursive: true })
@@ -219,7 +291,7 @@ export class FfmpegVideoStitcher implements ActivityVideoStitcher {
         '-crf',
         FFMPEG_VIDEO_CRF,
         '-vf',
-        'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+        scaleFilter,
         '-pix_fmt',
         'yuv420p',
         '-movflags',
