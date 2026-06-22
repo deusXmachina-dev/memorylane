@@ -9,9 +9,6 @@ export interface ExtractedActivity {
   tld?: string
   summary: string
   summaryModel: string
-  summaryMode: string
-  summaryReason: string
-  summaryFailureDetail: string
   ocrText: string
   vector: number[]
 }

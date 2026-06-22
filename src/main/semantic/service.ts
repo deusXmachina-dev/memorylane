@@ -1,6 +1,7 @@
 import { ACTIVITY_CONFIG, VISUAL_DETECTOR_CONFIG } from '@constants'
 import log from '../logger'
 import { UsageTracker } from '../services/usage-tracker'
+import { SummaryModeTracker } from '../services/summary-mode-tracker'
 import type { Activity } from '../activity-types'
 import type {
   ActivitySemanticService as SemanticServiceContract,
@@ -26,6 +27,7 @@ import type {
   ActivitySemanticServiceConfig,
   SemanticRoundTripDump,
   SemanticRunDiagnostics,
+  SummaryModeTrackerLike,
 } from './types'
 
 export class ActivitySemanticService implements SemanticServiceContract {
@@ -36,6 +38,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
   private requestTimeoutMs: number
   private pipelinePreference: SemanticPipelinePreference
   private readonly usageTracker: ActivitySemanticServiceConfig['usageTracker']
+  private readonly summaryModeTracker: SummaryModeTrackerLike
   private readonly debugDumper: ActivitySemanticServiceConfig['debugDumper']
   private readonly fetchImpl: typeof globalThis.fetch | undefined
   private readonly videoUnsupportedKeys = new Set<string>()
@@ -64,6 +67,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
     this.requestTimeoutMs = config?.requestTimeoutMs ?? ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS
     this.pipelinePreference = this.normalizePipelinePreference(config?.pipelinePreference)
     this.usageTracker = config?.usageTracker ?? new UsageTracker()
+    this.summaryModeTracker = config?.summaryModeTracker ?? new SummaryModeTracker()
     this.debugDumper = config?.debugDumper
     this.fetchImpl = config?.fetchImpl
 
@@ -190,17 +194,13 @@ export class ActivitySemanticService implements SemanticServiceContract {
     }
     this.lastRunDiagnostics = diagnostics
 
-    // Stamp the chosen mode + the reason it was chosen (the video-failure cause
-    // for fallbacks) onto every return, derived from the final diagnostics state.
+    // Record the chosen mode + the reason it was chosen (the video-failure cause
+    // for fallbacks) into the aggregate counter on every return, derived from the
+    // final diagnostics state. Every return path routes through finish(), so each
+    // outcome is counted exactly once.
     const finish = (summary: string, model: string): SemanticSummary => {
-      const outcome = deriveSummaryOutcome(diagnostics)
-      return {
-        summary,
-        model,
-        mode: outcome.mode,
-        reason: outcome.reason,
-        failureDetail: outcome.failureDetail,
-      }
+      this.summaryModeTracker.record(deriveSummaryOutcome(diagnostics))
+      return { summary, model }
     }
 
     if (!this.provider.isConfigured()) {

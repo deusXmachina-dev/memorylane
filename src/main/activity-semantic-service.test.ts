@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ACTIVITY_CONFIG, VISUAL_DETECTOR_CONFIG } from '@constants'
 import type { Activity, ActivityFrame } from './activity-types'
 import { ActivitySemanticService, SemanticFileDebugDumper } from './activity-semantic-service'
+import type { SummaryOutcome } from './semantic/summary-reason'
 import { InferenceProviderImpl } from './llm'
 import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
 import type { Vendor } from '../shared/types'
@@ -186,6 +187,7 @@ interface SetupOptions {
       cost?: number
     }) => void
   }
+  summaryModeTracker?: { record: (outcome: SummaryOutcome) => void }
   debugDumper?: SemanticFileDebugDumper
 }
 
@@ -238,6 +240,7 @@ function setupService(options: SetupOptions = {}): {
     pipelinePreference: options.pipelinePreference,
     requestTimeoutMs: options.requestTimeoutMs,
     usageTracker: options.usageTracker ?? { recordUsage: vi.fn() },
+    summaryModeTracker: options.summaryModeTracker ?? { record: vi.fn() },
     debugDumper: options.debugDumper,
     fetchImpl: fetchMock.fn as unknown as typeof globalThis.fetch,
   })

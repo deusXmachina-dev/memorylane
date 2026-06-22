@@ -75,9 +75,6 @@ export class ScaffoldTransformer implements ActivityTransformer {
       tld: activity.context.tld,
       summary: '',
       summaryModel: '',
-      summaryMode: '',
-      summaryReason: '',
-      summaryFailureDetail: '',
       ocrText: '',
       vector: [],
     }

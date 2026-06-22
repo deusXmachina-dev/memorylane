@@ -23,8 +23,8 @@ export class ActivityRepository {
     const insert = this.db.transaction(() => {
       this.db
         .prepare(
-          `INSERT INTO activities (id, start_timestamp, end_timestamp, app_name, window_title, tld, summary, summary_model, summary_mode, summary_mode_reason, summary_failure_detail, ocr_text, vector)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO activities (id, start_timestamp, end_timestamp, app_name, window_title, tld, summary, summary_model, ocr_text, vector)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           activity.id,
@@ -35,9 +35,6 @@ export class ActivityRepository {
           activity.tld,
           activity.summary,
           activity.summaryModel,
-          activity.summaryMode,
-          activity.summaryReason,
-          activity.summaryFailureDetail,
           activity.ocrText,
           blob,
         )
@@ -169,7 +166,7 @@ export class ActivityRepository {
     const placeholders = ids.map(() => '?').join(', ')
     const rows = this.db
       .prepare(
-        `SELECT id, start_timestamp, end_timestamp, app_name, window_title, tld, summary, summary_model, summary_mode, summary_mode_reason, summary_failure_detail, ocr_text, vector
+        `SELECT id, start_timestamp, end_timestamp, app_name, window_title, tld, summary, summary_model, ocr_text, vector
        FROM activities
        WHERE id IN (${placeholders})`,
       )
@@ -315,9 +312,6 @@ export class ActivityRepository {
       tld: (row.tld as string) ?? null,
       summary: row.summary as string,
       summaryModel: (row.summary_model as string) ?? '',
-      summaryMode: (row.summary_mode as string) ?? '',
-      summaryReason: (row.summary_mode_reason as string) ?? '',
-      summaryFailureDetail: (row.summary_failure_detail as string) ?? '',
       ocrText: row.ocr_text as string,
       vector: row.vector ? blobToVector(row.vector as Buffer) : [],
     }

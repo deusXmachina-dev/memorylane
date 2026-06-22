@@ -12,6 +12,7 @@ import { applyPendingDatabaseImport } from './ui/database-import'
 import { EmbeddingService } from './processor/embedding'
 import { activityOcrService } from './processor/ocr'
 import { UsageTracker } from './services/usage-tracker'
+import { SummaryModeTracker } from './services/summary-mode-tracker'
 import { createPipelineHarness } from './pipeline-harness'
 import { DefaultActivityTransformer } from './activity-transformer'
 import { SqliteActivitySink } from './sqlite-activity-sink'
@@ -92,6 +93,7 @@ export async function createMainRuntime(params: {
   const storage = new StorageService(dbPath)
   applyMigrations(storage.getDatabase())
   const usageTracker = new UsageTracker()
+  const summaryModeTracker = new SummaryModeTracker()
 
   const debugPipelineDir = path.join(app.getAppPath(), '.debug-pipeline')
   const debugDumper =
@@ -131,6 +133,7 @@ export async function createMainRuntime(params: {
   )
   const semanticService = new ActivitySemanticService(inferenceProvider, {
     usageTracker,
+    summaryModeTracker,
     debugDumper,
     pipelinePreference: params.semanticPipelinePreference,
     requestTimeoutMs: params.semanticRequestTimeoutMs,

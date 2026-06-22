@@ -21,15 +21,6 @@ const OCR_FRAME_POSITION_FROM_END = 5
 // path, so they're distinguishable from LLM output ('') and real models.
 const HEURISTIC_VIEWED_MODEL = 'heuristic:viewed'
 
-interface SummaryFields {
-  summary: string
-  summaryModel: string
-  summaryMode: string
-  summaryReason: string
-  summaryFailureDetail: string
-  textToEmbed: string
-}
-
 export class DefaultActivityTransformer implements ActivityTransformer {
   constructor(
     private stitcher: ActivityVideoStitcher,
@@ -62,10 +53,9 @@ export class DefaultActivityTransformer implements ActivityTransformer {
     // inference and label it from its on-screen context. We embed its OCR'd
     // contents rather than the "Viewed X" label so it stays findable by what was
     // actually on screen.
-    const { summary, summaryModel, summaryMode, summaryReason, summaryFailureDetail, textToEmbed } =
-      passiveView
-        ? this.buildPassiveSummary(activity, ocrText)
-        : await this.buildSemanticSummary(activity, videoAsset?.videoPath, ocrText)
+    const { summary, summaryModel, textToEmbed } = passiveView
+      ? this.buildPassiveSummary(activity, ocrText)
+      : await this.buildSemanticSummary(activity, videoAsset?.videoPath, ocrText)
 
     let vector: number[]
     try {
@@ -84,9 +74,6 @@ export class DefaultActivityTransformer implements ActivityTransformer {
       tld: activity.context.tld,
       summary,
       summaryModel,
-      summaryMode,
-      summaryReason,
-      summaryFailureDetail,
       ocrText,
       vector,
     }
@@ -111,27 +98,20 @@ export class DefaultActivityTransformer implements ActivityTransformer {
     activity: Activity,
     videoPath: string | undefined,
     ocrText: string,
-  ): Promise<SummaryFields> {
-    const result = await this.semantic.summarizeFromVideo({ activity, videoPath })
-    return {
-      summary: result.summary,
-      summaryModel: result.model,
-      summaryMode: result.mode,
-      summaryReason: result.reason,
-      summaryFailureDetail: result.failureDetail,
-      textToEmbed: result.summary || ocrText,
-    }
+  ): Promise<{ summary: string; summaryModel: string; textToEmbed: string }> {
+    const { summary, model } = await this.semantic.summarizeFromVideo({ activity, videoPath })
+    return { summary, summaryModel: model, textToEmbed: summary || ocrText }
   }
 
-  private buildPassiveSummary(activity: Activity, ocrText: string): SummaryFields {
+  private buildPassiveSummary(
+    activity: Activity,
+    ocrText: string,
+  ): { summary: string; summaryModel: string; textToEmbed: string } {
     const { windowTitle, tld, appName } = activity.context
     const label = windowTitle?.trim() || tld || appName
     return {
       summary: `Viewed ${label}`,
       summaryModel: HEURISTIC_VIEWED_MODEL,
-      summaryMode: 'passive',
-      summaryReason: 'passive',
-      summaryFailureDetail: '',
       textToEmbed: ocrText || `Viewed ${label}`,
     }
   }

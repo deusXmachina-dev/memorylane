@@ -78,10 +78,15 @@ export async function exportLogsZip({
       return { success: false, cancelled: true }
     }
 
+    // Ship the aggregate summary-mode counter alongside the logs so the
+    // video→snapshot fallback cause distribution travels with a support bundle.
+    const statsPath = path.join(app.getPath('userData'), 'summary-mode-stats.json')
+    const extras = fs.existsSync(statsPath) ? [statsPath] : []
+
     outputPath = ensureZipExtension(saveResult.filePath)
     // Snapshot: the active log file is appended to while we zip, and yazl's
     // streaming addFile would throw on the resulting size mismatch.
-    await createZipWithFiles(logFiles, outputPath, { snapshot: true })
+    await createZipWithFiles([...logFiles, ...extras], outputPath, { snapshot: true })
 
     return { success: true, outputPath }
   } catch (error) {
