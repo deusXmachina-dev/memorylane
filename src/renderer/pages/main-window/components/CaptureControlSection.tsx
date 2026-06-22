@@ -41,18 +41,24 @@ const PauseIcon = (): React.JSX.Element => (
 const formatDuration = (minutes: number): string => (minutes === 60 ? '1 hour' : `${minutes} min`)
 
 const formatCountdown = (remainingMs: number): string => {
-  const total = Math.max(0, Math.ceil(remainingMs / 1000))
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
+  const minutes = Math.max(0, Math.ceil(remainingMs / 60_000))
+  return minutes <= 1 ? '< 1 min' : `${minutes} min`
 }
 
-/** Live MM:SS countdown to `deadlineMs`, recomputed each second. */
+/**
+ * Minutes-remaining label until `deadlineMs`, recomputed every 30s. Coarse on
+ * purpose: a per-second stopwatch reads as distracting and the changing digit
+ * widths make the button jitter, so we round up to whole minutes.
+ */
 function useCountdown(deadlineMs: number | null): string | null {
   const [now, setNow] = React.useState(() => Date.now())
   React.useEffect(() => {
     if (deadlineMs === null) return
-    const id = setInterval(() => setNow(Date.now()), 1000)
+    // Refresh immediately: `now` may be stale from mount when the pause starts,
+    // which would otherwise over-count by up to one refresh interval (e.g. a
+    // 30-min pause briefly reading "31 min").
+    setNow(Date.now())
+    const id = setInterval(() => setNow(Date.now()), 30_000)
     return () => clearInterval(id)
   }, [deadlineMs])
   if (deadlineMs === null) return null
@@ -156,7 +162,7 @@ export function CaptureControlSection({
         title="Resume now"
       >
         <PlayIcon />
-        <span className="ml-2">Resumes in {countdown ?? '…'}</span>
+        <span className="ml-2 tabular-nums">Resumes in {countdown ?? '…'}</span>
       </Button>
     )
   }
