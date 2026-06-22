@@ -179,6 +179,11 @@ export interface SettingsAPI {
 export interface MainWindowStatus {
   capturing: boolean
   captureHotkeyLabel: string
+  /**
+   * When capture is on a timed pause, the epoch-ms deadline at which it
+   * auto-resumes; null when not paused. Drives the renderer countdown.
+   */
+  pausedUntilMs: number | null
 }
 
 export interface ObservationState {
@@ -326,6 +331,8 @@ export interface MainWindowAPI {
   submitConsentDecision: (outcome: ConsentOutcome) => Promise<SaveResult>
   getStatus: () => Promise<MainWindowStatus>
   toggleCapture: () => Promise<MainWindowStatus>
+  pauseCapture: (durationMs: number) => Promise<MainWindowStatus>
+  resumeCapture: () => Promise<MainWindowStatus>
   onStatusChanged: (callback: (status: MainWindowStatus) => void) => () => void
   // Settings methods (merged from settingsAPI)
   getCredentialStatuses: () => Promise<Record<Vendor, VendorStatus>>

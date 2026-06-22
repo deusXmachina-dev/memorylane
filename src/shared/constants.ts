@@ -119,6 +119,13 @@ export const PATTERN_DETECTION_CONFIG = {
   SETTLE_DELAY_MS: 60 * 1000, // 1 min after unlock before running
 }
 
+// User-initiated timed capture pause (auto-resumes when the timer elapses).
+// Presets are shared between the tray menu and the main-window control.
+export const CAPTURE_PAUSE_CONFIG = {
+  PRESETS_MINUTES: [15, 30, 60] as const,
+  DEFAULT_MINUTES: 30,
+}
+
 // Managed Key / Subscription Configuration
 export const MANAGED_KEY_CONFIG = {
   BACKEND_URL:
