@@ -8,8 +8,9 @@
  * The fixture is: event windows copied verbatim (the replay-critical input),
  * referenced PNGs copied in with paths rewritten to relative, a `manifest.json`,
  * an optional `session.mp4` for review, and an optional editable `golden.md`
- * scaffold seeded from a deterministic no-LLM replay (summaries pre-filled from
- * the live DB when available). No LLM is called here.
+ * scaffold. Summaries come from the live pipeline's `activities.jsonl` when the
+ * in-app recorder captured one; otherwise (CLI) from a deterministic no-LLM
+ * replay with a DB time-overlap backfill. No LLM is called here.
  */
 
 import * as fs from 'fs'
@@ -25,6 +26,7 @@ import { replayFixture, ScaffoldTransformer } from './replay-harness'
 import { readJsonl } from './jsonl'
 import {
   FIXTURE_SCHEMA_VERSION,
+  type DumpedActivity,
   type DumpedFrame,
   type FixtureManifest,
   type ReplayActivity,
@@ -187,6 +189,36 @@ function fillSummariesFromDb(transcript: ReplayActivity[], storage: StorageServi
   return filled
 }
 
+/** Reads the live activities the in-app recorder dumped (summaries captured at
+ *  the source). Empty when promoting a CLI `.debug-pipeline` capture, which has
+ *  no `activities.jsonl` — that path falls back to the replay scaffold + DB fill. */
+function readLiveActivities(sourceDir: string): DumpedActivity[] {
+  const filePath = path.join(sourceDir, 'activities.jsonl')
+  if (!fs.existsSync(filePath)) return []
+  return readJsonl<DumpedActivity>(filePath)
+}
+
+/** Adapts a dumped live activity to the `ReplayActivity` shape `renderGoldenMd`
+ *  consumes (it reads app/title/times/summary; the rest are inert defaults). */
+function liveToReplayActivity(a: DumpedActivity): ReplayActivity {
+  return {
+    activityId: a.id,
+    startTimestamp: a.startTimestamp,
+    endTimestamp: a.endTimestamp,
+    durationMs: a.endTimestamp - a.startTimestamp,
+    appName: a.appName,
+    windowTitle: a.windowTitle,
+    tld: a.tld,
+    interactionCount: 0,
+    summary: a.summary,
+    summaryModel: a.summaryModel,
+    ocrText: '',
+    frameRefs: [],
+    selectedSnapshotPaths: [],
+    diagnostics: null,
+  }
+}
+
 /** Resolves a storage handle for summary pre-fill: the injected one (not owned),
  *  or one opened from `dbPath` (owned → caller closes via the returned `close`). */
 function resolveStorage(opts: PromoteCaptureOptions): {
@@ -277,7 +309,18 @@ export async function promoteCapture(opts: PromoteCaptureOptions): Promise<Promo
     fixtureDir,
     transformer: new ScaffoldTransformer(),
   })
-  const transcript = [...activities, ...droppedActivities]
+
+  // In-app recordings dump the live pipeline's summaries to `activities.jsonl`;
+  // use those as the kept blocks (real capture-time output) instead of the blank
+  // replay scaffold. The replay still runs — it's the only source of DROPPED
+  // spans (drops are never persisted) and of the session clock. CLI promotions
+  // have no `activities.jsonl`, so they keep the replay scaffold + DB fill.
+  const liveActivities = readLiveActivities(opts.sourceDir)
+  const fromLive = liveActivities.length > 0
+  const keptActivities: ReplayActivity[] = fromLive
+    ? liveActivities.map(liveToReplayActivity)
+    : activities
+  const transcript = [...keptActivities, ...droppedActivities]
   const lastBlockEnd = transcript.reduce((max, t) => Math.max(max, t.endTimestamp), 0) || undefined
 
   if (wantVideo) {
@@ -291,12 +334,17 @@ export async function promoteCapture(opts: PromoteCaptureOptions): Promise<Promo
     } else {
       const dropped = transcript.filter((t) => t.dropped).length
       const kept = transcript.length - dropped
-      const { storage, close } = resolveStorage(opts)
       let filled = 0
-      try {
-        if (storage) filled = fillSummariesFromDb(transcript, storage)
-      } finally {
-        close()
+      if (fromLive) {
+        // Summaries are already on the kept blocks; just count the non-empty ones.
+        filled = keptActivities.filter((a) => a.summary.trim()).length
+      } else {
+        const { storage, close } = resolveStorage(opts)
+        try {
+          if (storage) filled = fillSummariesFromDb(transcript, storage)
+        } finally {
+          close()
+        }
       }
       fs.writeFileSync(
         goldenPath,

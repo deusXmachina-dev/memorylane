@@ -250,7 +250,13 @@ export class ActivityExtractor {
     }
   }
 
-  private async waitForIdle(): Promise<void> {
+  /**
+   * Resolves once no task is queued or in flight. Because `processTask` awaits
+   * `sink.persist` and the persisted listeners before decrementing `inFlight`,
+   * an idle extractor has finished persisting (and notifying) every activity it
+   * has seen so far — callers can rely on that to drain before snapshotting.
+   */
+  async waitForIdle(): Promise<void> {
     if (this.inFlight === 0 && this.pending.length === 0) {
       return
     }

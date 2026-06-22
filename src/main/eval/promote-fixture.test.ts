@@ -128,7 +128,50 @@ describe('promoteCapture', () => {
     expect(result.golden?.seeded).toBe(true)
     const golden = fs.readFileSync(path.join(fixturesRoot, 'demo2', 'golden.md'), 'utf8')
     expect(golden.startsWith('# Golden — demo2')).toBe(true)
+    // The confusing scaffold instruction comment is gone.
+    expect(golden).not.toContain('Exact transcript scaffolded')
     expect(() => parseGoldenMd(golden)).not.toThrow()
+  })
+
+  it('seeds golden summaries from live activities.jsonl, not the DB', async () => {
+    // The in-app recorder dumps the live pipeline's summaries here; promote must
+    // use them verbatim and never consult the DB (the source of the prior race).
+    const getForDay = vi.fn(() => [])
+    const storage = { activities: { getForDay } } as unknown as StorageService
+    fs.writeFileSync(
+      path.join(sourceDir, 'activities.jsonl'),
+      JSON.stringify({
+        id: 'live-1',
+        startTimestamp: T0,
+        endTimestamp: T0 + 1000,
+        appName: 'Code',
+        windowTitle: 'auth.ts',
+        tld: '',
+        summary: 'Live captured summary.',
+        summaryModel: 'video',
+      }) + '\n',
+    )
+
+    const result = await promoteCapture({
+      sourceDir,
+      fixturesRoot,
+      name: 'live1',
+      seed: true,
+      video: false,
+      storage,
+      reseed: true,
+    })
+
+    expect(result.golden?.seeded).toBe(true)
+    expect(result.golden?.summariesFilled).toBe(1)
+    expect(getForDay).not.toHaveBeenCalled()
+
+    const golden = fs.readFileSync(path.join(fixturesRoot, 'live1', 'golden.md'), 'utf8')
+    expect(golden).toContain('Live captured summary.')
+    expect(golden).not.toContain('no summary produced')
+
+    const kept = parseGoldenMd(golden).find((b) => !b.dropped)
+    expect(kept?.summary).toBe('Live captured summary.')
   })
 
   it('does not overwrite an existing golden.md unless reseed', async () => {

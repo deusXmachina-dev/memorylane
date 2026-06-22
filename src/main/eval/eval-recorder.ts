@@ -23,6 +23,7 @@ import type { PipelineHarness } from '../pipeline-harness'
 import type { RuntimeCaptureController } from '../capture-controller'
 import { FrameDebugDumper } from '../frame-debug-dump'
 import { EventWindowDebugDumper } from '../event-window-debug-dump'
+import { ActivityDebugDumper } from './activity-debug-dump'
 import { promoteCapture, type PromoteCaptureResult } from './promote-fixture'
 
 export interface EvalRecordingStatus {
@@ -51,6 +52,7 @@ export class EvalRecorder {
   private stagingDir: string | null = null
   private frameSub: StreamSubscription | null = null
   private eventSub: StreamSubscription | null = null
+  private activityUnsub: (() => void) | null = null
   private startedCapture = false
 
   constructor(deps: {
@@ -88,6 +90,7 @@ export class EvalRecorder {
 
     const frameDumper = new FrameDebugDumper(stagingDir)
     const eventDumper = new EventWindowDebugDumper(stagingDir)
+    const activityDumper = new ActivityDebugDumper(stagingDir)
     this.frameSub = this.harness.frameStream.subscribe({
       startAt: { type: 'now' },
       onRecord: (record) => frameDumper.dump(record.payload),
@@ -96,6 +99,22 @@ export class EvalRecorder {
       startAt: { type: 'now' },
       onRecord: (record) => eventDumper.dump(record.payload),
     })
+    // Tap the live extractor so each activity's real summary is captured at the
+    // source. The golden is then seeded straight from these — no replay, no DB
+    // time-overlap join. Fires after persist, so `extracted` carries the summary.
+    this.activityUnsub =
+      this.harness.activityExtractor?.addPersistedListener(({ activity, extracted }) => {
+        activityDumper.dump({
+          id: activity.id,
+          startTimestamp: extracted.startTimestamp,
+          endTimestamp: extracted.endTimestamp,
+          appName: extracted.appName,
+          windowTitle: extracted.windowTitle,
+          tld: extracted.tld,
+          summary: extracted.summary,
+          summaryModel: extracted.summaryModel,
+        })
+      }) ?? null
 
     // Frames only flow while capture is running; start it for the operator if it
     // is off, and remember so we can restore the prior state on stop.
@@ -115,27 +134,31 @@ export class EvalRecorder {
     const stagingDir = this.stagingDir
     if (!name || !stagingDir) throw new Error('No recording in progress')
 
-    // Flush + drain so the session's final activity closes, gets summarized, and
-    // is persisted before we promote — otherwise its golden summary seeds blank.
-    // The dumpers stay subscribed through this so any final window/frame is dumped.
-    try {
-      this.harness.eventCapturer.flush()
-    } catch (error) {
-      log.warn('[EvalRecorder] eventCapturer.flush failed:', error)
-    }
+    // Drain so the session's final activity closes, gets summarized, persisted,
+    // and dumped before we promote — otherwise its golden summary seeds blank.
+    // `drainActivities` waits on the extractor regardless of whether we started
+    // capture, fixing the prior race where an already-running capture skipped the
+    // extractor drain. The dumpers stay subscribed through this so the final
+    // window/frame/activity is dumped.
     await this.capture.waitForIdle()
+    try {
+      await this.harness.drainActivities()
+    } catch (error) {
+      log.warn('[EvalRecorder] drainActivities failed:', error)
+    }
     if (this.startedCapture) {
-      // We turned capture on for this recording; turning it off fully drains the
-      // producer/extractor (final activity summarized + persisted) and restores
-      // the operator's prior "capture off" state.
+      // We turned capture on for this recording; turn it back off to restore the
+      // operator's prior "capture off" state.
       this.capture.stopCapture()
       await this.capture.waitForIdle()
     }
 
     this.frameSub?.unsubscribe()
     this.eventSub?.unsubscribe()
+    this.activityUnsub?.()
     this.frameSub = null
     this.eventSub = null
+    this.activityUnsub = null
 
     try {
       const result = await promoteCapture({
@@ -145,6 +168,9 @@ export class EvalRecorder {
         storage: this.storage,
         video: true,
         seed: true,
+        // Always refresh the golden — re-recording the same name should reflect
+        // this capture, not silently keep a stale scaffold.
+        reseed: true,
       })
       log.info(`[EvalRecorder] Promoted "${name}" -> ${result.fixtureDir}`)
       return result

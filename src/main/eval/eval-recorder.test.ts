@@ -61,6 +61,7 @@ beforeEach(() => {
     frameStream,
     eventStream,
     eventCapturer: { flush: vi.fn() },
+    drainActivities: vi.fn().mockResolvedValue(undefined),
     setRetainScreenshots: setRetain,
     sweepNow,
   } as unknown as PipelineHarness
@@ -148,6 +149,9 @@ describe('EvalRecorder', () => {
     await appendFrameAndWindow()
     await recorder.stop()
     expect(stopCapture).not.toHaveBeenCalled()
+    // The extractor must still be drained even though we never stopped capture —
+    // this is the race that previously left the final summaries unpersisted.
+    expect(harness.drainActivities).toHaveBeenCalled()
   })
 
   it('rejects a second concurrent recording', () => {

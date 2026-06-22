@@ -77,14 +77,6 @@ export function renderGoldenMd(
   const lines: string[] = []
   lines.push(`# Golden — ${fixture}`)
   lines.push('')
-  lines.push('<!-- Exact transcript scaffolded from the producer. EDIT into the target:')
-  lines.push('     - write each summary to what it SHOULD say.')
-  lines.push('     - fix boundaries by merging/splitting blocks (adjust the mm:ss ranges).')
-  lines.push('     DROPPED blocks = the producer discarded this span (reason shown). Leave')
-  lines.push('     them DROPPED to assert "expect no activity here", or replace the DROPPED')
-  lines.push('     line with a real summary to assert it SHOULD be kept (then tune params).')
-  lines.push('     Times are mm:ss from session start; the header number is cosmetic. -->')
-  lines.push('')
 
   sorted.forEach((act, i) => {
     const title = act.windowTitle ? ` — ${act.windowTitle}` : ''
