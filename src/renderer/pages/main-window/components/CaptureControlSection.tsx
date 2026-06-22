@@ -1,4 +1,6 @@
 import * as React from 'react'
+import { Menu } from '@base-ui/react/menu'
+import { CaretDownIcon } from '@phosphor-icons/react'
 import { Button } from '@components/ui/button'
 import { CAPTURE_PAUSE_CONFIG } from '@/shared/constants'
 
@@ -140,24 +142,22 @@ export function CaptureControlSection({
     )
   }
 
-  // Expanded: paused — countdown + resume.
+  // Expanded: paused — the play icon is the resume action; the label shows the
+  // live auto-resume countdown rather than a redundant "Resume now".
   if (isPaused) {
     return (
-      <div className="flex flex-col gap-1.5">
-        <p className="text-center text-xs text-muted-foreground">
-          Paused — resumes in {countdown ?? '…'}
-        </p>
-        <Button
-          className="w-full"
-          variant="default"
-          size="lg"
-          disabled={toggling}
-          onClick={onResume}
-        >
-          <PlayIcon />
-          <span className="ml-2">Resume now</span>
-        </Button>
-      </div>
+      <Button
+        className="w-full"
+        variant="default"
+        size="lg"
+        disabled={toggling}
+        onClick={onResume}
+        aria-label="Resume now"
+        title="Resume now"
+      >
+        <PlayIcon />
+        <span className="ml-2">Resumes in {countdown ?? '…'}</span>
+      </Button>
     )
   }
 
@@ -171,11 +171,16 @@ export function CaptureControlSection({
     )
   }
 
-  // Expanded: capturing — primary "Pause for 30 min" + other durations + turn off.
+  // Expanded: capturing — split button. Primary action pauses for the default
+  // duration; a "more" menu holds the other presets and the de-emphasized
+  // "Turn off" so stopping capture entirely isn't a one-tap action.
+  const otherPresets = CAPTURE_PAUSE_CONFIG.PRESETS_MINUTES.filter(
+    (m) => m !== CAPTURE_PAUSE_CONFIG.DEFAULT_MINUTES,
+  )
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex w-full gap-px">
       <Button
-        className="w-full"
+        className="flex-1 rounded-r-none border-primary"
         variant="default"
         size="lg"
         disabled={toggling}
@@ -186,24 +191,43 @@ export function CaptureControlSection({
           Pause for {formatDuration(CAPTURE_PAUSE_CONFIG.DEFAULT_MINUTES)}
         </span>
       </Button>
-      <div className="flex items-center justify-center gap-1">
-        {CAPTURE_PAUSE_CONFIG.PRESETS_MINUTES.filter(
-          (m) => m !== CAPTURE_PAUSE_CONFIG.DEFAULT_MINUTES,
-        ).map((minutes) => (
-          <Button
-            key={minutes}
-            variant="ghost"
-            size="xs"
-            disabled={toggling}
-            onClick={() => onPause?.(minutes * 60_000)}
-          >
-            {formatDuration(minutes)}
-          </Button>
-        ))}
-        <Button variant="ghost" size="xs" disabled={toggling} onClick={onToggle}>
-          Turn off
-        </Button>
-      </div>
+      <Menu.Root>
+        <Menu.Trigger
+          render={
+            <Button
+              variant="default"
+              size="lg"
+              disabled={toggling}
+              aria-label="More capture options"
+              className="rounded-l-none border-primary px-2"
+            />
+          }
+        >
+          <CaretDownIcon />
+        </Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Positioner side="bottom" align="end" sideOffset={6} className="z-50">
+            <Menu.Popup className="min-w-40 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none">
+              {otherPresets.map((minutes) => (
+                <Menu.Item
+                  key={minutes}
+                  className="flex cursor-default items-center rounded-md px-2 py-1.5 text-sm outline-none data-highlighted:bg-muted data-highlighted:text-foreground"
+                  onClick={() => onPause?.(minutes * 60_000)}
+                >
+                  Pause for {formatDuration(minutes)}
+                </Menu.Item>
+              ))}
+              <div className="my-1 h-px bg-border" />
+              <Menu.Item
+                className="flex cursor-default items-center rounded-md px-2 py-1.5 text-sm text-muted-foreground outline-none data-highlighted:bg-muted data-highlighted:text-foreground"
+                onClick={onToggle}
+              >
+                Turn off capture
+              </Menu.Item>
+            </Menu.Popup>
+          </Menu.Positioner>
+        </Menu.Portal>
+      </Menu.Root>
     </div>
   )
 }
