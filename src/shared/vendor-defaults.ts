@@ -32,10 +32,6 @@ export const VENDOR_PRESETS: Record<Vendor, VendorPresets> = {
     semanticVideo: [
       { id: 'google/gemini-2.5-flash-lite-preview-09-2025', label: 'Gemini 2.5 Flash Lite' },
       { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-      // NOTE: 'allenai/molmo-2-8b' was removed — its free tier was decommissioned
-      // and the slug now 404s, so it only burned a request before the Mistral
-      // snapshot fallback. Add a verified video-capable model here if a 3rd
-      // fallback is wanted.
     ],
     semanticSnapshot: [
       { id: 'mistralai/mistral-small-3.2-24b-instruct', label: 'Mistral Small 3.2' },
