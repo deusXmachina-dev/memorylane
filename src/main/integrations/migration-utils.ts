@@ -2,14 +2,10 @@
  * Shared helpers for detecting stale vs current MemoryLane MCP entries
  * across Claude Desktop, Claude Code, and Cursor configs.
  *
- * Timeline of entry shapes:
- *   v0 (pre-v0.18) — Electron app-as-node: command=MemoryLane binary,
- *                    args=[.../mcp-entry.js], env={ELECTRON_RUN_AS_NODE: '1'}.
- *   v1 (v0.18+)    — CLI via npx: command='npx',
- *                    args=['-y', '-p', '@deusxmachina-dev/memorylane-cli', 'memorylane-mcp'].
- *   v2 (current)   — Electron app-as-node again, now with multi-DB support
- *                    and shared server code. Same shape as v0 but the .app
- *                    path may vary (user moved it, upgraded, switched edition).
+ * The current entry shape is Electron app-as-node: command=MemoryLane binary,
+ * args=[.../mcp-entry.js], env={ELECTRON_RUN_AS_NODE: '1'}. An entry is stale
+ * when it has that shape but points at a different .app (user moved it,
+ * upgraded, or switched edition).
  *
  * The per-integration `getXStatus` helpers use these fingerprints to surface a
  * 'stale' state in the Integrations UI so the user can reconnect explicitly —
@@ -28,27 +24,13 @@ export interface McpEntryShape {
  * can pinpoint why an entry was treated as stale.
  */
 export type LegacySignal =
-  | 'npx-memorylane-cli'
   | 'electron-run-as-node-env'
   | 'mcp-entry-js-arg'
   | 'packaged-app-binary'
 
 /**
- * Detects the v1 CLI shape: `npx ... @deusxmachina-dev/memorylane-cli`.
- */
-export function detectLegacyNpxSignal(entry: McpEntryShape | undefined): LegacySignal | null {
-  if (!entry || typeof entry !== 'object') return null
-  if (entry.command !== 'npx') return null
-  if (!Array.isArray(entry.args)) return null
-  const hit = entry.args.some(
-    (arg) => typeof arg === 'string' && arg.includes('@deusxmachina-dev/memorylane-cli'),
-  )
-  return hit ? 'npx-memorylane-cli' : null
-}
-
-/**
- * Detects any Electron app-as-node shape (v0 or an outdated v2 pointing at a
- * moved `.app`). This is deliberately broad — the caller should first check
+ * Detects any Electron app-as-node shape pointing at a moved `.app`. This is
+ * deliberately broad — the caller should first check
  * `isCurrentAppEntry` against the current app's exe + script path and only
  * call into `detectLegacyAppSignal` as a fallback.
  */

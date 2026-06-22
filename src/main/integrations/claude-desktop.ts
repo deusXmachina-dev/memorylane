@@ -18,12 +18,7 @@ import * as path from 'node:path'
 import * as os from 'node:os'
 import log from '../logger'
 import { buildAppMcpEntry, getMcpEntryScriptPath } from './app-mcp-entry'
-import {
-  detectLegacyAppSignal,
-  detectLegacyNpxSignal,
-  extractDbPathArg,
-  isCurrentAppEntry,
-} from './migration-utils'
+import { detectLegacyAppSignal, extractDbPathArg, isCurrentAppEntry } from './migration-utils'
 import { app } from 'electron'
 import type { McpEntryStatus } from '../../shared/types'
 
@@ -146,7 +141,7 @@ function classifyConfigPath(
   const existing = config.mcpServers?.[MCP_SERVER_KEY]
   if (!existing) return 'not-registered'
   if (isCurrentAppEntry(existing, currentExe, currentScript)) return 'current'
-  const signal = detectLegacyNpxSignal(existing) ?? detectLegacyAppSignal(existing)
+  const signal = detectLegacyAppSignal(existing)
   return signal !== null ? 'stale' : 'current'
 }
 
@@ -158,8 +153,8 @@ function classifyConfigPath(
  * Per-path classification:
  *   'current'        — entry matches the running app, or a foreign entry sits
  *                      at the memorylane key (conservative: don't stomp).
- *   'stale'          — entry matches a legacy shape we own (v0 Electron-as-
- *                      node, v1 npx CLI, moved .app).
+ *   'stale'          — entry matches an app-as-node shape we own but points
+ *                      at a different .app (moved, upgraded, or other edition).
  *   'not-registered' — no memorylane entry at this path.
  *
  * Reduction across all discovered paths:

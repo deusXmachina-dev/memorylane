@@ -107,11 +107,6 @@ const CURRENT_ENTRY = {
   env: { ELECTRON_RUN_AS_NODE: '1' },
 }
 
-const STALE_NPX_ENTRY = {
-  command: 'npx',
-  args: ['-y', '-p', '@deusxmachina-dev/memorylane-cli', 'memorylane-mcp'],
-}
-
 const STALE_MOVED_APP_ENTRY = {
   command: '/Applications/MemoryLane-old.app/Contents/MacOS/MemoryLane',
   args: ['/Applications/MemoryLane-old.app/Contents/Resources/app.asar/out/main/mcp-entry.js'],
@@ -154,11 +149,6 @@ describe('getClaudeDesktopStatus', () => {
     expect(getClaudeDesktopStatus()).toBe('current')
   })
 
-  it('stale when entry is the old npx CLI shape', () => {
-    writeClaudeDesktopConfig(STALE_NPX_ENTRY)
-    expect(getClaudeDesktopStatus()).toBe('stale')
-  })
-
   it('stale when entry points at a moved .app', () => {
     writeClaudeDesktopConfig(STALE_MOVED_APP_ENTRY)
     expect(getClaudeDesktopStatus()).toBe('stale')
@@ -198,12 +188,12 @@ describe.runIf(process.platform === 'win32')('getClaudeDesktopStatus — Windows
   })
 
   it('stale when only the MSIX path has a legacy entry', () => {
-    writeMsixConfig(STALE_NPX_ENTRY)
+    writeMsixConfig(STALE_MOVED_APP_ENTRY)
     expect(getClaudeDesktopStatus()).toBe('stale')
   })
 
   it('stale when classic is stale and MSIX is current', () => {
-    writeClaudeDesktopConfig(STALE_NPX_ENTRY)
+    writeClaudeDesktopConfig(STALE_MOVED_APP_ENTRY)
     writeMsixConfig(CURRENT_ENTRY)
     expect(getClaudeDesktopStatus()).toBe('stale')
   })
@@ -312,8 +302,8 @@ describe('getClaudeCodeStatus', () => {
     expect(getClaudeCodeStatus()).toBe('current')
   })
 
-  it('stale when entry is the npx CLI shape', () => {
-    writeClaudeCodeSettings(STALE_NPX_ENTRY)
+  it('stale when entry points at a moved .app', () => {
+    writeClaudeCodeSettings(STALE_MOVED_APP_ENTRY)
     expect(getClaudeCodeStatus()).toBe('stale')
   })
 })

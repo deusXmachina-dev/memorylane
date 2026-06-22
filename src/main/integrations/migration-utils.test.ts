@@ -1,75 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import {
-  detectLegacyAppSignal,
-  detectLegacyNpxSignal,
-  extractDbPathArg,
-  isCurrentAppEntry,
-} from './migration-utils'
+import { detectLegacyAppSignal, extractDbPathArg, isCurrentAppEntry } from './migration-utils'
 
 // Fixed paths used to stand in for the "current" app's exe + mcp-entry.js
 // so these tests don't need to import electron.
 const CURRENT_EXE = '/Applications/MemoryLane.app/Contents/MacOS/MemoryLane'
 const CURRENT_SCRIPT =
   '/Applications/MemoryLane.app/Contents/Resources/app.asar/out/main/mcp-entry.js'
-
-describe('detectLegacyNpxSignal', () => {
-  it('matches the canonical v1 CLI entry', () => {
-    expect(
-      detectLegacyNpxSignal({
-        command: 'npx',
-        args: ['-y', '-p', '@deusxmachina-dev/memorylane-cli', 'memorylane-mcp'],
-      }),
-    ).toBe('npx-memorylane-cli')
-  })
-
-  it('matches the v1 entry with stdio type', () => {
-    expect(
-      detectLegacyNpxSignal({
-        type: 'stdio',
-        command: 'npx',
-        args: ['-y', '-p', '@deusxmachina-dev/memorylane-cli', 'memorylane-mcp'],
-      } as never),
-    ).toBe('npx-memorylane-cli')
-  })
-
-  it('matches the v1 entry with preserved --db-path args', () => {
-    expect(
-      detectLegacyNpxSignal({
-        command: 'npx',
-        args: [
-          '-y',
-          '-p',
-          '@deusxmachina-dev/memorylane-cli',
-          'memorylane-mcp',
-          '--db-path',
-          '/tmp/team.db',
-        ],
-      }),
-    ).toBe('npx-memorylane-cli')
-  })
-
-  it('rejects an npx entry pointing at a different package', () => {
-    expect(
-      detectLegacyNpxSignal({
-        command: 'npx',
-        args: ['-y', 'some-other-mcp'],
-      }),
-    ).toBe(null)
-  })
-
-  it('rejects a non-npx command', () => {
-    expect(
-      detectLegacyNpxSignal({
-        command: 'node',
-        args: ['@deusxmachina-dev/memorylane-cli'],
-      }),
-    ).toBe(null)
-  })
-
-  it('handles undefined', () => {
-    expect(detectLegacyNpxSignal(undefined)).toBe(null)
-  })
-})
 
 describe('detectLegacyAppSignal', () => {
   it('detects an entry with ELECTRON_RUN_AS_NODE env', () => {

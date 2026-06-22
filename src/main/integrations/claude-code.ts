@@ -10,12 +10,7 @@ import * as path from 'node:path'
 import * as os from 'node:os'
 import log from '../logger'
 import { buildAppMcpEntry, getMcpEntryScriptPath } from './app-mcp-entry'
-import {
-  detectLegacyAppSignal,
-  detectLegacyNpxSignal,
-  extractDbPathArg,
-  isCurrentAppEntry,
-} from './migration-utils'
+import { detectLegacyAppSignal, extractDbPathArg, isCurrentAppEntry } from './migration-utils'
 import { app } from 'electron'
 import type { McpEntryStatus } from '../../shared/types'
 
@@ -98,7 +93,7 @@ export function getClaudeCodeStatus(): McpEntryStatus {
   const currentScript = getMcpEntryScriptPath()
   if (isCurrentAppEntry(existing, currentExe, currentScript)) return 'current'
 
-  const signal = detectLegacyNpxSignal(existing) ?? detectLegacyAppSignal(existing)
+  const signal = detectLegacyAppSignal(existing)
   return signal !== null ? 'stale' : 'current'
 }
 

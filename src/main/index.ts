@@ -2,7 +2,7 @@
  * MemoryLane - Main Process Entry Point
  *
  * Tray app running the timeline-first pipeline.
- * The MCP server is provided by the CLI package (@deusxmachina-dev/memorylane-cli).
+ * The MCP server is the app itself run as Node (see integrations/app-mcp-entry).
  */
 
 // Side-effect import: sets process.env.PATH for onnxruntime DLLs on Windows.
