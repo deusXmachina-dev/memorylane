@@ -419,35 +419,26 @@ export function MainWindowApp(): React.JSX.Element {
     [],
   )
 
-  const handleToggle = useCallback(async () => {
-    setToggling(true)
-    try {
-      applyStatus(await api.toggleCapture())
-    } finally {
-      setToggling(false)
-    }
-  }, [api, applyStatus])
-
-  const handlePause = useCallback(
-    async (durationMs: number) => {
+  // Run a capture-control IPC call with the `toggling` busy flag and apply the
+  // returned status. Shared by toggle/pause/resume — they differ only in call.
+  const runStatusAction = useCallback(
+    async (action: () => Promise<{ capturing: boolean; pausedUntilMs: number | null }>) => {
       setToggling(true)
       try {
-        applyStatus(await api.pauseCapture(durationMs))
+        applyStatus(await action())
       } finally {
         setToggling(false)
       }
     },
-    [api, applyStatus],
+    [applyStatus],
   )
 
-  const handleResume = useCallback(async () => {
-    setToggling(true)
-    try {
-      applyStatus(await api.resumeCapture())
-    } finally {
-      setToggling(false)
-    }
-  }, [api, applyStatus])
+  const handleToggle = useCallback(() => runStatusAction(api.toggleCapture), [api, runStatusAction])
+  const handlePause = useCallback(
+    (durationMs: number) => runStatusAction(() => api.pauseCapture(durationMs)),
+    [api, runStatusAction],
+  )
+  const handleResume = useCallback(() => runStatusAction(api.resumeCapture), [api, runStatusAction])
 
   const advance = useCallback(
     (id: OnboardingStepId) => () => {

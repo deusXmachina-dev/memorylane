@@ -1,8 +1,13 @@
 import * as React from 'react'
 import { Menu } from '@base-ui/react/menu'
-import { CaretDownIcon } from '@phosphor-icons/react'
+import {
+  CaretDownIcon,
+  PlayIcon as PlayGlyph,
+  PauseIcon as PauseGlyph,
+  StopIcon as StopGlyph,
+} from '@phosphor-icons/react'
 import { Button } from '@components/ui/button'
-import { CAPTURE_PAUSE_CONFIG } from '@/shared/constants'
+import { CAPTURE_PAUSE_CONFIG, formatPauseDuration } from '@/shared/constants'
 
 interface CaptureControlSectionProps {
   capturing: boolean
@@ -19,26 +24,10 @@ interface CaptureControlSectionProps {
   onResume?: () => void
 }
 
-const PlayIcon = (): React.JSX.Element => (
-  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-    <path d="M8 5v14l11-7z" />
-  </svg>
-)
-
-const StopIcon = (): React.JSX.Element => (
-  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-    <rect x="6" y="6" width="12" height="12" rx="1" />
-  </svg>
-)
-
-const PauseIcon = (): React.JSX.Element => (
-  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-    <rect x="6" y="5" width="4" height="14" rx="1" />
-    <rect x="14" y="5" width="4" height="14" rx="1" />
-  </svg>
-)
-
-const formatDuration = (minutes: number): string => (minutes === 60 ? '1 hour' : `${minutes} min`)
+// Thin wrappers fix the size/weight once so the call sites stay terse.
+const PlayIcon = (): React.JSX.Element => <PlayGlyph className="w-5 h-5" weight="fill" />
+const StopIcon = (): React.JSX.Element => <StopGlyph className="w-5 h-5" weight="fill" />
+const PauseIcon = (): React.JSX.Element => <PauseGlyph className="w-5 h-5" weight="fill" />
 
 const formatCountdown = (remainingMs: number): string => {
   const minutes = Math.max(0, Math.ceil(remainingMs / 60_000))
@@ -118,7 +107,7 @@ export function CaptureControlSection({
       )
     }
     if (capturing) {
-      const label = `Pause capture for ${formatDuration(CAPTURE_PAUSE_CONFIG.DEFAULT_MINUTES)}`
+      const label = `Pause capture for ${formatPauseDuration(CAPTURE_PAUSE_CONFIG.DEFAULT_MINUTES)}`
       return (
         <Button
           className="w-full"
@@ -194,7 +183,7 @@ export function CaptureControlSection({
       >
         <PauseIcon />
         <span className="ml-2">
-          Pause for {formatDuration(CAPTURE_PAUSE_CONFIG.DEFAULT_MINUTES)}
+          Pause for {formatPauseDuration(CAPTURE_PAUSE_CONFIG.DEFAULT_MINUTES)}
         </span>
       </Button>
       <Menu.Root>
@@ -220,7 +209,7 @@ export function CaptureControlSection({
                   className="flex cursor-default items-center rounded-md px-2 py-1.5 text-sm outline-none data-highlighted:bg-muted data-highlighted:text-foreground"
                   onClick={() => onPause?.(minutes * 60_000)}
                 >
-                  Pause for {formatDuration(minutes)}
+                  Pause for {formatPauseDuration(minutes)}
                 </Menu.Item>
               ))}
               <div className="my-1 h-px bg-border" />

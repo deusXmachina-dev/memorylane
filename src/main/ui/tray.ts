@@ -10,7 +10,7 @@ import type { StorageService } from '../storage'
 import { openMainWindow } from './main-window'
 import { getUpdateState, quitAndInstall } from '../updater'
 import { createTrayPrivacyState } from './tray-privacy-state'
-import { CAPTURE_PAUSE_CONFIG } from '../../shared/constants'
+import { CAPTURE_PAUSE_CONFIG, formatPauseDuration } from '../../shared/constants'
 
 interface TrayDependencies {
   capture: {
@@ -37,8 +37,6 @@ const clearPauseRefreshTimer = (): void => {
     pauseRefreshTimer = null
   }
 }
-
-const formatDuration = (minutes: number): string => (minutes === 60 ? '1 hour' : `${minutes} min`)
 
 const formatRemaining = (pausedUntilMs: number): string => {
   const remainingMs = Math.max(0, pausedUntilMs - Date.now())
@@ -144,7 +142,7 @@ const buildCaptureMenuItems = (state: {
       {
         label: 'Pause Capture',
         submenu: CAPTURE_PAUSE_CONFIG.PRESETS_MINUTES.map((minutes) => ({
-          label: `Pause for ${formatDuration(minutes)}`,
+          label: `Pause for ${formatPauseDuration(minutes)}`,
           click: () => deps!.capture.pauseCapture(minutes * 60_000),
         })),
       },

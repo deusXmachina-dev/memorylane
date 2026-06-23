@@ -126,6 +126,10 @@ export const CAPTURE_PAUSE_CONFIG = {
   DEFAULT_MINUTES: 30,
 }
 
+// Label for a pause preset, shared by the tray menu and the main-window control.
+export const formatPauseDuration = (minutes: number): string =>
+  minutes === 60 ? '1 hour' : `${minutes} min`
+
 // Managed Key / Subscription Configuration
 export const MANAGED_KEY_CONFIG = {
   BACKEND_URL:
