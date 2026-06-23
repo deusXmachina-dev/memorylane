@@ -69,6 +69,40 @@ describe('renderGoldenMd → parseGoldenMd round-trip', () => {
     })
   })
 
+  it('renders the `· App · tld` label and parses the tld back', () => {
+    const acts = [
+      replayActivity({ activityId: 'a1', appName: 'Code', tld: undefined }),
+      replayActivity({
+        activityId: 'a2',
+        appName: 'Google Chrome',
+        windowTitle: 'Customers - Google Drive',
+        tld: 'drive.google.com',
+        startTimestamp: 1_090_000,
+        endTimestamp: 1_130_000,
+      }),
+    ]
+    const md = renderGoldenMd('x', acts)
+    // Native app: app name only. Web: app name · domain.
+    expect(md).toContain('0:00 → 1:30 · Code')
+    expect(md).toContain('1:30 → 2:10 · Google Chrome · drive.google.com')
+
+    const parsed = parseGoldenMd(md)
+    expect(parsed[0].tld).toBeUndefined()
+    expect(parsed[1].tld).toBe('drive.google.com')
+    // appName/windowTitle still come from the `## ` header, unaffected by the label.
+    expect(parsed[1]).toMatchObject({
+      appName: 'Google Chrome',
+      windowTitle: 'Customers - Google Drive',
+    })
+  })
+
+  it('still parses legacy time lines that have no label', () => {
+    const md = ['# Golden — x', '## 1. Code — auth.ts', '0:00 → 1:30', 'Did a thing.'].join('\n')
+    const parsed = parseGoldenMd(md)
+    expect(parsed[0]).toMatchObject({ appName: 'Code', startOffsetMs: 0, endOffsetMs: 90_000 })
+    expect(parsed[0].tld).toBeUndefined()
+  })
+
   it('anchors offsets to sessionStartMs (the video clock), not the first block', () => {
     // First kept activity starts 10s after the session/video zero.
     const acts = [replayActivity({ startTimestamp: 1_010_000, endTimestamp: 1_040_000 })]

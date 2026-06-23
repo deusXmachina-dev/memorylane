@@ -17,19 +17,22 @@ import type { ReplayActivity } from './types'
  *   # Golden — <fixture>
  *
  *   ## 1. Code — auth.ts
- *   00:00 → 01:30
+ *   0:00 → 1:30 · Code
  *
  *   Stepped through the auth middleware in the debugger and inspected headers.
  *
  *   ---
  *
  *   ## 2. Chrome — github.com
- *   01:30 → 02:10
+ *   1:30 → 2:10 · Chrome · github.com
  *
  *   Reviewed the open PR's diff for the token-refresh change.
  *
- * Times are mm:ss from session start. The leading number in the header is for
- * humans only — matching is by time overlap, not index.
+ * Times are mm:ss from session start. The `· App · tld` label after the range is
+ * a human-facing scanning aid (app name, then domain when it's a web activity);
+ * it's reconstructed from the producer, not authoritative — appName/windowTitle
+ * are read from the `## ` header. The leading number in the header is for humans
+ * only — matching is by time overlap, not index.
  */
 
 export interface GoldenActivity {
@@ -37,6 +40,8 @@ export interface GoldenActivity {
   index: number
   appName: string
   windowTitle?: string
+  /** Domain of a web activity, recovered from the time-line `· App · tld` label. */
+  tld?: string
   startOffsetMs: number
   endOffsetMs: number
   /**
@@ -48,14 +53,42 @@ export interface GoldenActivity {
   summary: string
 }
 
-const HEADER_RE = /^##\s+(?:(\d+)\.\s*)?(.+?)(?:\s+—\s+(.+))?\s*$/
-const TIME_RE = /^\s*(\d+):(\d{2})\s*(?:->|→)\s*(\d+):(\d{2})\s*$/
+export const HEADER_RE = /^##\s+(?:(\d+)\.\s*)?(.+?)(?:\s+—\s+(.+))?\s*$/
+// The optional trailing group is the `· App · tld` scanning label (or a bare
+// `· App`); older goldens have none. It's captured but appName is taken from the
+// header, so the label is advisory.
+export const TIME_RE = /^\s*(\d+):(\d{2})\s*(?:->|→)\s*(\d+):(\d{2})\s*(?:·(.*))?$/
 
 export function formatOffset(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000))
   const m = Math.floor(total / 60)
   const s = total % 60
   return `${m}:${String(s).padStart(2, '0')}`
+}
+
+/**
+ * The single source of truth for a golden block's time line:
+ * `mm:ss → mm:ss · App[ · tld]`. Shared by the scaffold renderer and the
+ * tld backfill so both emit byte-identical lines.
+ */
+export function formatTimeLine(
+  startOffsetMs: number,
+  endOffsetMs: number,
+  appName: string,
+  tld?: string,
+): string {
+  const label = tld ? `${appName} · ${tld}` : appName
+  return `${formatOffset(startOffsetMs)} → ${formatOffset(endOffsetMs)} · ${label}`
+}
+
+/** Pulls the `tld` out of a time-line label (`App · tld` → `tld`; `App` → none). */
+function parseTldFromLabel(label: string | undefined): string | undefined {
+  if (!label) return undefined
+  const segs = label
+    .split('·')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  return segs.length >= 2 ? segs[segs.length - 1] : undefined
 }
 
 function parseOffset(min: string, sec: string): number {
@@ -82,7 +115,12 @@ export function renderGoldenMd(
     const title = act.windowTitle ? ` — ${act.windowTitle}` : ''
     lines.push(`## ${i + 1}. ${act.appName}${title}`)
     lines.push(
-      `${formatOffset(act.startTimestamp - sessionStart)} → ${formatOffset(act.endTimestamp - sessionStart)}`,
+      formatTimeLine(
+        act.startTimestamp - sessionStart,
+        act.endTimestamp - sessionStart,
+        act.appName,
+        act.tld,
+      ),
     )
     lines.push('')
     if (act.dropped) {
@@ -112,12 +150,14 @@ export function parseGoldenMd(text: string): GoldenActivity[] {
     // Find the time line, then everything after it (until `---`) is the summary.
     let startOffsetMs = 0
     let endOffsetMs = 0
+    let tld: string | undefined
     let timeLineIdx = -1
     for (let i = 1; i < block.length; i++) {
       const tm = block[i].match(TIME_RE)
       if (tm) {
         startOffsetMs = parseOffset(tm[1], tm[2])
         endOffsetMs = parseOffset(tm[3], tm[4])
+        tld = parseTldFromLabel(tm[5])
         timeLineIdx = i
         break
       }
@@ -136,6 +176,7 @@ export function parseGoldenMd(text: string): GoldenActivity[] {
       index: out.length + 1,
       appName,
       windowTitle,
+      tld,
       startOffsetMs,
       endOffsetMs,
       dropped: dropped || undefined,
