@@ -55,6 +55,8 @@ export async function replayCell(params: {
     debugDumper: params.dumper,
     // The default UsageTracker reads Electron's app.getPath, absent under enode.
     usageTracker: { recordUsage: () => {} },
+    // Same for the default SummaryModeTracker (writes summary-mode-stats.json).
+    summaryModeTracker: { record: () => {} },
   })
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memorylane-replay-'))
   const transformer = new DefaultActivityTransformer(
