@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   // Capture control
   getStatus: () => ipcRenderer.invoke('main-window:getStatus'),
   toggleCapture: () => ipcRenderer.invoke('main-window:toggleCapture'),
+  pauseCapture: (durationMs: number) => ipcRenderer.invoke('main-window:pauseCapture', durationMs),
+  resumeCapture: () => ipcRenderer.invoke('main-window:resumeCapture'),
   onStatusChanged: (callback: (status: unknown) => void) => {
     const handler = (_event: unknown, status: unknown): void => callback(status)
     ipcRenderer.on('main-window:statusChanged', handler)

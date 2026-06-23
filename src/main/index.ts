@@ -232,20 +232,26 @@ app.on('ready', async () => {
     isPaused: shouldPause,
     userContextBuilder,
     patternDetector: scheduledMiner,
+    onStateChanged: () => {
+      void updateTrayMenu()
+      void sendStatusToRenderer()
+    },
   })
 
   const hotkeyManager = createCaptureHotkeyManager({
     platform: process.platform,
     onTriggered: (accelerator) => {
-      if (captureCoordinator.controls.isCapturingNow()) {
+      if (captureCoordinator.controls.isUserPaused()) {
+        captureCoordinator.controls.resumeCapture()
+        log.info(`[Main] Capture resumed from pause by hotkey (${accelerator})`)
+      } else if (captureCoordinator.controls.isCapturingNow()) {
         captureCoordinator.controls.requestStopCapture()
         log.info(`[Main] Capture stopped by hotkey (${accelerator})`)
       } else {
         captureCoordinator.controls.requestStartCapture()
         log.info(`[Main] Capture started by hotkey (${accelerator})`)
       }
-      void updateTrayMenu()
-      void sendStatusToRenderer()
+      // Tray + renderer are refreshed by the coordinator's onStateChanged.
     },
   })
 

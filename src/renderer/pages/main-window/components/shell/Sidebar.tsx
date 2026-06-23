@@ -29,6 +29,9 @@ interface SidebarProps {
   capturing: boolean
   toggling: boolean
   onToggleCapture: () => void
+  pausedUntilMs: number | null
+  onPauseCapture: (durationMs: number) => void
+  onResumeCapture: () => void
   vendor: Vendor
   llmHealth: LlmHealthStatus | null
   configured: boolean
@@ -46,6 +49,9 @@ export function Sidebar({
   capturing,
   toggling,
   onToggleCapture,
+  pausedUntilMs,
+  onPauseCapture,
+  onResumeCapture,
   vendor,
   llmHealth,
   configured,
@@ -115,6 +121,9 @@ export function Sidebar({
         capturing={capturing}
         toggling={toggling}
         onToggle={onToggleCapture}
+        pausedUntilMs={pausedUntilMs}
+        onPause={onPauseCapture}
+        onResume={onResumeCapture}
         compact={collapsed}
       />
     </div>

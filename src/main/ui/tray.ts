@@ -7,19 +7,41 @@ import path from 'node:path'
 import log from '../logger'
 import { formatBytes, formatNumber } from '../utils/formatters'
 import type { StorageService } from '../storage'
-import { sendStatusToRenderer, openMainWindow } from './main-window'
+import { openMainWindow } from './main-window'
 import { getUpdateState, quitAndInstall } from '../updater'
 import { createTrayPrivacyState } from './tray-privacy-state'
+import { CAPTURE_PAUSE_CONFIG, formatPauseDuration } from '../../shared/constants'
 
 interface TrayDependencies {
   capture: {
     isCapturingNow: () => boolean
     requestStartCapture: () => void
     requestStopCapture: () => void
+    pauseCapture: (durationMs: number) => void
+    resumeCapture: () => void
+    getPauseState: () => { pausedUntilMs: number | null }
     stopCaptureForShutdown: () => void
     forceClose: () => Promise<void>
   }
   storage: StorageService
+}
+
+// Tray menus are static once set; while paused we periodically rebuild so the
+// "resumes in N min" countdown stays roughly fresh if the user opens the menu.
+const PAUSE_REFRESH_MS = 30_000
+let pauseRefreshTimer: ReturnType<typeof setTimeout> | null = null
+
+const clearPauseRefreshTimer = (): void => {
+  if (pauseRefreshTimer) {
+    clearTimeout(pauseRefreshTimer)
+    pauseRefreshTimer = null
+  }
+}
+
+const formatRemaining = (pausedUntilMs: number): string => {
+  const remainingMs = Math.max(0, pausedUntilMs - Date.now())
+  const minutes = Math.ceil(remainingMs / 60_000)
+  return minutes <= 1 ? 'less than a minute' : `~${minutes} min`
 }
 
 let tray: Tray | null = null
@@ -37,6 +59,7 @@ export const setPrivacyBlockedState = (blocked: boolean): void => {
 
 app.on('before-quit', () => {
   trayPrivacyState.dispose()
+  clearPauseRefreshTimer()
 
   if (tray) {
     tray.destroy()
@@ -92,20 +115,82 @@ const buildUsageStatsSubmenu = async (): Promise<Electron.MenuItemConstructorOpt
 }
 
 /**
+ * Build the capture-control menu items for the current state:
+ * - paused: a status line + "Resume Capture Now"
+ * - capturing: flat "Pause for 15/30/60 min" presets, then "Turn off capture"
+ * - off: "Start Capture"
+ */
+const buildCaptureMenuItems = (state: {
+  isCapturing: boolean
+  isUserPaused: boolean
+  pausedUntilMs: number | null
+}): Electron.MenuItemConstructorOptions[] => {
+  // Click handlers only invoke a coordinator control; the resulting
+  // onStateChanged refreshes the tray menu and renderer.
+  if (state.isUserPaused && state.pausedUntilMs !== null) {
+    return [
+      { label: `Paused — resumes ${formatRemaining(state.pausedUntilMs)}`, enabled: false },
+      {
+        label: 'Resume Capture Now',
+        click: () => deps!.capture.resumeCapture(),
+      },
+    ]
+  }
+
+  if (state.isCapturing) {
+    return [
+      // Pause is the default action — presets sit flat at the top level.
+      ...CAPTURE_PAUSE_CONFIG.PRESETS_MINUTES.map((minutes) => ({
+        label: `Pause for ${formatPauseDuration(minutes)}`,
+        click: () => deps!.capture.pauseCapture(minutes * 60_000),
+      })),
+      { type: 'separator' as const },
+      // Turning capture off entirely is the secondary, de-emphasized option.
+      {
+        label: 'Turn off capture',
+        click: () => deps!.capture.requestStopCapture(),
+      },
+    ]
+  }
+
+  return [
+    {
+      label: 'Start Capture',
+      click: () => deps!.capture.requestStartCapture(),
+    },
+  ]
+}
+
+/**
  * Update the tray context menu with current state
  */
 export const updateTrayMenu = async (): Promise<void> => {
   if (!tray || !deps) return
 
   const isCapturing = deps.capture.isCapturingNow()
+  const { pausedUntilMs } = deps.capture.getPauseState()
+  const isUserPaused = pausedUntilMs !== null
   const { isPrivacyBlocked, blockedRecently } = trayPrivacyState.getStatus(isCapturing)
+
+  // Keep the countdown label fresh while paused; stop refreshing otherwise.
+  clearPauseRefreshTimer()
+  if (isUserPaused) {
+    pauseRefreshTimer = setTimeout(() => {
+      pauseRefreshTimer = null
+      void updateTrayMenu()
+    }, PAUSE_REFRESH_MS)
+    pauseRefreshTimer.unref?.()
+  }
+
   const versionSuffix = ` (v${app.getVersion()})`
   tray.setToolTip(
-    isPrivacyBlocked
-      ? `MemoryLane - Capture Paused (Privacy Rule)${versionSuffix}`
-      : blockedRecently
-        ? `MemoryLane - Capture Recently Paused (Privacy Rule)${versionSuffix}`
-        : `MemoryLane - Screen Capture${versionSuffix}`,
+    isUserPaused
+      ? `MemoryLane - Capture Paused (resumes ${formatRemaining(pausedUntilMs)})${versionSuffix}`
+      : isPrivacyBlocked
+        ? `MemoryLane - Capture Paused (Privacy Rule)${versionSuffix}`
+        : blockedRecently
+          ? `MemoryLane - Capture Recently Paused (Privacy Rule)${versionSuffix}`
+          : `MemoryLane - Screen Capture${versionSuffix}`,
   )
 
   const usageStatsSubmenu = await buildUsageStatsSubmenu()
@@ -137,18 +222,7 @@ export const updateTrayMenu = async (): Promise<void> => {
             { type: 'separator' as const },
           ]
         : []),
-    {
-      label: isCapturing ? 'Stop Capture' : 'Start Capture',
-      click: () => {
-        if (isCapturing) {
-          deps!.capture.requestStopCapture()
-        } else {
-          deps!.capture.requestStartCapture()
-        }
-        void updateTrayMenu()
-        void sendStatusToRenderer()
-      },
-    },
+    ...buildCaptureMenuItems({ isCapturing, isUserPaused, pausedUntilMs }),
     { type: 'separator' },
     {
       label: 'Usage Stats',

@@ -59,6 +59,7 @@ export function MainWindowApp(): React.JSX.Element {
   )
   const [activeVendor, setActiveVendor] = useState<Vendor>('openrouter')
   const [capturing, setCapturing] = useState(false)
+  const [pausedUntilMs, setPausedUntilMs] = useState<number | null>(null)
   const [toggling, setToggling] = useState(false)
   const [stats, setStats] = useState<MainWindowStats | null>(null)
   const [mcpStatus, setMcpStatus] = useState<McpRegistrationStatus | null>(null)
@@ -302,9 +303,11 @@ export function MainWindowApp(): React.JSX.Element {
   useEffect(() => {
     void api.getStatus().then((status) => {
       setCapturing(status.capturing)
+      setPausedUntilMs(status.pausedUntilMs)
     })
     const unsubscribe = api.onStatusChanged((status) => {
       setCapturing(status.capturing)
+      setPausedUntilMs(status.pausedUntilMs)
       void loadStats()
       void loadPatterns()
       void activitiesRefreshRef.current()
@@ -401,21 +404,41 @@ export function MainWindowApp(): React.JSX.Element {
       void refreshOnFocus()
       void api.getStatus().then((status) => {
         setCapturing(status.capturing)
+        setPausedUntilMs(status.pausedUntilMs)
       })
     }
     window.addEventListener('focus', handleFocus)
     return () => window.removeEventListener('focus', handleFocus)
   }, [api, refreshOnFocus])
 
-  const handleToggle = useCallback(async () => {
-    setToggling(true)
-    try {
-      const status = await api.toggleCapture()
+  const applyStatus = useCallback(
+    (status: { capturing: boolean; pausedUntilMs: number | null }) => {
       setCapturing(status.capturing)
-    } finally {
-      setToggling(false)
-    }
-  }, [api])
+      setPausedUntilMs(status.pausedUntilMs)
+    },
+    [],
+  )
+
+  // Run a capture-control IPC call with the `toggling` busy flag and apply the
+  // returned status. Shared by toggle/pause/resume — they differ only in call.
+  const runStatusAction = useCallback(
+    async (action: () => Promise<{ capturing: boolean; pausedUntilMs: number | null }>) => {
+      setToggling(true)
+      try {
+        applyStatus(await action())
+      } finally {
+        setToggling(false)
+      }
+    },
+    [applyStatus],
+  )
+
+  const handleToggle = useCallback(() => runStatusAction(api.toggleCapture), [api, runStatusAction])
+  const handlePause = useCallback(
+    (durationMs: number) => runStatusAction(() => api.pauseCapture(durationMs)),
+    [api, runStatusAction],
+  )
+  const handleResume = useCallback(() => runStatusAction(api.resumeCapture), [api, runStatusAction])
 
   const advance = useCallback(
     (id: OnboardingStepId) => () => {
@@ -537,6 +560,9 @@ export function MainWindowApp(): React.JSX.Element {
       capturing={capturing}
       toggling={toggling}
       onToggleCapture={() => void handleToggle()}
+      pausedUntilMs={pausedUntilMs}
+      onPauseCapture={(durationMs) => void handlePause(durationMs)}
+      onResumeCapture={() => void handleResume()}
       vendor={activeVendor}
       llmHealth={llmHealth}
       configured={isConfigured}

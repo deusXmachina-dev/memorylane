@@ -89,6 +89,9 @@ interface MainWindowDependencies {
     isCapturingNow: () => boolean
     requestStartCapture: () => void
     requestStopCapture: () => void
+    pauseCapture: (durationMs: number) => void
+    resumeCapture: () => void
+    getPauseState: () => { pausedUntilMs: number | null }
     forceClose: () => Promise<void>
     updateActivityWindowConfig: (input: {
       minActivityDurationMs: number
@@ -184,6 +187,7 @@ function buildStatus(): MainWindowStatus {
   return {
     capturing: deps?.capture.isCapturingNow() ?? false,
     captureHotkeyLabel: deps?.getCaptureHotkeyLabel() ?? '',
+    pausedUntilMs: deps?.capture.getPauseState().pausedUntilMs ?? null,
   }
 }
 
@@ -526,12 +530,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   })
 
   handle('main-window:toggleCapture', () => {
-    if (!deps) {
-      return {
-        capturing: false,
-        captureHotkeyLabel: '',
-      }
-    }
+    if (!deps) return buildStatus()
 
     if (deps.capture.isCapturingNow()) {
       log.info('[Settings] user stopped capture')
@@ -541,8 +540,25 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       deps.capture.requestStartCapture()
     }
 
-    void updateTrayMenu()
+    // Tray + renderer are refreshed by the coordinator's onStateChanged.
+    return buildStatus()
+  })
 
+  handle('main-window:pauseCapture', (_event, durationMs: number) => {
+    if (!deps) return buildStatus()
+    if (!Number.isFinite(durationMs) || durationMs <= 0) {
+      log.warn(`[Settings] ignoring pauseCapture with invalid duration: ${durationMs}`)
+      return buildStatus()
+    }
+    log.info(`[Settings] user paused capture for ${Math.round(durationMs / 1000)}s`)
+    deps.capture.pauseCapture(durationMs)
+    return buildStatus()
+  })
+
+  handle('main-window:resumeCapture', () => {
+    if (!deps) return buildStatus()
+    log.info('[Settings] user resumed capture from pause')
+    deps.capture.resumeCapture()
     return buildStatus()
   })
 
