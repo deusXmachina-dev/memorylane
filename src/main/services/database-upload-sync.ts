@@ -162,8 +162,10 @@ export class DatabaseUploadSync {
 
       // Strip (drop sensitive columns/tables + VACUUM) and gzip the backup in a
       // worker process — that work is synchronous, CPU-heavy SQLite I/O and
-      // would freeze the UI if it ran on the main thread. gzip shrinks the body
-      // ~5-10x; the server detects gzip by magic bytes and inflates it, so no
+      // would freeze the UI if it ran on the main thread. gzip alone only buys
+      // ~1.4-1.8x on a real DB (packed embedding vectors are near-incompressible);
+      // the bigger win in summary mode is the strip step dropping OCR text + FTS.
+      // The server detects gzip by magic bytes and inflates it, so no
       // Content-Encoding header is needed and older raw uploads still work.
       const gzipped = await this.prepareUpload(tempPath, this.getStripOptions())
       const formData = new FormData()
