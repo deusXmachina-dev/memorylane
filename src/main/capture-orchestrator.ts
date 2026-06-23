@@ -47,7 +47,12 @@ export function createCaptureCoordinator(params: {
   controls: CaptureCoordinatorControls
   resumeCaptureIfDesired(reason: 'startup' | 'resume'): void
 } {
-  let pauseTimer: ReturnType<typeof setTimeout> | null = null
+  // How often the sweep checks whether a pause deadline has passed.
+  const SWEEP_INTERVAL_MS = 15_000
+  let pauseSweep: ReturnType<typeof setInterval> | null = null
+  // Absolute wall-clock deadline (epoch ms) at which capture auto-resumes, or
+  // null when not paused. Stored as a real timestamp so system sleep can't cut
+  // the pause short or overrun it — the sweep compares it against Date.now().
   let pausedUntilMs: number | null = null
 
   const scheduleBackgroundAnalyzers = (): void => {
@@ -63,10 +68,10 @@ export function createCaptureCoordinator(params: {
     }
   }
 
-  const clearPauseTimer = (): void => {
-    if (pauseTimer) {
-      clearTimeout(pauseTimer)
-      pauseTimer = null
+  const clearPauseSweep = (): void => {
+    if (pauseSweep) {
+      clearInterval(pauseSweep)
+      pauseSweep = null
     }
     pausedUntilMs = null
   }
@@ -85,7 +90,7 @@ export function createCaptureCoordinator(params: {
 
   const requestStartCapture = (): void => {
     // Starting un-pauses: a manual start overrides any active timed pause.
-    clearPauseTimer()
+    clearPauseSweep()
     if (!persistCaptureEnabled(true)) {
       notifyStateChanged()
       return
@@ -102,7 +107,7 @@ export function createCaptureCoordinator(params: {
 
   const requestStopCapture = (): void => {
     // Indefinite "turn off": cancel any timed pause so it can't auto-resume.
-    clearPauseTimer()
+    clearPauseSweep()
     if (!persistCaptureEnabled(false)) {
       notifyStateChanged()
       return
@@ -115,7 +120,7 @@ export function createCaptureCoordinator(params: {
   // Resume from a timed pause: start capture if it's still the desired state.
   // Used both by the manual "resume now" control and by the auto-resume timer.
   const resumeCapture = (): void => {
-    clearPauseTimer()
+    clearPauseSweep()
     if (!params.captureStateManager.isCaptureEnabled()) {
       notifyStateChanged()
       return
@@ -132,14 +137,17 @@ export function createCaptureCoordinator(params: {
     const clamped = Number.isFinite(durationMs) && durationMs > 0 ? Math.floor(durationMs) : 0
     if (clamped <= 0) return
 
-    if (pauseTimer) clearTimeout(pauseTimer)
+    // Record an absolute future deadline, then sweep until real time reaches it.
+    // Unlike a one-shot setTimeout (suspended during sleep, so it fires late),
+    // comparing Date.now() each tick keeps the pause accurate across sleep.
+    if (pauseSweep) clearInterval(pauseSweep)
     pausedUntilMs = Date.now() + clamped
-    pauseTimer = setTimeout(() => {
-      pauseTimer = null
-      pausedUntilMs = null
-      resumeCapture()
-    }, clamped)
-    pauseTimer.unref?.()
+    pauseSweep = setInterval(() => {
+      if (pausedUntilMs !== null && Date.now() >= pausedUntilMs) {
+        resumeCapture()
+      }
+    }, SWEEP_INTERVAL_MS)
+    pauseSweep.unref?.()
 
     // Keep the persisted preference enabled — the intent stays "capture on",
     // we're only taking a break. Halt capture now.
@@ -150,7 +158,7 @@ export function createCaptureCoordinator(params: {
   }
 
   const stopCaptureForShutdown = (): void => {
-    clearPauseTimer()
+    clearPauseSweep()
     params.capture.stopCapture()
   }
 

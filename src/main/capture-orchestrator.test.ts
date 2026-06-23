@@ -136,7 +136,24 @@ describe('createCaptureCoordinator timed pause', () => {
     expect(coordinator.controls.getPauseState().pausedUntilMs).toBeNull()
   })
 
-  it('resumeCapture starts capture immediately and cancels the timer', () => {
+  it('resumes after the deadline even if the sweep was suspended during sleep', () => {
+    const { capture, coordinator } = makeCoordinator()
+
+    coordinator.controls.pauseCapture(30 * 60_000)
+    expect(capture.startCapture).not.toHaveBeenCalled()
+
+    // Simulate the Mac sleeping past the deadline: the wall clock jumps forward
+    // by more than the pause duration while the sweep interval never ticks.
+    vi.setSystemTime(Date.now() + 2 * 60 * 60_000)
+    // The first sweep tick after wake compares the absolute deadline and resumes.
+    vi.advanceTimersByTime(15_000)
+
+    expect(capture.startCapture).toHaveBeenCalledTimes(1)
+    expect(coordinator.controls.isUserPaused()).toBe(false)
+    expect(coordinator.controls.getPauseState().pausedUntilMs).toBeNull()
+  })
+
+  it('resumeCapture starts capture immediately and cancels the sweep', () => {
     const { capture, coordinator } = makeCoordinator()
 
     coordinator.controls.pauseCapture(30 * 60_000)

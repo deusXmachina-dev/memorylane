@@ -117,7 +117,7 @@ const buildUsageStatsSubmenu = async (): Promise<Electron.MenuItemConstructorOpt
 /**
  * Build the capture-control menu items for the current state:
  * - paused: a status line + "Resume Capture Now"
- * - capturing: "Pause Capture ▸ (15/30/60 min)" + "Turn Off Capture"
+ * - capturing: flat "Pause for 15/30/60 min" presets, then "Turn off capture"
  * - off: "Start Capture"
  */
 const buildCaptureMenuItems = (state: {
@@ -139,15 +139,15 @@ const buildCaptureMenuItems = (state: {
 
   if (state.isCapturing) {
     return [
+      // Pause is the default action — presets sit flat at the top level.
+      ...CAPTURE_PAUSE_CONFIG.PRESETS_MINUTES.map((minutes) => ({
+        label: `Pause for ${formatPauseDuration(minutes)}`,
+        click: () => deps!.capture.pauseCapture(minutes * 60_000),
+      })),
+      { type: 'separator' as const },
+      // Turning capture off entirely is the secondary, de-emphasized option.
       {
-        label: 'Pause Capture',
-        submenu: CAPTURE_PAUSE_CONFIG.PRESETS_MINUTES.map((minutes) => ({
-          label: `Pause for ${formatPauseDuration(minutes)}`,
-          click: () => deps!.capture.pauseCapture(minutes * 60_000),
-        })),
-      },
-      {
-        label: 'Turn Off Capture',
+        label: 'Turn off capture',
         click: () => deps!.capture.requestStopCapture(),
       },
     ]
