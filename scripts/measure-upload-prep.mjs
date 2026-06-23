@@ -17,7 +17,12 @@ function stripDatabaseForUpload(dbPath, { detailLevel }) {
     if (detailLevel === 'summary') {
       for (const tr of SUMMARY_TRIGGERS_TO_DROP) db.exec(`DROP TRIGGER IF EXISTS "${tr}"`)
       for (const t of SUMMARY_TABLES_TO_DROP) db.exec(`DROP TABLE IF EXISTS "${t}"`)
-      const cols = new Set(db.prepare('PRAGMA table_info(activities)').all().map((c) => c.name))
+      const cols = new Set(
+        db
+          .prepare('PRAGMA table_info(activities)')
+          .all()
+          .map((c) => c.name),
+      )
       for (const c of SUMMARY_ACTIVITIES_COLUMNS_TO_DROP)
         if (cols.has(c)) db.exec(`ALTER TABLE activities DROP COLUMN "${c}"`)
     }
