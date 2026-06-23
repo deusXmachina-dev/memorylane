@@ -20,4 +20,20 @@ export const MODEL_PRICING_USD_PER_MILLION: Record<
     input_tokens_per_million: 0.1,
     completion_tokens_per_million: 0.4,
   },
+  'google/gemini-3-flash-preview': {
+    input_tokens_per_million: 0.5,
+    completion_tokens_per_million: 3,
+  },
+  'minimax/minimax-m3': {
+    input_tokens_per_million: 0.3,
+    completion_tokens_per_million: 1.2,
+  },
+  'google/gemini-3.1-flash-lite': {
+    input_tokens_per_million: 0.25,
+    completion_tokens_per_million: 1.5,
+  },
+  'google/gemini-3.1-flash-lite-preview': {
+    input_tokens_per_million: 0.25,
+    completion_tokens_per_million: 1.5,
+  },
 }
