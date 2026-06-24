@@ -1128,17 +1128,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     startPermissionPolling()
     return getPermissionStatus()
   })
-  ipcMain.handle('main-window:openPermissionSettings', async (_event, kind: string) => {
-    if (kind === 'accessibility' || kind === 'screenRecording') {
-      log.info(`[Permissions] openPermissionSettings(${kind})`)
-      if (kind === 'screenRecording') {
-        await requestScreenRecording()
-      } else {
-        await openPermissionSettings(kind)
-      }
-      startPermissionPolling()
-    }
-  })
   ipcMain.handle('main-window:restartApp', () => {
     log.info('[App] Restart requested from renderer')
     app.relaunch()
