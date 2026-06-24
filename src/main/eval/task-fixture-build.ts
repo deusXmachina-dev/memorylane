@@ -8,6 +8,7 @@
 
 import type { StorageService } from '../storage'
 import type { StoredActivity } from '../storage/types'
+import type { GoldenActivity } from './golden-md'
 import type { TaskFixtureActivity } from './task-types'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -151,4 +152,177 @@ export function renderSightingGoldenMd(
   lines.push('')
 
   return lines.join('\n')
+}
+
+// ---------------------------------------------------------------------------
+// Promoting a semantic-summary golden into a task + placing it in a noise day
+// ---------------------------------------------------------------------------
+
+export type PlacementMode = 'contiguous' | 'multitask'
+
+export interface SemanticTaskResult {
+  /** Task activities with offsets RELATIVE to the task start (laid out
+   *  back-to-back). Absolute offsets are assigned later by `placeTask`. */
+  activities: TaskFixtureActivity[]
+  /** A `keep` block seeded from the whole task (every minted id). */
+  block: GoldenBlockSeed
+}
+
+/**
+ * Promotes a parsed semantic-summary golden (one block per activity) into the
+ * pieces of a task-mining `keep` task: drops the DROPPED blocks, mints stable
+ * ids (`<idPrefix>-NN`), and lays the kept activities out back-to-back (each
+ * starts where the previous ended) so the task reads as one coherent episode.
+ * Semantic goldens carry no OCR, so `ocrText` is left empty — the summaries
+ * drive both the scan and the grounding tools.
+ */
+export function semanticGoldenToTask(params: {
+  goldens: GoldenActivity[]
+  idPrefix: string
+  title: string
+  description: string
+  /**
+   * 1-based indices (over the *kept*, non-dropped blocks) to leave OUT of the
+   * `keep` block — they stay as day activities but aren't part of the golden
+   * task, so the miner is penalised for absorbing them (grounding precision).
+   * E.g. `[1]` drops a recorder-start / unrelated opener that bookends the task.
+   */
+  keepExclude?: number[]
+}): SemanticTaskResult {
+  const kept = params.goldens.filter((g) => !g.dropped)
+  if (kept.length === 0) {
+    throw new Error('Semantic golden has no non-dropped blocks to promote')
+  }
+
+  let cursor = 0
+  const activities: TaskFixtureActivity[] = kept.map((g, i) => {
+    const durationMin = Math.max(1, Math.round((g.endOffsetMs - g.startOffsetMs) / 60_000))
+    const activity: TaskFixtureActivity = {
+      id: `${params.idPrefix}-${String(i + 1).padStart(2, '0')}`,
+      offsetMin: cursor,
+      durationMin,
+      app: g.appName,
+      windowTitle: g.windowTitle ?? '',
+      tld: g.tld ?? null,
+      summary: g.summary,
+      ocrText: '',
+    }
+    cursor += durationMin
+    return activity
+  })
+
+  const exclude = new Set(params.keepExclude ?? [])
+  const inBlock = activities.filter((_, i) => !exclude.has(i + 1))
+  const blockActivities = inBlock.length > 0 ? inBlock : activities
+
+  return {
+    activities,
+    block: {
+      title: params.title,
+      apps: [...new Set(blockActivities.map((a) => a.app))],
+      activityIds: blockActivities.map((a) => a.id),
+      description: params.description,
+    },
+  }
+}
+
+/** Total minutes the task occupies (its last activity's end), 0 when empty. */
+function taskSpanMin(task: readonly TaskFixtureActivity[]): number {
+  return task.reduce((max, a) => Math.max(max, a.offsetMin + a.durationMin), 0)
+}
+
+/**
+ * Start offset (min from midnight) of the largest inter-activity gap in the
+ * noise day that fits `spanMin`. `fallbackMin` when nothing fits (or no noise).
+ */
+export function largestGapOffset(
+  noise: readonly TaskFixtureActivity[],
+  spanMin: number,
+  fallbackMin: number,
+): number {
+  if (noise.length === 0) return fallbackMin
+  const sorted = [...noise].sort((a, b) => a.offsetMin - b.offsetMin)
+  let bestStart = fallbackMin
+  let bestGap = -1
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const end = sorted[i].offsetMin + sorted[i].durationMin
+    const gap = sorted[i + 1].offsetMin - end
+    if (gap >= spanMin && gap > bestGap) {
+      bestGap = gap
+      bestStart = end + 1
+    }
+  }
+  return bestStart
+}
+
+/** Index into `sortedStarts` of the tightest run of `need` consecutive
+ *  activities (smallest wall-clock span) — the busiest stretch to weave the
+ *  task through, so its interruptions are genuinely back-to-back rather than
+ *  separated by idle gaps. */
+function densestRunStart(sortedStarts: number[], need: number): number {
+  let bestStart = 0
+  let bestSpan = Infinity
+  for (let s = 0; s + need <= sortedStarts.length; s++) {
+    const span = sortedStarts[s + need - 1] - sortedStarts[s]
+    if (span < bestSpan) {
+      bestSpan = span
+      bestStart = s
+    }
+  }
+  return bestStart
+}
+
+export interface PlaceOptions {
+  /** Multitask only: unrelated activities to interleave between consecutive
+   *  task steps (default 3). The task is woven into the day's tightest run of
+   *  activity so each step is separated by ~this many interruptions —
+   *  density-independent, unlike a wall-clock spread. */
+  interruptions?: number
+  /** Offset used when there is no noise to anchor to (default 583 ≈ 09:43). */
+  fallbackOffsetMin?: number
+}
+
+/**
+ * Assigns absolute `offsetMin` to a task's activities relative to a noise day,
+ * returning clones (the input task keeps its relative offsets).
+ *
+ * - `contiguous`: pack the task into the largest free gap, preserving its
+ *   back-to-back internal layout — the miner sees one uninterrupted episode.
+ * - `multitask`: weave the task's steps through the day's tightest run of
+ *   activity so `interruptions` unrelated activities sit *between* consecutive
+ *   steps — the miner must stitch the task across them and exclude them.
+ */
+export function placeTask(
+  task: readonly TaskFixtureActivity[],
+  noise: readonly TaskFixtureActivity[],
+  mode: PlacementMode,
+  opts: PlaceOptions = {},
+): TaskFixtureActivity[] {
+  const sorted = [...task].sort((a, b) => a.offsetMin - b.offsetMin)
+  const fallback = opts.fallbackOffsetMin ?? 583
+  const maxOffset = 24 * 60 - 1
+
+  if (mode === 'contiguous') {
+    const base = largestGapOffset(noise, taskSpanMin(sorted), fallback)
+    return sorted.map((a) => ({ ...a, offsetMin: Math.min(base + a.offsetMin, maxOffset) }))
+  }
+
+  // multitask: anchor each step to a noise activity, leaving `gap` unrelated
+  // activities between consecutive steps (density-independent interleaving).
+  const n = sorted.length
+  const gap = Math.max(0, opts.interruptions ?? 3)
+  const starts = noise.map((a) => a.offsetMin).sort((x, y) => x - y)
+  if (starts.length === 0) {
+    return sorted.map((a) => ({ ...a, offsetMin: Math.min(fallback + a.offsetMin, maxOffset) }))
+  }
+  const need = (n - 1) * (gap + 1) + 1
+  const runStart = densestRunStart(starts, Math.min(need, starts.length))
+  let prev = -1
+  return sorted.map((a, i) => {
+    const anchorIdx = Math.min(runStart + i * (gap + 1), starts.length - 1)
+    let off = starts[anchorIdx]
+    if (off <= prev) off = prev + 1
+    prev = off
+    return { ...a, offsetMin: Math.min(off, maxOffset) }
+  })
 }

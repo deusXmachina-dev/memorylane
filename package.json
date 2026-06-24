@@ -50,6 +50,7 @@
     "eval-summaries": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/eval-summaries.ts",
     "eval-tasks": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/eval-tasks.ts",
     "export-day": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/export-day.ts",
+    "build-task-fixture": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/build-task-fixture.ts",
     "backfill-golden-tld": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/backfill-golden-tld.ts",
     "mcpb:pack": "npx @anthropic-ai/mcpb pack mcpb/",
     "cli:build": "cd packages/cli && npm run build",
