@@ -1,14 +1,7 @@
-/**
- * macOS permissions management for Accessibility and Screen Recording.
- *
- * Exposes pure status getters and idempotent request triggers so the renderer
- * can drive the onboarding permission step. The legacy blocking
- * `ensurePermissions()` flow has been removed — startup no longer waits on a
- * native prompt, and we no longer auto-relaunch after screen-recording grant.
- */
+// macOS permissions management for Accessibility and Screen Recording.
 
 import { spawn } from 'node:child_process'
-import { systemPreferences, shell } from 'electron'
+import { systemPreferences, shell, desktopCapturer } from 'electron'
 import log from '../logger'
 
 export type PermissionState = 'granted' | 'denied' | 'unknown'
@@ -41,13 +34,8 @@ export function getPermissionStatus(): PermissionStatus {
   return { accessibility, screenRecording }
 }
 
-/**
- * Open the macOS System Settings pane for the given permission.
- *
- * Uses `open(1)` via child_process — more reliable than shell.openExternal
- * for `x-apple.systempreferences:` URLs, which silently no-op on some recent
- * macOS versions when System Settings is already running.
- */
+// Uses open(1) rather than shell.openExternal — the latter silently no-ops for
+// x-apple.systempreferences: URLs when System Settings is already running.
 export async function openPermissionSettings(
   kind: 'accessibility' | 'screenRecording',
 ): Promise<void> {
@@ -68,5 +56,27 @@ export async function openPermissionSettings(
       `[Permissions] spawn open failed (${err instanceof Error ? err.message : String(err)}); falling back to shell.openExternal`,
     )
     await shell.openExternal(url)
+  }
+}
+
+// macOS reports 'denied' for both not-determined and denied screen recording, so
+// we fall back to the attempt count: first click captures (registers the app and
+// fires the native prompt), later clicks open Settings (the prompt won't refire).
+let hasAttemptedScreenCapture = false
+
+export async function requestScreenRecording(): Promise<void> {
+  if (process.platform !== 'darwin') return
+  if (systemPreferences.getMediaAccessStatus('screen') === 'granted') return
+  if (hasAttemptedScreenCapture) {
+    await openPermissionSettings('screenRecording')
+    return
+  }
+  hasAttemptedScreenCapture = true
+  try {
+    await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } })
+  } catch (err) {
+    log.debug(
+      `[Permissions] screen capture attempt rejected: ${err instanceof Error ? err.message : String(err)}`,
+    )
   }
 }

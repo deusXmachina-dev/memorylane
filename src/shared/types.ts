@@ -394,7 +394,6 @@ export interface MainWindowAPI {
   // Permissions
   getPermissionStatus: () => Promise<PermissionStatus>
   requestPermission: (kind: PermissionKind) => Promise<PermissionStatus>
-  openPermissionSettings: (kind: PermissionKind) => Promise<void>
   onPermissionStatusChanged: (callback: (status: PermissionStatus) => void) => () => void
   // App lifecycle
   restartApp: () => Promise<void>

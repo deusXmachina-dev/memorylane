@@ -117,8 +117,6 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   getPermissionStatus: () => ipcRenderer.invoke('main-window:getPermissionStatus'),
   requestPermission: (kind: PermissionKind) =>
     ipcRenderer.invoke('main-window:requestPermission', kind),
-  openPermissionSettings: (kind: PermissionKind) =>
-    ipcRenderer.invoke('main-window:openPermissionSettings', kind),
   onPermissionStatusChanged: (callback: (status: unknown) => void) => {
     const handler = (_event: unknown, status: unknown): void => callback(status)
     ipcRenderer.on('main-window:permissionStatusChanged', handler)
