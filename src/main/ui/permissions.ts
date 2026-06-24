@@ -8,7 +8,7 @@
  */
 
 import { spawn } from 'node:child_process'
-import { systemPreferences, shell } from 'electron'
+import { systemPreferences, shell, desktopCapturer } from 'electron'
 import log from '../logger'
 
 export type PermissionState = 'granted' | 'denied' | 'unknown'
@@ -68,5 +68,23 @@ export async function openPermissionSettings(
       `[Permissions] spawn open failed (${err instanceof Error ? err.message : String(err)}); falling back to shell.openExternal`,
     )
     await shell.openExternal(url)
+  }
+}
+
+/**
+ * Trigger the screen-recording grant flow by attempting a capture. macOS only adds
+ * an app to the Screen Recording list once it tries to capture, so a throwaway 1px
+ * getSources() both registers the app and surfaces macOS's native consent prompt
+ * (which carries its own "Open System Settings" button) as the single surface.
+ */
+export async function requestScreenRecording(): Promise<void> {
+  if (process.platform !== 'darwin') return
+  if (systemPreferences.getMediaAccessStatus('screen') === 'granted') return
+  try {
+    await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } })
+  } catch (err) {
+    log.debug(
+      `[Permissions] screen capture attempt rejected: ${err instanceof Error ? err.message : String(err)}`,
+    )
   }
 }

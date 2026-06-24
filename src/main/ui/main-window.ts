@@ -24,7 +24,12 @@ import { getUpdateInfo, quitAndInstall } from '../updater'
 import { exportDatabaseZip } from './database-export'
 import { exportLogsZip } from './logs-export'
 import { importDatabase } from './database-import'
-import { getPermissionStatus, openPermissionSettings, type PermissionStatus } from './permissions'
+import {
+  getPermissionStatus,
+  openPermissionSettings,
+  requestScreenRecording,
+  type PermissionStatus,
+} from './permissions'
 import { integrations } from '../integrations'
 import { listInstalledApps } from '../apps/installed-apps'
 import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
@@ -1106,29 +1111,31 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
     return status
   })
-  // The Grant button just opens the relevant System Settings pane and starts
-  // polling. We intentionally do NOT fire the native TCC request here:
-  //   - `isTrustedAccessibilityClient(true)` shows a separate native modal in
-  //     addition to System Settings (confusing — two surfaces fighting for the
-  //     user's attention), and in dev gets attributed to the responsible app
-  //     (your IDE), not MemoryLane.
-  //   - `desktopCapturer.getSources()` would also surface that modal once.
-  // The app already shows up in System Settings via other paths (uIOhook
-  // listening for accessibility, capture attempts for screen recording).
+  // Accessibility just opens System Settings (uIOhook listening already registers it).
+  // Screen recording attempts a capture first so macOS lists the app — see
+  // requestScreenRecording.
   ipcMain.handle('main-window:requestPermission', async (_event, kind: string) => {
     log.info(`[Permissions] requestPermission(${kind})`)
     if (kind !== 'accessibility' && kind !== 'screenRecording') {
       log.warn(`[Permissions] requestPermission ignored — unknown kind: ${kind}`)
       return getPermissionStatus()
     }
-    await openPermissionSettings(kind)
+    if (kind === 'screenRecording') {
+      await requestScreenRecording()
+    } else {
+      await openPermissionSettings(kind)
+    }
     startPermissionPolling()
     return getPermissionStatus()
   })
   ipcMain.handle('main-window:openPermissionSettings', async (_event, kind: string) => {
     if (kind === 'accessibility' || kind === 'screenRecording') {
       log.info(`[Permissions] openPermissionSettings(${kind})`)
-      await openPermissionSettings(kind)
+      if (kind === 'screenRecording') {
+        await requestScreenRecording()
+      } else {
+        await openPermissionSettings(kind)
+      }
       startPermissionPolling()
     }
   })
