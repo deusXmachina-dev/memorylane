@@ -1111,9 +1111,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
     return status
   })
-  // Accessibility just opens System Settings (uIOhook listening already registers it).
-  // Screen recording attempts a capture first so macOS lists the app — see
-  // requestScreenRecording.
   ipcMain.handle('main-window:requestPermission', async (_event, kind: string) => {
     log.info(`[Permissions] requestPermission(${kind})`)
     if (kind !== 'accessibility' && kind !== 'screenRecording') {

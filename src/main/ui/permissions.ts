@@ -1,11 +1,4 @@
-/**
- * macOS permissions management for Accessibility and Screen Recording.
- *
- * Exposes pure status getters and idempotent request triggers so the renderer
- * can drive the onboarding permission step. The legacy blocking
- * `ensurePermissions()` flow has been removed — startup no longer waits on a
- * native prompt, and we no longer auto-relaunch after screen-recording grant.
- */
+// macOS permissions management for Accessibility and Screen Recording.
 
 import { spawn } from 'node:child_process'
 import { systemPreferences, shell, desktopCapturer } from 'electron'
@@ -41,13 +34,8 @@ export function getPermissionStatus(): PermissionStatus {
   return { accessibility, screenRecording }
 }
 
-/**
- * Open the macOS System Settings pane for the given permission.
- *
- * Uses `open(1)` via child_process — more reliable than shell.openExternal
- * for `x-apple.systempreferences:` URLs, which silently no-op on some recent
- * macOS versions when System Settings is already running.
- */
+// Uses open(1) rather than shell.openExternal — the latter silently no-ops for
+// x-apple.systempreferences: URLs when System Settings is already running.
 export async function openPermissionSettings(
   kind: 'accessibility' | 'screenRecording',
 ): Promise<void> {
@@ -71,25 +59,11 @@ export async function openPermissionSettings(
   }
 }
 
-// macOS can't tell us whether screen recording is "not-determined" vs "denied":
-// getMediaAccessStatus('screen') reports 'denied' for both, and getSources()
-// rejects with "Failed to get sources." whenever it isn't already granted — even
-// on the not-determined path where the native prompt *does* fire. So neither the
-// status nor the rejection discriminates. The only reliable signal is the click
-// count: the first attempt is treated as not-determined (capture → native prompt,
-// the single surface), and any subsequent attempt as denied (escalate to Settings,
-// since the prompt won't fire again).
+// macOS reports 'denied' for both not-determined and denied screen recording, so
+// we fall back to the attempt count: first click captures (registers the app and
+// fires the native prompt), later clicks open Settings (the prompt won't refire).
 let hasAttemptedScreenCapture = false
 
-/**
- * Trigger the screen-recording grant flow. macOS only adds an app to the Screen
- * Recording list once it tries to capture, so the first call does a throwaway 1px
- * getSources() that both registers the app and surfaces macOS's native consent
- * prompt (which carries its own "Open System Settings" button). If the user comes
- * back without having granted, the prompt won't fire again, so we open System
- * Settings instead — giving a denied user a way to grant without double-surfacing
- * Settings on the happy path.
- */
 export async function requestScreenRecording(): Promise<void> {
   if (process.platform !== 'darwin') return
   if (systemPreferences.getMediaAccessStatus('screen') === 'granted') return
