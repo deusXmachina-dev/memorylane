@@ -71,15 +71,33 @@ export async function openPermissionSettings(
   }
 }
 
+// macOS can't tell us whether screen recording is "not-determined" vs "denied":
+// getMediaAccessStatus('screen') reports 'denied' for both, and getSources()
+// rejects with "Failed to get sources." whenever it isn't already granted — even
+// on the not-determined path where the native prompt *does* fire. So neither the
+// status nor the rejection discriminates. The only reliable signal is the click
+// count: the first attempt is treated as not-determined (capture → native prompt,
+// the single surface), and any subsequent attempt as denied (escalate to Settings,
+// since the prompt won't fire again).
+let hasAttemptedScreenCapture = false
+
 /**
- * Trigger the screen-recording grant flow by attempting a capture. macOS only adds
- * an app to the Screen Recording list once it tries to capture, so a throwaway 1px
- * getSources() both registers the app and surfaces macOS's native consent prompt
- * (which carries its own "Open System Settings" button) as the single surface.
+ * Trigger the screen-recording grant flow. macOS only adds an app to the Screen
+ * Recording list once it tries to capture, so the first call does a throwaway 1px
+ * getSources() that both registers the app and surfaces macOS's native consent
+ * prompt (which carries its own "Open System Settings" button). If the user comes
+ * back without having granted, the prompt won't fire again, so we open System
+ * Settings instead — giving a denied user a way to grant without double-surfacing
+ * Settings on the happy path.
  */
 export async function requestScreenRecording(): Promise<void> {
   if (process.platform !== 'darwin') return
   if (systemPreferences.getMediaAccessStatus('screen') === 'granted') return
+  if (hasAttemptedScreenCapture) {
+    await openPermissionSettings('screenRecording')
+    return
+  }
+  hasAttemptedScreenCapture = true
   try {
     await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } })
   } catch (err) {
