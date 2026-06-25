@@ -1,4 +1,4 @@
-import { Lock, X, type LucideIcon } from 'lucide-react'
+import { X, type LucideIcon } from 'lucide-react'
 import { Button } from '@components/ui/button'
 
 export interface ExclusionRowItem {
@@ -50,10 +50,7 @@ export function ManagedRow({ entry, icon: Icon }: ManagedRowProps): React.JSX.El
     >
       {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" />}
       <span className="flex-1 truncate text-xs">{entry}</span>
-      <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-        <Lock aria-hidden="true" className="size-3.5" />
-        Set by your organization
-      </span>
+      <span className="shrink-0 text-xs text-muted-foreground">Set by your organization</span>
     </li>
   )
 }
