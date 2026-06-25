@@ -513,4 +513,107 @@ describe('DatabaseUploadSync', () => {
     // The first upload still completed (fetch fired exactly once).
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
+
+  it('uploads exactly once per local calendar day across hourly ticks', async () => {
+    vi.useFakeTimers()
+    // Start late on day 1 so the next hourly tick crosses local midnight.
+    vi.setSystemTime(new Date(2026, 5, 24, 23, 0, 0))
+    const fetchMock = mockFetchResponse(201, {
+      ok: true,
+      upload_id: 'up_1',
+      checksum_sha256: 'abc',
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const backupToFile = vi.fn(async (dest: string) => {
+      fs.writeFileSync(dest, 'dbcontent')
+    })
+    // Backing store that the gate actually reads/writes, like production.
+    let lastUploadAt: number | null = null
+
+    const sync = new DatabaseUploadSync({
+      storage: { backupToFile },
+      getDeviceId: () => 'device-hex-id',
+      isActivated: () => true,
+      isSyncEnabled: () => true,
+      getStripOptions: () => ({ detailLevel: 'summary' as const }),
+      getBackendUrl: () => 'http://localhost:8000/',
+      getLastUploadAt: () => lastUploadAt,
+      recordUploadAt: (ts) => {
+        lastUploadAt = ts
+      },
+      intervalMs: 60 * 60 * 1000,
+    })
+
+    sync.start()
+    await vi.advanceTimersByTimeAsync(0)
+    // Day 1 upload.
+    expect(backupToFile).toHaveBeenCalledTimes(1)
+
+    // Tick across midnight into day 2 — uploads again (new calendar day).
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000)
+    expect(backupToFile).toHaveBeenCalledTimes(2)
+
+    // Another hour, still day 2 — gated out, no second upload that day.
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000)
+    expect(backupToFile).toHaveBeenCalledTimes(2)
+
+    await sync.stop()
+  })
+
+  it('does not double-upload when a second trigger races before the first records', async () => {
+    vi.useFakeTimers()
+    const fetchMock = mockFetchResponse(201, {
+      ok: true,
+      upload_id: 'up_1',
+      checksum_sha256: 'abc',
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    let resolveBackup!: () => void
+    const backupGate = new Promise<void>((resolve) => {
+      resolveBackup = resolve
+    })
+    let firstCall = true
+    const backupToFile = vi.fn(async (dest: string) => {
+      if (firstCall) {
+        firstCall = false
+        await backupGate
+      }
+      fs.writeFileSync(dest, 'dbcontent')
+    })
+    let lastUploadAt: number | null = null
+
+    const sync = new DatabaseUploadSync({
+      storage: { backupToFile },
+      getDeviceId: () => 'device-hex-id',
+      isActivated: () => true,
+      isSyncEnabled: () => true,
+      getStripOptions: () => ({ detailLevel: 'summary' as const }),
+      getBackendUrl: () => 'http://localhost:8000/',
+      getLastUploadAt: () => lastUploadAt,
+      recordUploadAt: (ts) => {
+        lastUploadAt = ts
+      },
+      intervalMs: 1_000_000,
+    })
+
+    // Startup upload enters uploadOnce (gate passes, store still empty) and
+    // blocks on the backup gate.
+    sync.start()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(backupToFile).toHaveBeenCalledTimes(1)
+
+    // A second trigger (e.g. power resume) arrives mid-flight, before the first
+    // upload has recorded its timestamp — schedules a coalesced rerun.
+    sync.scheduleUploadIfStale('resume')
+
+    // Release the first upload: it records today's timestamp, then the rerun
+    // re-checks the daily gate and skips — exactly one upload, not two.
+    resolveBackup()
+    await sync.stop()
+
+    expect(backupToFile).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
 })
