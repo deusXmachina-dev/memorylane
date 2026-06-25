@@ -164,7 +164,7 @@ export function ExclusionPicker({
       </div>
 
       {normalizedQuery ? (
-        <ScrollArea className="h-48">
+        <ScrollArea className="h-42">
           <ul className="space-y-2 pr-2">
             {suggestions.map((item) => (
               <li
@@ -217,11 +217,11 @@ export function ExclusionPicker({
             icon={Icon}
           />
           {items === null ? (
-            <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-border px-3 text-center text-xs text-muted-foreground">
+            <div className="flex h-42 items-center justify-center rounded-lg border border-dashed border-border px-3 text-center text-xs text-muted-foreground">
               Loading…
             </div>
           ) : hasRows ? (
-            <ScrollArea className="h-48">
+            <ScrollArea className="h-42">
               <ul className="space-y-2 pr-2">
                 {(managed ?? []).map((entry) => (
                   <ManagedRow key={`managed:${entry}`} entry={entry} icon={Icon} />
@@ -237,7 +237,7 @@ export function ExclusionPicker({
               </ul>
             </ScrollArea>
           ) : (
-            <div className="flex h-48 flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-border px-3 text-center text-xs text-muted-foreground">
+            <div className="flex h-42 flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-border px-3 text-center text-xs text-muted-foreground">
               <p>{emptyPrimary}</p>
               <p>{emptySecondary}</p>
             </div>
