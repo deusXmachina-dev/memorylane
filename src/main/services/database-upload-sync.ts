@@ -5,7 +5,12 @@ import log from '../logger'
 import { isSameDay } from './pattern-detector/helpers'
 import { type StripOptions } from './strip-database-for-upload'
 
-const DEFAULT_UPLOAD_INTERVAL_MS = 24 * 60 * 60 * 1000
+// Poll cadence, NOT the upload frequency. We check hourly whether today's
+// upload has happened yet; the isSameDay gate deduplicates to exactly one
+// successful upload per local calendar day. A frequent idempotent poll (vs a
+// 24h interval pinned to launch time) is what guarantees every active day gets
+// its upload promptly after midnight and survives sleep/DST/clock drift.
+const DEFAULT_CHECK_INTERVAL_MS = 60 * 60 * 1000
 
 /** Strip + VACUUM + gzip a backup DB into the bytes to upload. */
 export type PrepareUpload = (tempPath: string, stripOptions: StripOptions) => Promise<Buffer>
@@ -65,7 +70,7 @@ export class DatabaseUploadSync {
     this.getBackendUrl = params.getBackendUrl
     this.getLastUploadAt = params.getLastUploadAt
     this.recordUploadAt = params.recordUploadAt
-    this.intervalMs = params.intervalMs ?? DEFAULT_UPLOAD_INTERVAL_MS
+    this.intervalMs = params.intervalMs ?? DEFAULT_CHECK_INTERVAL_MS
     this.prepareUpload = params.prepareUpload ?? defaultPrepareUpload
   }
 
@@ -83,10 +88,10 @@ export class DatabaseUploadSync {
   }
 
   /**
-   * Upload if we haven't already uploaded today, otherwise skip. Call this on
-   * startup and on power resume so uploads catch up regardless of how the
-   * sleep-fragile 24h interval drifts. Unlike `triggerUpload`, this is gated —
-   * it never forces a duplicate same-day upload.
+   * Upload if we haven't already uploaded today, otherwise skip. Driven by the
+   * hourly poll and also called on startup and power resume so uploads catch up
+   * regardless of when the app became active. Unlike `triggerUpload`, this is
+   * gated — it never forces a duplicate same-day upload.
    */
   public scheduleUploadIfStale(reason: string): void {
     const lastUploadAt = this.getLastUploadAt()
@@ -94,7 +99,7 @@ export class DatabaseUploadSync {
       log.debug(`[DatabaseUploadSync] Skipping upload (${reason}) — already uploaded today`)
       return
     }
-    void this.queueUpload(reason)
+    void this.queueUpload(reason, false)
   }
 
   public async triggerUpload(): Promise<{ success: boolean; error?: string }> {
@@ -102,7 +107,7 @@ export class DatabaseUploadSync {
       return { success: false, error: 'Sharing disabled' }
     }
     try {
-      await this.queueUpload('manual')
+      await this.queueUpload('manual', true)
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Upload failed'
@@ -119,7 +124,7 @@ export class DatabaseUploadSync {
     await this.inFlight.catch(() => undefined)
   }
 
-  private async queueUpload(reason: string): Promise<void> {
+  private async queueUpload(reason: string, force: boolean): Promise<void> {
     if (this.uploadRunning) {
       this.rerunRequested = true
       return this.inFlight
@@ -127,11 +132,15 @@ export class DatabaseUploadSync {
 
     this.uploadRunning = true
     let nextReason = reason
+    // The coalesced rerun re-evaluates the daily gate (force = false) so a
+    // trigger that lands mid-flight can't produce a second same-day upload.
+    let nextForce = force
     this.inFlight = (async () => {
       do {
         this.rerunRequested = false
-        await this.uploadOnce(nextReason)
+        await this.uploadOnce(nextReason, nextForce)
         nextReason = 'coalesced'
+        nextForce = false
       } while (this.rerunRequested)
     })()
       .catch((error) => {
@@ -144,10 +153,22 @@ export class DatabaseUploadSync {
     return this.inFlight
   }
 
-  private async uploadOnce(reason: string): Promise<void> {
+  private async uploadOnce(reason: string, force: boolean): Promise<void> {
     if (!this.isSyncEnabled()) {
       log.debug('[DatabaseUploadSync] Skipping upload — sharing disabled')
       return
+    }
+
+    // Re-check the daily gate at upload time (manual force bypasses). This is
+    // the authoritative once-per-day guard: it closes the race where two
+    // triggers both pass scheduleUploadIfStale before the first records, and
+    // re-gates the coalesced rerun.
+    if (!force) {
+      const lastUploadAt = this.getLastUploadAt()
+      if (lastUploadAt !== null && isSameDay(lastUploadAt, Date.now())) {
+        log.debug(`[DatabaseUploadSync] Skipping upload (${reason}) — already uploaded today`)
+        return
+      }
     }
 
     if (!this.isActivated()) {
