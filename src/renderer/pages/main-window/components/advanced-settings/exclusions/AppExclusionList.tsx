@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { AppWindow } from 'lucide-react'
 import type { InstalledApp } from '@types'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { ExclusionPicker, type ExclusionPickerItem } from './ExclusionPicker'
@@ -65,9 +66,11 @@ export function AppExclusionList({
       found={found}
       onDismissFound={onDismissFound}
       managed={managed}
-      placeholder="Search or type an app name to block (e.g. signal)"
-      loadingLabel="Loading applications..."
-      emptyLabel="No apps blocked yet. Type a name above to block it."
+      title="Apps"
+      icon={AppWindow}
+      placeholder="Search or type an app name (e.g. signal)"
+      emptyPrimary="No apps blocked yet."
+      emptySecondary="Type a name above to block it."
     />
   )
 }

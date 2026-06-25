@@ -62,10 +62,11 @@ export function WebsiteExclusionList({
       found={found}
       onDismissFound={onDismissFound}
       managed={managed}
+      title="Websites"
       icon={Globe}
-      placeholder="Search or type a domain to block (e.g. bank.com)"
-      loadingLabel="Loading websites..."
-      emptyLabel="No websites blocked yet. Type a domain above to block it."
+      placeholder="Search or type a domain (e.g. bank.com)"
+      emptyPrimary="No websites blocked yet."
+      emptySecondary="Type a domain above to block it."
     />
   )
 }

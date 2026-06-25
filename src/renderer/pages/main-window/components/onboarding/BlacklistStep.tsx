@@ -54,7 +54,6 @@ export function BlacklistStep({ api, onContinue }: BlacklistStepProps): React.JS
       />
 
       <ExclusionsManager
-        layout="stacked"
         excludedApps={settings.excludedApps}
         excludedUrlPatterns={settings.excludedUrlPatterns}
         onAppsChange={handleAppsChange}

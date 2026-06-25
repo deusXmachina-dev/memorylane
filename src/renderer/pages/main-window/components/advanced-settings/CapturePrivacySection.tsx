@@ -48,10 +48,9 @@ export function CapturePrivacySection({
 
   return (
     <div className="space-y-6">
-      <SettingsSection title="Privacy rules" icon={<ShieldCheck className="h-4 w-4" />}>
+      <SettingsSection title="Blocklist" icon={<ShieldCheck className="h-4 w-4" />}>
         <div className="py-3 first:pt-0 last:pb-0">
           <ExclusionsManager
-            layout="stacked"
             excludedApps={form.excludedApps}
             excludedUrlPatterns={form.excludedUrlPatterns}
             onAppsChange={commitAppsChange}

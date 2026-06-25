@@ -1,4 +1,4 @@
-import { Radar, Square } from 'lucide-react'
+import { Square, Target } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import type { ObservationState } from '@types'
 
@@ -40,7 +40,7 @@ export function ObserveButton({
       onClick={onStart}
       title={`Watch which apps and sites you use for ${formatDuration(durationMs)} (no screenshots), then add them to exclusions.`}
     >
-      <Radar />
+      <Target />
       Auto-fill from activity
     </Button>
   )

@@ -1,6 +1,5 @@
-import { Lock, type LucideIcon } from 'lucide-react'
+import { Lock, X, type LucideIcon } from 'lucide-react'
 import { Button } from '@components/ui/button'
-import { Switch } from '@components/ui/switch'
 
 export interface ExclusionRowItem {
   key: string
@@ -10,63 +9,59 @@ export interface ExclusionRowItem {
 
 interface ExclusionRowProps {
   item: ExclusionRowItem
-  checked: boolean
-  onToggle: (checked: boolean) => void
+  onRemove: () => void
   icon?: LucideIcon
 }
 
-export function ExclusionRow({
-  item,
-  checked,
-  onToggle,
-  icon: Icon,
-}: ExclusionRowProps): React.JSX.Element {
+export function ExclusionRow({ item, onRemove, icon: Icon }: ExclusionRowProps): React.JSX.Element {
   return (
-    <li className="flex items-center gap-2 px-2 py-1.5">
+    <li className="flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1">
       {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" />}
       <span className="flex-1 truncate text-xs">{item.label}</span>
-      <Switch checked={checked} onCheckedChange={onToggle} aria-label={`Exclude ${item.label}`} />
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        onClick={onRemove}
+        aria-label={`Stop blocking ${item.label}`}
+        className="shrink-0 text-muted-foreground hover:text-foreground"
+      >
+        <X />
+      </Button>
     </li>
   )
 }
 
-interface ManagedBlockProps {
-  entries: string[]
+interface ManagedRowProps {
+  entry: string
   icon?: LucideIcon
 }
 
 /**
- * Read-only block listing the org-provided (centrally-synced) exclusions. These
- * are enforced regardless of the user's own list and can't be turned off here,
- * so each row shows a locked, always-on toggle.
+ * Read-only row for an org-provided (centrally-synced) exclusion. These are
+ * enforced regardless of the user's own list and can't be removed here, so the
+ * row shows a locked "Set by your organization" label instead of a remove button.
  */
-export function ManagedBlock({ entries, icon: Icon }: ManagedBlockProps): React.JSX.Element | null {
-  if (entries.length === 0) return null
+export function ManagedRow({ entry, icon: Icon }: ManagedRowProps): React.JSX.Element {
   return (
-    <div className="space-y-1 rounded-lg border border-border bg-muted/20 p-2">
-      <div className="flex items-center gap-1.5 px-1">
-        <Lock aria-hidden="true" className="size-3 text-muted-foreground" />
-        <p className="text-[11px] font-medium text-muted-foreground">
-          Set by your organization ({entries.length})
-        </p>
-      </div>
-      <ul className="divide-y divide-border/60">
-        {entries.map((entry) => (
-          <li key={entry} className="flex items-center gap-2 px-1 py-1.5">
-            {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" />}
-            <span className="flex-1 truncate text-xs">{entry}</span>
-            <Switch checked disabled aria-label={`${entry} — set by your organization`} />
-          </li>
-        ))}
-      </ul>
-    </div>
+    <li
+      className="flex h-9 items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-1"
+      title="Set by your organization"
+    >
+      {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" />}
+      <span className="flex-1 truncate text-xs">{entry}</span>
+      <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+        <Lock aria-hidden="true" className="size-3.5" />
+        Set by your organization
+      </span>
+    </li>
   )
 }
 
 interface FoundBlockProps {
   items: ExclusionRowItem[]
   excludedTokens: Set<string>
-  onToggle: (matchToken: string, checked: boolean) => void
+  onAdd: (matchToken: string) => void
   onAddAll?: () => void
   onDismiss?: () => void
   icon?: LucideIcon
@@ -75,18 +70,18 @@ interface FoundBlockProps {
 export function FoundBlock({
   items,
   excludedTokens,
-  onToggle,
+  onAdd,
   onAddAll,
   onDismiss,
-  icon,
+  icon: Icon,
 }: FoundBlockProps): React.JSX.Element | null {
   if (items.length === 0) return null
   const allAlreadyExcluded = items.every((item) => excludedTokens.has(item.matchToken))
   return (
-    <div className="space-y-1 rounded-lg border border-primary/40 bg-primary/5 p-2">
-      <div className="flex items-center justify-between px-1">
-        <p className="text-[11px] font-medium text-foreground">Found ({items.length})</p>
-        <div className="flex items-center gap-3">
+    <div className="space-y-2 rounded-lg border border-primary/40 bg-primary/5 p-2">
+      <div className="flex items-center justify-between px-0.5">
+        <p className="text-xs font-medium text-foreground">Found ({items.length})</p>
+        <div className="flex items-center gap-2">
           {onAddAll && (
             <Button
               type="button"
@@ -111,16 +106,31 @@ export function FoundBlock({
           )}
         </div>
       </div>
-      <ul className="divide-y divide-border/60">
-        {items.map((item) => (
-          <ExclusionRow
-            key={item.key}
-            item={item}
-            checked={excludedTokens.has(item.matchToken)}
-            onToggle={(checked) => onToggle(item.matchToken, checked)}
-            icon={icon}
-          />
-        ))}
+      <ul className="space-y-2">
+        {items.map((item) => {
+          const added = excludedTokens.has(item.matchToken)
+          return (
+            <li
+              key={item.key}
+              className="flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1"
+            >
+              {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" />}
+              <span className="flex-1 truncate text-xs">{item.label}</span>
+              {added ? (
+                <span className="text-xs text-muted-foreground">Added</span>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  onClick={() => onAdd(item.matchToken)}
+                >
+                  Add
+                </Button>
+              )}
+            </li>
+          )
+        })}
       </ul>
     </div>
   )
