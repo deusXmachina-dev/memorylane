@@ -293,6 +293,52 @@ describe('capture blacklist coordinator', () => {
     expect(forwarded).toEqual([terminalEvent])
   })
 
+  it('enforces org-managed app exclusions immediately when synced', () => {
+    const suppressionTransitions: boolean[] = []
+
+    const coordinator = createCaptureBlacklistCoordinator({
+      initialExcludedApps: [],
+      forwardInteraction: () => undefined,
+      flushEvents: () => undefined,
+      setScreenshotsSuppressed: (suppressed) => {
+        suppressionTransitions.push(suppressed)
+      },
+    })
+
+    coordinator.handleInteraction(appChangeEvent('Slack'))
+    coordinator.setManagedExclusions({ apps: ['Slack'], urlPatterns: [] })
+
+    expect(suppressionTransitions).toEqual([true])
+  })
+
+  it('keeps managed exclusions enforced across a user settings change (union of both layers)', () => {
+    const forwarded: InteractionContext[] = []
+    const suppressionTransitions: boolean[] = []
+
+    const coordinator = createCaptureBlacklistCoordinator({
+      initialExcludedApps: ['signal'],
+      forwardInteraction: (event) => forwarded.push(event),
+      flushEvents: () => undefined,
+      setScreenshotsSuppressed: (suppressed) => {
+        suppressionTransitions.push(suppressed)
+      },
+    })
+
+    coordinator.setManagedExclusions({ apps: ['slack'], urlPatterns: [] })
+
+    // A later user settings save (no Slack) must not drop the managed entry.
+    coordinator.updateExclusions({
+      apps: ['signal'],
+      windowTitlePatterns: [],
+      urlPatterns: [],
+      excludePrivateBrowsing: true,
+    })
+
+    coordinator.handleInteraction(appChangeEvent('Slack'))
+    expect(suppressionTransitions).toEqual([true])
+    expect(forwarded).toHaveLength(0)
+  })
+
   it('suppresses screenshots when window title matches excluded wildcard', () => {
     const forwarded: InteractionContext[] = []
     const suppressionTransitions: boolean[] = []

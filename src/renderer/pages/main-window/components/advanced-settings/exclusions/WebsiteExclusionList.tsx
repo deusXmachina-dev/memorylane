@@ -9,10 +9,7 @@ interface WebsiteExclusionListProps {
   onChange: (next: string[]) => void
   found?: string[]
   onDismissFound?: () => void
-}
-
-function isWildcardPattern(value: string): boolean {
-  return value.includes('*') || value.includes('?')
+  managed?: string[]
 }
 
 export function WebsiteExclusionList({
@@ -20,6 +17,7 @@ export function WebsiteExclusionList({
   onChange,
   found,
   onDismissFound,
+  managed,
 }: WebsiteExclusionListProps): React.JSX.Element {
   const api = useMainWindowAPI()
   const [domains, setDomains] = useState<SeenDomain[] | null>(null)
@@ -41,21 +39,11 @@ export function WebsiteExclusionList({
     }
   }, [api])
 
-  const nonLegacyExcluded = useMemo(
-    () => excludedUrlPatterns.filter((e) => !isWildcardPattern(e)),
-    [excludedUrlPatterns],
-  )
-
-  const legacyEntries = useMemo(
-    () => excludedUrlPatterns.filter(isWildcardPattern),
-    [excludedUrlPatterns],
-  )
-
-  // Search pool = already-blocked domains ∪ seen domains from activity history.
+  // Search pool = already-blocked patterns ∪ seen domains from activity history.
   const items = useMemo<ExclusionPickerItem[] | null>(() => {
     if (domains === null) return null
     const byToken = new Map<string, ExclusionPickerItem>()
-    for (const e of nonLegacyExcluded) {
+    for (const e of excludedUrlPatterns) {
       const t = e.toLowerCase()
       byToken.set(t, { key: t, matchToken: t, label: t })
     }
@@ -64,7 +52,7 @@ export function WebsiteExclusionList({
       if (!byToken.has(t)) byToken.set(t, { key: t, matchToken: t, label: t })
     }
     return [...byToken.values()]
-  }, [domains, nonLegacyExcluded])
+  }, [domains, excludedUrlPatterns])
 
   return (
     <ExclusionPicker
@@ -73,9 +61,7 @@ export function WebsiteExclusionList({
       items={items}
       found={found}
       onDismissFound={onDismissFound}
-      legacyEntries={legacyEntries}
-      legacyTitle="Custom patterns"
-      emptyViewMode="excluded-only"
+      managed={managed}
       icon={Globe}
       placeholder="Search or type a domain to block (e.g. bank.com)"
       loadingLabel="Loading websites..."

@@ -120,6 +120,8 @@ interface MainWindowDependencies {
     urlPatterns: string[]
     excludePrivateBrowsing: boolean
   }) => void
+  // Org-provided (centrally-synced) exclusions, surfaced read-only in the UI.
+  getManagedExclusions: () => { apps: string[]; urlPatterns: string[] }
   databaseExportSync: {
     onSettingsChanged: () => Promise<void>
   }
@@ -212,6 +214,15 @@ export function sendStatusToRenderer(): void {
 export function sendObservationUpdate(state: ObservationState): void {
   if (!mainWindow || mainWindow.isDestroyed()) return
   mainWindow.webContents.send('main-window:observationUpdate', state)
+}
+
+/**
+ * Broadcast the current org-provided (centrally-synced) exclusions to the
+ * renderer so an open settings window reflects an IT edit without a reopen.
+ */
+export function sendManagedExclusionsUpdate(): void {
+  if (!mainWindow || mainWindow.isDestroyed() || !deps) return
+  mainWindow.webContents.send('main-window:managedExclusionsUpdate', deps.getManagedExclusions())
 }
 
 /**
@@ -962,6 +973,11 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   ipcMain.handle('main-window:getObservationState', () => {
     if (!deps) return null
     return deps.observation.getState()
+  })
+
+  ipcMain.handle('main-window:getManagedExclusions', () => {
+    if (!deps) return { apps: [], urlPatterns: [] }
+    return deps.getManagedExclusions()
   })
 
   // Installed apps + seen domains (for privacy UI)

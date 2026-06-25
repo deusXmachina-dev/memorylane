@@ -6,7 +6,7 @@ import { ScrollArea } from '@components/ui/scroll-area'
 import {
   ExclusionRow,
   FoundBlock,
-  LegacyEntriesBlock,
+  ManagedBlock,
   type ExclusionRowItem,
 } from './ExclusionSwitchList'
 
@@ -18,13 +18,13 @@ interface ExclusionPickerProps {
   items: ExclusionPickerItem[] | null
   found?: string[]
   onDismissFound?: () => void
-  legacyEntries: string[]
-  legacyTitle: string
-  emptyViewMode: 'all' | 'excluded-only'
   icon?: LucideIcon
   placeholder: string
   loadingLabel: string
   emptyLabel: string
+  /** Org-provided (centrally-synced) entries — shown read-only in a locked block
+   * and filtered out of the editable list. */
+  managed?: string[]
 }
 
 export function ExclusionPicker({
@@ -33,51 +33,61 @@ export function ExclusionPicker({
   items,
   found,
   onDismissFound,
-  legacyEntries,
-  legacyTitle,
-  emptyViewMode,
   icon,
   placeholder,
   loadingLabel,
   emptyLabel,
+  managed,
 }: ExclusionPickerProps): React.JSX.Element {
   const [query, setQuery] = useState('')
   const normalizedQuery = query.trim().toLowerCase()
 
   const excludedTokens = useMemo(() => new Set(excluded.map((e) => e.toLowerCase())), [excluded])
+  const managedTokens = useMemo(
+    () => new Set((managed ?? []).map((m) => m.toLowerCase())),
+    [managed],
+  )
 
-  const itemsByToken = useMemo(() => {
-    const map = new Map<string, ExclusionPickerItem>()
-    for (const item of items ?? []) map.set(item.matchToken, item)
-    return map
-  }, [items])
+  // Editable pool = everything except the org-managed entries (those only ever
+  // render in the locked block above).
+  const editableItems = useMemo(
+    () => (items ?? []).filter((i) => !managedTokens.has(i.matchToken)),
+    [items, managedTokens],
+  )
+  const itemsByToken = useMemo(
+    () => new Map(editableItems.map((i) => [i.matchToken, i])),
+    [editableItems],
+  )
 
   const foundItems = useMemo<ExclusionPickerItem[]>(() => {
     if (!found?.length) return []
-    return found.map((token) => {
-      const normalized = token.toLowerCase()
-      const known = itemsByToken.get(normalized)
-      return { key: normalized, matchToken: normalized, label: known?.label ?? token }
-    })
-  }, [found, itemsByToken])
+    return found
+      .filter((token) => !managedTokens.has(token.toLowerCase()))
+      .map((token) => {
+        const normalized = token.toLowerCase()
+        return {
+          key: normalized,
+          matchToken: normalized,
+          label: itemsByToken.get(normalized)?.label ?? token,
+        }
+      })
+  }, [found, itemsByToken, managedTokens])
 
   const visibleItems = useMemo<ExclusionPickerItem[]>(() => {
     if (!items) return []
     if (normalizedQuery) {
-      return items.filter(
+      return editableItems.filter(
         (i) =>
           i.label.toLowerCase().includes(normalizedQuery) || i.matchToken.includes(normalizedQuery),
       )
     }
-    if (emptyViewMode === 'excluded-only') {
-      return items.filter((i) => excludedTokens.has(i.matchToken))
-    }
-    return items
-  }, [items, normalizedQuery, emptyViewMode, excludedTokens])
+    return editableItems.filter((i) => excludedTokens.has(i.matchToken))
+  }, [items, editableItems, normalizedQuery, excludedTokens])
 
   const canAddCustom =
     normalizedQuery.length > 0 &&
     !excludedTokens.has(normalizedQuery) &&
+    !managedTokens.has(normalizedQuery) &&
     !itemsByToken.has(normalizedQuery)
 
   const toggle = (token: string, checked: boolean): void => {
@@ -101,10 +111,6 @@ export function ExclusionPicker({
     onDismissFound?.()
   }
 
-  const removeLegacy = (entry: string): void => {
-    onChange(excluded.filter((e) => e.toLowerCase() !== entry.toLowerCase()))
-  }
-
   const addCustom = (): void => {
     if (!canAddCustom) return
     onChange([...excluded, normalizedQuery])
@@ -113,6 +119,8 @@ export function ExclusionPicker({
 
   return (
     <div className="flex flex-col gap-2">
+      <ManagedBlock entries={managed ?? []} icon={icon} />
+
       <FoundBlock
         items={foundItems}
         excludedTokens={excludedTokens}
@@ -187,8 +195,6 @@ export function ExclusionPicker({
           </ScrollArea>
         )}
       </div>
-
-      <LegacyEntriesBlock title={legacyTitle} entries={legacyEntries} onRemove={removeLegacy} />
     </div>
   )
 }

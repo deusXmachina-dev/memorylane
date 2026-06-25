@@ -1,4 +1,4 @@
-import { Trash2, type LucideIcon } from 'lucide-react'
+import { Lock, type LucideIcon } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import { Switch } from '@components/ui/switch'
 
@@ -27,6 +27,39 @@ export function ExclusionRow({
       <span className="flex-1 truncate text-xs">{item.label}</span>
       <Switch checked={checked} onCheckedChange={onToggle} aria-label={`Exclude ${item.label}`} />
     </li>
+  )
+}
+
+interface ManagedBlockProps {
+  entries: string[]
+  icon?: LucideIcon
+}
+
+/**
+ * Read-only block listing the org-provided (centrally-synced) exclusions. These
+ * are enforced regardless of the user's own list and can't be turned off here,
+ * so each row shows a locked, always-on toggle.
+ */
+export function ManagedBlock({ entries, icon: Icon }: ManagedBlockProps): React.JSX.Element | null {
+  if (entries.length === 0) return null
+  return (
+    <div className="space-y-1 rounded-lg border border-border bg-muted/20 p-2">
+      <div className="flex items-center gap-1.5 px-1">
+        <Lock aria-hidden="true" className="size-3 text-muted-foreground" />
+        <p className="text-[11px] font-medium text-muted-foreground">
+          Set by your organization ({entries.length})
+        </p>
+      </div>
+      <ul className="divide-y divide-border/60">
+        {entries.map((entry) => (
+          <li key={entry} className="flex items-center gap-2 px-1 py-1.5">
+            {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" />}
+            <span className="flex-1 truncate text-xs">{entry}</span>
+            <Switch checked disabled aria-label={`${entry} — set by your organization`} />
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 
@@ -87,45 +120,6 @@ export function FoundBlock({
             onToggle={(checked) => onToggle(item.matchToken, checked)}
             icon={icon}
           />
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-interface LegacyEntriesBlockProps {
-  title: string
-  entries: string[]
-  onRemove: (entry: string) => void
-}
-
-export function LegacyEntriesBlock({
-  title,
-  entries,
-  onRemove,
-}: LegacyEntriesBlockProps): React.JSX.Element | null {
-  if (entries.length === 0) return null
-  return (
-    <div className="space-y-1 rounded-lg border border-border bg-muted/20 p-2">
-      <p className="px-1 text-[11px] font-medium text-muted-foreground">
-        {title} ({entries.length})
-      </p>
-      <ul className="space-y-0.5">
-        {entries.map((entry) => (
-          <li
-            key={entry}
-            className="flex items-center justify-between gap-2 rounded px-1 py-1 hover:bg-muted/40"
-          >
-            <code className="flex-1 truncate text-[11px]">{entry}</code>
-            <Button
-              size="xs"
-              variant="ghost"
-              onClick={() => onRemove(entry)}
-              aria-label={`Remove ${entry}`}
-            >
-              <Trash2 className="size-3" />
-            </Button>
-          </li>
         ))}
       </ul>
     </div>

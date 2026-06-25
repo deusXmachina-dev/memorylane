@@ -54,6 +54,7 @@ export interface MainRuntime {
     urlPatterns: string[]
     excludePrivateBrowsing: boolean
   }): void
+  setManagedExclusions(managed: { apps: string[]; urlPatterns: string[] }): void
   purgeAll(): Promise<void>
   dispose(): Promise<void>
 }
@@ -251,6 +252,9 @@ export async function createMainRuntime(params: {
     evalFixturesRoot,
     updateExclusions(exclusions): void {
       blacklistCoordinator.updateExclusions(exclusions)
+    },
+    setManagedExclusions(managed): void {
+      blacklistCoordinator.setManagedExclusions(managed)
     },
     async purgeAll(): Promise<void> {
       const wasCapturing = capture.isCapturingNow()

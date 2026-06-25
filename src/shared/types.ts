@@ -321,6 +321,13 @@ export interface PatternDetailInfo {
   sightings: PatternSightingInfo[]
 }
 
+/** The tenant's centrally-synced capture blacklist, surfaced read-only in the
+ * exclusions UI so users can see what their organization enforces. */
+export interface ManagedExclusions {
+  apps: string[]
+  urlPatterns: string[]
+}
+
 export interface MainWindowAPI {
   getEditionConfig: () => Promise<AppEditionConfig>
   getAccessState: () => Promise<AccessState>
@@ -391,6 +398,9 @@ export interface MainWindowAPI {
   stopObservation: () => Promise<ObservationState>
   getObservationState: () => Promise<ObservationState>
   onObservationUpdate: (callback: (state: ObservationState) => void) => () => void
+  // Org-provided (centrally-synced) capture exclusions — read-only in the app.
+  getManagedExclusions: () => Promise<ManagedExclusions>
+  onManagedExclusionsUpdate: (callback: (managed: ManagedExclusions) => void) => () => void
   // Permissions
   getPermissionStatus: () => Promise<PermissionStatus>
   requestPermission: (kind: PermissionKind) => Promise<PermissionStatus>

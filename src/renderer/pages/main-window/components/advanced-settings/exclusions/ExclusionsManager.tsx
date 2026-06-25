@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { HelpCircle } from 'lucide-react'
 import { Tabs, TabsList, TabsTab, TabsPanel } from '@components/ui/tabs'
-import type { ObservationState } from '@types'
+import type { ManagedExclusions, ObservationState } from '@types'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { AppExclusionList } from './AppExclusionList'
 import { WebsiteExclusionList } from './WebsiteExclusionList'
@@ -49,6 +49,7 @@ export function ExclusionsManager({
 }: ExclusionsManagerProps): React.JSX.Element {
   const api = useMainWindowAPI()
   const [observation, setObservation] = useState<ObservationState | null>(null)
+  const [managed, setManaged] = useState<ManagedExclusions>({ apps: [], urlPatterns: [] })
   const [dismissedAppsAt, setDismissedAppsAt] = useState(() => readDismissedAt(DISMISSED_APPS_KEY))
   const [dismissedUrlsAt, setDismissedUrlsAt] = useState(() => readDismissedAt(DISMISSED_URLS_KEY))
 
@@ -59,6 +60,21 @@ export function ExclusionsManager({
       setObservation(initial)
     })
     const unsubscribe = api.onObservationUpdate((next) => setObservation(next))
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [api])
+
+  // Org-provided exclusions are pushed when IT edits them; fetch once and keep
+  // in sync so the locked rows reflect the current tenant policy live.
+  useEffect(() => {
+    let cancelled = false
+    void api.getManagedExclusions().then((initial) => {
+      if (cancelled) return
+      setManaged(initial)
+    })
+    const unsubscribe = api.onManagedExclusionsUpdate((next) => setManaged(next))
     return () => {
       cancelled = true
       unsubscribe()
@@ -156,6 +172,7 @@ export function ExclusionsManager({
           onChange={onAppsChange}
           found={foundApps}
           onDismissFound={dismissFoundApps}
+          managed={managed.apps}
         />
 
         <div className="space-y-0.5">
@@ -167,6 +184,7 @@ export function ExclusionsManager({
           onChange={onUrlsChange}
           found={foundUrls}
           onDismissFound={dismissFoundUrls}
+          managed={managed.urlPatterns}
         />
       </div>
     )
@@ -194,6 +212,7 @@ export function ExclusionsManager({
             onChange={onAppsChange}
             found={foundApps}
             onDismissFound={dismissFoundApps}
+            managed={managed.apps}
           />
         </TabsPanel>
         <TabsPanel value="websites" className="pt-2" keepMounted>
@@ -202,6 +221,7 @@ export function ExclusionsManager({
             onChange={onUrlsChange}
             found={foundUrls}
             onDismissFound={dismissFoundUrls}
+            managed={managed.urlPatterns}
           />
         </TabsPanel>
       </Tabs>

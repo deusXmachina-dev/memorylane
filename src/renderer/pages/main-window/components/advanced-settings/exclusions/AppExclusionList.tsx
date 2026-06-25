@@ -8,6 +8,7 @@ interface AppExclusionListProps {
   onChange: (next: string[]) => void
   found?: string[]
   onDismissFound?: () => void
+  managed?: string[]
 }
 
 export function AppExclusionList({
@@ -15,6 +16,7 @@ export function AppExclusionList({
   onChange,
   found,
   onDismissFound,
+  managed,
 }: AppExclusionListProps): React.JSX.Element {
   const api = useMainWindowAPI()
   const [apps, setApps] = useState<InstalledApp[] | null>(null)
@@ -62,9 +64,7 @@ export function AppExclusionList({
       items={items}
       found={found}
       onDismissFound={onDismissFound}
-      legacyEntries={[]}
-      legacyTitle=""
-      emptyViewMode="excluded-only"
+      managed={managed}
       placeholder="Search or type an app name to block (e.g. signal)"
       loadingLabel="Loading applications..."
       emptyLabel="No apps blocked yet. Type a name above to block it."
