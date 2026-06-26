@@ -105,7 +105,6 @@ describe('capture blacklist coordinator', () => {
     coordinator.handleInteraction(appChangeEvent('KeePassXC'))
     coordinator.updateExclusions({
       apps: ['keepassxc'],
-      windowTitlePatterns: [],
       urlPatterns: [],
       excludePrivateBrowsing: true,
     })
@@ -255,7 +254,6 @@ describe('capture blacklist coordinator', () => {
 
     coordinator.updateExclusions({
       apps: [],
-      windowTitlePatterns: [],
       urlPatterns: [],
       excludePrivateBrowsing: false,
     })
@@ -329,40 +327,11 @@ describe('capture blacklist coordinator', () => {
     // A later user settings save (no Slack) must not drop the managed entry.
     coordinator.updateExclusions({
       apps: ['signal'],
-      windowTitlePatterns: [],
       urlPatterns: [],
       excludePrivateBrowsing: true,
     })
 
     coordinator.handleInteraction(appChangeEvent('Slack'))
-    expect(suppressionTransitions).toEqual([true])
-    expect(forwarded).toHaveLength(0)
-  })
-
-  it('suppresses screenshots when window title matches excluded wildcard', () => {
-    const forwarded: InteractionContext[] = []
-    const suppressionTransitions: boolean[] = []
-    let flushCount = 0
-
-    const coordinator = createCaptureBlacklistCoordinator({
-      initialExcludedApps: [],
-      initialExcludedWindowTitlePatterns: ['*internal payroll*'],
-      forwardInteraction: (event) => forwarded.push(event),
-      flushEvents: () => {
-        flushCount++
-      },
-      setScreenshotsSuppressed: (suppressed) => {
-        suppressionTransitions.push(suppressed)
-      },
-    })
-
-    coordinator.handleInteraction(
-      appChangeEvent('Google Chrome', {
-        title: 'Internal Payroll - Google Chrome',
-      }),
-    )
-
-    expect(flushCount).toBe(1)
     expect(suppressionTransitions).toEqual([true])
     expect(forwarded).toHaveLength(0)
   })
@@ -394,5 +363,32 @@ describe('capture blacklist coordinator', () => {
     expect(flushCount).toBe(1)
     expect(suppressionTransitions).toEqual([true])
     expect(forwarded).toHaveLength(0)
+  })
+
+  it('matches a url prefix but not the same domain in another query', () => {
+    const suppressionTransitions: boolean[] = []
+    const coordinator = createCaptureBlacklistCoordinator({
+      initialExcludedApps: [],
+      initialExcludedUrlPatterns: ['https://linear.app'],
+      initialExcludePrivateBrowsing: false,
+      forwardInteraction: () => undefined,
+      flushEvents: () => undefined,
+      setScreenshotsSuppressed: (suppressed) => {
+        suppressionTransitions.push(suppressed)
+      },
+    })
+
+    coordinator.handleInteraction(
+      appChangeEvent('Google Chrome', {
+        title: 'Search',
+        url: 'https://google.com/?q=linear.app',
+      }),
+    )
+    expect(suppressionTransitions).toEqual([])
+
+    coordinator.handleInteraction(
+      appChangeEvent('Google Chrome', { title: 'Linear', url: 'https://linear.app/issue/123' }),
+    )
+    expect(suppressionTransitions).toEqual([true])
   })
 })

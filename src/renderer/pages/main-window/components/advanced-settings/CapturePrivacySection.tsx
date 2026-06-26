@@ -13,11 +13,7 @@ interface CapturePrivacySectionProps {
   onToggleRecordingHotkey: () => void
   onAutoStartEnabledChange: (enabled: boolean) => void
   onExcludePrivateBrowsingChange: (enabled: boolean) => void
-  onExcludedRulesCommit: (rules: {
-    excludedApps: string[]
-    excludedWindowTitlePatterns: string[]
-    excludedUrlPatterns: string[]
-  }) => void
+  onExcludedRulesCommit: (rules: { excludedApps: string[]; excludedUrlPatterns: string[] }) => void
   onObserved: () => void
 }
 
@@ -33,7 +29,6 @@ export function CapturePrivacySection({
   const commitAppsChange = (nextApps: string[]): void => {
     onExcludedRulesCommit({
       excludedApps: nextApps,
-      excludedWindowTitlePatterns: form.excludedWindowTitlePatterns,
       excludedUrlPatterns: form.excludedUrlPatterns,
     })
   }
@@ -41,7 +36,6 @@ export function CapturePrivacySection({
   const commitUrlsChange = (nextUrls: string[]): void => {
     onExcludedRulesCommit({
       excludedApps: form.excludedApps,
-      excludedWindowTitlePatterns: form.excludedWindowTitlePatterns,
       excludedUrlPatterns: nextUrls,
     })
   }

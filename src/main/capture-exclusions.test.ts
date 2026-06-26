@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   getExcludedAppMatch,
   getExcludedUrlMatch,
-  getExcludedWindowTitleMatch,
   normalizeExcludedApps,
   normalizeWildcardPatterns,
 } from './capture-exclusions'
@@ -77,30 +76,6 @@ describe('capture exclusions', () => {
     expect(normalizeWildcardPatterns(['  *github*  ', '*github*', '', '  '])).toEqual(['*github*'])
   })
 
-  it('matches window title wildcard patterns', () => {
-    const patterns = normalizeWildcardPatterns(['*incognito*', 'private ?indow*'])
-    expect(
-      getExcludedWindowTitleMatch(
-        {
-          title: 'New Incognito Tab - Google Chrome (Incognito)',
-        },
-        patterns,
-      ),
-    ).toBe('*incognito*')
-  })
-
-  it('treats plain window title patterns as substring matches', () => {
-    const patterns = normalizeWildcardPatterns(['bank statement', 'lab results'])
-    expect(
-      getExcludedWindowTitleMatch(
-        {
-          title: 'Checking - Bank Statement - March',
-        },
-        patterns,
-      ),
-    ).toBe('bank statement')
-  })
-
   it('matches url wildcard patterns', () => {
     const patterns = normalizeWildcardPatterns(['*://*.github.com/*'])
     expect(
@@ -113,15 +88,32 @@ describe('capture exclusions', () => {
     ).toBe('*://*.github.com/*')
   })
 
-  it('treats plain url patterns as substring matches', () => {
+  it('matches a url pattern as a prefix of the full url', () => {
+    const patterns = normalizeWildcardPatterns(['https://portal.example.com'])
+    expect(
+      getExcludedUrlMatch({ url: 'https://portal.example.com/mychart/visits' }, patterns),
+    ).toBe('https://portal.example.com')
+  })
+
+  it('does not match a plain pattern that only appears mid-url', () => {
     const patterns = normalizeWildcardPatterns(['mychart', 'bank.com'])
     expect(
-      getExcludedUrlMatch(
-        {
-          url: 'https://portal.example.com/mychart/visits',
-        },
-        patterns,
-      ),
-    ).toBe('mychart')
+      getExcludedUrlMatch({ url: 'https://portal.example.com/mychart/visits' }, patterns),
+    ).toBeNull()
+  })
+
+  it('matches anywhere only with an explicit wildcard', () => {
+    const patterns = normalizeWildcardPatterns(['*mychart*'])
+    expect(
+      getExcludedUrlMatch({ url: 'https://portal.example.com/mychart/visits' }, patterns),
+    ).toBe('*mychart*')
+  })
+
+  it('does not suppress a different site that mentions the domain in a query param', () => {
+    const patterns = normalizeWildcardPatterns(['https://linear.app'])
+    expect(getExcludedUrlMatch({ url: 'https://google.com/?q=linear.app' }, patterns)).toBeNull()
+    expect(getExcludedUrlMatch({ url: 'https://linear.app/issue/123' }, patterns)).toBe(
+      'https://linear.app',
+    )
   })
 })

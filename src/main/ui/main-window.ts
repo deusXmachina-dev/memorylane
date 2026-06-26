@@ -116,7 +116,6 @@ interface MainWindowDependencies {
   reconfigureCaptureHotkey: (accelerator: string) => { success: boolean; error?: string }
   updateExclusions: (exclusions: {
     apps: string[]
-    windowTitlePatterns: string[]
     urlPatterns: string[]
     excludePrivateBrowsing: boolean
   }) => void
@@ -414,11 +413,7 @@ function logCaptureSettingsChanges(previous: CaptureSettings, updated: CaptureSe
       )
     }
   }
-  const arrayFields: (keyof CaptureSettings)[] = [
-    'excludedApps',
-    'excludedWindowTitlePatterns',
-    'excludedUrlPatterns',
-  ]
+  const arrayFields: (keyof CaptureSettings)[] = ['excludedApps', 'excludedUrlPatterns']
   for (const field of arrayFields) {
     const before = previous[field] as string[]
     const after = updated[field] as string[]
@@ -1032,7 +1027,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         })
         deps.updateExclusions({
           apps: updated.excludedApps,
-          windowTitlePatterns: updated.excludedWindowTitlePatterns,
           urlPatterns: updated.excludedUrlPatterns,
           excludePrivateBrowsing: updated.excludePrivateBrowsing,
         })
@@ -1094,7 +1088,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       })
       deps.updateExclusions({
         apps: updated.excludedApps,
-        windowTitlePatterns: updated.excludedWindowTitlePatterns,
         urlPatterns: updated.excludedUrlPatterns,
         excludePrivateBrowsing: updated.excludePrivateBrowsing,
       })

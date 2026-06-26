@@ -3,7 +3,6 @@ import log from './logger'
 import {
   getExcludedAppMatch,
   getExcludedUrlMatch,
-  getExcludedWindowTitleMatch,
   normalizeExcludedApps,
   normalizeWildcardPatterns,
 } from './capture-exclusions'
@@ -13,19 +12,16 @@ export interface CaptureBlacklistCoordinator {
   handleInteraction(event: InteractionContext): void
   updateExclusions(exclusions: {
     apps: string[]
-    windowTitlePatterns: string[]
     urlPatterns: string[]
     excludePrivateBrowsing: boolean
   }): void
   /** The org's centrally-synced blacklist (enterprise). Unioned with the user's
-   * own exclusions for app/URL matching; window titles and private browsing are
-   * user-only and unaffected. */
+   * own exclusions for app/URL matching; private browsing stays user-only. */
   setManagedExclusions(managed: { apps: string[]; urlPatterns: string[] }): void
 }
 
 export function createCaptureBlacklistCoordinator(params: {
   initialExcludedApps?: string[]
-  initialExcludedWindowTitlePatterns?: string[]
   initialExcludedUrlPatterns?: string[]
   initialExcludePrivateBrowsing?: boolean
   onPrivacyBlockingChanged?: (blocked: boolean) => void
@@ -35,15 +31,12 @@ export function createCaptureBlacklistCoordinator(params: {
 }): CaptureBlacklistCoordinator {
   // Two layers — the device user's own exclusions and the org's centrally-synced
   // ones. Effective apps/URLs (used for matching) are the union of both,
-  // recomputed whenever either layer changes. Window titles and private browsing
-  // are user-only; the managed layer never contributes them.
+  // recomputed whenever either layer changes. Private browsing is user-only; the
+  // managed layer never contributes it.
   let userExcludedApps = normalizeExcludedApps(params.initialExcludedApps)
   let userExcludedUrlPatterns = normalizeWildcardPatterns(params.initialExcludedUrlPatterns)
   let managedExcludedApps: string[] = []
   let managedExcludedUrlPatterns: string[] = []
-  let excludedWindowTitlePatterns = normalizeWildcardPatterns(
-    params.initialExcludedWindowTitlePatterns,
-  )
   let excludePrivateBrowsing = params.initialExcludePrivateBrowsing ?? true
 
   let excludedApps = new Set<string>()
@@ -54,7 +47,6 @@ export function createCaptureBlacklistCoordinator(params: {
   }
   recomputeEffective()
   let blockedByExcludedApp = false
-  let blockedByExcludedWindowTitle = false
   let blockedByExcludedUrl = false
   let blockedByAnonymousBrowser = false
   const privateBrowserWindowHandles = new Set<string>()
@@ -89,28 +81,18 @@ export function createCaptureBlacklistCoordinator(params: {
 
   const setBlocked = (
     excludedAppMatch: string | null,
-    excludedWindowTitleMatch: string | null,
     excludedUrlMatch: string | null,
     anonymousModeMatch: string | null,
     reason: string,
   ): void => {
     const nextBlockedByExcludedApp = excludedAppMatch !== null
-    const nextBlockedByExcludedWindowTitle = excludedWindowTitleMatch !== null
     const nextBlockedByExcludedUrl = excludedUrlMatch !== null
     const nextBlockedByAnonymousBrowser = anonymousModeMatch !== null
-    const wasBlocked =
-      blockedByExcludedApp ||
-      blockedByExcludedWindowTitle ||
-      blockedByExcludedUrl ||
-      blockedByAnonymousBrowser
+    const wasBlocked = blockedByExcludedApp || blockedByExcludedUrl || blockedByAnonymousBrowser
     const blocked =
-      nextBlockedByExcludedApp ||
-      nextBlockedByExcludedWindowTitle ||
-      nextBlockedByExcludedUrl ||
-      nextBlockedByAnonymousBrowser
+      nextBlockedByExcludedApp || nextBlockedByExcludedUrl || nextBlockedByAnonymousBrowser
 
     blockedByExcludedApp = nextBlockedByExcludedApp
-    blockedByExcludedWindowTitle = nextBlockedByExcludedWindowTitle
     blockedByExcludedUrl = nextBlockedByExcludedUrl
     blockedByAnonymousBrowser = nextBlockedByAnonymousBrowser
 
@@ -125,9 +107,6 @@ export function createCaptureBlacklistCoordinator(params: {
       params.flushEvents()
       const details: string[] = []
       if (excludedAppMatch !== null) details.push(`excluded_app=${excludedAppMatch}`)
-      if (excludedWindowTitleMatch !== null) {
-        details.push(`excluded_window_title=${excludedWindowTitleMatch}`)
-      }
       if (excludedUrlMatch !== null) details.push(`excluded_url=${excludedUrlMatch}`)
       if (anonymousModeMatch !== null) details.push(`anonymous_mode=${anonymousModeMatch}`)
       log.info(`[Blacklist] Entering blocked mode (${reason}: ${details.join(', ')})`)
@@ -142,28 +121,13 @@ export function createCaptureBlacklistCoordinator(params: {
     activeWindow: InteractionContext['activeWindow'],
   ): boolean => {
     const excludedAppMatch = getExcludedAppMatch(activeWindow, excludedApps)
-    const excludedWindowTitleMatch = getExcludedWindowTitleMatch(
-      activeWindow,
-      excludedWindowTitlePatterns,
-    )
     const excludedUrlMatch = getExcludedUrlMatch(activeWindow, excludedUrlPatterns)
     const detectedAnonymousModeMatch = excludePrivateBrowsing
       ? getAnonymousModeBrowserMatch(activeWindow)
       : null
     const anonymousModeMatch = resolveAnonymousModeMatch(activeWindow, detectedAnonymousModeMatch)
-    setBlocked(
-      excludedAppMatch,
-      excludedWindowTitleMatch,
-      excludedUrlMatch,
-      anonymousModeMatch,
-      reason,
-    )
-    return (
-      excludedAppMatch === null &&
-      excludedWindowTitleMatch === null &&
-      excludedUrlMatch === null &&
-      anonymousModeMatch === null
-    )
+    setBlocked(excludedAppMatch, excludedUrlMatch, anonymousModeMatch, reason)
+    return excludedAppMatch === null && excludedUrlMatch === null && anonymousModeMatch === null
   }
 
   return {
@@ -178,19 +142,13 @@ export function createCaptureBlacklistCoordinator(params: {
         return
       }
 
-      if (
-        blockedByExcludedApp ||
-        blockedByExcludedWindowTitle ||
-        blockedByExcludedUrl ||
-        blockedByAnonymousBrowser
-      ) {
+      if (blockedByExcludedApp || blockedByExcludedUrl || blockedByAnonymousBrowser) {
         return
       }
       params.forwardInteraction(event)
     },
     updateExclusions(exclusions): void {
       userExcludedApps = normalizeExcludedApps(exclusions.apps)
-      excludedWindowTitlePatterns = normalizeWildcardPatterns(exclusions.windowTitlePatterns)
       userExcludedUrlPatterns = normalizeWildcardPatterns(exclusions.urlPatterns)
       excludePrivateBrowsing = exclusions.excludePrivateBrowsing
       if (!excludePrivateBrowsing) {

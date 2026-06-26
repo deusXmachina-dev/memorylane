@@ -121,17 +121,12 @@ export function SettingsPage({
   )
 
   const commitExcludedRules = useCallback(
-    (rules: {
-      excludedApps: string[]
-      excludedWindowTitlePatterns: string[]
-      excludedUrlPatterns: string[]
-    }): void => {
+    (rules: { excludedApps: string[]; excludedUrlPatterns: string[] }): void => {
       setForm((prev) =>
         prev
           ? {
               ...prev,
               excludedApps: rules.excludedApps,
-              excludedWindowTitlePatterns: rules.excludedWindowTitlePatterns,
               excludedUrlPatterns: rules.excludedUrlPatterns,
             }
           : prev,
@@ -139,7 +134,6 @@ export function SettingsPage({
       save(
         {
           excludedApps: rules.excludedApps,
-          excludedWindowTitlePatterns: rules.excludedWindowTitlePatterns,
           excludedUrlPatterns: rules.excludedUrlPatterns,
         },
         'Privacy rules updated',

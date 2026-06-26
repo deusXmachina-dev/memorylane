@@ -176,7 +176,6 @@ app.on('ready', async () => {
     semanticPipelinePreference: initialCaptureSettings.semanticPipelineMode,
     semanticRequestTimeoutMs: initialCaptureSettings.semanticRequestTimeoutMs,
     excludedApps: initialCaptureSettings.excludedApps,
-    excludedWindowTitlePatterns: initialCaptureSettings.excludedWindowTitlePatterns,
     excludedUrlPatterns: initialCaptureSettings.excludedUrlPatterns,
     excludePrivateBrowsing: initialCaptureSettings.excludePrivateBrowsing,
     deviceIdentity,

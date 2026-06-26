@@ -232,8 +232,8 @@ export interface CaptureSettings {
   databaseExportDirectory: string
   excludePrivateBrowsing: boolean
   excludedApps: string[]
-  excludedWindowTitlePatterns: string[]
   excludedUrlPatterns: string[]
+  urlMatchSchemaVersion?: number
   activeVendor: Vendor
   semanticVideoModel: string
   semanticSnapshotModel: string

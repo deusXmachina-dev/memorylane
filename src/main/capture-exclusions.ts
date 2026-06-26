@@ -86,21 +86,22 @@ export function normalizeWildcardPatterns(values: readonly string[] | undefined)
   return normalized
 }
 
-const wildcardRegexCache = new Map<string, RegExp>()
+const urlRegexCache = new Map<string, RegExp>()
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-function wildcardPatternToRegex(pattern: string): RegExp {
-  const cached = wildcardRegexCache.get(pattern)
+// URL patterns match "starts-with" against the full (scheme-qualified) URL.
+// `*` (any text) and `?` (one char) are explicit wildcards; a pattern with
+// neither is a literal prefix. The start is anchored, the end stays open.
+function urlPatternToRegex(pattern: string): RegExp {
+  const cached = urlRegexCache.get(pattern)
   if (cached) return cached
 
-  const startWrapped = pattern.startsWith('*') ? pattern : `*${pattern}`
-  const fullyWrapped = startWrapped.endsWith('*') ? startWrapped : `${startWrapped}*`
-  const escapedPattern = escapeRegex(fullyWrapped)
-  const regex = new RegExp(`^${escapedPattern.replace(/\\\*/g, '.*').replace(/\\\?/g, '.')}$`)
-  wildcardRegexCache.set(pattern, regex)
+  const body = escapeRegex(pattern).replace(/\\\*/g, '.*').replace(/\\\?/g, '.')
+  const regex = new RegExp(`^${body}`)
+  urlRegexCache.set(pattern, regex)
   return regex
 }
 
@@ -110,7 +111,7 @@ function getWildcardMatch(value: string | undefined, patterns: readonly string[]
   if (normalizedValue.length === 0) return null
 
   for (const pattern of patterns) {
-    if (wildcardPatternToRegex(pattern).test(normalizedValue)) {
+    if (urlPatternToRegex(pattern).test(normalizedValue)) {
       return pattern
     }
   }
@@ -154,13 +155,6 @@ export function getExcludedAppMatch(
   }
 
   return null
-}
-
-export function getExcludedWindowTitleMatch(
-  window: ExclusionWindowContext | undefined,
-  patterns: readonly string[],
-): string | null {
-  return getWildcardMatch(window?.title, patterns)
 }
 
 export function getExcludedUrlMatch(

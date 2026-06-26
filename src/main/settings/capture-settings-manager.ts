@@ -119,6 +119,11 @@ function defaultUploadDetailLevel(edition: AppEdition): CaptureSettings['uploadD
   return edition === 'enterprise' ? 'detailed' : 'off'
 }
 
+// Bump when the meaning of stored URL exclusion patterns changes. v1 switched
+// URL matching from substring to starts-with; on first load we wrap pre-v1 bare
+// patterns in `*…*` so they keep their old contains behavior.
+const URL_MATCH_SCHEMA_VERSION = 1
+
 const DEFAULTS: CaptureSettings = {
   autoStartEnabled: true,
   visualThreshold: VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT,
@@ -134,8 +139,8 @@ const DEFAULTS: CaptureSettings = {
   databaseExportDirectory: '',
   excludePrivateBrowsing: true,
   excludedApps: [],
-  excludedWindowTitlePatterns: [],
   excludedUrlPatterns: [],
+  urlMatchSchemaVersion: URL_MATCH_SCHEMA_VERSION,
   activeVendor: 'openrouter',
   semanticVideoModel: OPENROUTER_DEFAULTS.semanticVideoModel,
   semanticSnapshotModel: OPENROUTER_DEFAULTS.semanticSnapshotModel,
@@ -263,12 +268,20 @@ export class CaptureSettingsManager {
             semanticPipelineMode,
           }
         }
+        // Migrate pre-v1 URL patterns (substring era): wrap bare patterns in
+        // `*…*` so they keep contains behavior; patterns added post-v1 keep the
+        // starts-with default.
+        const loadedUrlPatterns = normalizeWildcardPatterns(data.excludedUrlPatterns)
+        const excludedUrlPatterns =
+          (data.urlMatchSchemaVersion ?? 0) < URL_MATCH_SCHEMA_VERSION
+            ? loadedUrlPatterns.map((p) => (/[*?]/.test(p) ? p : `*${p}*`))
+            : loadedUrlPatterns
         return {
           ...this.defaults,
           ...data,
           excludedApps: normalizeExcludedApps(data.excludedApps),
-          excludedWindowTitlePatterns: normalizeWildcardPatterns(data.excludedWindowTitlePatterns),
-          excludedUrlPatterns: normalizeWildcardPatterns(data.excludedUrlPatterns),
+          excludedUrlPatterns,
+          urlMatchSchemaVersion: URL_MATCH_SCHEMA_VERSION,
           maxScreenshotsForLlm:
             typeof data.maxScreenshotsForLlm === 'number'
               ? data.maxScreenshotsForLlm
@@ -307,9 +320,6 @@ export class CaptureSettingsManager {
         partial.databaseExportDirectory ?? this.settings.databaseExportDirectory,
       ),
       excludedApps: normalizeExcludedApps(partial.excludedApps ?? this.settings.excludedApps),
-      excludedWindowTitlePatterns: normalizeWildcardPatterns(
-        partial.excludedWindowTitlePatterns ?? this.settings.excludedWindowTitlePatterns,
-      ),
       excludedUrlPatterns: normalizeWildcardPatterns(
         partial.excludedUrlPatterns ?? this.settings.excludedUrlPatterns,
       ),
