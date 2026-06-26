@@ -114,11 +114,8 @@ interface MainWindowDependencies {
   userContextBuilder?: UserContextBuilderService
   getCaptureHotkeyLabel: () => string
   reconfigureCaptureHotkey: (accelerator: string) => { success: boolean; error?: string }
-  updateExclusions: (exclusions: {
-    apps: string[]
-    urlPatterns: string[]
-    excludePrivateBrowsing: boolean
-  }) => void
+  // Re-applies the user's exclusions after capture settings were persisted.
+  notifyExclusionsChanged: () => void
   // Org-provided (centrally-synced) exclusions, surfaced read-only in the UI.
   getManagedExclusions: () => { apps: string[]; urlPatterns: string[] }
   databaseExportSync: {
@@ -1025,11 +1022,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
           minActivityDurationMs: updated.minActivityDurationMs,
           maxActivityDurationMs: updated.maxActivityDurationMs,
         })
-        deps.updateExclusions({
-          apps: updated.excludedApps,
-          urlPatterns: updated.excludedUrlPatterns,
-          excludePrivateBrowsing: updated.excludePrivateBrowsing,
-        })
+        deps.notifyExclusionsChanged()
         deps.semanticService.updatePipelinePreference(updated.semanticPipelineMode)
         deps.semanticService.updateRequestTimeoutMs(updated.semanticRequestTimeoutMs)
         applyModelSettings(deps, updated, previous)
@@ -1086,11 +1079,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         minActivityDurationMs: updated.minActivityDurationMs,
         maxActivityDurationMs: updated.maxActivityDurationMs,
       })
-      deps.updateExclusions({
-        apps: updated.excludedApps,
-        urlPatterns: updated.excludedUrlPatterns,
-        excludePrivateBrowsing: updated.excludePrivateBrowsing,
-      })
+      deps.notifyExclusionsChanged()
       deps.semanticService.updatePipelinePreference(updated.semanticPipelineMode)
       deps.semanticService.updateRequestTimeoutMs(updated.semanticRequestTimeoutMs)
       applyModelSettings(deps, updated, previous)

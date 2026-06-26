@@ -23,7 +23,10 @@ import { InteractionEventDebugDumper } from './interaction-event-debug-dump'
 import { InferenceProviderImpl, type InferenceProvider } from './llm'
 import type { Vendor } from '../shared/types'
 import { VENDOR_PRESETS, buildModelChain } from '../shared/vendor-defaults'
-import { createCaptureBlacklistCoordinator } from './capture-blacklist-coordinator'
+import { BlacklistCoordinator } from './blacklist/blacklist-coordinator'
+import { LocalBlacklist } from './blacklist/local-blacklist'
+import type { Blacklist } from './blacklist/blacklist'
+import type { CaptureSettingsManager } from './settings/capture-settings-manager'
 import {
   createCaptureController,
   type RuntimeCapture,
@@ -48,12 +51,9 @@ export interface MainRuntime {
   evalFixtureStore: EvalFixtureStore
   taskFixtureStore: TaskFixtureStore
   evalFixturesRoot: string
-  updateExclusions(exclusions: {
-    apps: string[]
-    urlPatterns: string[]
-    excludePrivateBrowsing: boolean
-  }): void
-  setManagedExclusions(managed: { apps: string[]; urlPatterns: string[] }): void
+  /** Re-reads the user's exclusions from settings and re-applies them. Called
+   * after the saveCaptureSettings IPC handler has persisted the new values. */
+  notifyExclusionsChanged(): void
   purgeAll(): Promise<void>
   dispose(): Promise<void>
 }
@@ -63,9 +63,9 @@ export async function createMainRuntime(params: {
   onPrivacyBlockingChanged?: (blocked: boolean) => void
   semanticPipelinePreference?: SemanticPipelinePreference
   semanticRequestTimeoutMs?: number
-  excludedApps?: string[]
-  excludedUrlPatterns?: string[]
-  excludePrivateBrowsing?: boolean
+  captureSettingsManager: CaptureSettingsManager
+  /** The org's centrally-synced blacklist (enterprise only); null otherwise. */
+  remoteBlacklist?: Blacklist
   deviceIdentity?: DeviceIdentity
   edition: AppEdition
   vendorCredentials: VendorCredentialsManager
@@ -195,24 +195,26 @@ export async function createMainRuntime(params: {
     onStateChanged: () => onCaptureStateChanged(),
   })
 
-  const blacklistCoordinator = createCaptureBlacklistCoordinator({
-    initialExcludedApps: params.excludedApps,
-    initialExcludedUrlPatterns: params.excludedUrlPatterns,
-    initialExcludePrivateBrowsing: params.excludePrivateBrowsing,
-    onPrivacyBlockingChanged: params.onPrivacyBlockingChanged,
-    forwardInteraction: (event) => {
-      // Dump only events that passed the blacklist — excluded window
-      // titles/URLs must never reach the plaintext JSONL.
-      interactionDumper?.dump(event)
-      harness.handleEvent(event)
+  const localBlacklist = new LocalBlacklist(params.captureSettingsManager)
+  const blacklistCoordinator = new BlacklistCoordinator(
+    localBlacklist,
+    params.remoteBlacklist ?? null,
+    {
+      onPrivacyBlockingChanged: params.onPrivacyBlockingChanged,
+      forwardInteraction: (event) => {
+        // Dump only events that passed the blacklist — excluded window
+        // titles/URLs must never reach the plaintext JSONL.
+        interactionDumper?.dump(event)
+        harness.handleEvent(event)
+      },
+      flushEvents: () => {
+        harness.eventCapturer.flush()
+      },
+      setScreenshotsSuppressed: (suppressed) => {
+        capture.setFrameCaptureSuppressed(suppressed)
+      },
     },
-    flushEvents: () => {
-      harness.eventCapturer.flush()
-    },
-    setScreenshotsSuppressed: (suppressed) => {
-      capture.setFrameCaptureSuppressed(suppressed)
-    },
-  })
+  )
 
   const interactionHandler = (event: Parameters<typeof harness.handleEvent>[0]): void => {
     blacklistCoordinator.handleInteraction(event)
@@ -247,11 +249,8 @@ export async function createMainRuntime(params: {
     evalFixtureStore,
     taskFixtureStore,
     evalFixturesRoot,
-    updateExclusions(exclusions): void {
-      blacklistCoordinator.updateExclusions(exclusions)
-    },
-    setManagedExclusions(managed): void {
-      blacklistCoordinator.setManagedExclusions(managed)
+    notifyExclusionsChanged(): void {
+      localBlacklist.notifyChanged()
     },
     async purgeAll(): Promise<void> {
       const wasCapturing = capture.isCapturingNow()
@@ -312,6 +311,8 @@ export async function createMainRuntime(params: {
 
         try {
           interactionMonitor.clearInteractionCallback(interactionHandler)
+          blacklistCoordinator.dispose()
+          localBlacklist.dispose()
         } catch (error) {
           log.warn('[Runtime] Failed to clear interaction callback:', error)
         }

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { InteractionContext } from '../shared/types'
-import { createCaptureBlacklistCoordinator } from './capture-blacklist-coordinator'
+import type { CaptureSettings, InteractionContext } from '../../shared/types'
+import { Blacklist } from './blacklist'
+import { LocalBlacklist, type CaptureSettingsStore } from './local-blacklist'
+import { BlacklistCoordinator } from './blacklist-coordinator'
 
 function appChangeEvent(
   appName: string,
@@ -24,40 +26,85 @@ function appChangeEvent(
   }
 }
 
-describe('capture blacklist coordinator', () => {
-  it('suppresses screenshots and drops events while excluded app is active', () => {
-    const forwarded: InteractionContext[] = []
-    const suppressionTransitions: boolean[] = []
-    let flushCount = 0
+type LocalSeed = {
+  excludedApps?: string[]
+  excludedUrlPatterns?: string[]
+  excludePrivateBrowsing?: boolean
+}
 
-    const coordinator = createCaptureBlacklistCoordinator({
-      initialExcludedApps: ['signal'],
-      forwardInteraction: (event) => forwarded.push(event),
-      flushEvents: () => {
-        flushCount++
-      },
-      setScreenshotsSuppressed: (suppressed) => {
-        suppressionTransitions.push(suppressed)
-      },
+/** In-memory stand-in for CaptureSettingsManager — only the exclusion slice. */
+function createFakeStore(seed: LocalSeed): CaptureSettingsStore {
+  const state = {
+    excludedApps: seed.excludedApps ?? [],
+    excludedUrlPatterns: seed.excludedUrlPatterns ?? [],
+    excludePrivateBrowsing: seed.excludePrivateBrowsing ?? true,
+  }
+  return {
+    get: () => ({ ...state }),
+    save: (partial: Partial<CaptureSettings>) => {
+      if (partial.excludedApps !== undefined) state.excludedApps = partial.excludedApps
+      if (partial.excludedUrlPatterns !== undefined)
+        state.excludedUrlPatterns = partial.excludedUrlPatterns
+      if (partial.excludePrivateBrowsing !== undefined)
+        state.excludePrivateBrowsing = partial.excludePrivateBrowsing
+    },
+  }
+}
+
+/** A controllable managed source, standing in for the enterprise RemoteBlacklist. */
+class FakeRemoteBlacklist extends Blacklist {
+  private apps: string[] = []
+  private urls: string[] = []
+  getBlacklistedApps(): string[] {
+    return this.apps
+  }
+  getBlacklistedUrls(): string[] {
+    return this.urls
+  }
+  set(next: { apps: string[]; urlPatterns: string[] }): void {
+    this.apps = next.apps
+    this.urls = next.urlPatterns
+    this.emit()
+  }
+}
+
+function makeCoordinator(opts: {
+  local?: LocalSeed
+  remote?: FakeRemoteBlacklist
+  onPrivacyBlockingChanged?: (blocked: boolean) => void
+}) {
+  const forwarded: InteractionContext[] = []
+  const suppressionTransitions: boolean[] = []
+  const flushes: true[] = []
+  const local = new LocalBlacklist(createFakeStore(opts.local ?? {}))
+  const coordinator = new BlacklistCoordinator(local, opts.remote ?? null, {
+    onPrivacyBlockingChanged: opts.onPrivacyBlockingChanged,
+    forwardInteraction: (event) => forwarded.push(event),
+    flushEvents: () => flushes.push(true),
+    setScreenshotsSuppressed: (suppressed) => suppressionTransitions.push(suppressed),
+  })
+  return { coordinator, local, forwarded, suppressionTransitions, flushes }
+}
+
+describe('blacklist coordinator', () => {
+  it('suppresses screenshots and drops events while excluded app is active', () => {
+    const { coordinator, forwarded, suppressionTransitions, flushes } = makeCoordinator({
+      local: { excludedApps: ['signal'] },
     })
 
     coordinator.handleInteraction(appChangeEvent('Signal'))
     coordinator.handleInteraction({ type: 'keyboard', timestamp: Date.now(), keyCount: 3 })
 
-    expect(flushCount).toBe(1)
+    expect(flushes).toHaveLength(1)
     expect(suppressionTransitions).toEqual([true])
     expect(forwarded).toHaveLength(0)
   })
 
   it('emits privacy blocking transitions when entering and leaving blocked state', () => {
     const privacyTransitions: boolean[] = []
-
-    const coordinator = createCaptureBlacklistCoordinator({
-      initialExcludedApps: ['signal'],
+    const { coordinator } = makeCoordinator({
+      local: { excludedApps: ['signal'] },
       onPrivacyBlockingChanged: (blocked) => privacyTransitions.push(blocked),
-      forwardInteraction: () => undefined,
-      flushEvents: () => undefined,
-      setScreenshotsSuppressed: () => undefined,
     })
 
     coordinator.handleInteraction(appChangeEvent('Signal'))
@@ -67,16 +114,8 @@ describe('capture blacklist coordinator', () => {
   })
 
   it('resumes screenshots and forwards events when allowed app becomes active', () => {
-    const forwarded: InteractionContext[] = []
-    const suppressionTransitions: boolean[] = []
-
-    const coordinator = createCaptureBlacklistCoordinator({
-      initialExcludedApps: ['signal'],
-      forwardInteraction: (event) => forwarded.push(event),
-      flushEvents: () => undefined,
-      setScreenshotsSuppressed: (suppressed) => {
-        suppressionTransitions.push(suppressed)
-      },
+    const { coordinator, forwarded, suppressionTransitions } = makeCoordinator({
+      local: { excludedApps: ['signal'] },
     })
 
     coordinator.handleInteraction(appChangeEvent('Signal'))
@@ -88,45 +127,24 @@ describe('capture blacklist coordinator', () => {
   })
 
   it('reacts immediately when excluded app settings change', () => {
-    const suppressionTransitions: boolean[] = []
-    let flushCount = 0
-
-    const coordinator = createCaptureBlacklistCoordinator({
-      initialExcludedApps: [],
-      forwardInteraction: () => undefined,
-      flushEvents: () => {
-        flushCount++
-      },
-      setScreenshotsSuppressed: (suppressed) => {
-        suppressionTransitions.push(suppressed)
-      },
+    const { coordinator, local, suppressionTransitions, flushes } = makeCoordinator({
+      local: { excludedApps: [] },
     })
 
     coordinator.handleInteraction(appChangeEvent('KeePassXC'))
-    coordinator.updateExclusions({
+    local.update({
       apps: ['keepassxc'],
       urlPatterns: [],
       excludePrivateBrowsing: true,
     })
 
-    expect(flushCount).toBe(1)
+    expect(flushes).toHaveLength(1)
     expect(suppressionTransitions).toEqual([true])
   })
 
   it('suppresses screenshots for browser anonymous mode windows', () => {
-    const forwarded: InteractionContext[] = []
-    const suppressionTransitions: boolean[] = []
-    let flushCount = 0
-
-    const coordinator = createCaptureBlacklistCoordinator({
-      initialExcludedApps: [],
-      forwardInteraction: (event) => forwarded.push(event),
-      flushEvents: () => {
-        flushCount++
-      },
-      setScreenshotsSuppressed: (suppressed) => {
-        suppressionTransitions.push(suppressed)
-      },
+    const { coordinator, forwarded, suppressionTransitions, flushes } = makeCoordinator({
+      local: { excludedApps: [] },
     })
 
     coordinator.handleInteraction(
@@ -136,22 +154,14 @@ describe('capture blacklist coordinator', () => {
     )
     coordinator.handleInteraction({ type: 'keyboard', timestamp: Date.now(), keyCount: 2 })
 
-    expect(flushCount).toBe(1)
+    expect(flushes).toHaveLength(1)
     expect(suppressionTransitions).toEqual([true])
     expect(forwarded).toHaveLength(0)
   })
 
   it('resumes once browser leaves anonymous mode', () => {
-    const forwarded: InteractionContext[] = []
-    const suppressionTransitions: boolean[] = []
-
-    const coordinator = createCaptureBlacklistCoordinator({
-      initialExcludedApps: [],
-      forwardInteraction: (event) => forwarded.push(event),
-      flushEvents: () => undefined,
-      setScreenshotsSuppressed: (suppressed) => {
-        suppressionTransitions.push(suppressed)
-      },
+    const { coordinator, forwarded, suppressionTransitions } = makeCoordinator({
+      local: { excludedApps: [] },
     })
 
     coordinator.handleInteraction(
@@ -169,19 +179,8 @@ describe('capture blacklist coordinator', () => {
   })
 
   it('keeps anonymous suppression for the same windows hwnd after title/url changes', () => {
-    const forwarded: InteractionContext[] = []
-    const suppressionTransitions: boolean[] = []
-    let flushCount = 0
-
-    const coordinator = createCaptureBlacklistCoordinator({
-      initialExcludedApps: [],
-      forwardInteraction: (event) => forwarded.push(event),
-      flushEvents: () => {
-        flushCount++
-      },
-      setScreenshotsSuppressed: (suppressed) => {
-        suppressionTransitions.push(suppressed)
-      },
+    const { coordinator, forwarded, suppressionTransitions, flushes } = makeCoordinator({
+      local: { excludedApps: [] },
     })
 
     coordinator.handleInteraction(
@@ -204,23 +203,14 @@ describe('capture blacklist coordinator', () => {
     })
     coordinator.handleInteraction(normalChromeWindow)
 
-    expect(flushCount).toBe(1)
+    expect(flushes).toHaveLength(1)
     expect(suppressionTransitions).toEqual([true, false])
     expect(forwarded).toEqual([normalChromeWindow])
   })
 
   it('does not suppress anonymous browser windows when private browsing exclusion is disabled', () => {
-    const forwarded: InteractionContext[] = []
-    const suppressionTransitions: boolean[] = []
-
-    const coordinator = createCaptureBlacklistCoordinator({
-      initialExcludedApps: [],
-      initialExcludePrivateBrowsing: false,
-      forwardInteraction: (event) => forwarded.push(event),
-      flushEvents: () => undefined,
-      setScreenshotsSuppressed: (suppressed) => {
-        suppressionTransitions.push(suppressed)
-      },
+    const { coordinator, forwarded, suppressionTransitions } = makeCoordinator({
+      local: { excludedApps: [], excludePrivateBrowsing: false },
     })
 
     const incognitoEdgeWindow = appChangeEvent('Microsoft Edge', {
@@ -233,16 +223,8 @@ describe('capture blacklist coordinator', () => {
   })
 
   it('clears sticky anonymous hwnd suppression when private browsing exclusion is disabled', () => {
-    const forwarded: InteractionContext[] = []
-    const suppressionTransitions: boolean[] = []
-
-    const coordinator = createCaptureBlacklistCoordinator({
-      initialExcludedApps: [],
-      forwardInteraction: (event) => forwarded.push(event),
-      flushEvents: () => undefined,
-      setScreenshotsSuppressed: (suppressed) => {
-        suppressionTransitions.push(suppressed)
-      },
+    const { coordinator, local, forwarded, suppressionTransitions } = makeCoordinator({
+      local: { excludedApps: [] },
     })
 
     coordinator.handleInteraction(
@@ -252,7 +234,7 @@ describe('capture blacklist coordinator', () => {
       }),
     )
 
-    coordinator.updateExclusions({
+    local.update({
       apps: [],
       urlPatterns: [],
       excludePrivateBrowsing: false,
@@ -270,16 +252,8 @@ describe('capture blacklist coordinator', () => {
   })
 
   it('does not suppress non-browser windows with private-like wording', () => {
-    const forwarded: InteractionContext[] = []
-    const suppressionTransitions: boolean[] = []
-
-    const coordinator = createCaptureBlacklistCoordinator({
-      initialExcludedApps: [],
-      forwardInteraction: (event) => forwarded.push(event),
-      flushEvents: () => undefined,
-      setScreenshotsSuppressed: (suppressed) => {
-        suppressionTransitions.push(suppressed)
-      },
+    const { coordinator, forwarded, suppressionTransitions } = makeCoordinator({
+      local: { excludedApps: [] },
     })
 
     const terminalEvent = appChangeEvent('Terminal', {
@@ -292,40 +266,29 @@ describe('capture blacklist coordinator', () => {
   })
 
   it('enforces org-managed app exclusions immediately when synced', () => {
-    const suppressionTransitions: boolean[] = []
-
-    const coordinator = createCaptureBlacklistCoordinator({
-      initialExcludedApps: [],
-      forwardInteraction: () => undefined,
-      flushEvents: () => undefined,
-      setScreenshotsSuppressed: (suppressed) => {
-        suppressionTransitions.push(suppressed)
-      },
+    const remote = new FakeRemoteBlacklist()
+    const { coordinator, suppressionTransitions } = makeCoordinator({
+      local: { excludedApps: [] },
+      remote,
     })
 
     coordinator.handleInteraction(appChangeEvent('Slack'))
-    coordinator.setManagedExclusions({ apps: ['Slack'], urlPatterns: [] })
+    remote.set({ apps: ['Slack'], urlPatterns: [] })
 
     expect(suppressionTransitions).toEqual([true])
   })
 
   it('keeps managed exclusions enforced across a user settings change (union of both layers)', () => {
-    const forwarded: InteractionContext[] = []
-    const suppressionTransitions: boolean[] = []
-
-    const coordinator = createCaptureBlacklistCoordinator({
-      initialExcludedApps: ['signal'],
-      forwardInteraction: (event) => forwarded.push(event),
-      flushEvents: () => undefined,
-      setScreenshotsSuppressed: (suppressed) => {
-        suppressionTransitions.push(suppressed)
-      },
+    const remote = new FakeRemoteBlacklist()
+    const { coordinator, local, forwarded, suppressionTransitions } = makeCoordinator({
+      local: { excludedApps: ['signal'] },
+      remote,
     })
 
-    coordinator.setManagedExclusions({ apps: ['slack'], urlPatterns: [] })
+    remote.set({ apps: ['slack'], urlPatterns: [] })
 
     // A later user settings save (no Slack) must not drop the managed entry.
-    coordinator.updateExclusions({
+    local.update({
       apps: ['signal'],
       urlPatterns: [],
       excludePrivateBrowsing: true,
@@ -337,20 +300,8 @@ describe('capture blacklist coordinator', () => {
   })
 
   it('suppresses screenshots when url matches excluded wildcard', () => {
-    const forwarded: InteractionContext[] = []
-    const suppressionTransitions: boolean[] = []
-    let flushCount = 0
-
-    const coordinator = createCaptureBlacklistCoordinator({
-      initialExcludedApps: [],
-      initialExcludedUrlPatterns: ['*://mail.google.com/*'],
-      forwardInteraction: (event) => forwarded.push(event),
-      flushEvents: () => {
-        flushCount++
-      },
-      setScreenshotsSuppressed: (suppressed) => {
-        suppressionTransitions.push(suppressed)
-      },
+    const { coordinator, forwarded, suppressionTransitions, flushes } = makeCoordinator({
+      local: { excludedApps: [], excludedUrlPatterns: ['*://mail.google.com/*'] },
     })
 
     coordinator.handleInteraction(
@@ -360,21 +311,17 @@ describe('capture blacklist coordinator', () => {
       }),
     )
 
-    expect(flushCount).toBe(1)
+    expect(flushes).toHaveLength(1)
     expect(suppressionTransitions).toEqual([true])
     expect(forwarded).toHaveLength(0)
   })
 
   it('matches a url prefix but not the same domain in another query', () => {
-    const suppressionTransitions: boolean[] = []
-    const coordinator = createCaptureBlacklistCoordinator({
-      initialExcludedApps: [],
-      initialExcludedUrlPatterns: ['https://linear.app'],
-      initialExcludePrivateBrowsing: false,
-      forwardInteraction: () => undefined,
-      flushEvents: () => undefined,
-      setScreenshotsSuppressed: (suppressed) => {
-        suppressionTransitions.push(suppressed)
+    const { coordinator, suppressionTransitions } = makeCoordinator({
+      local: {
+        excludedApps: [],
+        excludedUrlPatterns: ['https://linear.app'],
+        excludePrivateBrowsing: false,
       },
     })
 
@@ -393,20 +340,15 @@ describe('capture blacklist coordinator', () => {
   })
 
   it('enforces a bare-host managed url pattern by normalizing it to a scheme prefix', () => {
-    const suppressionTransitions: boolean[] = []
-    const coordinator = createCaptureBlacklistCoordinator({
-      initialExcludedApps: [],
-      initialExcludePrivateBrowsing: false,
-      forwardInteraction: () => undefined,
-      flushEvents: () => undefined,
-      setScreenshotsSuppressed: (suppressed) => {
-        suppressionTransitions.push(suppressed)
-      },
+    const remote = new FakeRemoteBlacklist()
+    const { coordinator, suppressionTransitions } = makeCoordinator({
+      local: { excludedApps: [], excludePrivateBrowsing: false },
+      remote,
     })
 
     // An org pushes a bare host (no scheme). Without normalization the
     // starts-with matcher would never match a real https:// URL.
-    coordinator.setManagedExclusions({ apps: [], urlPatterns: ['bank.com'] })
+    remote.set({ apps: [], urlPatterns: ['bank.com'] })
 
     coordinator.handleInteraction(
       appChangeEvent('Google Chrome', { title: 'Bank', url: 'https://bank.com/accounts' }),
@@ -415,15 +357,11 @@ describe('capture blacklist coordinator', () => {
   })
 
   it('enforces a bare-host user url pattern by normalizing it to a scheme prefix', () => {
-    const suppressionTransitions: boolean[] = []
-    const coordinator = createCaptureBlacklistCoordinator({
-      initialExcludedApps: [],
-      initialExcludedUrlPatterns: ['bank.com'],
-      initialExcludePrivateBrowsing: false,
-      forwardInteraction: () => undefined,
-      flushEvents: () => undefined,
-      setScreenshotsSuppressed: (suppressed) => {
-        suppressionTransitions.push(suppressed)
+    const { coordinator, suppressionTransitions } = makeCoordinator({
+      local: {
+        excludedApps: [],
+        excludedUrlPatterns: ['bank.com'],
+        excludePrivateBrowsing: false,
       },
     })
 

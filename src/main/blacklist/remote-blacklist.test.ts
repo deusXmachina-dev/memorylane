@@ -4,32 +4,32 @@ vi.mock('../logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
-import { RemoteCapturePolicyService } from './remote-capture-policy-service'
+import { RemoteBlacklist } from './remote-blacklist'
 
 function jsonResponse(body: unknown): Response {
   return { ok: true, status: 200, json: async () => body } as unknown as Response
 }
 
-describe('RemoteCapturePolicyService', () => {
+describe('RemoteBlacklist', () => {
   const originalFetch = globalThis.fetch
 
   function makeService(
     overrides: Partial<{
       isActivated: () => boolean
-      onChange: () => void
       readStored: () => { apps: string[]; urlPatterns: string[] } | null
       writeStored: (policy: { apps: string[]; urlPatterns: string[] }) => void
     }> = {},
   ) {
-    const onChange = overrides.onChange ?? vi.fn()
-    const service = new RemoteCapturePolicyService({
+    const onChange = vi.fn()
+    const service = new RemoteBlacklist({
       getDeviceId: () => 'device-123',
       isActivated: overrides.isActivated ?? (() => true),
       getBackendUrl: () => 'https://backend.test',
-      onChange,
-      readStored: overrides.readStored,
-      writeStored: overrides.writeStored,
+      // Always inject so tests never touch the on-disk store.
+      readStored: overrides.readStored ?? (() => null),
+      writeStored: overrides.writeStored ?? vi.fn(),
     })
+    service.onChange(onChange)
     return { service, onChange }
   }
 
@@ -56,7 +56,7 @@ describe('RemoteCapturePolicyService', () => {
     )
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer device-123')
     // Non-string entries are dropped.
-    expect(service.getPolicy()).toEqual({
+    expect(service.getSnapshot()).toEqual({
       apps: ['slack', 'msedge'],
       urlPatterns: ['*bank*'],
     })
@@ -72,7 +72,7 @@ describe('RemoteCapturePolicyService', () => {
 
     expect(fetchMock).not.toHaveBeenCalled()
     expect(onChange).not.toHaveBeenCalled()
-    expect(service.getPolicy()).toEqual({ apps: [], urlPatterns: [] })
+    expect(service.getSnapshot()).toEqual({ apps: [], urlPatterns: [] })
   })
 
   it('notifies only when the policy actually changes', async () => {
@@ -96,11 +96,11 @@ describe('RemoteCapturePolicyService', () => {
 
     const { service, onChange } = makeService()
     await service.sync()
-    expect(service.getPolicy().apps).toEqual(['slack'])
+    expect(service.getSnapshot().apps).toEqual(['slack'])
 
     await service.sync()
     // 401 is treated like any other failure: the last-known list is retained.
-    expect(service.getPolicy().apps).toEqual(['slack'])
+    expect(service.getSnapshot().apps).toEqual(['slack'])
     expect(onChange).toHaveBeenCalledTimes(1)
   })
 
@@ -115,7 +115,7 @@ describe('RemoteCapturePolicyService', () => {
     await service.sync()
     await expect(service.sync()).resolves.toBeUndefined()
 
-    expect(service.getPolicy().apps).toEqual(['slack'])
+    expect(service.getSnapshot().apps).toEqual(['slack'])
     expect(onChange).toHaveBeenCalledTimes(1)
   })
 
@@ -131,7 +131,7 @@ describe('RemoteCapturePolicyService', () => {
     await service.sync()
     await service.sync()
 
-    expect(service.getPolicy()).toEqual({ apps: [], urlPatterns: [] })
+    expect(service.getSnapshot()).toEqual({ apps: [], urlPatterns: [] })
     expect(onChange).toHaveBeenCalledTimes(2)
     expect(writeStored).toHaveBeenLastCalledWith({ apps: [], urlPatterns: [] })
   })
@@ -162,7 +162,7 @@ describe('RemoteCapturePolicyService', () => {
 
     // The cached list was applied and broadcast synchronously, before the async
     // first sync's fetch had a chance to resolve.
-    expect(service.getPolicy()).toEqual(cached)
+    expect(service.getSnapshot()).toEqual(cached)
     expect(onChange).toHaveBeenCalledWith(cached)
   })
 
