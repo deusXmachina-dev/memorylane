@@ -34,6 +34,10 @@ import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
 import { DatabaseUploadSync } from './services/database-upload-sync'
 import { RemoteCapturePolicyService } from './services/remote-capture-policy-service'
+import {
+  readManagedCapturePolicy,
+  writeManagedCapturePolicy,
+} from './services/managed-capture-policy-store'
 import { createMainRuntime, type MainRuntime } from './runtime'
 import { registerEvalMediaScheme, registerEvalMediaProtocol } from './eval/eval-media-protocol'
 import { createObservationController, type ObservationController } from './observation-controller'
@@ -219,6 +223,8 @@ app.on('ready', async () => {
         runtime?.setManagedExclusions(policy)
         sendManagedExclusionsUpdate()
       },
+      readStored: () => readManagedCapturePolicy(),
+      writeStored: (policy) => writeManagedCapturePolicy(policy),
     })
     remoteCapturePolicy.start()
   }

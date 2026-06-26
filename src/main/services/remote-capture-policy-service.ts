@@ -26,24 +26,36 @@ export interface RemoteCapturePolicyServiceParams {
   /** Fired with the new policy whenever it actually changes (including the first
    * successful fetch). The blacklist coordinator unions it with the user's list. */
   onChange: (policy: ManagedExclusions) => void
+  /** Reads the last-known policy cached on disk, or null when none is cached.
+   * Loaded on start() so a restarted device enforces the blacklist immediately,
+   * before the first network sync lands. */
+  readStored?: () => ManagedExclusions | null
+  /** Persists the latest policy whenever it changes, so it survives restarts and
+   * outlives transient backend failures. */
+  writeStored?: (policy: ManagedExclusions) => void
   intervalMs?: number
 }
 
 /**
  * Pulls the tenant's centralized capture blacklist (DEU-166) on a timer and
- * holds the latest copy in memory. It owns its own poll loop and never writes to
- * the user's local settings — the blacklist coordinator unions this with the
+ * caches the latest copy to a dedicated file (never the user's own settings).
+ * It owns its own poll loop — the blacklist coordinator unions this with the
  * user's exclusions at capture time, so centrally-mandated entries are always
  * enforced and never user-removable.
  *
- * A failed sync is swallowed (logged) and leaves the last-known policy intact,
- * so a transient backend blip never drops the blacklist.
+ * The last-known policy is durable: it's loaded from disk on start() (enforced
+ * before the first network sync) and only ever replaced by a clean HTTP 200.
+ * Any failure — 4xx/5xx, network error, even a 401 deactivation — is swallowed
+ * (logged) and leaves the cached policy intact, so a backend blip never drops
+ * the blacklist. Only a 200 carrying an empty list clears it.
  */
 export class RemoteCapturePolicyService {
   private readonly getDeviceId: () => string
   private readonly isActivated: () => boolean
   private readonly getBackendUrl: () => string
   private readonly onChange: (policy: ManagedExclusions) => void
+  private readonly readStored?: () => ManagedExclusions | null
+  private readonly writeStored?: (policy: ManagedExclusions) => void
   private readonly intervalMs: number
 
   private policy: ManagedExclusions = EMPTY
@@ -56,6 +68,8 @@ export class RemoteCapturePolicyService {
     this.isActivated = params.isActivated
     this.getBackendUrl = params.getBackendUrl
     this.onChange = params.onChange
+    this.readStored = params.readStored
+    this.writeStored = params.writeStored
     this.intervalMs = params.intervalMs ?? DEFAULT_SYNC_INTERVAL_MS
   }
 
@@ -65,9 +79,27 @@ export class RemoteCapturePolicyService {
 
   start(): void {
     if (this.timer !== null) return
+    this.loadCached()
     this.timer = setInterval(() => void this.sync(), this.intervalMs)
     this.timer.unref?.()
     void this.sync()
+  }
+
+  /** Loads the on-disk policy and enforces it immediately, ahead of the first
+   * network sync, so a restarted device never has a blacklist-free window. A
+   * missing/empty cache is a no-op (reuses the change-detection below). */
+  private loadCached(): void {
+    const cached = this.readStored?.()
+    if (!cached) return
+    const serialized = serialize(cached)
+    if (serialized === this.serialized) return
+    this.policy = cached
+    this.serialized = serialized
+    log.info(
+      `[CapturePolicy] Loaded cached blacklist: ${cached.apps.length} apps, ` +
+        `${cached.urlPatterns.length} url patterns`,
+    )
+    this.onChange(cached)
   }
 
   stop(): void {
@@ -88,6 +120,7 @@ export class RemoteCapturePolicyService {
       if (serialized === this.serialized) return
       this.policy = next
       this.serialized = serialized
+      this.writeStored?.(next)
       log.info(
         `[CapturePolicy] Synced centralized blacklist: ${next.apps.length} apps, ` +
           `${next.urlPatterns.length} url patterns`,
@@ -111,11 +144,9 @@ export class RemoteCapturePolicyService {
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${this.getDeviceId()}` },
     })
-    // 401 = the device token isn't bound to a tenant (e.g. deactivated). Treat
-    // as "no centralized policy" so enforcement stops rather than going stale.
-    if (response.status === 401) {
-      return EMPTY
-    }
+    // Any non-200 (including a 401 deactivation) is treated as a failure so the
+    // last-known blacklist is kept rather than dropped — only a clean 200 ever
+    // replaces it. The sync loop swallows the throw and leaves the cache intact.
     if (!response.ok) {
       throw new Error(`Capture policy request failed (${response.status})`)
     }

@@ -17,6 +17,8 @@ describe('RemoteCapturePolicyService', () => {
     overrides: Partial<{
       isActivated: () => boolean
       onChange: () => void
+      readStored: () => { apps: string[]; urlPatterns: string[] } | null
+      writeStored: (policy: { apps: string[]; urlPatterns: string[] }) => void
     }> = {},
   ) {
     const onChange = overrides.onChange ?? vi.fn()
@@ -25,6 +27,8 @@ describe('RemoteCapturePolicyService', () => {
       isActivated: overrides.isActivated ?? (() => true),
       getBackendUrl: () => 'https://backend.test',
       onChange,
+      readStored: overrides.readStored,
+      writeStored: overrides.writeStored,
     })
     return { service, onChange }
   }
@@ -83,7 +87,7 @@ describe('RemoteCapturePolicyService', () => {
     expect(onChange).toHaveBeenCalledTimes(1)
   })
 
-  it('clears the policy on 401 (device no longer bound) and notifies', async () => {
+  it('keeps the last policy on 401 (does not clear on deactivation)', async () => {
     const responses: Response[] = [
       jsonResponse({ excludedApps: ['slack'], excludedUrlPatterns: ['*bank*'] }),
       { ok: false, status: 401, json: async () => ({}) } as unknown as Response,
@@ -95,8 +99,9 @@ describe('RemoteCapturePolicyService', () => {
     expect(service.getPolicy().apps).toEqual(['slack'])
 
     await service.sync()
-    expect(service.getPolicy()).toEqual({ apps: [], urlPatterns: [] })
-    expect(onChange).toHaveBeenCalledTimes(2)
+    // 401 is treated like any other failure: the last-known list is retained.
+    expect(service.getPolicy().apps).toEqual(['slack'])
+    expect(onChange).toHaveBeenCalledTimes(1)
   })
 
   it('keeps the last policy and swallows the error on a failed fetch', async () => {
@@ -112,5 +117,64 @@ describe('RemoteCapturePolicyService', () => {
 
     expect(service.getPolicy().apps).toEqual(['slack'])
     expect(onChange).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears the policy only on a real 200 with an empty list, and persists it', async () => {
+    const responses: Response[] = [
+      jsonResponse({ excludedApps: ['slack'], excludedUrlPatterns: [] }),
+      jsonResponse({ excludedApps: [], excludedUrlPatterns: [] }),
+    ]
+    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as unknown as typeof fetch
+
+    const writeStored = vi.fn()
+    const { service, onChange } = makeService({ writeStored })
+    await service.sync()
+    await service.sync()
+
+    expect(service.getPolicy()).toEqual({ apps: [], urlPatterns: [] })
+    expect(onChange).toHaveBeenCalledTimes(2)
+    expect(writeStored).toHaveBeenLastCalledWith({ apps: [], urlPatterns: [] })
+  })
+
+  it('persists the policy to the store whenever it changes', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ excludedApps: ['slack'], excludedUrlPatterns: ['*bank*'] }),
+    ) as unknown as typeof fetch
+
+    const writeStored = vi.fn()
+    const { service } = makeService({ writeStored })
+    await service.sync()
+    await service.sync()
+
+    // Written once on the change; the unchanged second sync does not rewrite.
+    expect(writeStored).toHaveBeenCalledTimes(1)
+    expect(writeStored).toHaveBeenCalledWith({ apps: ['slack'], urlPatterns: ['*bank*'] })
+  })
+
+  it('loads the cached policy on start() and enforces it before any fetch', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ excludedApps: [], excludedUrlPatterns: [] }))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const cached = { apps: ['slack'], urlPatterns: ['*bank*'] }
+    const { service, onChange } = makeService({ readStored: () => cached })
+    service.start()
+    service.stop()
+
+    // The cached list was applied and broadcast synchronously, before the async
+    // first sync's fetch had a chance to resolve.
+    expect(service.getPolicy()).toEqual(cached)
+    expect(onChange).toHaveBeenCalledWith(cached)
+  })
+
+  it('treats an empty/missing cache on start() as a no-op', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ excludedApps: [], excludedUrlPatterns: [] }),
+    ) as unknown as typeof fetch
+
+    const { service, onChange } = makeService({ readStored: () => null })
+    service.start()
+    service.stop()
+
+    expect(onChange).not.toHaveBeenCalled()
   })
 })
