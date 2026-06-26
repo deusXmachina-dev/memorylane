@@ -116,8 +116,8 @@ interface MainWindowDependencies {
   reconfigureCaptureHotkey: (accelerator: string) => { success: boolean; error?: string }
   // Re-applies the user's exclusions after capture settings were persisted.
   notifyExclusionsChanged: () => void
-  // Org-provided (centrally-synced) exclusions, surfaced read-only in the UI.
-  getManagedExclusions: () => { apps: string[]; urlPatterns: string[] }
+  // The org's centrally-synced (remote) blacklist, surfaced read-only in the UI.
+  getRemoteBlacklist: () => { apps: string[]; urlPatterns: string[] }
   databaseExportSync: {
     onSettingsChanged: () => Promise<void>
   }
@@ -216,9 +216,9 @@ export function sendObservationUpdate(state: ObservationState): void {
  * Broadcast the current org-provided (centrally-synced) exclusions to the
  * renderer so an open settings window reflects an IT edit without a reopen.
  */
-export function sendManagedExclusionsUpdate(): void {
+export function sendRemoteBlacklistUpdate(): void {
   if (!mainWindow || mainWindow.isDestroyed() || !deps) return
-  mainWindow.webContents.send('main-window:managedExclusionsUpdate', deps.getManagedExclusions())
+  mainWindow.webContents.send('main-window:remoteBlacklistUpdate', deps.getRemoteBlacklist())
 }
 
 /**
@@ -967,9 +967,9 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     return deps.observation.getState()
   })
 
-  ipcMain.handle('main-window:getManagedExclusions', () => {
+  ipcMain.handle('main-window:getRemoteBlacklist', () => {
     if (!deps) return { apps: [], urlPatterns: [] }
-    return deps.getManagedExclusions()
+    return deps.getRemoteBlacklist()
   })
 
   // Installed apps + seen domains (for privacy UI)

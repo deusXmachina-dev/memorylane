@@ -163,7 +163,7 @@ app.on('ready', async () => {
   }
 
   const { setupTray, updateTrayMenu, setPrivacyBlockedState } = await import('./ui/tray')
-  const { initMainWindowIPC, openMainWindow, sendStatusToRenderer, sendManagedExclusionsUpdate } =
+  const { initMainWindowIPC, openMainWindow, sendStatusToRenderer, sendRemoteBlacklistUpdate } =
     await import('./ui/main-window')
 
   // The org's centrally-synced blacklist (enterprise only). Constructed before
@@ -223,7 +223,7 @@ app.on('ready', async () => {
 
     // The coordinator already subscribes for matching; this second subscriber
     // keeps the read-only managed rows in the renderer in sync.
-    remoteBlacklist?.onChange(() => sendManagedExclusionsUpdate())
+    remoteBlacklist?.onChange(() => sendRemoteBlacklistUpdate())
     remoteBlacklist?.start()
   }
 
@@ -320,7 +320,7 @@ app.on('ready', async () => {
     getCaptureHotkeyLabel: hotkeyManager.getLabel,
     reconfigureCaptureHotkey,
     notifyExclusionsChanged: () => runtime?.notifyExclusionsChanged(),
-    getManagedExclusions: () => remoteBlacklist?.getSnapshot() ?? { apps: [], urlPatterns: [] },
+    getRemoteBlacklist: () => remoteBlacklist?.getSnapshot() ?? { apps: [], urlPatterns: [] },
     databaseExportSync: rawDatabaseExportSync,
     databaseUploadSync: databaseUploadSync ?? undefined,
     purgeAll: () => runtime?.purgeAll() ?? Promise.reject(new Error('Runtime not initialized')),

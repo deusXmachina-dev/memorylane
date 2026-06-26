@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ManagedExclusions, ObservationState } from '@types'
+import type { BlacklistSnapshot, ObservationState } from '@types'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { AppExclusionList } from './AppExclusionList'
 import { WebsiteExclusionList } from './WebsiteExclusionList'
@@ -46,7 +46,7 @@ export function ExclusionsManager({
 }: ExclusionsManagerProps): React.JSX.Element {
   const api = useMainWindowAPI()
   const [observation, setObservation] = useState<ObservationState | null>(null)
-  const [managed, setManaged] = useState<ManagedExclusions>({ apps: [], urlPatterns: [] })
+  const [managed, setManaged] = useState<BlacklistSnapshot>({ apps: [], urlPatterns: [] })
   const [dismissedAppsAt, setDismissedAppsAt] = useState(() => readDismissedAt(DISMISSED_APPS_KEY))
   const [dismissedUrlsAt, setDismissedUrlsAt] = useState(() => readDismissedAt(DISMISSED_URLS_KEY))
 
@@ -67,11 +67,11 @@ export function ExclusionsManager({
   // in sync so the locked rows reflect the current tenant policy live.
   useEffect(() => {
     let cancelled = false
-    void api.getManagedExclusions().then((initial) => {
+    void api.getRemoteBlacklist().then((initial) => {
       if (cancelled) return
       setManaged(initial)
     })
-    const unsubscribe = api.onManagedExclusionsUpdate((next) => setManaged(next))
+    const unsubscribe = api.onRemoteBlacklistUpdate((next) => setManaged(next))
     return () => {
       cancelled = true
       unsubscribe()

@@ -52,7 +52,7 @@ describe('RemoteBlacklist', () => {
     const expectedPlatform =
       process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : null
     expect(String(url)).toBe(
-      `https://backend.test/api/license/capture-policy${expectedPlatform ? `?platform=${expectedPlatform}` : ''}`,
+      `https://backend.test/api/license/blacklist${expectedPlatform ? `?platform=${expectedPlatform}` : ''}`,
     )
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer device-123')
     // Non-string entries are dropped.

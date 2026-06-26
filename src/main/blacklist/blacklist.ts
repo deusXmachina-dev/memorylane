@@ -1,11 +1,6 @@
-import type { ManagedExclusions } from '../../shared/types'
+import type { BlacklistSnapshot } from '../../shared/types'
 
-/**
- * A source's exclusions, kept raw (un-normalized) so the UI can resolve managed
- * bundle ids to friendly names. The {@link BlacklistCoordinator} normalizes for
- * matching.
- */
-export type BlacklistSnapshot = ManagedExclusions
+export type { BlacklistSnapshot }
 
 /**
  * A source of capture exclusions (apps + URL patterns). Concrete sources —

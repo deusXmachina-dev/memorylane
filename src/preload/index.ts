@@ -113,13 +113,13 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
       ipcRenderer.off('main-window:observationUpdate', handler)
     }
   },
-  // Org-provided (centrally-synced) capture exclusions
-  getManagedExclusions: () => ipcRenderer.invoke('main-window:getManagedExclusions'),
-  onManagedExclusionsUpdate: (callback: (managed: unknown) => void) => {
-    const handler = (_event: unknown, managed: unknown): void => callback(managed)
-    ipcRenderer.on('main-window:managedExclusionsUpdate', handler)
+  // The org's centrally-synced (remote) blacklist, read-only in the UI
+  getRemoteBlacklist: () => ipcRenderer.invoke('main-window:getRemoteBlacklist'),
+  onRemoteBlacklistUpdate: (callback: (blacklist: unknown) => void) => {
+    const handler = (_event: unknown, blacklist: unknown): void => callback(blacklist)
+    ipcRenderer.on('main-window:remoteBlacklistUpdate', handler)
     return () => {
-      ipcRenderer.off('main-window:managedExclusionsUpdate', handler)
+      ipcRenderer.off('main-window:remoteBlacklistUpdate', handler)
     }
   },
   // Permissions

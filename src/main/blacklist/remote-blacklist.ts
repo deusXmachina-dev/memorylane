@@ -1,39 +1,40 @@
 import log from '../logger'
-import type { ManagedExclusions } from '../../shared/types'
+import type { BlacklistSnapshot } from '../../shared/types'
 import {
-  coerceManagedExclusions,
-  readManagedCapturePolicy,
-  writeManagedCapturePolicy,
-} from '../services/managed-capture-policy-store'
+  coerceBlacklistSnapshot,
+  readRemoteBlacklist,
+  writeRemoteBlacklist,
+} from './remote-blacklist-store'
 import { Blacklist } from './blacklist'
 
-const EMPTY: ManagedExclusions = { apps: [], urlPatterns: [] }
+const EMPTY: BlacklistSnapshot = { apps: [], urlPatterns: [] }
 
 // Poll cadence for the tenant blacklist. Cheap, since a sync only notifies on a
 // real change. Matches the enterprise status-refresh interval.
 const DEFAULT_SYNC_INTERVAL_MS = 0.5 * 60 * 1000
 
-function serialize(policy: ManagedExclusions): string {
-  return JSON.stringify([policy.apps, policy.urlPatterns])
+function serialize(snapshot: BlacklistSnapshot): string {
+  return JSON.stringify([snapshot.apps, snapshot.urlPatterns])
 }
 
 export interface RemoteBlacklistParams {
   getDeviceId: () => string
   isActivated: () => boolean
   getBackendUrl: () => string
-  /** Last-known policy cached on disk, or null. Loaded on start() so a restart
-   * enforces before the first network sync. Defaults to the managed-policy store. */
-  readStored?: () => ManagedExclusions | null
-  /** Persists the latest policy so it survives restarts and backend outages. */
-  writeStored?: (policy: ManagedExclusions) => void
+  /** Last-known blacklist cached on disk, or null. Loaded on start() so a
+   * restart enforces before the first network sync. Defaults to the on-disk
+   * remote-blacklist store. */
+  readStored?: () => BlacklistSnapshot | null
+  /** Persists the latest blacklist so it survives restarts and backend outages. */
+  writeStored?: (snapshot: BlacklistSnapshot) => void
   intervalMs?: number
 }
 
 /**
  * The org's centrally-synced capture blacklist (enterprise only). Polls the
- * tenant policy on a timer and caches it to a dedicated file (never the user's
- * settings). The coordinator unions it with the user's exclusions, so managed
- * entries are always enforced and not removable.
+ * tenant blacklist on a timer and caches it to a dedicated file (never the
+ * user's settings). The coordinator unions it with the user's own exclusions,
+ * so managed entries are always enforced and not removable.
  *
  * The cache is durable: loaded on start() and replaced only by a clean HTTP 200.
  * Any failure (4xx/5xx, network, even 401) is logged and keeps the cache, so a
@@ -43,11 +44,11 @@ export class RemoteBlacklist extends Blacklist {
   private readonly getDeviceId: () => string
   private readonly isActivated: () => boolean
   private readonly getBackendUrl: () => string
-  private readonly readStored: () => ManagedExclusions | null
-  private readonly writeStored: (policy: ManagedExclusions) => void
+  private readonly readStored: () => BlacklistSnapshot | null
+  private readonly writeStored: (snapshot: BlacklistSnapshot) => void
   private readonly intervalMs: number
 
-  private policy: ManagedExclusions = EMPTY
+  private current: BlacklistSnapshot = EMPTY
   private serialized = serialize(EMPTY)
   private timer: ReturnType<typeof setInterval> | null = null
   private syncing = false
@@ -57,17 +58,17 @@ export class RemoteBlacklist extends Blacklist {
     this.getDeviceId = params.getDeviceId
     this.isActivated = params.isActivated
     this.getBackendUrl = params.getBackendUrl
-    this.readStored = params.readStored ?? (() => readManagedCapturePolicy())
-    this.writeStored = params.writeStored ?? ((policy) => writeManagedCapturePolicy(policy))
+    this.readStored = params.readStored ?? (() => readRemoteBlacklist())
+    this.writeStored = params.writeStored ?? ((snapshot) => writeRemoteBlacklist(snapshot))
     this.intervalMs = params.intervalMs ?? DEFAULT_SYNC_INTERVAL_MS
   }
 
   getBlacklistedApps(): string[] {
-    return this.policy.apps
+    return this.current.apps
   }
 
   getBlacklistedUrls(): string[] {
-    return this.policy.urlPatterns
+    return this.current.urlPatterns
   }
 
   start(): void {
@@ -90,49 +91,51 @@ export class RemoteBlacklist extends Blacklist {
     super.dispose()
   }
 
-  /** Enforces the on-disk policy ahead of the first sync, so a restart has no
+  /** Enforces the on-disk blacklist ahead of the first sync, so a restart has no
    * blacklist-free window. Missing/empty cache is a no-op. */
   private loadCached(): void {
     const cached = this.readStored()
     if (!cached) return
     const serialized = serialize(cached)
     if (serialized === this.serialized) return
-    this.policy = cached
+    this.current = cached
     this.serialized = serialized
     log.info(
-      `[CapturePolicy] Loaded cached blacklist: ${cached.apps.length} apps, ` +
+      `[RemoteBlacklist] Loaded cached blacklist: ${cached.apps.length} apps, ` +
         `${cached.urlPatterns.length} url patterns`,
     )
     this.emit()
   }
 
   /** One sync pass. Skips while a prior pass is in flight or the device isn't
-   * activated; updates the held policy and notifies only on a real change. */
+   * activated; updates the held blacklist and notifies only on a real change. */
   async sync(): Promise<void> {
     if (this.syncing || !this.isActivated()) return
     this.syncing = true
     try {
-      const next = await this.fetchPolicy()
+      const next = await this.fetchRemote()
       const serialized = serialize(next)
       if (serialized === this.serialized) return
-      this.policy = next
+      this.current = next
       this.serialized = serialized
       this.writeStored(next)
       log.info(
-        `[CapturePolicy] Synced centralized blacklist: ${next.apps.length} apps, ` +
+        `[RemoteBlacklist] Synced centralized blacklist: ${next.apps.length} apps, ` +
           `${next.urlPatterns.length} url patterns`,
       )
       this.emit()
     } catch (error) {
-      log.warn('[CapturePolicy] Sync failed:', error)
+      log.warn('[RemoteBlacklist] Sync failed:', error)
     } finally {
       this.syncing = false
     }
   }
 
-  private async fetchPolicy(): Promise<ManagedExclusions> {
+  private async fetchRemote(): Promise<BlacklistSnapshot> {
     const base = this.getBackendUrl().replace(/\/?$/, '/')
-    const url = new URL('api/license/capture-policy', base)
+    // The endpoint path is the backend contract; the excludedApps/
+    // excludedUrlPatterns response keys are the server's response shape.
+    const url = new URL('api/license/blacklist', base)
     // Narrow app tokens to this platform's identifiers (macOS bundle ids vs.
     // Windows process names); the device can't match the other's.
     const platform =
@@ -144,12 +147,12 @@ export class RemoteBlacklist extends Blacklist {
     // Any non-200 (including 401) is a failure: the sync loop swallows the throw
     // and keeps the last-known blacklist. Only a clean 200 replaces it.
     if (!response.ok) {
-      throw new Error(`Capture policy request failed (${response.status})`)
+      throw new Error(`Remote blacklist request failed (${response.status})`)
     }
     const data = (await response.json()) as {
       excludedApps?: unknown
       excludedUrlPatterns?: unknown
     }
-    return coerceManagedExclusions(data.excludedApps, data.excludedUrlPatterns)
+    return coerceBlacklistSnapshot(data.excludedApps, data.excludedUrlPatterns)
   }
 }
