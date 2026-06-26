@@ -11,6 +11,15 @@ function toStringArray(value: unknown): string[] {
     : []
 }
 
+/**
+ * Coerces untrusted app/url-pattern values (from disk or the backend) into a
+ * sanitized {@link ManagedExclusions}. The single source of truth for turning
+ * an unknown payload into a managed policy.
+ */
+export function coerceManagedExclusions(apps: unknown, urlPatterns: unknown): ManagedExclusions {
+  return { apps: toStringArray(apps), urlPatterns: toStringArray(urlPatterns) }
+}
+
 function defaultPath(): string {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const electron = require('electron') as typeof import('electron')
@@ -30,10 +39,7 @@ export function readManagedCapturePolicy(
   try {
     const raw = fs.readFileSync(filePath, 'utf-8')
     const data = JSON.parse(raw) as { apps?: unknown; urlPatterns?: unknown }
-    return {
-      apps: toStringArray(data.apps),
-      urlPatterns: toStringArray(data.urlPatterns),
-    }
+    return coerceManagedExclusions(data.apps, data.urlPatterns)
   } catch {
     return null
   }

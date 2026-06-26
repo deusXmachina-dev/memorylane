@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
-import { HelpCircle, Plus, Search, type LucideIcon } from 'lucide-react'
+import { Plus, Search, type LucideIcon } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { ScrollArea } from '@components/ui/scroll-area'
 import { ExclusionRow, FoundBlock, ManagedRow, type ExclusionRowItem } from './ExclusionSwitchList'
+import { HelpTooltip } from './HelpTooltip'
 
 export type ExclusionPickerItem = ExclusionRowItem
 
@@ -149,22 +150,7 @@ export function ExclusionPicker({
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-1.5">
         <p className="text-sm font-medium text-foreground">{title}</p>
-        {titleHelp && (
-          <span
-            tabIndex={0}
-            role="button"
-            aria-label={`How ${title} matching works`}
-            className="group relative inline-flex rounded outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <HelpCircle aria-hidden="true" className="size-3.5 cursor-help text-muted-foreground" />
-            <span
-              role="tooltip"
-              className="pointer-events-none absolute top-full left-0 z-10 mt-1 w-64 rounded-md border border-border bg-popover px-2.5 py-2 text-[11px] leading-snug text-popover-foreground opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-            >
-              {titleHelp}
-            </span>
-          </span>
-        )}
+        {titleHelp && <HelpTooltip label={`How ${title} matching works`}>{titleHelp}</HelpTooltip>}
       </div>
 
       <div className="relative">

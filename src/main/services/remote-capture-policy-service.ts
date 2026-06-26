@@ -1,17 +1,12 @@
 import log from '../logger'
 import type { ManagedExclusions } from '../../shared/types'
+import { coerceManagedExclusions } from './managed-capture-policy-store'
 
 const EMPTY: ManagedExclusions = { apps: [], urlPatterns: [] }
 
 // Poll cadence for the tenant blacklist. Cheap, since a sync only notifies on a
 // real change. Matches the enterprise status-refresh interval.
 const DEFAULT_SYNC_INTERVAL_MS = 0.5 * 60 * 1000
-
-function toStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string')
-    : []
-}
 
 function serialize(policy: ManagedExclusions): string {
   return JSON.stringify([policy.apps, policy.urlPatterns])
@@ -144,9 +139,6 @@ export class RemoteCapturePolicyService {
       excludedApps?: unknown
       excludedUrlPatterns?: unknown
     }
-    return {
-      apps: toStringArray(data.excludedApps),
-      urlPatterns: toStringArray(data.excludedUrlPatterns),
-    }
+    return coerceManagedExclusions(data.excludedApps, data.excludedUrlPatterns)
   }
 }
