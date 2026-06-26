@@ -7,11 +7,11 @@ vi.mock('../logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
-import { readManagedCapturePolicy, writeManagedCapturePolicy } from './managed-capture-policy-store'
+import { readRemoteBlacklist, writeRemoteBlacklist } from './remote-blacklist-store'
 
-const TMP_FILE = path.join(os.tmpdir(), 'memorylane-managed-capture-policy.test.json')
+const TMP_FILE = path.join(os.tmpdir(), 'memorylane-remote-blacklist.test.json')
 
-describe('managed-capture-policy-store', () => {
+describe('remote-blacklist-store', () => {
   afterEach(() => {
     try {
       fs.unlinkSync(TMP_FILE)
@@ -20,24 +20,24 @@ describe('managed-capture-policy-store', () => {
     }
   })
 
-  it('round-trips a policy through write then read', () => {
-    const policy = { apps: ['slack', 'msedge'], urlPatterns: ['*bank*'] }
-    writeManagedCapturePolicy(policy, TMP_FILE)
-    expect(readManagedCapturePolicy(TMP_FILE)).toEqual(policy)
+  it('round-trips a blacklist through write then read', () => {
+    const blacklist = { apps: ['slack', 'msedge'], urlPatterns: ['*bank*'] }
+    writeRemoteBlacklist(blacklist, TMP_FILE)
+    expect(readRemoteBlacklist(TMP_FILE)).toEqual(blacklist)
   })
 
   it('returns null when the file is missing', () => {
-    expect(readManagedCapturePolicy(TMP_FILE)).toBeNull()
+    expect(readRemoteBlacklist(TMP_FILE)).toBeNull()
   })
 
   it('returns null on corrupt JSON', () => {
     fs.writeFileSync(TMP_FILE, '{ not valid json')
-    expect(readManagedCapturePolicy(TMP_FILE)).toBeNull()
+    expect(readRemoteBlacklist(TMP_FILE)).toBeNull()
   })
 
   it('drops non-string entries and missing fields on read', () => {
     fs.writeFileSync(TMP_FILE, JSON.stringify({ apps: ['slack', 1, null, 'code'] }))
-    expect(readManagedCapturePolicy(TMP_FILE)).toEqual({
+    expect(readRemoteBlacklist(TMP_FILE)).toEqual({
       apps: ['slack', 'code'],
       urlPatterns: [],
     })

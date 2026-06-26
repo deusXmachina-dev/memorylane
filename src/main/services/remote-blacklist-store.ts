@@ -3,7 +3,7 @@ import * as path from 'path'
 import log from '../logger'
 import type { ManagedExclusions } from '../../shared/types'
 
-const FILE_NAME = 'managed-capture-policy.json'
+const FILE_NAME = 'remote-blacklist.json'
 
 function toStringArray(value: unknown): string[] {
   return Array.isArray(value)
@@ -14,7 +14,7 @@ function toStringArray(value: unknown): string[] {
 /**
  * Coerces untrusted app/url-pattern values (from disk or the backend) into a
  * sanitized {@link ManagedExclusions}. The single source of truth for turning
- * an unknown payload into a managed policy.
+ * an unknown payload into a remote blacklist.
  */
 export function coerceManagedExclusions(apps: unknown, urlPatterns: unknown): ManagedExclusions {
   return { apps: toStringArray(apps), urlPatterns: toStringArray(urlPatterns) }
@@ -27,15 +27,12 @@ function defaultPath(): string {
 }
 
 /**
- * Reads the last-known centralized capture blacklist cached on disk. Returns
- * null when the file is missing or unreadable/corrupt, so callers treat it as
- * "no cached policy" and fall back to waiting for a fresh sync. Entries are
- * sanitized to string arrays in case the file was hand-edited or written by an
- * older build.
+ * Reads the last-known remote blacklist cached on disk. Returns null when the
+ * file is missing or unreadable/corrupt, so callers treat it as "no cached
+ * blacklist" and fall back to waiting for a fresh sync. Entries are sanitized to
+ * string arrays in case the file was hand-edited or written by an older build.
  */
-export function readManagedCapturePolicy(
-  filePath: string = defaultPath(),
-): ManagedExclusions | null {
+export function readRemoteBlacklist(filePath: string = defaultPath()): ManagedExclusions | null {
   try {
     const raw = fs.readFileSync(filePath, 'utf-8')
     const data = JSON.parse(raw) as { apps?: unknown; urlPatterns?: unknown }
@@ -46,16 +43,16 @@ export function readManagedCapturePolicy(
 }
 
 /**
- * Persists the latest centralized capture blacklist. Failures are swallowed
- * (logged) — a disk hiccup must never break the policy sync loop.
+ * Persists the latest remote blacklist. Failures are swallowed (logged) — a disk
+ * hiccup must never break the sync loop.
  */
-export function writeManagedCapturePolicy(
-  policy: ManagedExclusions,
+export function writeRemoteBlacklist(
+  blacklist: ManagedExclusions,
   filePath: string = defaultPath(),
 ): void {
   try {
-    fs.writeFileSync(filePath, JSON.stringify(policy, null, 2))
+    fs.writeFileSync(filePath, JSON.stringify(blacklist, null, 2))
   } catch (error) {
-    log.warn('[CapturePolicy] Failed to persist centralized blacklist:', error)
+    log.warn('[RemoteBlacklist] Failed to persist blacklist:', error)
   }
 }

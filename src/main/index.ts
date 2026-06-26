@@ -33,11 +33,8 @@ import { TASK_MINING_ENABLED } from './feature-flags'
 import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
 import { DatabaseUploadSync } from './services/database-upload-sync'
-import { RemoteCapturePolicyService } from './services/remote-capture-policy-service'
-import {
-  readManagedCapturePolicy,
-  writeManagedCapturePolicy,
-} from './services/managed-capture-policy-store'
+import { RemoteBlacklistService } from './services/remote-blacklist-service'
+import { readRemoteBlacklist, writeRemoteBlacklist } from './services/remote-blacklist-store'
 import { createMainRuntime, type MainRuntime } from './runtime'
 import { registerEvalMediaScheme, registerEvalMediaProtocol } from './eval/eval-media-protocol'
 import { createObservationController, type ObservationController } from './observation-controller'
@@ -88,7 +85,7 @@ let patternDetector: PatternDetector | null = null
 let taskMiner: TaskMiner | null = null
 let rawDatabaseExportSync: RawDatabaseExportSync | null = null
 let databaseUploadSync: DatabaseUploadSync | null = null
-let remoteCapturePolicy: RemoteCapturePolicyService | null = null
+let remoteBlacklist: RemoteBlacklistService | null = null
 let observation: ObservationController | null = null
 
 // Blocks `app.quit()` until all subscribers to native helpers have released
@@ -104,7 +101,7 @@ app.on('before-quit', (event) => {
   event.preventDefault()
 
   runtime?.accessProvider.stopPeriodicRefresh()
-  remoteCapturePolicy?.stop()
+  remoteBlacklist?.stop()
   observation?.dispose()
 
   void Promise.allSettled([
@@ -215,18 +212,18 @@ app.on('ready', async () => {
     })
     databaseUploadSync.start()
 
-    remoteCapturePolicy = new RemoteCapturePolicyService({
+    remoteBlacklist = new RemoteBlacklistService({
       getDeviceId: () => deviceIdentity.getDeviceId(),
       isActivated: () => runtime?.accessProvider.getAccessState().isEnterpriseActivated ?? false,
       getBackendUrl: () => ENTERPRISE_BACKEND_CONFIG.BACKEND_URL,
-      onChange: (policy) => {
-        runtime?.setManagedExclusions(policy)
+      onChange: (blacklist) => {
+        runtime?.setManagedExclusions(blacklist)
         sendManagedExclusionsUpdate()
       },
-      readStored: () => readManagedCapturePolicy(),
-      writeStored: (policy) => writeManagedCapturePolicy(policy),
+      readStored: () => readRemoteBlacklist(),
+      writeStored: (blacklist) => writeRemoteBlacklist(blacklist),
     })
-    remoteCapturePolicy.start()
+    remoteBlacklist.start()
   }
 
   userContextBuilder = new UserContextBuilder(runtime.storage, runtime.inferenceProvider)
@@ -322,7 +319,7 @@ app.on('ready', async () => {
     getCaptureHotkeyLabel: hotkeyManager.getLabel,
     reconfigureCaptureHotkey,
     updateExclusions: (exclusions) => runtime?.updateExclusions(exclusions),
-    getManagedExclusions: () => remoteCapturePolicy?.getPolicy() ?? { apps: [], urlPatterns: [] },
+    getManagedExclusions: () => remoteBlacklist?.getBlacklist() ?? { apps: [], urlPatterns: [] },
     databaseExportSync: rawDatabaseExportSync,
     databaseUploadSync: databaseUploadSync ?? undefined,
     purgeAll: () => runtime?.purgeAll() ?? Promise.reject(new Error('Runtime not initialized')),
