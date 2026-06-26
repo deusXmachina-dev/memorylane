@@ -103,6 +103,11 @@ export class RemoteCapturePolicyService {
   private async fetchPolicy(): Promise<ManagedExclusions> {
     const base = this.getBackendUrl().replace(/\/?$/, '/')
     const url = new URL('api/license/capture-policy', base)
+    // Narrow app tokens to this platform's identifiers (macOS bundle ids vs.
+    // Windows process names); the device can't match the other platform's.
+    const platform =
+      process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : null
+    if (platform) url.searchParams.set('platform', platform)
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${this.getDeviceId()}` },
     })

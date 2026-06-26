@@ -44,7 +44,12 @@ describe('RemoteCapturePolicyService', () => {
     await service.sync()
 
     const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit]
-    expect(String(url)).toBe('https://backend.test/api/license/capture-policy')
+    // The client sends its platform so the backend returns only matchable tokens.
+    const expectedPlatform =
+      process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : null
+    expect(String(url)).toBe(
+      `https://backend.test/api/license/capture-policy${expectedPlatform ? `?platform=${expectedPlatform}` : ''}`,
+    )
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer device-123')
     // Non-string entries are dropped.
     expect(service.getPolicy()).toEqual({
