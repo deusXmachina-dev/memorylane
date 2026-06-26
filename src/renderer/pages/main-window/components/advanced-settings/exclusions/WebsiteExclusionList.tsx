@@ -73,6 +73,12 @@ export function WebsiteExclusionList({
       onDismissFound={onDismissFound}
       managed={managed}
       title="Websites"
+      titleHelp={
+        <>
+          Wrap text in <code className="font-medium">*</code> to match it anywhere in a URL — e.g.{' '}
+          <code className="font-medium">*bank.com*</code> blocks any address containing bank.com.
+        </>
+      }
       icon={Globe}
       placeholder="Type a URL to block (e.g. https://bank.com)"
       emptyPrimary="No websites blocked yet."
