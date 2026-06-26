@@ -29,6 +29,9 @@ interface ExclusionPickerProps {
   /** Org-provided (centrally-synced) entries — shown read-only and filtered out
    * of the editable list. */
   managed?: string[]
+  /** Maps a managed entry token to a friendly display name (e.g. bundle id →
+   * app name). Defaults to showing the raw entry. */
+  resolveManagedLabel?: (entry: string) => string
 }
 
 export function ExclusionPicker({
@@ -44,6 +47,7 @@ export function ExclusionPicker({
   emptyPrimary,
   emptySecondary,
   managed,
+  resolveManagedLabel,
 }: ExclusionPickerProps): React.JSX.Element {
   const [query, setQuery] = useState('')
   const normalizedQuery = query.trim().toLowerCase()
@@ -245,7 +249,12 @@ export function ExclusionPicker({
             <ScrollArea className="h-42">
               <ul className="space-y-2 pr-2">
                 {(managed ?? []).map((entry) => (
-                  <ManagedRow key={`managed:${entry}`} entry={entry} icon={Icon} />
+                  <ManagedRow
+                    key={`managed:${entry}`}
+                    entry={entry}
+                    label={resolveManagedLabel?.(entry)}
+                    icon={Icon}
+                  />
                 ))}
                 {userItems.map((item) => (
                   <ExclusionRow

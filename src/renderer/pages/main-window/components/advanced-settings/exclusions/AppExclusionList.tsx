@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AppWindow } from 'lucide-react'
 import type { InstalledApp } from '@types'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
@@ -58,6 +58,25 @@ export function AppExclusionList({
     return [...byToken.values()]
   }, [apps, excludedApps])
 
+  // Managed entries arrive as raw tokens (often full bundle ids like
+  // `com.google.chrome`). Resolve them to an installed app's display name,
+  // falling back to the bundle id's last segment — same candidate order the
+  // capture matcher uses — then to the raw entry.
+  const resolveManagedLabel = useCallback(
+    (entry: string): string => {
+      const normalized = entry.toLowerCase()
+      const direct = apps?.find((a) => a.matchToken === normalized)
+      if (direct) return direct.displayName
+      const lastSegment = normalized.split('.').pop()
+      if (lastSegment && lastSegment !== normalized) {
+        const bySegment = apps?.find((a) => a.matchToken === lastSegment)
+        if (bySegment) return bySegment.displayName
+      }
+      return entry
+    },
+    [apps],
+  )
+
   return (
     <ExclusionPicker
       excluded={excludedApps}
@@ -66,6 +85,7 @@ export function AppExclusionList({
       found={found}
       onDismissFound={onDismissFound}
       managed={managed}
+      resolveManagedLabel={resolveManagedLabel}
       title="Apps"
       icon={AppWindow}
       placeholder="Search or type an app name (e.g. signal)"
