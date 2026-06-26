@@ -1,5 +1,36 @@
 import { describe, expect, it } from 'vitest'
-import { isPrivateNetworkHost, isSameRegistrableDomain, registrableDomain } from './url-utils'
+import {
+  isPrivateNetworkHost,
+  isSameRegistrableDomain,
+  normalizeUrlPattern,
+  registrableDomain,
+} from './url-utils'
+
+describe('normalizeUrlPattern', () => {
+  it('prepends https:// to a bare host so it matches a scheme-qualified URL', () => {
+    expect(normalizeUrlPattern('bank.com')).toBe('https://bank.com')
+    expect(normalizeUrlPattern('  Bank.com  ')).toBe('https://Bank.com')
+  })
+
+  it('leaves full URLs untouched', () => {
+    expect(normalizeUrlPattern('https://bank.com')).toBe('https://bank.com')
+    expect(normalizeUrlPattern('http://intranet/portal')).toBe('http://intranet/portal')
+  })
+
+  it('leaves wildcard patterns untouched', () => {
+    expect(normalizeUrlPattern('*bank*')).toBe('*bank*')
+    expect(normalizeUrlPattern('bank.?om')).toBe('bank.?om')
+  })
+
+  it('returns empty/blank input unchanged', () => {
+    expect(normalizeUrlPattern('')).toBe('')
+    expect(normalizeUrlPattern('   ')).toBe('')
+  })
+
+  it('is idempotent', () => {
+    expect(normalizeUrlPattern(normalizeUrlPattern('bank.com'))).toBe('https://bank.com')
+  })
+})
 
 describe('registrableDomain', () => {
   it('returns the last two labels for multi-label hosts', () => {

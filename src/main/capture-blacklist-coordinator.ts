@@ -7,6 +7,7 @@ import {
   normalizeWildcardPatterns,
 } from './capture-exclusions'
 import { getAnonymousModeBrowserMatch } from './capture-anonymous-mode'
+import { normalizeUrlPattern } from '../shared/url-utils'
 
 export interface CaptureBlacklistCoordinator {
   handleInteraction(event: InteractionContext): void
@@ -33,8 +34,13 @@ export function createCaptureBlacklistCoordinator(params: {
   // ones. Effective apps/URLs (used for matching) are the union of both,
   // recomputed whenever either layer changes. Private browsing is user-only; the
   // managed layer never contributes it.
+  // URL patterns match starts-with against the full URL, so every entry path
+  // runs through normalizeUrlPattern (which prepends https:// to a bare host).
+  const normalizeUrlPatterns = (values: readonly string[] | undefined): string[] =>
+    normalizeWildcardPatterns(values).map(normalizeUrlPattern)
+
   let userExcludedApps = normalizeExcludedApps(params.initialExcludedApps)
-  let userExcludedUrlPatterns = normalizeWildcardPatterns(params.initialExcludedUrlPatterns)
+  let userExcludedUrlPatterns = normalizeUrlPatterns(params.initialExcludedUrlPatterns)
   let managedExcludedApps: string[] = []
   let managedExcludedUrlPatterns: string[] = []
   let excludePrivateBrowsing = params.initialExcludePrivateBrowsing ?? true
@@ -149,7 +155,7 @@ export function createCaptureBlacklistCoordinator(params: {
     },
     updateExclusions(exclusions): void {
       userExcludedApps = normalizeExcludedApps(exclusions.apps)
-      userExcludedUrlPatterns = normalizeWildcardPatterns(exclusions.urlPatterns)
+      userExcludedUrlPatterns = normalizeUrlPatterns(exclusions.urlPatterns)
       excludePrivateBrowsing = exclusions.excludePrivateBrowsing
       if (!excludePrivateBrowsing) {
         privateBrowserWindowHandles.clear()
@@ -159,7 +165,7 @@ export function createCaptureBlacklistCoordinator(params: {
     },
     setManagedExclusions(managed): void {
       managedExcludedApps = normalizeExcludedApps(managed.apps)
-      managedExcludedUrlPatterns = normalizeWildcardPatterns(managed.urlPatterns)
+      managedExcludedUrlPatterns = normalizeUrlPatterns(managed.urlPatterns)
       recomputeEffective()
       reconcileBlockingState('managed_update', lastActiveWindow)
     },

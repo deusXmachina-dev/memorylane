@@ -391,4 +391,45 @@ describe('capture blacklist coordinator', () => {
     )
     expect(suppressionTransitions).toEqual([true])
   })
+
+  it('enforces a bare-host managed url pattern by normalizing it to a scheme prefix', () => {
+    const suppressionTransitions: boolean[] = []
+    const coordinator = createCaptureBlacklistCoordinator({
+      initialExcludedApps: [],
+      initialExcludePrivateBrowsing: false,
+      forwardInteraction: () => undefined,
+      flushEvents: () => undefined,
+      setScreenshotsSuppressed: (suppressed) => {
+        suppressionTransitions.push(suppressed)
+      },
+    })
+
+    // An org pushes a bare host (no scheme). Without normalization the
+    // starts-with matcher would never match a real https:// URL.
+    coordinator.setManagedExclusions({ apps: [], urlPatterns: ['bank.com'] })
+
+    coordinator.handleInteraction(
+      appChangeEvent('Google Chrome', { title: 'Bank', url: 'https://bank.com/accounts' }),
+    )
+    expect(suppressionTransitions).toEqual([true])
+  })
+
+  it('enforces a bare-host user url pattern by normalizing it to a scheme prefix', () => {
+    const suppressionTransitions: boolean[] = []
+    const coordinator = createCaptureBlacklistCoordinator({
+      initialExcludedApps: [],
+      initialExcludedUrlPatterns: ['bank.com'],
+      initialExcludePrivateBrowsing: false,
+      forwardInteraction: () => undefined,
+      flushEvents: () => undefined,
+      setScreenshotsSuppressed: (suppressed) => {
+        suppressionTransitions.push(suppressed)
+      },
+    })
+
+    coordinator.handleInteraction(
+      appChangeEvent('Google Chrome', { title: 'Bank', url: 'https://bank.com/accounts' }),
+    )
+    expect(suppressionTransitions).toEqual([true])
+  })
 })

@@ -3,10 +3,8 @@ import type { ManagedExclusions } from '../../shared/types'
 
 const EMPTY: ManagedExclusions = { apps: [], urlPatterns: [] }
 
-// Poll cadence for pulling the tenant's centralized blacklist. Aligned with the
-// enterprise status-refresh interval so a device converges on an IT edit within
-// roughly one refresh. The sync is idempotent and only notifies on a real
-// change, so polling costs little.
+// Poll cadence for the tenant blacklist. Cheap, since a sync only notifies on a
+// real change. Matches the enterprise status-refresh interval.
 const DEFAULT_SYNC_INTERVAL_MS = 0.5 * 60 * 1000
 
 function toStringArray(value: unknown): string[] {
@@ -23,31 +21,25 @@ export interface RemoteCapturePolicyServiceParams {
   getDeviceId: () => string
   isActivated: () => boolean
   getBackendUrl: () => string
-  /** Fired with the new policy whenever it actually changes (including the first
-   * successful fetch). The blacklist coordinator unions it with the user's list. */
+  /** Fired when the policy changes (including the first fetch); the coordinator
+   * unions it with the user's list. */
   onChange: (policy: ManagedExclusions) => void
-  /** Reads the last-known policy cached on disk, or null when none is cached.
-   * Loaded on start() so a restarted device enforces the blacklist immediately,
-   * before the first network sync lands. */
+  /** Last-known policy cached on disk, or null. Loaded on start() so a restart
+   * enforces before the first network sync. */
   readStored?: () => ManagedExclusions | null
-  /** Persists the latest policy whenever it changes, so it survives restarts and
-   * outlives transient backend failures. */
+  /** Persists the latest policy so it survives restarts and backend outages. */
   writeStored?: (policy: ManagedExclusions) => void
   intervalMs?: number
 }
 
 /**
- * Pulls the tenant's centralized capture blacklist (DEU-166) on a timer and
- * caches the latest copy to a dedicated file (never the user's own settings).
- * It owns its own poll loop — the blacklist coordinator unions this with the
- * user's exclusions at capture time, so centrally-mandated entries are always
- * enforced and never user-removable.
+ * Polls the tenant's centralized capture blacklist on a timer and caches it to a
+ * dedicated file (never the user's settings). The coordinator unions it with the
+ * user's exclusions, so managed entries are always enforced and not removable.
  *
- * The last-known policy is durable: it's loaded from disk on start() (enforced
- * before the first network sync) and only ever replaced by a clean HTTP 200.
- * Any failure — 4xx/5xx, network error, even a 401 deactivation — is swallowed
- * (logged) and leaves the cached policy intact, so a backend blip never drops
- * the blacklist. Only a 200 carrying an empty list clears it.
+ * The cache is durable: loaded on start() and replaced only by a clean HTTP 200.
+ * Any failure (4xx/5xx, network, even 401) is logged and keeps the cache, so a
+ * backend blip never drops the blacklist. Only a 200 with an empty list clears it.
  */
 export class RemoteCapturePolicyService {
   private readonly getDeviceId: () => string
@@ -85,9 +77,8 @@ export class RemoteCapturePolicyService {
     void this.sync()
   }
 
-  /** Loads the on-disk policy and enforces it immediately, ahead of the first
-   * network sync, so a restarted device never has a blacklist-free window. A
-   * missing/empty cache is a no-op (reuses the change-detection below). */
+  /** Enforces the on-disk policy ahead of the first sync, so a restart has no
+   * blacklist-free window. Missing/empty cache is a no-op. */
   private loadCached(): void {
     const cached = this.readStored?.()
     if (!cached) return
@@ -137,16 +128,15 @@ export class RemoteCapturePolicyService {
     const base = this.getBackendUrl().replace(/\/?$/, '/')
     const url = new URL('api/license/capture-policy', base)
     // Narrow app tokens to this platform's identifiers (macOS bundle ids vs.
-    // Windows process names); the device can't match the other platform's.
+    // Windows process names); the device can't match the other's.
     const platform =
       process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : null
     if (platform) url.searchParams.set('platform', platform)
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${this.getDeviceId()}` },
     })
-    // Any non-200 (including a 401 deactivation) is treated as a failure so the
-    // last-known blacklist is kept rather than dropped — only a clean 200 ever
-    // replaces it. The sync loop swallows the throw and leaves the cache intact.
+    // Any non-200 (including 401) is a failure: the sync loop swallows the throw
+    // and keeps the last-known blacklist. Only a clean 200 replaces it.
     if (!response.ok) {
       throw new Error(`Capture policy request failed (${response.status})`)
     }

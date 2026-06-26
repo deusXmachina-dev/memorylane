@@ -61,6 +61,21 @@ export function isPrivateNetworkHost(hostname: string): boolean {
   return false
 }
 
+/**
+ * Normalize a URL exclusion pattern to a matchable "starts-with" prefix. Patterns
+ * match against the full scheme-qualified URL, so a bare host like `bank.com`
+ * can't match `https://bank.com/...`; prepend `https://` to a scheme-less,
+ * wildcard-free entry. Full URLs and `*`/`?` patterns are left as-is.
+ *
+ * Shared by every entry path (user input, "Found" suggestions, managed sync) so
+ * the matcher, settings, and UI agree on what a pattern means.
+ */
+export function normalizeUrlPattern(value: string): string {
+  const v = value.trim()
+  if (!v || /[*?]/.test(v) || v.includes('://')) return v
+  return `https://${v}`
+}
+
 function hostnameOf(input: string): string | null {
   try {
     return new URL(input).hostname

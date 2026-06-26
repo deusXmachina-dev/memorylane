@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Globe } from 'lucide-react'
 import type { SeenDomain } from '@types'
+import { normalizeUrlPattern } from '@/shared/url-utils'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { ExclusionPicker, type ExclusionPickerItem } from './ExclusionPicker'
 
@@ -10,15 +11,6 @@ interface WebsiteExclusionListProps {
   found?: string[]
   onDismissFound?: () => void
   managed?: string[]
-}
-
-// URL exclusions match "starts-with" against the full URL, so a bare host can't
-// match. Prepend https:// to a scheme-less, wildcard-free entry so it forms a
-// valid prefix; leave full URLs and `*`/`?` wildcard patterns untouched.
-function normalizeUrlInput(value: string): string {
-  const v = value.trim()
-  if (!v || /[*?]/.test(v) || v.includes('://')) return v
-  return `https://${v}`
 }
 
 export function WebsiteExclusionList({
@@ -58,7 +50,7 @@ export function WebsiteExclusionList({
       byToken.set(t, { key: t, matchToken: t, label: t })
     }
     for (const d of domains) {
-      const t = normalizeUrlInput(d.tld.toLowerCase())
+      const t = normalizeUrlPattern(d.tld.toLowerCase())
       if (!byToken.has(t)) byToken.set(t, { key: t, matchToken: t, label: t })
     }
     return [...byToken.values()]
@@ -67,9 +59,9 @@ export function WebsiteExclusionList({
   return (
     <ExclusionPicker
       excluded={excludedUrlPatterns}
-      onChange={(next) => onChange(next.map(normalizeUrlInput))}
+      onChange={(next) => onChange(next.map(normalizeUrlPattern))}
       items={items}
-      found={found?.map(normalizeUrlInput)}
+      found={found?.map(normalizeUrlPattern)}
       onDismissFound={onDismissFound}
       managed={managed}
       title="Websites"
