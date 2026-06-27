@@ -176,7 +176,7 @@ export function ExclusionPicker({
 
       {normalizedQuery ? (
         <ScrollArea className="h-42">
-          <ul className="space-y-2 pr-2">
+          <ul className="space-y-2">
             {suggestions.map((item) => (
               <li
                 key={item.key}
@@ -233,7 +233,7 @@ export function ExclusionPicker({
             </div>
           ) : hasRows ? (
             <ScrollArea className="h-42">
-              <ul className="space-y-2 pr-2">
+              <ul className="space-y-2">
                 {(managed ?? []).map((entry) => (
                   <ManagedRow
                     key={`managed:${entry}`}
