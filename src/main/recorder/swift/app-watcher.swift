@@ -119,13 +119,26 @@ let browserBundleIds: Set<String> = [
     "com.apple.SafariTechnologyPreview",
 ]
 
+/// New-tab / blank sentinels carry no real navigable URL. On the re-read path we
+/// treat them as "not settled yet" so a freshly-navigated tab isn't reported (and
+/// blacklisted/attributed) as chrome://newtab/.
+func isNewTabSentinel(_ url: String) -> Bool {
+    let u = url.lowercased()
+    return u.hasPrefix("chrome://newtab")
+        || u.hasPrefix("chrome://new-tab-page")
+        || u.hasPrefix("edge://newtab")
+        || u.hasPrefix("about:newtab")
+        || u == "about:blank"
+}
+
 /// Try the AXDocument attribute on the window — supported by Safari and Chrome-family.
-func axDocumentURL(window: AXUIElement) -> String? {
+func axDocumentURL(window: AXUIElement, rejectSentinels: Bool = false) -> String? {
     var value: AnyObject?
     guard AXUIElementCopyAttributeValue(window, "AXDocument" as CFString, &value) == .success else {
         return nil
     }
     guard let url = value as? String, !url.isEmpty, url != "about:blank" else { return nil }
+    if rejectSentinels && isNewTabSentinel(url) { return nil }
     return url
 }
 
@@ -161,12 +174,18 @@ func findAddressBarValue(in element: AXUIElement, depth: Int = 0) -> String? {
 
 /// Extract the current URL from a browser window using the Accessibility API only.
 /// No AppleScript — relies solely on the Accessibility permission already required by this process.
-func browserURL(pid: pid_t, bundleId: String) -> String? {
+func browserURL(pid: pid_t, bundleId: String, rejectSentinels: Bool = false) -> String? {
     guard browserBundleIds.contains(bundleId) else { return nil }
     guard let window = focusedWindow(forPid: pid) else { return nil }
 
     // AXDocument is the fast path — one attribute read, works for Safari and Chrome-family.
-    if let url = axDocumentURL(window: window) { return url }
+    if let url = axDocumentURL(window: window, rejectSentinels: rejectSentinels) { return url }
+
+    // On the re-read path we deliberately do NOT fall back to the address-bar BFS:
+    // the omnibox often yields a scheme-less or half-typed value that won't match a
+    // scheme-qualified blacklist pattern. AXDocument settles to the committed URL
+    // within a few hundred ms of navigation, which the re-sample retries catch.
+    if rejectSentinels { return nil }
 
     // Fall back to searching the AX tree for the address bar text field.
     return findAddressBarValue(in: window)
@@ -175,7 +194,14 @@ func browserURL(pid: pid_t, bundleId: String) -> String? {
 // MARK: - Build event payload
 
 /// Build the full event dictionary, enriching with url/document where possible.
-func buildEvent(type: String, app: NSRunningApplication, title: String) -> [String: Any] {
+/// `explicitURL` lets a caller supply an already-read URL (e.g. a re-sampled,
+/// settled URL) instead of reading it again here.
+func buildEvent(
+    type: String,
+    app: NSRunningApplication,
+    title: String,
+    explicitURL: String? = nil
+) -> [String: Any] {
     let bundleId = app.bundleIdentifier ?? ""
     let appName = app.localizedName ?? ""
     let pid = app.processIdentifier
@@ -189,7 +215,7 @@ func buildEvent(type: String, app: NSRunningApplication, title: String) -> [Stri
         "title": title,
     ]
 
-    if let url = browserURL(pid: pid, bundleId: bundleId) {
+    if let url = explicitURL ?? browserURL(pid: pid, bundleId: bundleId) {
         dict["url"] = url
     }
 
@@ -206,6 +232,51 @@ func buildEvent(type: String, app: NSRunningApplication, title: String) -> [Stri
     }
 
     return dict
+}
+
+// MARK: - Browser URL re-read (settles the stale-at-title-change race)
+
+/// AXDocument can lag the window title when a browser navigates: the title flips to
+/// the new page before AXDocument reflects the new URL, so a single read at
+/// title-change time yields the previous/new-tab URL. We re-sample a few times
+/// after a browser title/window change and emit a corrective `window_change` once
+/// the URL settles to something new. A generation counter cancels an older burst
+/// when a newer change arrives (avoids stacked timers during multi-step loads).
+var urlResampleGeneration = 0
+
+func scheduleURLResample(
+    app: NSRunningApplication,
+    bundleId: String,
+    emittedURL: String?,
+    generation: Int,
+    delays: [Double]
+) {
+    guard let delay = delays.first else { return }
+    let remaining = Array(delays.dropFirst())
+
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+        // Superseded by a newer window/title change.
+        guard generation == urlResampleGeneration else { return }
+        // The browser is no longer frontmost — nothing to correct.
+        guard let frontmost = NSWorkspace.shared.frontmostApplication,
+              frontmost.processIdentifier == app.processIdentifier else { return }
+
+        let fresh = browserURL(pid: app.processIdentifier, bundleId: bundleId, rejectSentinels: true)
+        if let freshURL = fresh, freshURL != emittedURL {
+            let title = windowTitle(forPid: app.processIdentifier) ?? ""
+            emit(buildEvent(type: "window_change", app: app, title: title, explicitURL: freshURL))
+            return
+        }
+
+        // Not settled yet — try again later.
+        scheduleURLResample(
+            app: app,
+            bundleId: bundleId,
+            emittedURL: emittedURL,
+            generation: generation,
+            delays: remaining
+        )
+    }
 }
 
 // MARK: - AXObserver for focused-window changes within an app
@@ -257,7 +328,21 @@ let titleCallback: AXObserverCallback = { _, element, _, _ in
         title = ""
     }
 
-    emit(buildEvent(type: "window_change", app: app, title: title))
+    let bundleId = app.bundleIdentifier ?? ""
+    let url = browserURL(pid: app.processIdentifier, bundleId: bundleId)
+    emit(buildEvent(type: "window_change", app: app, title: title, explicitURL: url))
+
+    // AXDocument can lag the title on navigation; re-sample to catch the settled URL.
+    if browserBundleIds.contains(bundleId) {
+        urlResampleGeneration += 1
+        scheduleURLResample(
+            app: app,
+            bundleId: bundleId,
+            emittedURL: url,
+            generation: urlResampleGeneration,
+            delays: [0.25, 0.75, 1.5]
+        )
+    }
 }
 
 func setupTitleObserver(forPid pid: pid_t) {
@@ -295,7 +380,20 @@ let axCallback: AXObserverCallback = { _, element, _, _ in
         title = windowTitle(forPid: app.processIdentifier) ?? ""
     }
 
-    emit(buildEvent(type: "window_change", app: app, title: title))
+    let bundleId = app.bundleIdentifier ?? ""
+    let url = browserURL(pid: app.processIdentifier, bundleId: bundleId)
+    emit(buildEvent(type: "window_change", app: app, title: title, explicitURL: url))
+
+    if browserBundleIds.contains(bundleId) {
+        urlResampleGeneration += 1
+        scheduleURLResample(
+            app: app,
+            bundleId: bundleId,
+            emittedURL: url,
+            generation: urlResampleGeneration,
+            delays: [0.25, 0.75, 1.5]
+        )
+    }
 
     // Re-target title observer to the newly focused window
     setupTitleObserver(forPid: app.processIdentifier)

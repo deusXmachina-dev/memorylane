@@ -132,6 +132,11 @@ export function createCaptureBlacklistCoordinator(params: {
       ? getAnonymousModeBrowserMatch(activeWindow)
       : null
     const anonymousModeMatch = resolveAnonymousModeMatch(activeWindow, detectedAnonymousModeMatch)
+    log.debug(
+      `[Blacklist] reconcile reason=${reason} url=${activeWindow?.url ?? '(none)'} ` +
+        `urlMatch=${excludedUrlMatch ?? '(none)'} appMatch=${excludedAppMatch ?? '(none)'} ` +
+        `anon=${anonymousModeMatch ?? '(none)'} urlPatterns=${excludedUrlPatterns.length}`,
+    )
     setBlocked(excludedAppMatch, excludedUrlMatch, anonymousModeMatch, reason)
     return excludedAppMatch === null && excludedUrlMatch === null && anonymousModeMatch === null
   }
