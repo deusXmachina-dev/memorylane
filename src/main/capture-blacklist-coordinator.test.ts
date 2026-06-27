@@ -365,7 +365,7 @@ describe('capture blacklist coordinator', () => {
     expect(forwarded).toHaveLength(0)
   })
 
-  it('matches a url prefix but not the same domain in another query', () => {
+  it('matches a domain but not the same name mentioned in another site query', () => {
     const suppressionTransitions: boolean[] = []
     const coordinator = createCaptureBlacklistCoordinator({
       initialExcludedApps: [],
@@ -392,7 +392,7 @@ describe('capture blacklist coordinator', () => {
     expect(suppressionTransitions).toEqual([true])
   })
 
-  it('enforces a bare-host managed url pattern by normalizing it to a scheme prefix', () => {
+  it('enforces a managed domain entry against a real URL', () => {
     const suppressionTransitions: boolean[] = []
     const coordinator = createCaptureBlacklistCoordinator({
       initialExcludedApps: [],
@@ -404,8 +404,7 @@ describe('capture blacklist coordinator', () => {
       },
     })
 
-    // An org pushes a bare host (no scheme). Without normalization the
-    // starts-with matcher would never match a real https:// URL.
+    // An org pushes a domain; it must match the host of a real https:// URL.
     coordinator.setManagedExclusions({ apps: [], urlPatterns: ['bank.com'] })
 
     coordinator.handleInteraction(
@@ -414,7 +413,7 @@ describe('capture blacklist coordinator', () => {
     expect(suppressionTransitions).toEqual([true])
   })
 
-  it('enforces a bare-host user url pattern by normalizing it to a scheme prefix', () => {
+  it('enforces a user domain entry against a real URL', () => {
     const suppressionTransitions: boolean[] = []
     const coordinator = createCaptureBlacklistCoordinator({
       initialExcludedApps: [],

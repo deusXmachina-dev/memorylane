@@ -76,44 +76,48 @@ describe('capture exclusions', () => {
     expect(normalizeWildcardPatterns(['  *github*  ', '*github*', '', '  '])).toEqual(['*github*'])
   })
 
-  it('matches url wildcard patterns', () => {
-    const patterns = normalizeWildcardPatterns(['*://*.github.com/*'])
-    expect(
-      getExcludedUrlMatch(
-        {
-          url: 'https://deusXmachina-dev.github.com/memorylane',
-        },
-        patterns,
-      ),
-    ).toBe('*://*.github.com/*')
-  })
-
-  it('matches a url pattern as a prefix of the full url', () => {
-    const patterns = normalizeWildcardPatterns(['https://portal.example.com'])
-    expect(
-      getExcludedUrlMatch({ url: 'https://portal.example.com/mychart/visits' }, patterns),
-    ).toBe('https://portal.example.com')
-  })
-
-  it('does not match a plain pattern that only appears mid-url', () => {
-    const patterns = normalizeWildcardPatterns(['mychart', 'bank.com'])
-    expect(
-      getExcludedUrlMatch({ url: 'https://portal.example.com/mychart/visits' }, patterns),
-    ).toBeNull()
-  })
-
-  it('matches anywhere only with an explicit wildcard', () => {
-    const patterns = normalizeWildcardPatterns(['*mychart*'])
-    expect(
-      getExcludedUrlMatch({ url: 'https://portal.example.com/mychart/visits' }, patterns),
-    ).toBe('*mychart*')
-  })
-
-  it('does not suppress a different site that mentions the domain in a query param', () => {
-    const patterns = normalizeWildcardPatterns(['https://linear.app'])
-    expect(getExcludedUrlMatch({ url: 'https://google.com/?q=linear.app' }, patterns)).toBeNull()
-    expect(getExcludedUrlMatch({ url: 'https://linear.app/issue/123' }, patterns)).toBe(
-      'https://linear.app',
+  // Entries reach the matcher already normalized (domain reduced to a bare host,
+  // or a wildcard kept verbatim) — see normalizeUrlPattern.
+  it('matches a domain and all its subdomains, on either platform form', () => {
+    const patterns = ['linkedin.com']
+    // macOS captures the canonical www host; Windows elides it. Both match.
+    expect(getExcludedUrlMatch({ url: 'https://www.linkedin.com/feed/' }, patterns)).toBe(
+      'linkedin.com',
     )
+    expect(getExcludedUrlMatch({ url: 'https://linkedin.com/jobs' }, patterns)).toBe('linkedin.com')
+    expect(getExcludedUrlMatch({ url: 'https://m.linkedin.com/' }, patterns)).toBe('linkedin.com')
+  })
+
+  it('does not match a look-alike or a mention in a query param', () => {
+    const patterns = ['linkedin.com']
+    expect(getExcludedUrlMatch({ url: 'https://google.com/?q=linkedin.com' }, patterns)).toBeNull()
+    expect(getExcludedUrlMatch({ url: 'https://evil-linkedin.com/' }, patterns)).toBeNull()
+    expect(getExcludedUrlMatch({ url: 'https://linkedin.com.evil.com/' }, patterns)).toBeNull()
+  })
+
+  it('matches a specific subdomain without blocking its siblings', () => {
+    const patterns = ['mail.google.com']
+    expect(getExcludedUrlMatch({ url: 'https://mail.google.com/inbox' }, patterns)).toBe(
+      'mail.google.com',
+    )
+    expect(getExcludedUrlMatch({ url: 'https://docs.google.com/d/1' }, patterns)).toBeNull()
+  })
+
+  it('matches a wildcard as a substring anywhere in the url', () => {
+    expect(
+      getExcludedUrlMatch({ url: 'https://portal.example.com/mychart/visits' }, ['*mychart*']),
+    ).toBe('*mychart*')
+    expect(getExcludedUrlMatch({ url: 'https://example.com/health' }, ['*mychart*'])).toBeNull()
+  })
+
+  it('expands * in a wildcard to any run of characters', () => {
+    expect(
+      getExcludedUrlMatch({ url: 'https://github.com/foo/settings' }, ['github.com/*/settings']),
+    ).toBe('github.com/*/settings')
+  })
+
+  it('treats ? in a wildcard as literal, not a single-char wildcard', () => {
+    expect(getExcludedUrlMatch({ url: 'https://example.com/aXc' }, ['*a?c*'])).toBeNull()
+    expect(getExcludedUrlMatch({ url: 'https://example.com/?a?c' }, ['*a?c*'])).toBe('*a?c*')
   })
 })

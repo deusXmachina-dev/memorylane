@@ -40,8 +40,9 @@ export function WebsiteExclusionList({
     }
   }, [api])
 
-  // Search pool = already-blocked patterns ∪ seen domains, surfaced as full-URL
-  // prefixes since URL exclusions now match "starts-with" against the full URL.
+  // Search pool = already-blocked entries ∪ seen domains. Each entry is a domain
+  // (matched by host, subdomain-inclusive) or a `*…*` wildcard; normalizeUrlPattern
+  // reduces a seen host to its bare domain.
   const items = useMemo<ExclusionPickerItem[] | null>(() => {
     if (domains === null) return null
     const byToken = new Map<string, ExclusionPickerItem>()
@@ -67,14 +68,16 @@ export function WebsiteExclusionList({
       title="Websites"
       titleHelp={
         <>
-          Wrap text in <code className="font-medium">*</code> to match it anywhere in a URL — e.g.{' '}
-          <code className="font-medium">*bank.com*</code> blocks any address containing bank.com.
+          Enter a domain to block it and its subdomains — e.g.{' '}
+          <code className="font-medium">bank.com</code>. Wrap text in{' '}
+          <code className="font-medium">*</code> to match anywhere in a URL — e.g.{' '}
+          <code className="font-medium">*bank.com*</code>.
         </>
       }
       icon={Globe}
-      placeholder="Type a URL to block (e.g. https://bank.com)"
+      placeholder="Type a domain to block (e.g. bank.com)"
       emptyPrimary="No websites blocked yet."
-      emptySecondary="Type a URL above to block it. Use *text* to match anywhere."
+      emptySecondary="Type a domain above to block it. Use *text* to match anywhere."
     />
   )
 }

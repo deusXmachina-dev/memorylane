@@ -119,9 +119,10 @@ function defaultUploadDetailLevel(edition: AppEdition): CaptureSettings['uploadD
   return edition === 'enterprise' ? 'detailed' : 'off'
 }
 
-// Bump when the meaning of stored URL exclusion patterns changes. v1 switched
-// URL matching from substring to starts-with; on first load we wrap pre-v1 bare
-// patterns in `*…*` so they keep their old contains behavior.
+// Bump when the meaning of stored URL exclusion entries changes. Entries are now
+// a domain (host match, subdomain-inclusive) or a `*…*` wildcard (substring).
+// v1's one-time migration wraps pre-v1 bare patterns in `*…*` on first load so
+// their old "contains" behavior carries over as a wildcard.
 const URL_MATCH_SCHEMA_VERSION = 1
 
 const DEFAULTS: CaptureSettings = {
@@ -269,8 +270,8 @@ export class CaptureSettingsManager {
           }
         }
         // Migrate pre-v1 URL patterns (substring era): wrap bare patterns in
-        // `*…*` so they keep contains behavior; patterns added post-v1 keep the
-        // starts-with default.
+        // `*…*` so they keep contains behavior as a wildcard. Post-v1 entries are
+        // interpreted as a domain or wildcard as-is.
         const loadedUrlPatterns = normalizeWildcardPatterns(data.excludedUrlPatterns)
         const excludedUrlPatterns =
           (data.urlMatchSchemaVersion ?? 0) < URL_MATCH_SCHEMA_VERSION

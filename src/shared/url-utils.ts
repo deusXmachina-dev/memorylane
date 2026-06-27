@@ -62,18 +62,36 @@ export function isPrivateNetworkHost(hostname: string): boolean {
 }
 
 /**
- * Normalize a URL exclusion pattern to a matchable "starts-with" prefix. Patterns
- * match against the full scheme-qualified URL, so a bare host like `bank.com`
- * can't match `https://bank.com/...`; prepend `https://` to a scheme-less,
- * wildcard-free entry. Full URLs and `*`/`?` patterns are left as-is.
+ * Normalize a capture-blacklist entry to one of exactly two canonical forms:
+ *  - a wildcard (contains `*`): kept verbatim (trimmed + lowercased); matched as
+ *    a substring anywhere in the URL, with `*` meaning "any run of characters"
+ *    and every other character (including `?`) literal.
+ *  - a domain (no `*`): reduced to its bare host — scheme, path, and query
+ *    stripped and a leading `www.` dropped; matched against the URL host,
+ *    subdomain-inclusive.
  *
  * Shared by every entry path (user input, "Found" suggestions, managed sync) so
- * the matcher, settings, and UI agree on what a pattern means.
+ * the matcher, settings, and UI agree on what an entry means.
  */
 export function normalizeUrlPattern(value: string): string {
-  const v = value.trim()
-  if (!v || /[*?]/.test(v) || v.includes('://')) return v
-  return `https://${v}`
+  const v = value.trim().toLowerCase()
+  if (!v) return ''
+  if (v.includes('*')) return v
+  return domainOf(v) ?? v
+}
+
+/**
+ * Reduce a domain entry or URL to its bare host: parse the host (accepting a
+ * bare `host`, `host/path`, or a full scheme-qualified URL) and drop a leading
+ * `www.`. Returns null if no host can be parsed.
+ */
+export function domainOf(value: string): string | null {
+  const v = value.trim().toLowerCase()
+  if (!v) return null
+  const direct = hostnameOf(v)
+  const host = direct && direct.length > 0 ? direct : hostnameOf(`https://${v}`)
+  if (!host) return null
+  return host.startsWith('www.') ? host.slice(4) : host
 }
 
 function hostnameOf(input: string): string | null {
