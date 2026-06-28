@@ -1,12 +1,14 @@
 import log from '../logger'
 import type { ManagedExclusions } from '../../shared/types'
+import { ENTERPRISE_BACKEND_CONFIG } from '../../shared/constants'
 import { coerceManagedExclusions } from './remote-blacklist-store'
 
 const EMPTY: ManagedExclusions = { apps: [], urlPatterns: [] }
 
 // Poll cadence for the tenant blacklist. Cheap, since a sync only notifies on a
-// real change. Matches the enterprise status-refresh interval.
-const DEFAULT_SYNC_INTERVAL_MS = 0.5 * 60 * 1000
+// real change. Shares the enterprise status-refresh interval (5 min) — IT edits
+// the policy rarely, so there's no need to poll more often.
+const DEFAULT_SYNC_INTERVAL_MS = ENTERPRISE_BACKEND_CONFIG.STATUS_REFRESH_INTERVAL_MS
 
 function serialize(blacklist: ManagedExclusions): string {
   return JSON.stringify([blacklist.apps, blacklist.urlPatterns])
