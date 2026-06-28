@@ -78,13 +78,20 @@ if (process.platform === 'darwin') {
 
 // Capture otherwise-unlogged crashes so they reach main.log for support bundles.
 // electron-log's file transport only records calls made through the logger, so
-// without these a fatal main-process error or a renderer crash would leave no
-// trace at the moment it matters most. We log and keep running rather than
-// force-exit — a stray async rejection shouldn't take down the tray and stop
-// capture.
+// without these a fatal main-process error would leave no trace at the moment it
+// matters most.
+//
+// An uncaught exception leaves the process in an undefined state; Node's docs are
+// explicit that it's not safe to resume. We log and then exit with Node's default
+// failure code so the tray crashes rather than limping on with capture silently
+// dead. electron-log's file transport writes synchronously, so the line is on
+// disk before we exit.
 process.on('uncaughtException', (error) => {
   log.error('[Crash] Uncaught exception in main process:', error)
+  process.exit(1)
 })
+// A stray rejection (e.g. a failed background fetch) is usually non-fatal, so we
+// log and keep capturing rather than take down the tray.
 process.on('unhandledRejection', (reason) => {
   log.error('[Crash] Unhandled promise rejection in main process:', reason)
 })
