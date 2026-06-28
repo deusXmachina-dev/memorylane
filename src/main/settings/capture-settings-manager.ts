@@ -269,13 +269,15 @@ export class CaptureSettingsManager {
             semanticPipelineMode,
           }
         }
-        // Migrate pre-v1 URL patterns (substring era): wrap bare patterns in
-        // `*…*` so they keep contains behavior as a wildcard. Post-v1 entries are
-        // interpreted as a domain or wildcard as-is.
+        // Migrate pre-v1 URL patterns (substring era): wrap patterns without a
+        // `*` in `*…*` so they keep contains behavior as a wildcard. Only `*` is a
+        // wildcard now, so a pre-v1 `?` (the old single-char wildcard) must also be
+        // wrapped — left bare it would be reinterpreted as a domain and stop
+        // matching. Post-v1 entries are interpreted as a domain or wildcard as-is.
         const loadedUrlPatterns = normalizeWildcardPatterns(data.excludedUrlPatterns)
         const excludedUrlPatterns =
           (data.urlMatchSchemaVersion ?? 0) < URL_MATCH_SCHEMA_VERSION
-            ? loadedUrlPatterns.map((p) => (/[*?]/.test(p) ? p : `*${p}*`))
+            ? loadedUrlPatterns.map((p) => (p.includes('*') ? p : `*${p}*`))
             : loadedUrlPatterns
         return {
           ...this.defaults,

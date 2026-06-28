@@ -72,11 +72,15 @@ export function isPrivateNetworkHost(hostname: string): boolean {
  *
  * Shared by every entry path (user input, "Found" suggestions, managed sync) so
  * the matcher, settings, and UI agree on what an entry means.
+ *
+ * A degenerate wildcard with no literal content (`*`, `**`, …) would match every
+ * URL and silently disable all capture, so it is rejected to the empty string —
+ * callers drop empty entries.
  */
 export function normalizeUrlPattern(value: string): string {
   const v = value.trim().toLowerCase()
   if (!v) return ''
-  if (v.includes('*')) return v
+  if (v.includes('*')) return v.replace(/\*/g, '') ? v : ''
   return domainOf(v) ?? v
 }
 

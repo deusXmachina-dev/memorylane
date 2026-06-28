@@ -34,10 +34,11 @@ export function createCaptureBlacklistCoordinator(params: {
   // ones. Effective apps/URLs (used for matching) are the union of both,
   // recomputed whenever either layer changes. Private browsing is user-only; the
   // managed layer never contributes it.
-  // URL patterns match starts-with against the full URL, so every entry path
-  // runs through normalizeUrlPattern (which prepends https:// to a bare host).
+  // Every entry path runs through normalizeUrlPattern (a wildcard kept verbatim,
+  // a domain reduced to its bare host). It returns '' for a degenerate match-all
+  // wildcard, so empties are filtered before the patterns reach the matcher.
   const normalizeUrlPatterns = (values: readonly string[] | undefined): string[] =>
-    normalizeWildcardPatterns(values).map(normalizeUrlPattern)
+    normalizeWildcardPatterns(values).map(normalizeUrlPattern).filter(Boolean)
 
   let userExcludedApps = normalizeExcludedApps(params.initialExcludedApps)
   let userExcludedUrlPatterns = normalizeUrlPatterns(params.initialExcludedUrlPatterns)

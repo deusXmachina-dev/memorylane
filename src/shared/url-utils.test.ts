@@ -29,6 +29,14 @@ describe('normalizeUrlPattern', () => {
     expect(normalizeUrlPattern('   ')).toBe('')
   })
 
+  it('rejects a degenerate match-all wildcard to empty (would block everything)', () => {
+    expect(normalizeUrlPattern('*')).toBe('')
+    expect(normalizeUrlPattern('**')).toBe('')
+    expect(normalizeUrlPattern('  *  ')).toBe('')
+    // A wildcard with real literal content is kept.
+    expect(normalizeUrlPattern('*bank*')).toBe('*bank*')
+  })
+
   it('is idempotent', () => {
     expect(normalizeUrlPattern(normalizeUrlPattern('https://www.bank.com/x'))).toBe('bank.com')
     expect(normalizeUrlPattern(normalizeUrlPattern('*bank*'))).toBe('*bank*')

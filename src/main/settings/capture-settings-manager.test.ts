@@ -147,6 +147,18 @@ describe('CaptureSettingsManager', () => {
       expect(manager.get().excludedUrlPatterns).toEqual(['*linear.app*', '*keepme*'])
     })
 
+    it('wraps pre-v1 patterns containing a literal ? so they keep matching', () => {
+      // `?` was the old single-char wildcard; it is literal now. A pre-v1 pattern
+      // with `?` but no `*` must still be wrapped — left bare it would be read as a
+      // domain and silently stop matching.
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({ excludedUrlPatterns: ['mychart?id', 'github.com/login?x'] }),
+      )
+      const manager = new CaptureSettingsManager(configPath)
+      expect(manager.get().excludedUrlPatterns).toEqual(['*mychart?id*', '*github.com/login?x*'])
+    })
+
     it('persists private browsing exclusion flag', () => {
       const manager = new CaptureSettingsManager(configPath)
       manager.save({ excludePrivateBrowsing: false })
