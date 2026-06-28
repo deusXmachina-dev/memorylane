@@ -76,6 +76,33 @@ if (process.platform === 'darwin') {
   app.dock?.hide()
 }
 
+// Capture otherwise-unlogged crashes so they reach main.log for support bundles.
+// electron-log's file transport only records calls made through the logger, so
+// without these a fatal main-process error or a renderer crash would leave no
+// trace at the moment it matters most. We log and keep running rather than
+// force-exit — a stray async rejection shouldn't take down the tray and stop
+// capture.
+process.on('uncaughtException', (error) => {
+  log.error('[Crash] Uncaught exception in main process:', error)
+})
+process.on('unhandledRejection', (reason) => {
+  log.error('[Crash] Unhandled promise rejection in main process:', reason)
+})
+app.on('render-process-gone', (_event, _webContents, details) => {
+  const line = `[Crash] Renderer process gone (reason=${details.reason}, exitCode=${details.exitCode})`
+  // A clean exit is a normal window teardown, not a crash.
+  if (details.reason === 'clean-exit') log.debug(line)
+  else log.error(line)
+})
+app.on('child-process-gone', (_event, details) => {
+  // Utility processes (e.g. the upload-prep worker) exit cleanly by design —
+  // only an abnormal departure is worth a line.
+  if (details.reason === 'clean-exit') return
+  log.warn(
+    `[Crash] Child process gone (type=${details.type}, reason=${details.reason}, exitCode=${details.exitCode})`,
+  )
+})
+
 // Prevent app from quitting when all windows are closed (tray app)
 app.on('window-all-closed', () => {
   // Don't quit - this is a tray app

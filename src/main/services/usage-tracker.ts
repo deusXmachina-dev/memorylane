@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
+import log from '../logger'
 
 export interface UsageStats {
   requestCount: number
@@ -42,7 +43,7 @@ export class UsageTracker {
         ...stored,
       }
     } catch (error) {
-      console.error('[UsageTracker] Error loading stats, using defaults:', error)
+      log.warn('[UsageTracker] Error loading stats, using defaults:', error)
       return this.getDefaultStats()
     }
   }
@@ -51,7 +52,7 @@ export class UsageTracker {
     try {
       fs.writeFileSync(this.filePath, JSON.stringify(this.stats, null, 2))
     } catch (error) {
-      console.error('[UsageTracker] Error saving stats:', error)
+      log.warn('[UsageTracker] Error saving stats:', error)
     }
   }
 

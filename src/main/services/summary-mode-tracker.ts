@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
+import log from '../logger'
 import type { SummaryOutcome } from '../semantic/summary-reason'
 
 /**
@@ -59,7 +60,7 @@ export class SummaryModeTracker {
         ...stored,
       }
     } catch (error) {
-      console.error('[SummaryModeTracker] Error loading stats, using defaults:', error)
+      log.warn('[SummaryModeTracker] Error loading stats, using defaults:', error)
       return this.getDefaultStats()
     }
   }
@@ -68,7 +69,7 @@ export class SummaryModeTracker {
     try {
       fs.writeFileSync(this.filePath, JSON.stringify(this.stats, null, 2))
     } catch (error) {
-      console.error('[SummaryModeTracker] Error saving stats:', error)
+      log.warn('[SummaryModeTracker] Error saving stats:', error)
     }
   }
 
