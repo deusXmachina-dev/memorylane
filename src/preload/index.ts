@@ -113,6 +113,15 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
       ipcRenderer.off('main-window:observationUpdate', handler)
     }
   },
+  // Org-provided (centrally-synced) capture exclusions
+  getManagedExclusions: () => ipcRenderer.invoke('main-window:getManagedExclusions'),
+  onManagedExclusionsUpdate: (callback: (managed: unknown) => void) => {
+    const handler = (_event: unknown, managed: unknown): void => callback(managed)
+    ipcRenderer.on('main-window:managedExclusionsUpdate', handler)
+    return () => {
+      ipcRenderer.off('main-window:managedExclusionsUpdate', handler)
+    }
+  },
   // Permissions
   getPermissionStatus: () => ipcRenderer.invoke('main-window:getPermissionStatus'),
   requestPermission: (kind: PermissionKind) =>

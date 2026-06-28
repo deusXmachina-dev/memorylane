@@ -116,10 +116,11 @@ interface MainWindowDependencies {
   reconfigureCaptureHotkey: (accelerator: string) => { success: boolean; error?: string }
   updateExclusions: (exclusions: {
     apps: string[]
-    windowTitlePatterns: string[]
     urlPatterns: string[]
     excludePrivateBrowsing: boolean
   }) => void
+  // Org-provided (centrally-synced) exclusions, surfaced read-only in the UI.
+  getManagedExclusions: () => { apps: string[]; urlPatterns: string[] }
   databaseExportSync: {
     onSettingsChanged: () => Promise<void>
   }
@@ -212,6 +213,15 @@ export function sendStatusToRenderer(): void {
 export function sendObservationUpdate(state: ObservationState): void {
   if (!mainWindow || mainWindow.isDestroyed()) return
   mainWindow.webContents.send('main-window:observationUpdate', state)
+}
+
+/**
+ * Broadcast the current org-provided (centrally-synced) exclusions to the
+ * renderer so an open settings window reflects an IT edit without a reopen.
+ */
+export function sendManagedExclusionsUpdate(): void {
+  if (!mainWindow || mainWindow.isDestroyed() || !deps) return
+  mainWindow.webContents.send('main-window:managedExclusionsUpdate', deps.getManagedExclusions())
 }
 
 /**
@@ -403,11 +413,7 @@ function logCaptureSettingsChanges(previous: CaptureSettings, updated: CaptureSe
       )
     }
   }
-  const arrayFields: (keyof CaptureSettings)[] = [
-    'excludedApps',
-    'excludedWindowTitlePatterns',
-    'excludedUrlPatterns',
-  ]
+  const arrayFields: (keyof CaptureSettings)[] = ['excludedApps', 'excludedUrlPatterns']
   for (const field of arrayFields) {
     const before = previous[field] as string[]
     const after = updated[field] as string[]
@@ -964,6 +970,11 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     return deps.observation.getState()
   })
 
+  ipcMain.handle('main-window:getManagedExclusions', () => {
+    if (!deps) return { apps: [], urlPatterns: [] }
+    return deps.getManagedExclusions()
+  })
+
   // Installed apps + seen domains (for privacy UI)
   ipcMain.handle('main-window:listInstalledApps', () => listInstalledApps())
 
@@ -1016,7 +1027,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         })
         deps.updateExclusions({
           apps: updated.excludedApps,
-          windowTitlePatterns: updated.excludedWindowTitlePatterns,
           urlPatterns: updated.excludedUrlPatterns,
           excludePrivateBrowsing: updated.excludePrivateBrowsing,
         })
@@ -1078,7 +1088,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       })
       deps.updateExclusions({
         apps: updated.excludedApps,
-        windowTitlePatterns: updated.excludedWindowTitlePatterns,
         urlPatterns: updated.excludedUrlPatterns,
         excludePrivateBrowsing: updated.excludePrivateBrowsing,
       })

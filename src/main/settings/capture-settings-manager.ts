@@ -119,6 +119,12 @@ function defaultUploadDetailLevel(edition: AppEdition): CaptureSettings['uploadD
   return edition === 'enterprise' ? 'detailed' : 'off'
 }
 
+// Bump when the meaning of stored URL exclusion entries changes. Entries are now
+// a domain (host match, subdomain-inclusive) or a `*…*` wildcard (substring).
+// v1's one-time migration wraps pre-v1 bare patterns in `*…*` on first load so
+// their old "contains" behavior carries over as a wildcard.
+const URL_MATCH_SCHEMA_VERSION = 1
+
 const DEFAULTS: CaptureSettings = {
   autoStartEnabled: true,
   visualThreshold: VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT,
@@ -134,8 +140,8 @@ const DEFAULTS: CaptureSettings = {
   databaseExportDirectory: '',
   excludePrivateBrowsing: true,
   excludedApps: [],
-  excludedWindowTitlePatterns: [],
   excludedUrlPatterns: [],
+  urlMatchSchemaVersion: URL_MATCH_SCHEMA_VERSION,
   activeVendor: 'openrouter',
   semanticVideoModel: OPENROUTER_DEFAULTS.semanticVideoModel,
   semanticSnapshotModel: OPENROUTER_DEFAULTS.semanticSnapshotModel,
@@ -263,12 +269,22 @@ export class CaptureSettingsManager {
             semanticPipelineMode,
           }
         }
+        // Migrate pre-v1 URL patterns (substring era): wrap patterns without a
+        // `*` in `*…*` so they keep contains behavior as a wildcard. Only `*` is a
+        // wildcard now, so a pre-v1 `?` (the old single-char wildcard) must also be
+        // wrapped — left bare it would be reinterpreted as a domain and stop
+        // matching. Post-v1 entries are interpreted as a domain or wildcard as-is.
+        const loadedUrlPatterns = normalizeWildcardPatterns(data.excludedUrlPatterns)
+        const excludedUrlPatterns =
+          (data.urlMatchSchemaVersion ?? 0) < URL_MATCH_SCHEMA_VERSION
+            ? loadedUrlPatterns.map((p) => (p.includes('*') ? p : `*${p}*`))
+            : loadedUrlPatterns
         return {
           ...this.defaults,
           ...data,
           excludedApps: normalizeExcludedApps(data.excludedApps),
-          excludedWindowTitlePatterns: normalizeWildcardPatterns(data.excludedWindowTitlePatterns),
-          excludedUrlPatterns: normalizeWildcardPatterns(data.excludedUrlPatterns),
+          excludedUrlPatterns,
+          urlMatchSchemaVersion: URL_MATCH_SCHEMA_VERSION,
           maxScreenshotsForLlm:
             typeof data.maxScreenshotsForLlm === 'number'
               ? data.maxScreenshotsForLlm
@@ -307,9 +323,6 @@ export class CaptureSettingsManager {
         partial.databaseExportDirectory ?? this.settings.databaseExportDirectory,
       ),
       excludedApps: normalizeExcludedApps(partial.excludedApps ?? this.settings.excludedApps),
-      excludedWindowTitlePatterns: normalizeWildcardPatterns(
-        partial.excludedWindowTitlePatterns ?? this.settings.excludedWindowTitlePatterns,
-      ),
       excludedUrlPatterns: normalizeWildcardPatterns(
         partial.excludedUrlPatterns ?? this.settings.excludedUrlPatterns,
       ),

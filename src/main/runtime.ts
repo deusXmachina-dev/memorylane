@@ -50,10 +50,10 @@ export interface MainRuntime {
   evalFixturesRoot: string
   updateExclusions(exclusions: {
     apps: string[]
-    windowTitlePatterns: string[]
     urlPatterns: string[]
     excludePrivateBrowsing: boolean
   }): void
+  setManagedExclusions(managed: { apps: string[]; urlPatterns: string[] }): void
   purgeAll(): Promise<void>
   dispose(): Promise<void>
 }
@@ -64,7 +64,6 @@ export async function createMainRuntime(params: {
   semanticPipelinePreference?: SemanticPipelinePreference
   semanticRequestTimeoutMs?: number
   excludedApps?: string[]
-  excludedWindowTitlePatterns?: string[]
   excludedUrlPatterns?: string[]
   excludePrivateBrowsing?: boolean
   deviceIdentity?: DeviceIdentity
@@ -198,7 +197,6 @@ export async function createMainRuntime(params: {
 
   const blacklistCoordinator = createCaptureBlacklistCoordinator({
     initialExcludedApps: params.excludedApps,
-    initialExcludedWindowTitlePatterns: params.excludedWindowTitlePatterns,
     initialExcludedUrlPatterns: params.excludedUrlPatterns,
     initialExcludePrivateBrowsing: params.excludePrivateBrowsing,
     onPrivacyBlockingChanged: params.onPrivacyBlockingChanged,
@@ -251,6 +249,9 @@ export async function createMainRuntime(params: {
     evalFixturesRoot,
     updateExclusions(exclusions): void {
       blacklistCoordinator.updateExclusions(exclusions)
+    },
+    setManagedExclusions(managed): void {
+      blacklistCoordinator.setManagedExclusions(managed)
     },
     async purgeAll(): Promise<void> {
       const wasCapturing = capture.isCapturingNow()

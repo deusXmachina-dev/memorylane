@@ -1,3 +1,5 @@
+import { domainOf } from '../shared/url-utils'
+
 export interface ExclusionWindowContext {
   processName?: string
   bundleId?: string
@@ -92,30 +94,17 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-function wildcardPatternToRegex(pattern: string): RegExp {
+// A wildcard entry (contains `*`) matches as a substring anywhere in the URL,
+// with `*` standing for any run of characters. Every other character — including
+// `?`, which is common in query strings — is literal. The match is unanchored.
+function wildcardToRegex(pattern: string): RegExp {
   const cached = wildcardRegexCache.get(pattern)
   if (cached) return cached
 
-  const startWrapped = pattern.startsWith('*') ? pattern : `*${pattern}`
-  const fullyWrapped = startWrapped.endsWith('*') ? startWrapped : `${startWrapped}*`
-  const escapedPattern = escapeRegex(fullyWrapped)
-  const regex = new RegExp(`^${escapedPattern.replace(/\\\*/g, '.*').replace(/\\\?/g, '.')}$`)
+  const body = escapeRegex(pattern).replace(/\\\*/g, '.*')
+  const regex = new RegExp(body)
   wildcardRegexCache.set(pattern, regex)
   return regex
-}
-
-function getWildcardMatch(value: string | undefined, patterns: readonly string[]): string | null {
-  if (!value || patterns.length === 0) return null
-  const normalizedValue = normalizePatternToken(value)
-  if (normalizedValue.length === 0) return null
-
-  for (const pattern of patterns) {
-    if (wildcardPatternToRegex(pattern).test(normalizedValue)) {
-      return pattern
-    }
-  }
-
-  return null
 }
 
 function collectCandidates(window: ExclusionWindowContext | undefined): string[] {
@@ -156,16 +145,29 @@ export function getExcludedAppMatch(
   return null
 }
 
-export function getExcludedWindowTitleMatch(
-  window: ExclusionWindowContext | undefined,
-  patterns: readonly string[],
-): string | null {
-  return getWildcardMatch(window?.title, patterns)
-}
-
+// An exclusion entry is one of two kinds (see `normalizeUrlPattern`):
+//  - a wildcard (`*`): substring match anywhere in the URL.
+//  - a domain (no `*`): matched against the URL host, subdomain-inclusive
+//    (`host === entry` or `host` ends with `.entry`), so `linkedin.com` blocks
+//    `www.linkedin.com` and `m.linkedin.com` but not `evil-linkedin.com`.
+// Entries are assumed already normalized (domain reduced to a bare host, leading
+// `www.` dropped); the URL host is reduced the same way via `domainOf`.
 export function getExcludedUrlMatch(
   window: ExclusionWindowContext | undefined,
   patterns: readonly string[],
 ): string | null {
-  return getWildcardMatch(window?.url, patterns)
+  const url = window?.url
+  if (!url || patterns.length === 0) return null
+  const lowerUrl = url.toLowerCase()
+  const host = domainOf(lowerUrl)
+
+  for (const pattern of patterns) {
+    if (pattern.includes('*')) {
+      if (wildcardToRegex(pattern).test(lowerUrl)) return pattern
+    } else if (host !== null && (host === pattern || host.endsWith(`.${pattern}`))) {
+      return pattern
+    }
+  }
+
+  return null
 }

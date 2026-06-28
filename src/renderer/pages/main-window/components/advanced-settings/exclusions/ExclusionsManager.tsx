@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { HelpCircle } from 'lucide-react'
-import { Tabs, TabsList, TabsTab, TabsPanel } from '@components/ui/tabs'
-import type { ObservationState } from '@types'
+import type { ManagedExclusions, ObservationState } from '@types'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { AppExclusionList } from './AppExclusionList'
 import { WebsiteExclusionList } from './WebsiteExclusionList'
 import { ObserveButton } from './ObserveButton'
 import { ObservationRunningBanner } from './ObservationRunningBanner'
+import { HelpTooltip } from './HelpTooltip'
 
 const DEFAULT_DURATION_MS = 120_000
 const DISMISSED_APPS_KEY = 'exclusions.dismissedAppsAt'
@@ -36,7 +35,6 @@ interface ExclusionsManagerProps {
   onAppsChange: (next: string[]) => void
   onUrlsChange: (next: string[]) => void
   onObserved: () => void
-  layout?: 'tabbed' | 'stacked'
 }
 
 export function ExclusionsManager({
@@ -45,10 +43,10 @@ export function ExclusionsManager({
   onAppsChange,
   onUrlsChange,
   onObserved,
-  layout = 'tabbed',
 }: ExclusionsManagerProps): React.JSX.Element {
   const api = useMainWindowAPI()
   const [observation, setObservation] = useState<ObservationState | null>(null)
+  const [managed, setManaged] = useState<ManagedExclusions>({ apps: [], urlPatterns: [] })
   const [dismissedAppsAt, setDismissedAppsAt] = useState(() => readDismissedAt(DISMISSED_APPS_KEY))
   const [dismissedUrlsAt, setDismissedUrlsAt] = useState(() => readDismissedAt(DISMISSED_URLS_KEY))
 
@@ -59,6 +57,21 @@ export function ExclusionsManager({
       setObservation(initial)
     })
     const unsubscribe = api.onObservationUpdate((next) => setObservation(next))
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [api])
+
+  // Org-provided exclusions are pushed when IT edits them; fetch once and keep
+  // in sync so the locked rows reflect the current tenant policy live.
+  useEffect(() => {
+    let cancelled = false
+    void api.getManagedExclusions().then((initial) => {
+      if (cancelled) return
+      setManaged(initial)
+    })
+    const unsubscribe = api.onManagedExclusionsUpdate((next) => setManaged(next))
     return () => {
       cancelled = true
       unsubscribe()
@@ -108,103 +121,53 @@ export function ExclusionsManager({
     return null
   }, [observation])
 
-  if (layout === 'stacked') {
-    return (
-      <div className="space-y-5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="space-y-0.5">
-            <div className="flex items-center gap-1.5">
-              <p className="text-sm font-medium text-foreground">Block apps & websites</p>
-              <span
-                tabIndex={0}
-                role="button"
-                aria-label="About privacy filtering"
-                className="group relative inline-flex rounded outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <HelpCircle
-                  aria-hidden="true"
-                  className="size-3.5 cursor-help text-muted-foreground"
-                />
-                <span
-                  role="tooltip"
-                  className="pointer-events-none absolute top-full left-0 z-10 mt-1 w-72 rounded-md border border-border bg-popover px-2.5 py-2 text-[11px] leading-snug text-popover-foreground opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
-                >
-                  Privacy filtering is best-effort. Because MemoryLane captures the whole screen, a
-                  blocked app or site may still appear in screenshots if it&apos;s visible in the
-                  background, during a window switch, or briefly during transitions.
-                </span>
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Skip these entirely — never captured, never analysed.
-            </p>
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-medium text-foreground">Block apps &amp; websites</p>
+            <HelpTooltip label="About privacy filtering" width="w-72">
+              Privacy filtering is best-effort. Because MemoryLane captures the whole screen, a
+              blocked app or site may still appear in screenshots if it&apos;s visible in the
+              background, during a window switch, or briefly during transitions.
+            </HelpTooltip>
           </div>
-          <ObserveButton
-            state={observation}
-            durationMs={DEFAULT_DURATION_MS}
-            onStart={handleStart}
-            onStop={handleStop}
-          />
+          <p className="text-xs text-muted-foreground">
+            Skip these entirely — never captured, never analysed.
+          </p>
         </div>
-        {banner}
-
-        <div className="space-y-0.5">
-          <p className="text-sm font-medium text-foreground">Blacklisted apps</p>
-        </div>
-        <AppExclusionList
-          excludedApps={excludedApps}
-          onChange={onAppsChange}
-          found={foundApps}
-          onDismissFound={dismissFoundApps}
-        />
-
-        <div className="space-y-0.5">
-          <p className="text-sm font-medium text-foreground">Blacklisted websites</p>
-          <p className="text-xs text-muted-foreground">URL patterns that will never be captured.</p>
-        </div>
-        <WebsiteExclusionList
-          excludedUrlPatterns={excludedUrlPatterns}
-          onChange={onUrlsChange}
-          found={foundUrls}
-          onDismissFound={dismissFoundUrls}
+        <ObserveButton
+          state={observation}
+          durationMs={DEFAULT_DURATION_MS}
+          onStart={handleStart}
+          onStop={handleStop}
         />
       </div>
-    )
-  }
 
-  return (
-    <div>
-      <Tabs defaultValue="apps">
-        <div className="flex items-center justify-between gap-2">
-          <TabsList>
-            <TabsTab value="apps">Exclude Apps ({excludedApps.length})</TabsTab>
-            <TabsTab value="websites">Exclude Websites ({excludedUrlPatterns.length})</TabsTab>
-          </TabsList>
-          <ObserveButton
-            state={observation}
-            durationMs={DEFAULT_DURATION_MS}
-            onStart={handleStart}
-            onStop={handleStop}
-          />
-        </div>
+      <div className="space-y-3 rounded-xl border border-border bg-muted/10 p-4">
         {banner}
-        <TabsPanel value="apps" className="pt-2" keepMounted>
-          <AppExclusionList
-            excludedApps={excludedApps}
-            onChange={onAppsChange}
-            found={foundApps}
-            onDismissFound={dismissFoundApps}
-          />
-        </TabsPanel>
-        <TabsPanel value="websites" className="pt-2" keepMounted>
-          <WebsiteExclusionList
-            excludedUrlPatterns={excludedUrlPatterns}
-            onChange={onUrlsChange}
-            found={foundUrls}
-            onDismissFound={dismissFoundUrls}
-          />
-        </TabsPanel>
-      </Tabs>
+        <div className="grid grid-cols-2 divide-x divide-border">
+          <div className="pr-4">
+            <AppExclusionList
+              excludedApps={excludedApps}
+              onChange={onAppsChange}
+              found={foundApps}
+              onDismissFound={dismissFoundApps}
+              managed={managed.apps}
+            />
+          </div>
+          <div className="pl-4">
+            <WebsiteExclusionList
+              excludedUrlPatterns={excludedUrlPatterns}
+              onChange={onUrlsChange}
+              found={foundUrls}
+              onDismissFound={dismissFoundUrls}
+              managed={managed.urlPatterns}
+            />
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

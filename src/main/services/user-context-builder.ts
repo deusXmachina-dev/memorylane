@@ -205,21 +205,43 @@ interface ParsedContext {
   detailed_summary: string
 }
 
+// Models occasionally return a summary as an array of bullets or a nested
+// object instead of a plain string. Flatten those to text so they never reach
+// SQLite as a non-primitive (better-sqlite3 treats an object arg as named
+// params, yielding "Too few parameter values were provided").
+function coerceSummary(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) return value.map(coerceSummary).filter(Boolean).join('\n')
+  if (value && typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>)
+      .map(coerceSummary)
+      .filter(Boolean)
+      .join('\n')
+  }
+  return ''
+}
+
+function normalizeContext(parsed: {
+  short_summary?: unknown
+  detailed_summary?: unknown
+}): ParsedContext | null {
+  const short_summary = coerceSummary(parsed.short_summary).trim()
+  const detailed_summary = coerceSummary(parsed.detailed_summary).trim()
+  if (short_summary && detailed_summary) return { short_summary, detailed_summary }
+  return null
+}
+
 function extractContextFromResponse(content: string): ParsedContext | null {
   const jsonMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
   const jsonStr = jsonMatch ? jsonMatch[1] : content
 
   try {
-    const parsed = JSON.parse(jsonStr) as ParsedContext
-    if (parsed.short_summary && parsed.detailed_summary) return parsed
-    return null
+    return normalizeContext(JSON.parse(jsonStr))
   } catch {
     const objMatch = jsonStr.match(/\{[\s\S]*\}/)
     if (objMatch) {
       try {
-        const parsed = JSON.parse(objMatch[0]) as ParsedContext
-        if (parsed.short_summary && parsed.detailed_summary) return parsed
-        return null
+        return normalizeContext(JSON.parse(objMatch[0]))
       } catch {
         return null
       }

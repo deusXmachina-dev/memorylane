@@ -1,16 +1,14 @@
 import { useMemo, useState } from 'react'
-import { Plus, Search, X, type LucideIcon } from 'lucide-react'
+import { Plus, Search, type LucideIcon } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { ScrollArea } from '@components/ui/scroll-area'
-import {
-  ExclusionRow,
-  FoundBlock,
-  LegacyEntriesBlock,
-  type ExclusionRowItem,
-} from './ExclusionSwitchList'
+import { ExclusionRow, FoundBlock, ManagedRow, type ExclusionRowItem } from './ExclusionSwitchList'
+import { HelpTooltip } from './HelpTooltip'
 
 export type ExclusionPickerItem = ExclusionRowItem
+
+const MAX_SUGGESTIONS = 8
 
 interface ExclusionPickerProps {
   excluded: string[]
@@ -18,13 +16,23 @@ interface ExclusionPickerProps {
   items: ExclusionPickerItem[] | null
   found?: string[]
   onDismissFound?: () => void
-  legacyEntries: string[]
-  legacyTitle: string
-  emptyViewMode: 'all' | 'excluded-only'
+  /** Column heading, e.g. "Apps" / "Websites". */
+  title: string
+  /** Optional tooltip shown via a help icon next to the heading. */
+  titleHelp?: React.ReactNode
+  /** Leading icon for each rule row. */
   icon?: LucideIcon
+  /** Search input placeholder. */
   placeholder: string
-  loadingLabel: string
-  emptyLabel: string
+  /** Empty-state lines shown when nothing is blocked. */
+  emptyPrimary: string
+  emptySecondary: string
+  /** Org-provided (centrally-synced) entries — shown read-only and filtered out
+   * of the editable list. */
+  managed?: string[]
+  /** Maps a managed entry token to a friendly display name (e.g. bundle id →
+   * app name). Defaults to showing the raw entry. */
+  resolveManagedLabel?: (entry: string) => string
 }
 
 export function ExclusionPicker({
@@ -33,51 +41,79 @@ export function ExclusionPicker({
   items,
   found,
   onDismissFound,
-  legacyEntries,
-  legacyTitle,
-  emptyViewMode,
-  icon,
+  title,
+  titleHelp,
+  icon: Icon,
   placeholder,
-  loadingLabel,
-  emptyLabel,
+  emptyPrimary,
+  emptySecondary,
+  managed,
+  resolveManagedLabel,
 }: ExclusionPickerProps): React.JSX.Element {
   const [query, setQuery] = useState('')
   const normalizedQuery = query.trim().toLowerCase()
 
   const excludedTokens = useMemo(() => new Set(excluded.map((e) => e.toLowerCase())), [excluded])
+  const managedTokens = useMemo(
+    () => new Set((managed ?? []).map((m) => m.toLowerCase())),
+    [managed],
+  )
 
-  const itemsByToken = useMemo(() => {
-    const map = new Map<string, ExclusionPickerItem>()
-    for (const item of items ?? []) map.set(item.matchToken, item)
-    return map
-  }, [items])
+  // Editable pool = everything except the org-managed entries (those only ever
+  // render as read-only rows).
+  const editableItems = useMemo(
+    () => (items ?? []).filter((i) => !managedTokens.has(i.matchToken)),
+    [items, managedTokens],
+  )
+  const itemsByToken = useMemo(
+    () => new Map(editableItems.map((i) => [i.matchToken, i])),
+    [editableItems],
+  )
 
   const foundItems = useMemo<ExclusionPickerItem[]>(() => {
     if (!found?.length) return []
-    return found.map((token) => {
-      const normalized = token.toLowerCase()
-      const known = itemsByToken.get(normalized)
-      return { key: normalized, matchToken: normalized, label: known?.label ?? token }
-    })
-  }, [found, itemsByToken])
+    return found
+      .filter((token) => !managedTokens.has(token.toLowerCase()))
+      .map((token) => {
+        const normalized = token.toLowerCase()
+        return {
+          key: normalized,
+          matchToken: normalized,
+          label: itemsByToken.get(normalized)?.label ?? token,
+        }
+      })
+  }, [found, itemsByToken, managedTokens])
 
-  const visibleItems = useMemo<ExclusionPickerItem[]>(() => {
-    if (!items) return []
-    if (normalizedQuery) {
-      return items.filter(
+  // Rows already blocked by the user (managed entries render separately above).
+  const userItems = useMemo<ExclusionPickerItem[]>(() => {
+    const seen = new Set<string>()
+    const rows: ExclusionPickerItem[] = []
+    for (const e of excluded) {
+      const token = e.toLowerCase()
+      if (managedTokens.has(token) || seen.has(token)) continue
+      seen.add(token)
+      rows.push(itemsByToken.get(token) ?? { key: token, matchToken: token, label: e })
+    }
+    return rows
+  }, [excluded, itemsByToken, managedTokens])
+
+  // Search results = pool entries matching the query that aren't already blocked.
+  const suggestions = useMemo<ExclusionPickerItem[]>(() => {
+    if (!normalizedQuery) return []
+    return editableItems
+      .filter(
         (i) =>
-          i.label.toLowerCase().includes(normalizedQuery) || i.matchToken.includes(normalizedQuery),
+          !excludedTokens.has(i.matchToken) &&
+          (i.label.toLowerCase().includes(normalizedQuery) ||
+            i.matchToken.includes(normalizedQuery)),
       )
-    }
-    if (emptyViewMode === 'excluded-only') {
-      return items.filter((i) => excludedTokens.has(i.matchToken))
-    }
-    return items
-  }, [items, normalizedQuery, emptyViewMode, excludedTokens])
+      .slice(0, MAX_SUGGESTIONS)
+  }, [editableItems, normalizedQuery, excludedTokens])
 
   const canAddCustom =
     normalizedQuery.length > 0 &&
     !excludedTokens.has(normalizedQuery) &&
+    !managedTokens.has(normalizedQuery) &&
     !itemsByToken.has(normalizedQuery)
 
   const toggle = (token: string, checked: boolean): void => {
@@ -101,29 +137,24 @@ export function ExclusionPicker({
     onDismissFound?.()
   }
 
-  const removeLegacy = (entry: string): void => {
-    onChange(excluded.filter((e) => e.toLowerCase() !== entry.toLowerCase()))
-  }
-
-  const addCustom = (): void => {
-    if (!canAddCustom) return
-    onChange([...excluded, normalizedQuery])
+  const add = (token: string): void => {
+    const normalized = token.trim().toLowerCase()
+    if (!normalized || excludedTokens.has(normalized) || managedTokens.has(normalized)) return
+    onChange([...excluded, normalized])
     setQuery('')
   }
 
+  const hasRows = userItems.length > 0 || (managed?.length ?? 0) > 0
+
   return (
     <div className="flex flex-col gap-2">
-      <FoundBlock
-        items={foundItems}
-        excludedTokens={excludedTokens}
-        onToggle={toggle}
-        onAddAll={addAllFound}
-        onDismiss={onDismissFound}
-        icon={icon}
-      />
+      <div className="flex items-center gap-1.5">
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        {titleHelp && <HelpTooltip label={`How ${title} matching works`}>{titleHelp}</HelpTooltip>}
+      </div>
 
       <div className="relative">
-        <Search className="absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
           value={query}
           onChange={(e) => {
@@ -131,64 +162,104 @@ export function ExclusionPicker({
             if (e.target.value.length > 0 && onDismissFound) onDismissFound()
           }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && canAddCustom && visibleItems.length === 0) {
+            if (e.key === 'Enter' && normalizedQuery) {
               e.preventDefault()
-              addCustom()
+              add(suggestions[0]?.matchToken ?? normalizedQuery)
+            } else if (e.key === 'Escape') {
+              setQuery('')
             }
           }}
           placeholder={placeholder}
-          className="pl-7 pr-7 text-xs"
+          className="pl-7 text-xs"
         />
-        {query.length > 0 && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            onClick={() => setQuery('')}
-            aria-label="Clear search"
-            className="absolute top-1/2 right-1 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-          >
-            <X />
-          </Button>
-        )}
       </div>
 
-      <div className="rounded-lg border border-border">
-        {items === null ? (
-          <div className="px-3 py-6 text-center text-xs text-muted-foreground">{loadingLabel}</div>
-        ) : visibleItems.length === 0 && !canAddCustom ? (
-          <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-            {normalizedQuery ? 'Already blocked.' : emptyLabel}
-          </div>
-        ) : (
-          <ScrollArea className="max-h-72">
-            <ul className="divide-y divide-border">
-              {visibleItems.map((item) => (
-                <ExclusionRow
-                  key={item.key}
-                  item={item}
-                  checked={excludedTokens.has(item.matchToken)}
-                  onToggle={(checked) => toggle(item.matchToken, checked)}
-                  icon={icon}
-                />
-              ))}
-              {canAddCustom && (
-                <li className="flex items-center gap-2 px-2 py-1.5">
-                  <Plus className="size-4 shrink-0 text-muted-foreground" />
-                  <span className="flex-1 truncate text-xs">
-                    Add <code className="font-medium">{normalizedQuery}</code>
-                  </span>
-                  <Button size="xs" variant="outline" onClick={addCustom}>
-                    Add
-                  </Button>
-                </li>
-              )}
-            </ul>
-          </ScrollArea>
-        )}
-      </div>
-
-      <LegacyEntriesBlock title={legacyTitle} entries={legacyEntries} onRemove={removeLegacy} />
+      {normalizedQuery ? (
+        <ScrollArea className="h-42">
+          <ul className="space-y-2">
+            {suggestions.map((item) => (
+              <li
+                key={item.key}
+                className="flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1"
+              >
+                {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" />}
+                <span className="flex-1 truncate text-xs">{item.label}</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  onClick={() => add(item.matchToken)}
+                >
+                  Add
+                </Button>
+              </li>
+            ))}
+            {canAddCustom && (
+              <li className="flex h-9 items-center gap-2 rounded-lg border border-dashed border-border px-2.5 py-1">
+                <Plus className="size-4 shrink-0 text-muted-foreground" />
+                <span className="flex-1 truncate text-xs">
+                  Block <code className="font-medium">{normalizedQuery}</code>
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  onClick={() => add(normalizedQuery)}
+                >
+                  Add
+                </Button>
+              </li>
+            )}
+            {suggestions.length === 0 && !canAddCustom && (
+              <li className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+                Already blocked.
+              </li>
+            )}
+          </ul>
+        </ScrollArea>
+      ) : (
+        <>
+          <FoundBlock
+            items={foundItems}
+            excludedTokens={excludedTokens}
+            onAdd={(token) => toggle(token, true)}
+            onAddAll={addAllFound}
+            onDismiss={onDismissFound}
+            icon={Icon}
+          />
+          {items === null ? (
+            <div className="flex h-42 items-center justify-center rounded-lg border border-dashed border-border px-3 text-center text-xs text-muted-foreground">
+              Loading…
+            </div>
+          ) : hasRows ? (
+            <ScrollArea className="h-42">
+              <ul className="space-y-2">
+                {(managed ?? []).map((entry) => (
+                  <ManagedRow
+                    key={`managed:${entry}`}
+                    entry={entry}
+                    label={resolveManagedLabel?.(entry)}
+                    icon={Icon}
+                  />
+                ))}
+                {userItems.map((item) => (
+                  <ExclusionRow
+                    key={item.key}
+                    item={item}
+                    onRemove={() => toggle(item.matchToken, false)}
+                    icon={Icon}
+                  />
+                ))}
+              </ul>
+            </ScrollArea>
+          ) : (
+            <div className="flex h-42 flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-border px-3 text-center text-xs text-muted-foreground">
+              <p>{emptyPrimary}</p>
+              <p>{emptySecondary}</p>
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }

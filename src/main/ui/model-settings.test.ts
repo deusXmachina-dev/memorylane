@@ -35,7 +35,6 @@ function makeSettings(overrides: Partial<CaptureSettings> = {}): CaptureSettings
     databaseExportDirectory: '',
     excludePrivateBrowsing: true,
     excludedApps: [],
-    excludedWindowTitlePatterns: [],
     excludedUrlPatterns: [],
     activeVendor: 'openrouter',
     semanticVideoModel: VENDOR_PRESETS.openrouter.semanticVideo[0].id,

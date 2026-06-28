@@ -105,7 +105,6 @@ describe('capture blacklist coordinator', () => {
     coordinator.handleInteraction(appChangeEvent('KeePassXC'))
     coordinator.updateExclusions({
       apps: ['keepassxc'],
-      windowTitlePatterns: [],
       urlPatterns: [],
       excludePrivateBrowsing: true,
     })
@@ -255,7 +254,6 @@ describe('capture blacklist coordinator', () => {
 
     coordinator.updateExclusions({
       apps: [],
-      windowTitlePatterns: [],
       urlPatterns: [],
       excludePrivateBrowsing: false,
     })
@@ -293,30 +291,47 @@ describe('capture blacklist coordinator', () => {
     expect(forwarded).toEqual([terminalEvent])
   })
 
-  it('suppresses screenshots when window title matches excluded wildcard', () => {
-    const forwarded: InteractionContext[] = []
+  it('enforces org-managed app exclusions immediately when synced', () => {
     const suppressionTransitions: boolean[] = []
-    let flushCount = 0
 
     const coordinator = createCaptureBlacklistCoordinator({
       initialExcludedApps: [],
-      initialExcludedWindowTitlePatterns: ['*internal payroll*'],
-      forwardInteraction: (event) => forwarded.push(event),
-      flushEvents: () => {
-        flushCount++
-      },
+      forwardInteraction: () => undefined,
+      flushEvents: () => undefined,
       setScreenshotsSuppressed: (suppressed) => {
         suppressionTransitions.push(suppressed)
       },
     })
 
-    coordinator.handleInteraction(
-      appChangeEvent('Google Chrome', {
-        title: 'Internal Payroll - Google Chrome',
-      }),
-    )
+    coordinator.handleInteraction(appChangeEvent('Slack'))
+    coordinator.setManagedExclusions({ apps: ['Slack'], urlPatterns: [] })
 
-    expect(flushCount).toBe(1)
+    expect(suppressionTransitions).toEqual([true])
+  })
+
+  it('keeps managed exclusions enforced across a user settings change (union of both layers)', () => {
+    const forwarded: InteractionContext[] = []
+    const suppressionTransitions: boolean[] = []
+
+    const coordinator = createCaptureBlacklistCoordinator({
+      initialExcludedApps: ['signal'],
+      forwardInteraction: (event) => forwarded.push(event),
+      flushEvents: () => undefined,
+      setScreenshotsSuppressed: (suppressed) => {
+        suppressionTransitions.push(suppressed)
+      },
+    })
+
+    coordinator.setManagedExclusions({ apps: ['slack'], urlPatterns: [] })
+
+    // A later user settings save (no Slack) must not drop the managed entry.
+    coordinator.updateExclusions({
+      apps: ['signal'],
+      urlPatterns: [],
+      excludePrivateBrowsing: true,
+    })
+
+    coordinator.handleInteraction(appChangeEvent('Slack'))
     expect(suppressionTransitions).toEqual([true])
     expect(forwarded).toHaveLength(0)
   })
@@ -348,5 +363,72 @@ describe('capture blacklist coordinator', () => {
     expect(flushCount).toBe(1)
     expect(suppressionTransitions).toEqual([true])
     expect(forwarded).toHaveLength(0)
+  })
+
+  it('matches a domain but not the same name mentioned in another site query', () => {
+    const suppressionTransitions: boolean[] = []
+    const coordinator = createCaptureBlacklistCoordinator({
+      initialExcludedApps: [],
+      initialExcludedUrlPatterns: ['https://linear.app'],
+      initialExcludePrivateBrowsing: false,
+      forwardInteraction: () => undefined,
+      flushEvents: () => undefined,
+      setScreenshotsSuppressed: (suppressed) => {
+        suppressionTransitions.push(suppressed)
+      },
+    })
+
+    coordinator.handleInteraction(
+      appChangeEvent('Google Chrome', {
+        title: 'Search',
+        url: 'https://google.com/?q=linear.app',
+      }),
+    )
+    expect(suppressionTransitions).toEqual([])
+
+    coordinator.handleInteraction(
+      appChangeEvent('Google Chrome', { title: 'Linear', url: 'https://linear.app/issue/123' }),
+    )
+    expect(suppressionTransitions).toEqual([true])
+  })
+
+  it('enforces a managed domain entry against a real URL', () => {
+    const suppressionTransitions: boolean[] = []
+    const coordinator = createCaptureBlacklistCoordinator({
+      initialExcludedApps: [],
+      initialExcludePrivateBrowsing: false,
+      forwardInteraction: () => undefined,
+      flushEvents: () => undefined,
+      setScreenshotsSuppressed: (suppressed) => {
+        suppressionTransitions.push(suppressed)
+      },
+    })
+
+    // An org pushes a domain; it must match the host of a real https:// URL.
+    coordinator.setManagedExclusions({ apps: [], urlPatterns: ['bank.com'] })
+
+    coordinator.handleInteraction(
+      appChangeEvent('Google Chrome', { title: 'Bank', url: 'https://bank.com/accounts' }),
+    )
+    expect(suppressionTransitions).toEqual([true])
+  })
+
+  it('enforces a user domain entry against a real URL', () => {
+    const suppressionTransitions: boolean[] = []
+    const coordinator = createCaptureBlacklistCoordinator({
+      initialExcludedApps: [],
+      initialExcludedUrlPatterns: ['bank.com'],
+      initialExcludePrivateBrowsing: false,
+      forwardInteraction: () => undefined,
+      flushEvents: () => undefined,
+      setScreenshotsSuppressed: (suppressed) => {
+        suppressionTransitions.push(suppressed)
+      },
+    })
+
+    coordinator.handleInteraction(
+      appChangeEvent('Google Chrome', { title: 'Bank', url: 'https://bank.com/accounts' }),
+    )
+    expect(suppressionTransitions).toEqual([true])
   })
 })

@@ -1,5 +1,60 @@
 import { describe, expect, it } from 'vitest'
-import { isPrivateNetworkHost, isSameRegistrableDomain, registrableDomain } from './url-utils'
+import {
+  domainOf,
+  isPrivateNetworkHost,
+  isSameRegistrableDomain,
+  normalizeUrlPattern,
+  registrableDomain,
+} from './url-utils'
+
+describe('normalizeUrlPattern', () => {
+  it('reduces a domain entry to its bare host (lowercased, www dropped)', () => {
+    expect(normalizeUrlPattern('bank.com')).toBe('bank.com')
+    expect(normalizeUrlPattern('  Bank.com  ')).toBe('bank.com')
+    expect(normalizeUrlPattern('www.bank.com')).toBe('bank.com')
+  })
+
+  it('reduces a full URL to its host (scheme/path/query stripped)', () => {
+    expect(normalizeUrlPattern('https://www.linkedin.com/feed/')).toBe('linkedin.com')
+    expect(normalizeUrlPattern('http://intranet/portal')).toBe('intranet')
+  })
+
+  it('keeps wildcard entries verbatim (lowercased)', () => {
+    expect(normalizeUrlPattern('*Bank*')).toBe('*bank*')
+    expect(normalizeUrlPattern('github.com/*/settings')).toBe('github.com/*/settings')
+  })
+
+  it('returns empty/blank input unchanged', () => {
+    expect(normalizeUrlPattern('')).toBe('')
+    expect(normalizeUrlPattern('   ')).toBe('')
+  })
+
+  it('rejects a degenerate match-all wildcard to empty (would block everything)', () => {
+    expect(normalizeUrlPattern('*')).toBe('')
+    expect(normalizeUrlPattern('**')).toBe('')
+    expect(normalizeUrlPattern('  *  ')).toBe('')
+    // A wildcard with real literal content is kept.
+    expect(normalizeUrlPattern('*bank*')).toBe('*bank*')
+  })
+
+  it('is idempotent', () => {
+    expect(normalizeUrlPattern(normalizeUrlPattern('https://www.bank.com/x'))).toBe('bank.com')
+    expect(normalizeUrlPattern(normalizeUrlPattern('*bank*'))).toBe('*bank*')
+  })
+})
+
+describe('domainOf', () => {
+  it('extracts and lowercases the host, dropping a leading www', () => {
+    expect(domainOf('https://www.LinkedIn.com/feed')).toBe('linkedin.com')
+    expect(domainOf('mail.google.com')).toBe('mail.google.com')
+    expect(domainOf('localhost:3000')).toBe('localhost')
+  })
+
+  it('returns null when no host can be parsed', () => {
+    expect(domainOf('')).toBeNull()
+    expect(domainOf('   ')).toBeNull()
+  })
+})
 
 describe('registrableDomain', () => {
   it('returns the last two labels for multi-label hosts', () => {

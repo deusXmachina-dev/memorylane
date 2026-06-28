@@ -50,7 +50,6 @@ describe('CaptureSettingsManager', () => {
       expect(defaults.databaseExportDirectory).toBe('')
       expect(defaults.excludePrivateBrowsing).toBe(true)
       expect(defaults.excludedApps).toEqual([])
-      expect(defaults.excludedWindowTitlePatterns).toEqual([])
       expect(defaults.excludedUrlPatterns).toEqual([])
       expect(defaults.uploadDetailLevel).toBe('off')
     })
@@ -131,12 +130,33 @@ describe('CaptureSettingsManager', () => {
     it('normalizes wildcard exclusion patterns', () => {
       const manager = new CaptureSettingsManager(configPath)
       manager.save({
-        excludedWindowTitlePatterns: [' *incognito* ', '*INCOGNITO*', ''],
         excludedUrlPatterns: [' *://*.github.com/* ', '*://*.GITHUB.com/*', ''],
       })
 
-      expect(manager.get().excludedWindowTitlePatterns).toEqual(['*incognito*'])
       expect(manager.get().excludedUrlPatterns).toEqual(['*://*.github.com/*'])
+    })
+
+    it('migrates pre-v1 bare url patterns to contains-style on load', () => {
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({ excludedUrlPatterns: ['linear.app', '*keepme*'] }),
+      )
+      const manager = new CaptureSettingsManager(configPath)
+      // Bare patterns from the substring era are wrapped to keep matching;
+      // patterns that already contain wildcards are left untouched.
+      expect(manager.get().excludedUrlPatterns).toEqual(['*linear.app*', '*keepme*'])
+    })
+
+    it('wraps pre-v1 patterns containing a literal ? so they keep matching', () => {
+      // `?` was the old single-char wildcard; it is literal now. A pre-v1 pattern
+      // with `?` but no `*` must still be wrapped — left bare it would be read as a
+      // domain and silently stop matching.
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({ excludedUrlPatterns: ['mychart?id', 'github.com/login?x'] }),
+      )
+      const manager = new CaptureSettingsManager(configPath)
+      expect(manager.get().excludedUrlPatterns).toEqual(['*mychart?id*', '*github.com/login?x*'])
     })
 
     it('persists private browsing exclusion flag', () => {

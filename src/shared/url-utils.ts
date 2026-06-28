@@ -61,6 +61,43 @@ export function isPrivateNetworkHost(hostname: string): boolean {
   return false
 }
 
+/**
+ * Normalize a capture-blacklist entry to one of exactly two canonical forms:
+ *  - a wildcard (contains `*`): kept verbatim (trimmed + lowercased); matched as
+ *    a substring anywhere in the URL, with `*` meaning "any run of characters"
+ *    and every other character (including `?`) literal.
+ *  - a domain (no `*`): reduced to its bare host — scheme, path, and query
+ *    stripped and a leading `www.` dropped; matched against the URL host,
+ *    subdomain-inclusive.
+ *
+ * Shared by every entry path (user input, "Found" suggestions, managed sync) so
+ * the matcher, settings, and UI agree on what an entry means.
+ *
+ * A degenerate wildcard with no literal content (`*`, `**`, …) would match every
+ * URL and silently disable all capture, so it is rejected to the empty string —
+ * callers drop empty entries.
+ */
+export function normalizeUrlPattern(value: string): string {
+  const v = value.trim().toLowerCase()
+  if (!v) return ''
+  if (v.includes('*')) return v.replace(/\*/g, '') ? v : ''
+  return domainOf(v) ?? v
+}
+
+/**
+ * Reduce a domain entry or URL to its bare host: parse the host (accepting a
+ * bare `host`, `host/path`, or a full scheme-qualified URL) and drop a leading
+ * `www.`. Returns null if no host can be parsed.
+ */
+export function domainOf(value: string): string | null {
+  const v = value.trim().toLowerCase()
+  if (!v) return null
+  const direct = hostnameOf(v)
+  const host = direct && direct.length > 0 ? direct : hostnameOf(`https://${v}`)
+  if (!host) return null
+  return host.startsWith('www.') ? host.slice(4) : host
+}
+
 function hostnameOf(input: string): string | null {
   try {
     return new URL(input).hostname

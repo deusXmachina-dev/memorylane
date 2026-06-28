@@ -281,7 +281,7 @@ function handleScroll(event: UiohookWheelEvent): void {
  */
 function handleAppWatcherEvent(event: AppWatcherEvent): void {
   log.debug(
-    `[Interaction Monitor] Received AppWatcher event: type=${event.type} app=${event.app} title=${event.title}`,
+    `[Interaction Monitor] Received AppWatcher event: type=${event.type} app=${event.app} title=${event.title} url=${event.url}`,
   )
 
   if (event.type === 'ready') {
@@ -316,9 +316,12 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
     previousWindow.title === current.title &&
     previousWindow.processName === current.processName &&
     previousWindow.hwnd === current.hwnd &&
+    previousWindow.url === current.url &&
     previousWindowDisplayId === resolvedDisplayId
   ) {
-    log.debug(`[Interaction Monitor] Skipping duplicate: ${current.processName} "${current.title}"`)
+    log.debug(
+      `[Interaction Monitor] Skipping duplicate: ${current.processName} "${current.title}" url=${current.url} (prevUrl=${previousWindow.url})`,
+    )
     return
   }
 

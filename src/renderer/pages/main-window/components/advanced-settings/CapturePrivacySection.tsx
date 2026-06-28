@@ -13,11 +13,7 @@ interface CapturePrivacySectionProps {
   onToggleRecordingHotkey: () => void
   onAutoStartEnabledChange: (enabled: boolean) => void
   onExcludePrivateBrowsingChange: (enabled: boolean) => void
-  onExcludedRulesCommit: (rules: {
-    excludedApps: string[]
-    excludedWindowTitlePatterns: string[]
-    excludedUrlPatterns: string[]
-  }) => void
+  onExcludedRulesCommit: (rules: { excludedApps: string[]; excludedUrlPatterns: string[] }) => void
   onObserved: () => void
 }
 
@@ -33,7 +29,6 @@ export function CapturePrivacySection({
   const commitAppsChange = (nextApps: string[]): void => {
     onExcludedRulesCommit({
       excludedApps: nextApps,
-      excludedWindowTitlePatterns: form.excludedWindowTitlePatterns,
       excludedUrlPatterns: form.excludedUrlPatterns,
     })
   }
@@ -41,17 +36,15 @@ export function CapturePrivacySection({
   const commitUrlsChange = (nextUrls: string[]): void => {
     onExcludedRulesCommit({
       excludedApps: form.excludedApps,
-      excludedWindowTitlePatterns: form.excludedWindowTitlePatterns,
       excludedUrlPatterns: nextUrls,
     })
   }
 
   return (
     <div className="space-y-6">
-      <SettingsSection title="Privacy rules" icon={<ShieldCheck className="h-4 w-4" />}>
+      <SettingsSection title="Blocklist" icon={<ShieldCheck className="h-4 w-4" />}>
         <div className="py-3 first:pt-0 last:pb-0">
           <ExclusionsManager
-            layout="stacked"
             excludedApps={form.excludedApps}
             excludedUrlPatterns={form.excludedUrlPatterns}
             onAppsChange={commitAppsChange}
