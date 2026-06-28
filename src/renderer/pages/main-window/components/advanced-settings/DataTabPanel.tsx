@@ -169,18 +169,11 @@ export function DataTabPanel({
             }
           />
           {uploadDetailLevel !== 'off' && (
-            <>
-              <SettingsRow
-                label="Sync database now"
-                description="Push the current database to remote."
-                control={<DatabaseSyncSection api={api} />}
-              />
-              <SettingsRow
-                label="Sync logs now"
-                description="Push the latest app logs to remote for debugging."
-                control={<LogsSyncSection api={api} />}
-              />
-            </>
+            <SettingsRow
+              label="Sync database now"
+              description="Push the current database to remote."
+              control={<DatabaseSyncSection api={api} />}
+            />
           )}
         </SettingsSection>
       )}
@@ -191,6 +184,13 @@ export function DataTabPanel({
           description="Download a ZIP of the app logs to share for debugging."
           control={<LogsExportSection api={api} />}
         />
+        {isEnterprise && uploadDetailLevel !== 'off' && (
+          <SettingsRow
+            label="Sync logs now"
+            description="Push the latest app logs to remote for debugging."
+            control={<LogsSyncSection api={api} />}
+          />
+        )}
       </SettingsSection>
 
       <SettingsSection title="Danger zone" icon={<AlertTriangle className="h-4 w-4" />}>
