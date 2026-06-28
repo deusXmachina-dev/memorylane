@@ -11,6 +11,7 @@ import { DatabaseExportSection } from '../DatabaseExportSection'
 import { DatabaseImportSection } from '../DatabaseImportSection'
 import { DatabaseSyncSection } from '../DatabaseSyncSection'
 import { LogsExportSection } from '../LogsExportSection'
+import { LogsSyncSection } from '../LogsSyncSection'
 import { SegmentedControl } from './SegmentedControl'
 import { SettingsRow } from './SettingsRow'
 import { SettingsSection } from './SettingsSection'
@@ -168,11 +169,18 @@ export function DataTabPanel({
             }
           />
           {uploadDetailLevel !== 'off' && (
-            <SettingsRow
-              label="Sync now"
-              description="Push the current database to remote."
-              control={<DatabaseSyncSection api={api} />}
-            />
+            <>
+              <SettingsRow
+                label="Sync database now"
+                description="Push the current database to remote."
+                control={<DatabaseSyncSection api={api} />}
+              />
+              <SettingsRow
+                label="Sync logs now"
+                description="Push the latest app logs to remote for debugging."
+                control={<LogsSyncSection api={api} />}
+              />
+            </>
           )}
         </SettingsSection>
       )}

@@ -127,6 +127,9 @@ interface MainWindowDependencies {
   databaseUploadSync?: {
     triggerUpload: () => Promise<{ success: boolean; error?: string }>
   }
+  logUploadSync?: {
+    triggerUpload: () => Promise<{ success: boolean; error?: string }>
+  }
   purgeAll: () => Promise<void>
   observation: {
     start: (durationMs: number) => ObservationState
@@ -932,6 +935,13 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: false, error: 'Not available' }
     }
     return deps.databaseUploadSync.triggerUpload()
+  })
+
+  ipcMain.handle('main-window:syncLogsToRemote', async () => {
+    if (!deps?.logUploadSync) {
+      return { success: false, error: 'Not available' }
+    }
+    return deps.logUploadSync.triggerUpload()
   })
 
   ipcMain.handle(

@@ -161,4 +161,42 @@ describe('LogUploadSync', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(state.value).toBeNull()
   })
+
+  it('triggerUpload returns an error when sharing is disabled', async () => {
+    const fetchMock = mockFetchResponse(200)
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const { sync, zipFiles } = makeSync({ isSyncEnabled: () => false })
+    const result = await sync.triggerUpload()
+
+    expect(result).toEqual({ success: false, error: 'Sharing disabled' })
+    expect(zipFiles).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('triggerUpload forces an upload even when logs are unchanged', async () => {
+    const fetchMock = mockFetchResponse(200)
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const { sync } = makeSync()
+    // First upload establishes the marker (signature recorded).
+    expect(await sync.triggerUpload()).toEqual({ success: true })
+    // Second manual trigger uploads again despite the unchanged signature and
+    // the throttle window — the automatic poll would skip here.
+    expect(await sync.triggerUpload()).toEqual({ success: true })
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('triggerUpload surfaces an upload failure', async () => {
+    const fetchMock = mockFetchResponse(500, 'server error')
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const { sync, state } = makeSync()
+    const result = await sync.triggerUpload()
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('500')
+    expect(state.value).toBeNull()
+  })
 })

@@ -109,31 +109,61 @@ export class LogUploadSync {
       })
   }
 
-  private async syncOnce(reason: string): Promise<void> {
+  /**
+   * Force an upload now, bypassing the change/throttle gates (the "Sync now"
+   * button). Returns the outcome so the UI can toast success/failure. Mirrors
+   * DatabaseUploadSync.triggerUpload.
+   */
+  async triggerUpload(): Promise<{ success: boolean; error?: string }> {
+    if (!this.isSyncEnabled()) {
+      return { success: false, error: 'Sharing disabled' }
+    }
+    // Let any in-flight background pass finish so the two don't overlap.
+    await this.inFlight.catch(() => undefined)
+    this.syncing = true
+    const run = this.syncOnce('manual', true).finally(() => {
+      this.syncing = false
+    })
+    this.inFlight = run.catch(() => undefined)
+    try {
+      await run
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Upload failed' }
+    }
+  }
+
+  private async syncOnce(reason: string, force = false): Promise<void> {
     if (!this.isSyncEnabled()) {
       log.debug(`[LogUpload] Skipping (${reason}) — sharing disabled`)
       return
     }
     if (!this.isActivated()) {
+      if (force) throw new Error('Device not activated')
       log.debug(`[LogUpload] Skipping (${reason}) — device not activated`)
       return
     }
 
     const files = this.collectFiles()
     if (files.length === 0) {
+      if (force) throw new Error('No log files found')
       log.debug(`[LogUpload] Skipping (${reason}) — no log files`)
       return
     }
 
     const signature = this.computeSignature(files)
-    const state = this.readState()
-    if (state?.lastSig === signature) {
-      log.debug(`[LogUpload] Skipping (${reason}) — logs unchanged since last upload`)
-      return
-    }
-    if (state?.lastUploadAt != null && this.now() - state.lastUploadAt < this.minIntervalMs) {
-      log.debug(`[LogUpload] Skipping (${reason}) — throttled (uploaded recently)`)
-      return
+    // A manual trigger uploads regardless of whether the logs changed or when we
+    // last uploaded; the automatic poll respects both gates.
+    if (!force) {
+      const state = this.readState()
+      if (state?.lastSig === signature) {
+        log.debug(`[LogUpload] Skipping (${reason}) — logs unchanged since last upload`)
+        return
+      }
+      if (state?.lastUploadAt != null && this.now() - state.lastUploadAt < this.minIntervalMs) {
+        log.debug(`[LogUpload] Skipping (${reason}) — throttled (uploaded recently)`)
+        return
+      }
     }
 
     const tempPath = path.join(os.tmpdir(), `.memorylane-logs-${process.pid}.${this.now()}.zip`)
