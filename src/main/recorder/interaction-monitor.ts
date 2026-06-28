@@ -285,7 +285,7 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
   )
 
   if (event.type === 'ready') {
-    log.info('[Interaction Monitor] AppWatcher is ready and streaming events')
+    log.debug('[Interaction Monitor] AppWatcher is ready and streaming events')
     return
   }
   if (event.type === 'error') {
@@ -369,7 +369,7 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
  */
 export function startInteractionMonitoring(): void {
   if (isRunning) {
-    log.info('[Interaction Monitor] Already running')
+    log.debug('[Interaction Monitor] Already running')
     return
   }
 
@@ -379,7 +379,7 @@ export function startInteractionMonitoring(): void {
   }
 
   try {
-    log.info('[Interaction Monitor] Starting')
+    log.debug('[Interaction Monitor] Starting')
     isRunning = true
 
     // Register event handlers
@@ -397,12 +397,12 @@ export function startInteractionMonitoring(): void {
 
     // Start the hook
     uIOhook.start()
-    log.info('[Interaction Monitor] uiohook started successfully')
+    log.debug('[Interaction Monitor] uiohook started successfully')
 
     // Start native app-watcher process for app/window change events
     if (INTERACTION_MONITOR_CONFIG.TRACK_APP_CHANGE) {
       appWatcherUnsubscribe = addAppWatcherListener(handleAppWatcherEvent)
-      log.info('[Interaction Monitor] App watcher started')
+      log.debug('[Interaction Monitor] App watcher started')
     }
   } catch (error) {
     log.error('[Interaction Monitor] Failed to start:', error)
@@ -417,12 +417,12 @@ export function startInteractionMonitoring(): void {
  */
 export function stopInteractionMonitoring(): void {
   if (!isRunning) {
-    log.info('[Interaction Monitor] Not running')
+    log.debug('[Interaction Monitor] Not running')
     return
   }
 
   try {
-    log.info('[Interaction Monitor] Stopping')
+    log.debug('[Interaction Monitor] Stopping')
     isRunning = false
 
     // Cancel pending session timers and clear accumulation

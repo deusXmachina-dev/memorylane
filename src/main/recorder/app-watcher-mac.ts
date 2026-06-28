@@ -54,11 +54,11 @@ function getExecutable(): AppWatcherExecutable {
 
 function spawnWatcher(): void {
   const { command, args } = getExecutable()
-  log.info(`[AppWatcher] Spawning: ${command} ${args.join(' ')}`)
+  log.debug(`[AppWatcher] Spawning: ${command} ${args.join(' ')}`)
 
   const child = spawn(command, [...args], { stdio: ['ignore', 'pipe', 'pipe'] })
   proc = child
-  log.info(`[AppWatcher] Process spawned (pid=${child.pid})`)
+  log.debug(`[AppWatcher] Process spawned (pid=${child.pid})`)
 
   const rl = createInterface({ input: child.stdout! })
 
@@ -67,7 +67,7 @@ function spawnWatcher(): void {
       const event: AppWatcherEvent = JSON.parse(line)
       if (event.type === 'ready') {
         retries = 0 // successful start, reset backoff
-        log.info('[AppWatcher] Ready event received — watcher is alive')
+        log.debug('[AppWatcher] Ready event received — watcher is alive')
       }
       onEvent?.(event)
     } catch {
@@ -85,7 +85,11 @@ function spawnWatcher(): void {
   })
 
   child.on('close', (code, signal) => {
-    log.info(`[AppWatcher] Process exited (code=${code}, signal=${signal}, stopped=${stopped})`)
+    if (stopped) {
+      log.debug(`[AppWatcher] Process exited (code=${code}, signal=${signal}, stopped=true)`)
+    } else {
+      log.warn(`[AppWatcher] Process exited unexpectedly (code=${code}, signal=${signal})`)
+    }
     proc = null
     if (stopped) return
     if (retries < APP_WATCHER_CONFIG.MAX_RESTART_RETRIES) {
@@ -109,16 +113,16 @@ function spawnWatcher(): void {
 }
 
 export function startAppWatcherMac(callback: (event: AppWatcherEvent) => void): void {
-  log.info(`[AppWatcher] startAppWatcherMac called (proc=${!!proc}, stopped=${stopped})`)
+  log.debug(`[AppWatcher] startAppWatcherMac called (proc=${!!proc}, stopped=${stopped})`)
   if (proc) {
-    log.info('[AppWatcher] Already running, skipping')
+    log.debug('[AppWatcher] Already running, skipping')
     return
   }
 
   stopped = false
   retries = 0
   onEvent = callback
-  log.info('[AppWatcher] Spawning watcher process...')
+  log.debug('[AppWatcher] Spawning watcher process...')
   spawnWatcher()
 }
 
@@ -127,7 +131,7 @@ export function stopAppWatcherMac(): void {
   onEvent = null
 
   if (proc) {
-    log.info(`[AppWatcher] Stopping (pid=${proc.pid})`)
+    log.debug(`[AppWatcher] Stopping (pid=${proc.pid})`)
     proc.kill('SIGTERM')
     proc = null
   }

@@ -64,7 +64,7 @@ async function extractTextMacOS(filepath: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const OCR_TIMEOUT_MS = 15_000
     const proc = spawn(command, [...args, filepath, '--mode', OCR_CONFIG.RECOGNITION_MODE])
-    log.info(`[OCR] Spawned process (pid=${proc.pid}) for ${path.basename(filepath)}`)
+    log.debug(`[OCR] Spawned process (pid=${proc.pid}) for ${path.basename(filepath)}`)
 
     let stdoutData = ''
     let stderrData = ''
@@ -105,7 +105,7 @@ async function extractTextMacOS(filepath: string): Promise<string> {
         )
       }
 
-      log.info(
+      log.debug(
         `[OCR] Process (pid=${proc.pid}) completed, extracted ${stdoutData.trim().length} chars`,
       )
       resolve(stdoutData.trim())
@@ -151,7 +151,7 @@ export async function extractText(filepath: string): Promise<string> {
   const startMs = Date.now()
   const text = await backend(filepath)
   const elapsedMs = Date.now() - startMs
-  log.info(`[OCR] extractText completed in ${elapsedMs}ms for ${path.basename(filepath)}`)
+  log.debug(`[OCR] extractText completed in ${elapsedMs}ms for ${path.basename(filepath)}`)
   return text
 }
 

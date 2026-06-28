@@ -199,7 +199,18 @@ export class ActivitySemanticService implements SemanticServiceContract {
     // final diagnostics state. Every return path routes through finish(), so each
     // outcome is counted exactly once.
     const finish = (summary: string, model: string): SemanticSummary => {
-      this.summaryModeTracker.record(deriveSummaryOutcome(diagnostics))
+      const outcome = deriveSummaryOutcome(diagnostics)
+      this.summaryModeTracker.record(outcome)
+      // One line per summarized activity (a few hundred/day): which pipeline
+      // produced it, why that mode, the model, and the output size — plus the
+      // raw video-failure detail on a fallback. Pairs with the aggregate in
+      // summary-mode-stats.json for after-the-fact debugging.
+      const detail = outcome.failureDetail ? ` detail=${outcome.failureDetail.slice(0, 200)}` : ''
+      log.info(
+        `[ActivitySemanticService] Summary activity=${diagnostics.activityId} ` +
+          `mode=${outcome.mode || 'none'} reason=${outcome.reason || 'ok'} ` +
+          `model=${model || diagnostics.chosenModel || 'none'} chars=${summary.length}${detail}`,
+      )
       return { summary, model }
     }
 
@@ -222,7 +233,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
       const effectiveVideoModels = this.filterCachedSupportedVideoModels()
       if (effectiveVideoModels.length === 0) {
         diagnostics.fallbackReason = 'all video models marked unsupported (session)'
-        log.info(
+        log.debug(
           '[ActivitySemanticService] Skipping video summarization; all configured video models are cached as unsupported on this route',
           JSON.stringify({
             activityId: input.activity.id,
@@ -547,7 +558,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
         throw new Error('empty summary')
       }
       this.recordLlmSuccess()
-      log.info(
+      log.debug(
         '[ActivitySemanticService] Connection test succeeded',
         JSON.stringify({ model, durationMs: Date.now() - startedAt }),
       )

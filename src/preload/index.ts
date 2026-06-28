@@ -97,6 +97,7 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   exportLogsZip: () => ipcRenderer.invoke('main-window:exportLogsZip'),
   importDatabase: () => ipcRenderer.invoke('main-window:importDatabase'),
   syncDatabaseToRemote: () => ipcRenderer.invoke('main-window:syncDatabaseToRemote'),
+  syncLogsToRemote: () => ipcRenderer.invoke('main-window:syncLogsToRemote'),
   purgeDatabase: (confirmation: string) =>
     ipcRenderer.invoke('main-window:purgeDatabase', confirmation),
   // Shell

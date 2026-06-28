@@ -33,6 +33,8 @@ import { TASK_MINING_ENABLED } from './feature-flags'
 import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
 import { DatabaseUploadSync } from './services/database-upload-sync'
+import { LogUploadSync } from './services/log-upload-sync'
+import { readLogUploadState, writeLogUploadState } from './services/log-upload-store'
 import { RemoteBlacklistService } from './services/remote-blacklist-service'
 import { readRemoteBlacklist, writeRemoteBlacklist } from './services/remote-blacklist-store'
 import { createMainRuntime, type MainRuntime } from './runtime'
@@ -74,6 +76,40 @@ if (process.platform === 'darwin') {
   app.dock?.hide()
 }
 
+// Capture otherwise-unlogged crashes so they reach main.log for support bundles.
+// electron-log's file transport only records calls made through the logger, so
+// without these a fatal main-process error would leave no trace at the moment it
+// matters most.
+//
+// An uncaught exception leaves the process in an undefined state; Node's docs are
+// explicit that it's not safe to resume. We log and then exit with Node's default
+// failure code so the tray crashes rather than limping on with capture silently
+// dead. electron-log's file transport writes synchronously, so the line is on
+// disk before we exit.
+process.on('uncaughtException', (error) => {
+  log.error('[Crash] Uncaught exception in main process:', error)
+  process.exit(1)
+})
+// A stray rejection (e.g. a failed background fetch) is usually non-fatal, so we
+// log and keep capturing rather than take down the tray.
+process.on('unhandledRejection', (reason) => {
+  log.error('[Crash] Unhandled promise rejection in main process:', reason)
+})
+app.on('render-process-gone', (_event, _webContents, details) => {
+  const line = `[Crash] Renderer process gone (reason=${details.reason}, exitCode=${details.exitCode})`
+  // A clean exit is a normal window teardown, not a crash.
+  if (details.reason === 'clean-exit') log.debug(line)
+  else log.error(line)
+})
+app.on('child-process-gone', (_event, details) => {
+  // Utility processes (e.g. the upload-prep worker) exit cleanly by design —
+  // only an abnormal departure is worth a line.
+  if (details.reason === 'clean-exit') return
+  log.warn(
+    `[Crash] Child process gone (type=${details.type}, reason=${details.reason}, exitCode=${details.exitCode})`,
+  )
+})
+
 // Prevent app from quitting when all windows are closed (tray app)
 app.on('window-all-closed', () => {
   // Don't quit - this is a tray app
@@ -85,6 +121,7 @@ let patternDetector: PatternDetector | null = null
 let taskMiner: TaskMiner | null = null
 let rawDatabaseExportSync: RawDatabaseExportSync | null = null
 let databaseUploadSync: DatabaseUploadSync | null = null
+let logUploadSync: LogUploadSync | null = null
 let remoteBlacklist: RemoteBlacklistService | null = null
 let observation: ObservationController | null = null
 
@@ -108,6 +145,7 @@ app.on('before-quit', (event) => {
     runtime?.dispose(),
     rawDatabaseExportSync?.stop(),
     databaseUploadSync?.stop(),
+    logUploadSync?.stop(),
   ]).finally(() => {
     shutdownCompleted = true
     app.quit()
@@ -211,6 +249,16 @@ app.on('ready', async () => {
       recordUploadAt: (ts) => runtime?.storage.uploadRuns.record(ts),
     })
     databaseUploadSync.start()
+
+    logUploadSync = new LogUploadSync({
+      getDeviceId: () => deviceIdentity.getDeviceId(),
+      isActivated: () => runtime?.accessProvider.getAccessState().isEnterpriseActivated ?? false,
+      isSyncEnabled: () => captureSettingsManager.get().uploadDetailLevel !== 'off',
+      getBackendUrl: () => ENTERPRISE_BACKEND_CONFIG.BACKEND_URL,
+      readState: () => readLogUploadState(),
+      writeState: (state) => writeLogUploadState(state),
+    })
+    logUploadSync.start()
 
     remoteBlacklist = new RemoteBlacklistService({
       getDeviceId: () => deviceIdentity.getDeviceId(),
@@ -322,6 +370,7 @@ app.on('ready', async () => {
     getManagedExclusions: () => remoteBlacklist?.getBlacklist() ?? { apps: [], urlPatterns: [] },
     databaseExportSync: rawDatabaseExportSync,
     databaseUploadSync: databaseUploadSync ?? undefined,
+    logUploadSync: logUploadSync ?? undefined,
     purgeAll: () => runtime?.purgeAll() ?? Promise.reject(new Error('Runtime not initialized')),
     observation,
     evalRecorder: runtime.evalRecorder,
@@ -360,6 +409,7 @@ app.on('ready', async () => {
       captureCoordinator.resumeCaptureIfDesired('resume')
       // Catch up uploads on wake — the 24h interval doesn't survive sleep.
       databaseUploadSync?.scheduleUploadIfStale('resume')
+      logUploadSync?.requestSync('resume')
     },
   })
 

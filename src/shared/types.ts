@@ -387,6 +387,7 @@ export interface MainWindowAPI {
   exportLogsZip: () => Promise<DatabaseExportResult>
   importDatabase: () => Promise<DatabaseImportResult>
   syncDatabaseToRemote: () => Promise<{ success: boolean; error?: string }>
+  syncLogsToRemote: () => Promise<{ success: boolean; error?: string }>
   purgeDatabase: (confirmation: string) => Promise<{ success: boolean; error?: string }>
   // Updater
   getUpdateInfo: () => Promise<UpdateInfo>
