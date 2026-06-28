@@ -26,14 +26,14 @@ export class EmbeddingService implements ActivityEmbeddingService {
     if (this.pipe) return
 
     if (bundledPath) {
-      log.info(`Using bundled embedding model from ${bundledPath}`)
+      log.debug(`Using bundled embedding model from ${bundledPath}`)
     } else {
-      log.info(`Using remote embedding model from ${env.cacheDir}`)
+      log.debug(`Using remote embedding model from ${env.cacheDir}`)
     }
-    log.info(`Loading embedding model: ${MODEL_NAME}`)
+    log.debug(`Loading embedding model: ${MODEL_NAME}`)
     try {
       this.pipe = await pipeline('feature-extraction', MODEL_NAME, { dtype: 'fp32' })
-      log.info('Embedding model loaded.')
+      log.debug('Embedding model loaded.')
     } catch (error) {
       const modelRoot = bundledPath ?? env.cacheDir ?? '(unknown cache dir)'
       log.error(

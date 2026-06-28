@@ -35,10 +35,28 @@ export function collectLogFiles(logDir: string): string[] {
 }
 
 /**
+ * Diagnostic stats files that ship alongside the logs in both the manual export
+ * ZIP and the automatic backend upload. Kept as a single source of truth so the
+ * two bundles never drift. Each is included only when it exists.
+ *
+ * - `summary-mode-stats.json` — the video→snapshot fallback cause distribution
+ *   (SummaryModeTracker): which mode/reason produced each summary, plus one raw
+ *   failure sample per reason. The "mode failures" signal for debugging degraded
+ *   summary quality.
+ * - `usage-stats.json` — aggregate usage counters (UsageTracker).
+ */
+export function collectDiagnosticExtras(): string[] {
+  const userData = app.getPath('userData')
+  return ['summary-mode-stats.json', 'usage-stats.json']
+    .map((name) => path.join(userData, name))
+    .filter((filePath) => fs.existsSync(filePath))
+}
+
+/**
  * Resolve the directory electron-log writes to. Falls back to Electron's
  * default logs path if the transport hasn't materialised a file yet.
  */
-function resolveLogDir(): string {
+export function resolveLogDir(): string {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const electronLog = require('electron-log/main')
@@ -78,10 +96,9 @@ export async function exportLogsZip({
       return { success: false, cancelled: true }
     }
 
-    // Ship the aggregate summary-mode counter alongside the logs so the
-    // video→snapshot fallback cause distribution travels with a support bundle.
-    const statsPath = path.join(app.getPath('userData'), 'summary-mode-stats.json')
-    const extras = fs.existsSync(statsPath) ? [statsPath] : []
+    // Ship the diagnostic stats alongside the logs so the video→snapshot
+    // fallback cause distribution travels with a support bundle.
+    const extras = collectDiagnosticExtras()
 
     outputPath = ensureZipExtension(saveResult.filePath)
     // Snapshot: the active log file is appended to while we zip, and yazl's

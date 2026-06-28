@@ -50,7 +50,7 @@ export class PresenceMonitor {
   start(): void {
     if (this.timer !== null) return
     this.timer = setInterval(() => this.tick(), this.config.heartbeatIntervalMs)
-    log.info(
+    log.debug(
       `[Presence] Heartbeat started (every ${this.config.heartbeatIntervalMs}ms, ` +
         `away after ${this.config.awayIdleSeconds}s idle)`,
     )
@@ -60,7 +60,7 @@ export class PresenceMonitor {
     if (this.timer === null) return
     clearInterval(this.timer)
     this.timer = null
-    log.info('[Presence] Heartbeat stopped')
+    log.debug('[Presence] Heartbeat stopped')
   }
 
   /** Evaluate presence once and emit a heartbeat if the user is present. Exposed for tests. */

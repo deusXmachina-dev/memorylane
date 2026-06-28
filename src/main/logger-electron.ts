@@ -21,6 +21,10 @@ const devFileLogging =
 electronLog.transports.file.level = isDev ? (devFileLogging ? level : false) : level
 electronLog.transports.console.level = level
 electronLog.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}] [{level}] {text}'
+// Default is 1 MB, which rotates to a single main.old.log and keeps < 2 MB of
+// history — too little to debug an issue reported hours later. electron-log
+// keeps exactly one rotated file, so worst-case on disk is ~2× this.
+electronLog.transports.file.maxSize = 10 * 1024 * 1024 // 10 MB
 
 if (devFileLogging) {
   electronLog.transports.file.resolvePathFn = (): string =>

@@ -159,3 +159,8 @@ export const ENTERPRISE_BACKEND_CONFIG = {
   CONSENT_DECISION_TIMEOUT_MS: 15 * 60 * 1000, // 15 minutes
   STATUS_REFRESH_INTERVAL_MS: 5 * 60 * 1000, // 5 minutes
 }
+
+// Minimum time between automatic log uploads. The uploader polls hourly but only
+// ships when the logs changed AND this much time has passed since the last
+// upload, bounding uploads to a few per day.
+export const LOG_UPLOAD_MIN_INTERVAL_MS = 6 * 60 * 60 * 1000 // 6 hours

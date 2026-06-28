@@ -222,7 +222,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
       const effectiveVideoModels = this.filterCachedSupportedVideoModels()
       if (effectiveVideoModels.length === 0) {
         diagnostics.fallbackReason = 'all video models marked unsupported (session)'
-        log.info(
+        log.debug(
           '[ActivitySemanticService] Skipping video summarization; all configured video models are cached as unsupported on this route',
           JSON.stringify({
             activityId: input.activity.id,
@@ -547,7 +547,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
         throw new Error('empty summary')
       }
       this.recordLlmSuccess()
-      log.info(
+      log.debug(
         '[ActivitySemanticService] Connection test succeeded',
         JSON.stringify({ model, durationMs: Date.now() - startedAt }),
       )

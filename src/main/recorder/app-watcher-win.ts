@@ -100,14 +100,14 @@ function spawnWatcher(): void {
     return
   }
 
-  log.info(`[AppWatcher:win] Spawning: ${executable.command} ${executable.args.join(' ')}`)
+  log.debug(`[AppWatcher:win] Spawning: ${executable.command} ${executable.args.join(' ')}`)
   const child = spawn(executable.command, [...executable.args], {
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   })
 
   proc = child
-  log.info(`[AppWatcher:win] Process spawned (pid=${child.pid})`)
+  log.debug(`[AppWatcher:win] Process spawned (pid=${child.pid})`)
 
   const rl = createInterface({ input: child.stdout! })
   rl.on('line', (line) => {
@@ -126,7 +126,7 @@ function spawnWatcher(): void {
 
     if (parsed.type === 'ready') {
       retries = 0
-      log.info('[AppWatcher:win] Ready event received — watcher is alive')
+      log.debug('[AppWatcher:win] Ready event received — watcher is alive')
     }
 
     try {
@@ -153,17 +153,18 @@ function spawnWatcher(): void {
 
   child.on('close', (code, signal) => {
     proc = null
-    log.info(`[AppWatcher:win] Process exited (code=${code}, signal=${signal}, stopped=${stopped})`)
     if (stopped) {
+      log.debug(`[AppWatcher:win] Process exited (code=${code}, signal=${signal}, stopped=true)`)
       return
     }
+    log.warn(`[AppWatcher:win] Process exited unexpectedly (code=${code}, signal=${signal})`)
     scheduleRestartOrEmitFatalError()
   })
 }
 
 export function startAppWatcherWin(callback: (event: AppWatcherEvent) => void): void {
   if (proc) {
-    log.info('[AppWatcher:win] Already running, skipping')
+    log.debug('[AppWatcher:win] Already running, skipping')
     return
   }
 
@@ -178,7 +179,7 @@ export function stopAppWatcherWin(): void {
   onEvent = null
 
   if (proc) {
-    log.info(`[AppWatcher:win] Stopping (pid=${proc.pid})`)
+    log.debug(`[AppWatcher:win] Stopping (pid=${proc.pid})`)
     proc.kill('SIGTERM')
     proc = null
   }

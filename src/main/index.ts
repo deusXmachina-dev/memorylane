@@ -33,6 +33,8 @@ import { TASK_MINING_ENABLED } from './feature-flags'
 import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
 import { DatabaseUploadSync } from './services/database-upload-sync'
+import { LogUploadSync } from './services/log-upload-sync'
+import { readLogUploadState, writeLogUploadState } from './services/log-upload-store'
 import { RemoteBlacklistService } from './services/remote-blacklist-service'
 import { readRemoteBlacklist, writeRemoteBlacklist } from './services/remote-blacklist-store'
 import { createMainRuntime, type MainRuntime } from './runtime'
@@ -85,6 +87,7 @@ let patternDetector: PatternDetector | null = null
 let taskMiner: TaskMiner | null = null
 let rawDatabaseExportSync: RawDatabaseExportSync | null = null
 let databaseUploadSync: DatabaseUploadSync | null = null
+let logUploadSync: LogUploadSync | null = null
 let remoteBlacklist: RemoteBlacklistService | null = null
 let observation: ObservationController | null = null
 
@@ -108,6 +111,7 @@ app.on('before-quit', (event) => {
     runtime?.dispose(),
     rawDatabaseExportSync?.stop(),
     databaseUploadSync?.stop(),
+    logUploadSync?.stop(),
   ]).finally(() => {
     shutdownCompleted = true
     app.quit()
@@ -211,6 +215,16 @@ app.on('ready', async () => {
       recordUploadAt: (ts) => runtime?.storage.uploadRuns.record(ts),
     })
     databaseUploadSync.start()
+
+    logUploadSync = new LogUploadSync({
+      getDeviceId: () => deviceIdentity.getDeviceId(),
+      isActivated: () => runtime?.accessProvider.getAccessState().isEnterpriseActivated ?? false,
+      isSyncEnabled: () => captureSettingsManager.get().uploadDetailLevel !== 'off',
+      getBackendUrl: () => ENTERPRISE_BACKEND_CONFIG.BACKEND_URL,
+      readState: () => readLogUploadState(),
+      writeState: (state) => writeLogUploadState(state),
+    })
+    logUploadSync.start()
 
     remoteBlacklist = new RemoteBlacklistService({
       getDeviceId: () => deviceIdentity.getDeviceId(),
@@ -360,6 +374,7 @@ app.on('ready', async () => {
       captureCoordinator.resumeCaptureIfDesired('resume')
       // Catch up uploads on wake — the 24h interval doesn't survive sleep.
       databaseUploadSync?.scheduleUploadIfStale('resume')
+      logUploadSync?.requestSync('resume')
     },
   })
 
