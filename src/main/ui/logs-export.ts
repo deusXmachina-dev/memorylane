@@ -53,6 +53,15 @@ export function collectDiagnosticExtras(): string[] {
 }
 
 /**
+ * The full support-bundle file list: every rotated log file plus the diagnostic
+ * stats. Single source of truth so the manual export ZIP and the automatic
+ * backend upload always bundle the same set.
+ */
+export function collectSupportBundleFiles(): string[] {
+  return [...collectLogFiles(resolveLogDir()), ...collectDiagnosticExtras()]
+}
+
+/**
  * Resolve the directory electron-log writes to. Falls back to Electron's
  * default logs path if the transport hasn't materialised a file yet.
  */
@@ -96,14 +105,10 @@ export async function exportLogsZip({
       return { success: false, cancelled: true }
     }
 
-    // Ship the diagnostic stats alongside the logs so the video→snapshot
-    // fallback cause distribution travels with a support bundle.
-    const extras = collectDiagnosticExtras()
-
     outputPath = ensureZipExtension(saveResult.filePath)
     // Snapshot: the active log file is appended to while we zip, and yazl's
     // streaming addFile would throw on the resulting size mismatch.
-    await createZipWithFiles([...logFiles, ...extras], outputPath, { snapshot: true })
+    await createZipWithFiles(collectSupportBundleFiles(), outputPath, { snapshot: true })
 
     return { success: true, outputPath }
   } catch (error) {

@@ -4,7 +4,7 @@ import * as os from 'os'
 import * as path from 'path'
 import log from '../logger'
 import { LOG_UPLOAD_MIN_INTERVAL_MS } from '../../shared/constants'
-import { collectDiagnosticExtras, collectLogFiles, resolveLogDir } from '../ui/logs-export'
+import { collectSupportBundleFiles } from '../ui/logs-export'
 import { createZipWithFiles } from '../ui/zip'
 import type { LogUploadState } from './log-upload-store'
 
@@ -61,8 +61,10 @@ export class LogUploadSync {
   private readonly now: () => number
 
   private timer: ReturnType<typeof setInterval> | null = null
-  private syncing = false
-  private inFlight: Promise<void> = Promise.resolve()
+  // The current pass, or null when idle. Non-null also means "a pass is running"
+  // for overlap guarding — settled state isn't synchronously pollable, so the
+  // null/non-null flag stands in for it.
+  private inFlight: Promise<void> | null = null
 
   constructor(params: LogUploadSyncParams) {
     this.getDeviceId = params.getDeviceId
@@ -71,9 +73,7 @@ export class LogUploadSync {
     this.getBackendUrl = params.getBackendUrl
     this.readState = params.readState
     this.writeState = params.writeState
-    this.collectFiles =
-      params.collectFiles ??
-      (() => [...collectLogFiles(resolveLogDir()), ...collectDiagnosticExtras()])
+    this.collectFiles = params.collectFiles ?? collectSupportBundleFiles
     this.zipFiles =
       params.zipFiles ?? ((files, out) => createZipWithFiles(files, out, { snapshot: true }))
     this.intervalMs = params.intervalMs ?? DEFAULT_CHECK_INTERVAL_MS
@@ -93,20 +93,15 @@ export class LogUploadSync {
       clearInterval(this.timer)
       this.timer = null
     }
-    await this.inFlight.catch(() => undefined)
+    await this.inFlight?.catch(() => undefined)
   }
 
   /** Kick off a sync pass if one isn't already running. */
   requestSync(reason: string): void {
-    if (this.syncing) return
-    this.syncing = true
-    this.inFlight = this.syncOnce(reason)
-      .catch((error) => {
-        log.warn(`[LogUpload] Sync failed (${reason}):`, error)
-      })
-      .finally(() => {
-        this.syncing = false
-      })
+    if (this.inFlight) return
+    void this.run(reason, false).catch((error) => {
+      log.warn(`[LogUpload] Sync failed (${reason}):`, error)
+    })
   }
 
   /**
@@ -119,18 +114,28 @@ export class LogUploadSync {
       return { success: false, error: 'Sharing disabled' }
     }
     // Let any in-flight background pass finish so the two don't overlap.
-    await this.inFlight.catch(() => undefined)
-    this.syncing = true
-    const run = this.syncOnce('manual', true).finally(() => {
-      this.syncing = false
-    })
-    this.inFlight = run.catch(() => undefined)
+    await this.inFlight?.catch(() => undefined)
     try {
-      await run
+      await this.run('manual', true)
       return { success: true }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Upload failed' }
     }
+  }
+
+  /**
+   * Run a single pass and track it as `inFlight` (settling back to idle) so
+   * overlapping passes are guarded and `stop`/`triggerUpload` can await it. The
+   * raw pass is returned so callers see its rejection; `inFlight` swallows it.
+   */
+  private run(reason: string, force: boolean): Promise<void> {
+    const pass = this.syncOnce(reason, force)
+    this.inFlight = pass
+      .catch(() => undefined)
+      .finally(() => {
+        this.inFlight = null
+      })
+    return pass
   }
 
   private async syncOnce(reason: string, force = false): Promise<void> {
