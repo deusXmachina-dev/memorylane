@@ -63,6 +63,24 @@ describe('VendorCredentialsManager', () => {
     expect(m.getCredentials('google')).toEqual({ apiKey: 'AIza-test' })
   })
 
+  it('saveManagedCredentials is idempotent: re-saving identical input is a no-op', () => {
+    const m = new VendorCredentialsManager({
+      ...paths(),
+      safeStorage: makeSafeStorage(),
+      env: {},
+    })
+    // Returns whether anything changed — callers gate cache-clear / re-probe on this.
+    expect(m.saveManagedCredentials('openrouter', { apiKey: 'sk-managed' })).toBe(true)
+    expect(m.saveManagedCredentials('openrouter', { apiKey: 'sk-managed' })).toBe(false)
+
+    // A genuine change reports true again.
+    expect(m.saveManagedCredentials('openrouter', { apiKey: 'sk-rotated' })).toBe(true)
+    expect(m.saveManagedCredentials('google', { apiKey: 'AIza', project: 'p1' })).toBe(true)
+    expect(m.saveManagedCredentials('google', { apiKey: 'AIza', project: 'p1' })).toBe(false)
+    expect(m.saveManagedCredentials('google', { apiKey: 'AIza', project: 'p2' })).toBe(true)
+    expect(m.getCredentials('google')).toEqual({ apiKey: 'AIza', project: 'p2' })
+  })
+
   it('per-vendor isolation: deleting one does not affect others', () => {
     const m = new VendorCredentialsManager({
       ...paths(),

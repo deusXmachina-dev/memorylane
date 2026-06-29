@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { LLM_HEALTH_CONFIG } from '@constants'
 import type { LlmHealthStatus, MainWindowAPI } from '@types'
 
 interface UseLlmHealthParams {
@@ -31,19 +32,29 @@ export function useLlmHealth({ api, enabled }: UseLlmHealthParams): {
 
     const intervalId = window.setInterval(() => {
       void refreshLlmHealth()
-    }, 5000)
+    }, LLM_HEALTH_CONFIG.STATUS_POLL_INTERVAL_MS)
 
     return () => {
       window.clearInterval(intervalId)
     }
   }, [enabled, refreshLlmHealth])
 
+  // Re-probe only while the connection is known to be failing, at a slow
+  // cadence, to detect recovery. We no longer probe on focus or a resting
+  // `unknown` state — health is driven by real inference traffic (DEU-176).
   useEffect(() => {
-    if (!enabled || llmHealth?.state !== 'unknown') return
+    if (!enabled || llmHealth?.state !== 'failing') return
 
-    void api.testLlmConnection().finally(() => {
-      void refreshLlmHealth()
-    })
+    const probe = (): void => {
+      void api.testLlmConnection().finally(() => {
+        void refreshLlmHealth()
+      })
+    }
+    const intervalId = window.setInterval(probe, LLM_HEALTH_CONFIG.RECOVERY_PROBE_INTERVAL_MS)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
   }, [api, enabled, llmHealth?.state, refreshLlmHealth])
 
   return { llmHealth, refreshLlmHealth }

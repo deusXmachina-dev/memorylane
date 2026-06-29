@@ -16,36 +16,19 @@ interface LlmStatusPanelProps {
   onClick: () => void
 }
 
+// Health is reactive: a configured LLM is assumed healthy unless a real request
+// has actually failed. So only `failing` shows red — everything else configured
+// is green (DEU-176).
 function dotClass(configured: boolean, llmHealth: LlmHealthStatus | null): string {
-  if (!configured) return 'bg-muted-foreground/40'
-  if (!llmHealth) return 'bg-muted-foreground/40'
-  switch (llmHealth.state) {
-    case 'active':
-      return 'bg-emerald-500'
-    case 'failing':
-      return 'bg-destructive'
-    case 'unknown':
-      return 'bg-amber-500'
-    case 'not_configured':
-    default:
-      return 'bg-muted-foreground/40'
-  }
+  if (!configured || llmHealth?.state === 'not_configured') return 'bg-muted-foreground/40'
+  if (llmHealth?.state === 'failing') return 'bg-destructive'
+  return 'bg-emerald-500'
 }
 
 function stateLabel(configured: boolean, llmHealth: LlmHealthStatus | null): string {
-  if (!configured) return 'Not configured'
-  if (!llmHealth) return 'Checking…'
-  switch (llmHealth.state) {
-    case 'active':
-      return 'Connected'
-    case 'failing':
-      return 'Failing'
-    case 'unknown':
-      return 'Checking…'
-    case 'not_configured':
-    default:
-      return 'Not configured'
-  }
+  if (!configured || llmHealth?.state === 'not_configured') return 'Not configured'
+  if (llmHealth?.state === 'failing') return 'Failing'
+  return 'Connected'
 }
 
 export function LlmStatusPanel({

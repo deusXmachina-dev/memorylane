@@ -1,4 +1,5 @@
 import log from '../logger'
+import { extractHttpStatus } from './error-classify'
 import { describeSemanticError, safeJsonStringify } from './response-utils'
 import type {
   AttemptResult,
@@ -145,6 +146,7 @@ export async function trySemanticModelChain(
         durationMs,
         success: false,
         error: detail,
+        httpStatus: extractHttpStatus(error),
       })
 
       params.onDumpRoundTrip({

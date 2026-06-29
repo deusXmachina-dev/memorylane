@@ -66,6 +66,11 @@ export const ACTIVITY_CONFIG = {
   SEMANTIC_REQUEST_TIMEOUT_MS: 120_000, // Per-model semantic request timeout
 }
 
+export const LLM_HEALTH_CONFIG = {
+  STATUS_POLL_INTERVAL_MS: 5_000, // Renderer reads cached health status (no probe)
+  RECOVERY_PROBE_INTERVAL_MS: 60_000, // Re-probe cadence while health is failing
+}
+
 // Presence Heartbeat Configuration
 // Keeps an event window alive while the user is present but not providing input
 // (reading), so a no-input view isn't dropped when the idle gap fires.

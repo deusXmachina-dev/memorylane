@@ -689,7 +689,10 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     if (payload?.config && deps) {
       const cfg = payload.config
       const vendor: Vendor = cfg.provider === 'vertex' ? 'google' : 'openrouter'
-      deps.vendorCredentials.saveManagedCredentials(vendor, {
+      // Managed config is re-applied on every focus/poll; only react when it
+      // actually changed, otherwise we'd clear caches and re-probe the LLM on
+      // every window focus (DEU-176).
+      const changed = deps.vendorCredentials.saveManagedCredentials(vendor, {
         apiKey: cfg.apiKey,
         ...(cfg.project !== undefined ? { project: cfg.project } : {}),
         ...(cfg.location !== undefined ? { location: cfg.location } : {}),
@@ -709,8 +712,11 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       const reconciled = reconcileManagedModelSelections(deps.captureSettingsManager, vendor)
       if (switching || reconciled) {
         applyVendorSwitch(deps, deps.captureSettingsManager.get())
-      } else {
+      } else if (changed) {
+        // Genuine key rotation with no vendor/model change: refresh the SDK and
+        // probe once to confirm the new key works.
         deps.inferenceProvider.notifyConfigChanged()
+        void deps.semanticService.testConnection()
       }
     }
     if (payload?.invalidate && deps) {

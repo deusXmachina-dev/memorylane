@@ -152,19 +152,24 @@ export class VendorCredentialsManager {
     log.info(`[VendorCredentialsManager] saved credentials for ${vendor}`)
   }
 
-  public saveManagedKey(vendor: Vendor, apiKey: string): void {
-    this.saveManagedCredentials(vendor, { apiKey })
+  public saveManagedKey(vendor: Vendor, apiKey: string): boolean {
+    return this.saveManagedCredentials(vendor, { apiKey })
   }
 
-  public saveManagedCredentials(vendor: Vendor, input: ManagedCredentialsInput): void {
+  /**
+   * Persist managed credentials. Returns whether anything actually changed —
+   * managed config is re-applied on every focus/poll, so callers gate their
+   * downstream effects (cache clear, connection test) on this to avoid churn
+   * (DEU-176).
+   */
+  public saveManagedCredentials(vendor: Vendor, input: ManagedCredentialsInput): boolean {
     if (!this.safeStorage.isEncryptionAvailable()) {
       throw new Error('Secure storage is not available on this system')
     }
-    const encrypted = this.safeStorage.encryptString(input.apiKey).toString('base64')
     const existing = this.store.vendors[vendor] ?? {}
     const next: StoredVendorEntry = {
       ...existing,
-      apiKey: encrypted,
+      apiKey: this.safeStorage.encryptString(input.apiKey).toString('base64'),
       source: 'managed',
     }
     if (input.project !== undefined) {
@@ -179,10 +184,21 @@ export class VendorCredentialsManager {
     } else {
       delete next.location
     }
+    // Compare semantic values, not the ciphertext (encryptString is
+    // non-deterministic, so the base64 blob differs on every call).
+    const unchanged =
+      existing.source === 'managed' &&
+      this.resolveStoredKey(vendor) === input.apiKey &&
+      next.project === existing.project &&
+      next.location === existing.location
+    if (unchanged) {
+      return false
+    }
     this.store.vendors[vendor] = next
     this.cachedKeys[vendor] = input.apiKey
     this.persist()
     log.info(`[VendorCredentialsManager] saved managed credentials for ${vendor}`)
+    return true
   }
 
   public deleteCredentials(vendor: Vendor): void {

@@ -188,6 +188,7 @@ interface SetupOptions {
   }
   summaryModeTracker?: { record: (outcome: SummaryOutcome) => void }
   debugDumper?: SemanticFileDebugDumper
+  healthStatePath?: string
 }
 
 function setupService(options: SetupOptions = {}): {
@@ -242,6 +243,7 @@ function setupService(options: SetupOptions = {}): {
     summaryModeTracker: options.summaryModeTracker ?? { record: vi.fn() },
     debugDumper: options.debugDumper,
     fetchImpl: fetchMock.fn as unknown as typeof globalThis.fetch,
+    healthStatePath: options.healthStatePath,
   })
   return { service, fetchMock, provider }
 }
@@ -525,6 +527,91 @@ describe('ActivitySemanticService', () => {
       lastError: expect.stringContaining('connect ECONNREFUSED'),
       lastAttemptAt: expect.any(Number),
     })
+  })
+
+  it('does not mark LLM failing on transient (429) inference errors', async () => {
+    const tempDir = createTempDir()
+    tempDirs.push(tempDir)
+    const videoPath = createVideoFile(tempDir)
+
+    const { service, fetchMock } = setupService({
+      snapshotModels: [],
+      pipelinePreference: 'video',
+    })
+    fetchMock.setHandler(() => httpError(429, { error: 'rate limited' }))
+
+    await service.summarizeFromVideo({
+      activity: makeActivity(),
+      videoPath,
+    })
+
+    expect(service.getLlmHealthStatus()).toEqual({
+      configured: true,
+      state: 'unknown',
+      consecutiveFailures: 0,
+      lastError: null,
+      lastAttemptAt: null,
+    })
+  })
+
+  it('marks LLM failing on a 500 inference error', async () => {
+    const tempDir = createTempDir()
+    tempDirs.push(tempDir)
+    const videoPath = createVideoFile(tempDir)
+
+    const { service, fetchMock } = setupService({
+      snapshotModels: [],
+      pipelinePreference: 'video',
+    })
+    fetchMock.setHandler(() => httpError(500, { error: 'server error' }))
+
+    await service.summarizeFromVideo({
+      activity: makeActivity(),
+      videoPath,
+    })
+
+    expect(service.getLlmHealthStatus().state).toBe('failing')
+    expect(service.getLlmHealthStatus().consecutiveFailures).toBe(1)
+  })
+
+  it('marks LLM failing on a 401 connection test', async () => {
+    const { service, fetchMock } = setupService()
+    fetchMock.setHandler(() => httpError(401, { error: 'unauthorized' }))
+
+    await service.testConnection()
+
+    expect(service.getLlmHealthStatus().state).toBe('failing')
+    expect(service.getLlmHealthStatus().consecutiveFailures).toBe(1)
+  })
+
+  it('persists a failing state across restarts (rehydrated without re-probing)', async () => {
+    const tempDir = createTempDir()
+    tempDirs.push(tempDir)
+    const healthStatePath = path.join(tempDir, 'llm-health.json')
+
+    const first = setupService({ healthStatePath })
+    first.fetchMock.setHandler(() => httpError(401, { error: 'unauthorized' }))
+    await first.service.testConnection()
+    expect(first.service.getLlmHealthStatus().state).toBe('failing')
+
+    // A fresh service pointed at the same file starts already-failing.
+    const second = setupService({ healthStatePath })
+    expect(second.service.getLlmHealthStatus().state).toBe('failing')
+    expect(second.service.getLlmHealthStatus().consecutiveFailures).toBe(1)
+  })
+
+  it('persists a healthy state across restarts (active rehydrated, no probe)', async () => {
+    const tempDir = createTempDir()
+    tempDirs.push(tempDir)
+    const healthStatePath = path.join(tempDir, 'llm-health.json')
+
+    const first = setupService({ healthStatePath })
+    first.fetchMock.setHandler(() => chatCompletionResponse('OK'))
+    await first.service.testConnection()
+    expect(first.service.getLlmHealthStatus().state).toBe('active')
+
+    const second = setupService({ healthStatePath })
+    expect(second.service.getLlmHealthStatus().state).toBe('active')
   })
 
   it('falls from video pipeline to snapshot pipeline', async () => {

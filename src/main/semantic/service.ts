@@ -1,3 +1,4 @@
+import * as fs from 'fs'
 import { ACTIVITY_CONFIG, VISUAL_DETECTOR_CONFIG } from '@constants'
 import log from '../logger'
 import { UsageTracker } from '../services/usage-tracker'
@@ -13,6 +14,7 @@ import {
   isLikelyVideoUnsupportedError,
   videoUnsupportedCacheKey,
 } from './custom-endpoint-video-fallback'
+import { extractHttpStatus, isHealthAffectingStatus } from './error-classify'
 import { invokeViaGenerateText, invokeRawVideoCompletion } from './invoke'
 import { tryLoadVideoAsDataUrl, encodeSnapshots } from './media'
 import { trySemanticModelChain } from './model-chain'
@@ -41,6 +43,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
   private readonly summaryModeTracker: SummaryModeTrackerLike
   private readonly debugDumper: ActivitySemanticServiceConfig['debugDumper']
   private readonly fetchImpl: typeof globalThis.fetch | undefined
+  private readonly healthStatePath: string | undefined
   private readonly videoUnsupportedKeys = new Set<string>()
   private readonly unsubscribeProvider: () => void
 
@@ -70,6 +73,8 @@ export class ActivitySemanticService implements SemanticServiceContract {
     this.summaryModeTracker = config?.summaryModeTracker ?? new SummaryModeTracker()
     this.debugDumper = config?.debugDumper
     this.fetchImpl = config?.fetchImpl
+    this.healthStatePath = config?.healthStatePath
+    this.loadPersistedHealth()
 
     if (!Number.isFinite(this.maxVideoBytes) || this.maxVideoBytes <= 0) {
       throw new Error('maxVideoBytes must be > 0')
@@ -507,6 +512,39 @@ export class ActivitySemanticService implements SemanticServiceContract {
       lastAttemptAt: null,
       lastSuccessAt: null,
     }
+    this.persistHealth()
+  }
+
+  /** Rehydrate health from disk so a restart shows the genuine last-known state. */
+  private loadPersistedHealth(): void {
+    if (!this.healthStatePath || !fs.existsSync(this.healthStatePath)) {
+      return
+    }
+    try {
+      const raw = JSON.parse(fs.readFileSync(this.healthStatePath, 'utf-8')) as Partial<
+        typeof this.llmHealth
+      >
+      this.llmHealth = {
+        consecutiveFailures:
+          typeof raw.consecutiveFailures === 'number' ? raw.consecutiveFailures : 0,
+        lastError: typeof raw.lastError === 'string' ? raw.lastError : null,
+        lastAttemptAt: typeof raw.lastAttemptAt === 'number' ? raw.lastAttemptAt : null,
+        lastSuccessAt: typeof raw.lastSuccessAt === 'number' ? raw.lastSuccessAt : null,
+      }
+    } catch (error) {
+      log.warn('[ActivitySemanticService] failed to load persisted LLM health:', error)
+    }
+  }
+
+  private persistHealth(): void {
+    if (!this.healthStatePath) {
+      return
+    }
+    try {
+      fs.writeFileSync(this.healthStatePath, JSON.stringify(this.llmHealth))
+    } catch (error) {
+      log.warn('[ActivitySemanticService] failed to persist LLM health:', error)
+    }
   }
 
   private recordLlmSuccess(): void {
@@ -516,6 +554,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
     this.llmHealth.lastError = null
     this.llmHealth.lastAttemptAt = now
     this.llmHealth.lastSuccessAt = now
+    this.persistHealth()
     if (recoveredFrom > 0) {
       log.info(
         `[ActivitySemanticService] LLM recovered after ${recoveredFrom} consecutive failure(s)`,
@@ -525,7 +564,12 @@ export class ActivitySemanticService implements SemanticServiceContract {
 
   private updateLlmHealthFromDiagnostics(diagnostics: SemanticRunDiagnostics): void {
     const failedAttempts = diagnostics.attempts.filter((attempt) => !attempt.success)
-    const actionableFailures = failedAttempts.filter((attempt) => attempt.error !== 'empty summary')
+    // Only genuine connectivity/config failures count toward health. Skip empty
+    // summaries and transient provider responses (429/529) — see DEU-176.
+    const actionableFailures = failedAttempts.filter(
+      (attempt) =>
+        attempt.error !== 'empty summary' && isHealthAffectingStatus(attempt.httpStatus ?? null),
+    )
 
     if (actionableFailures.length === 0) {
       return
@@ -536,6 +580,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
     this.llmHealth.consecutiveFailures += 1
     this.llmHealth.lastError = lastFailure?.error ?? 'Unknown LLM error'
     this.llmHealth.lastAttemptAt = Date.now()
+    this.persistHealth()
     // Log only the passing→failing transition; per-request failures would be noise.
     if (wasHealthy) {
       log.warn(`[ActivitySemanticService] LLM started failing: ${this.llmHealth.lastError}`)
@@ -564,9 +609,19 @@ export class ActivitySemanticService implements SemanticServiceContract {
       )
     } catch (error) {
       const detail = describeSemanticError(error)
+      // Transient provider responses (429/529) don't mean the connection is
+      // broken — leave the prior state untouched. See DEU-176.
+      if (!isHealthAffectingStatus(extractHttpStatus(error))) {
+        log.debug(
+          '[ActivitySemanticService] Connection test hit a transient error; ignoring',
+          JSON.stringify({ model, durationMs: Date.now() - startedAt, error: detail }),
+        )
+        return
+      }
       this.llmHealth.consecutiveFailures += 1
       this.llmHealth.lastError = detail
       this.llmHealth.lastAttemptAt = Date.now()
+      this.persistHealth()
       log.warn(
         '[ActivitySemanticService] Connection test failed',
         JSON.stringify({ model, durationMs: Date.now() - startedAt, error: detail }),
