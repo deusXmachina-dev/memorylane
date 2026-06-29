@@ -3,7 +3,7 @@ import { MANAGED_KEY_CONFIG } from '../../shared/constants'
 import type { ConsentOutcome, PendingConsent, SubscriptionPlan } from '../../shared/types'
 import { isSameRegistrableDomain } from '../../shared/url-utils'
 import log from '../logger'
-import { DeviceIdentityUnavailableError, type DeviceIdentity } from '../settings/device-identity'
+import type { DeviceIdentity } from '../settings/device-identity'
 import { BaseAccessProvider } from './base-access-provider'
 import {
   setCustomerPolling,
@@ -15,14 +15,12 @@ import { createInitialAccessState } from './types'
 type KeyFetchResult = { kind: 'key'; key: string } | { kind: 'no_key' } | { kind: 'transient' }
 
 export class CustomerAccessProvider extends BaseAccessProvider {
-  private readonly deviceIdentity: DeviceIdentity
   private pollTimer: ReturnType<typeof setInterval> | null = null
   private timeoutTimer: ReturnType<typeof setTimeout> | null = null
   private refreshTimer: ReturnType<typeof setInterval> | null = null
 
   constructor(deviceIdentity: DeviceIdentity) {
-    super(createInitialAccessState('customer'))
-    this.deviceIdentity = deviceIdentity
+    super(createInitialAccessState('customer'), deviceIdentity)
   }
 
   public async refreshAccessState(): Promise<void> {
@@ -31,17 +29,9 @@ export class CustomerAccessProvider extends BaseAccessProvider {
       return
     }
 
-    let deviceId: string
-    try {
-      deviceId = this.deviceIdentity.getDeviceId()
-    } catch (error) {
-      if (error instanceof DeviceIdentityUnavailableError) {
-        // Transient: don't invalidate the managed key. The periodic refresh retries.
-        log.warn('[CustomerAccess] Device identity unavailable, skipping refresh:', error.message)
-        return
-      }
-      throw error
-    }
+    // Transient identity failure: don't invalidate the managed key. The periodic refresh retries.
+    const deviceId = this.resolveDeviceIdOrSkip('[CustomerAccess]')
+    if (deviceId === null) return
 
     const result = await this.fetchCustomerKey(deviceId)
     switch (result.kind) {
