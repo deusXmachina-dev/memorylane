@@ -8,6 +8,10 @@ import log from '../logger'
 import { DeviceIdentityUnavailableError, type DeviceIdentity } from '../settings/device-identity'
 import type { AccessProvider, AccessStateCallback, AccessUpdatePayload } from './types'
 
+/** User-facing message for a transient secure-storage hiccup in an interactive flow. */
+export const DEVICE_IDENTITY_RETRY_MESSAGE =
+  'Secure storage is temporarily unavailable. Please try again in a moment.'
+
 export abstract class BaseAccessProvider implements AccessProvider {
   protected accessState: AccessState
   protected onUpdate: AccessStateCallback | null = null
@@ -24,13 +28,30 @@ export abstract class BaseAccessProvider implements AccessProvider {
    * state, so a recoverable secure-storage hiccup never invalidates a key or
    * de-activates the device. Non-transient errors propagate.
    */
-  protected resolveDeviceIdOrSkip(logPrefix: string): string | null {
+  protected resolveDeviceIdOrSkip(): string | null {
     try {
       return this.deviceIdentity.getDeviceId()
     } catch (error) {
       if (error instanceof DeviceIdentityUnavailableError) {
-        log.warn(`${logPrefix} Device identity unavailable, skipping:`, error.message)
+        log.warn('[AccessProvider] Device identity unavailable, skipping refresh:', error.message)
         return null
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Read the device id for an interactive (user-initiated) flow. A transient
+   * DeviceIdentityUnavailableError is rethrown as a clean, retryable error so
+   * the UI can prompt a retry — we never proceed to the backend with a missing
+   * or regenerated id. Non-transient errors propagate unchanged.
+   */
+  protected resolveDeviceIdInteractive(): string {
+    try {
+      return this.deviceIdentity.getDeviceId()
+    } catch (error) {
+      if (error instanceof DeviceIdentityUnavailableError) {
+        throw new Error(DEVICE_IDENTITY_RETRY_MESSAGE, { cause: error })
       }
       throw error
     }

@@ -4,7 +4,7 @@ import type { ConsentOutcome, PendingConsent } from '../../shared/types'
 import log from '../logger'
 import type { DeviceIdentity } from '../settings/device-identity'
 import { parseActivationCode } from './activation-code'
-import { BaseAccessProvider } from './base-access-provider'
+import { BaseAccessProvider, DEVICE_IDENTITY_RETRY_MESSAGE } from './base-access-provider'
 import {
   transitionEnterpriseAccess,
   type EnterpriseAccessTransition,
@@ -123,7 +123,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     }
     // Transient identity failure: don't transition to activation_failed, which
     // would falsely de-activate the device. The periodic refresh retries.
-    const deviceId = this.resolveDeviceIdOrSkip('[EnterpriseAccess]')
+    const deviceId = this.resolveDeviceIdOrSkip()
     if (deviceId === null) return
     try {
       const activated = await this.fetchEnterpriseStatus(deviceId)
@@ -283,7 +283,9 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       throw new Error('No consent decision pending')
     }
 
-    const deviceId = this.deviceIdentity.getDeviceId()
+    // Transient identity failure: throw a clean retry error without touching
+    // state, leaving the consent prompt open so the user can resubmit.
+    const deviceId = this.resolveDeviceIdInteractive()
     const result = await this.postActivate(
       {
         tenant_token: pending.tenantToken,
@@ -341,7 +343,18 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
   }
 
   private async bindWithExternalConsent(tenantToken: string, email: string): Promise<void> {
-    const deviceId = this.deviceIdentity.getDeviceId()
+    // Transient identity failure mid-activation: surface activation_failed (not a
+    // stuck 'activating' state) and throw a clean retry error.
+    let deviceId: string
+    try {
+      deviceId = this.resolveDeviceIdInteractive()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : DEVICE_IDENTITY_RETRY_MESSAGE
+      this.applyTransition(
+        transitionEnterpriseAccess(this.accessState, { type: 'activation_failed', error: message }),
+      )
+      throw new Error(message)
+    }
     const result = await this.postActivate(
       { tenant_token: tenantToken, device_id: deviceId, email, outcome: 'accepted' },
       tenantToken,

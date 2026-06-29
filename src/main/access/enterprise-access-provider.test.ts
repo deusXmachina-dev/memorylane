@@ -12,7 +12,7 @@ vi.mock('../logger', () => ({
 
 import { EnterpriseAccessProvider } from './enterprise-access-provider'
 import { ENTERPRISE_BACKEND_CONFIG } from '../../shared/constants'
-import type { DeviceIdentity } from '../settings/device-identity'
+import { DeviceIdentityUnavailableError, type DeviceIdentity } from '../settings/device-identity'
 
 const TENANT_TOKEN = 'tt_GigKRAyNbQ1U8jBSEKTq7uiiufT392Si'
 const EMAIL = 'alice@corp.com'
@@ -317,6 +317,40 @@ describe('EnterpriseAccessProvider', () => {
     expect(updates.at(-1)?.payload).toEqual({
       config: { provider: 'openrouter', apiKey: 'sk-or-enterprise' },
     })
+  })
+
+  it('keeps the consent prompt open and throws a retry error when identity is unavailable at consent submit', async () => {
+    const responses = [descriptorResponse(), pdfResponse()]
+    const fetchMock = vi.fn(async () => responses.shift() as Response) as typeof fetch
+    globalThis.fetch = fetchMock
+    const throwingIdentity = {
+      getDeviceId: () => {
+        throw new DeviceIdentityUnavailableError('secure storage unavailable')
+      },
+    } as unknown as DeviceIdentity
+
+    const provider = new EnterpriseAccessProvider(throwingIdentity)
+    const updates: Array<{ status: string | null }> = []
+    provider.setUpdateCallback((state) => {
+      updates.push({ status: state.enterpriseActivationStatus })
+    })
+
+    await provider.activateEnterpriseLicense(ACTIVATION_CODE)
+    expect(updates.at(-1)?.status).toBe('awaiting_consent')
+    const fetchCountAfterActivate = (fetchMock as unknown as { mock: { calls: unknown[] } }).mock
+      .calls.length
+
+    await expect(provider.submitConsentDecision('accepted')).rejects.toThrow(
+      /temporarily unavailable/i,
+    )
+
+    // No activate POST was attempted, the prompt stays open, and we did not
+    // fall into the error state — the user can simply retry.
+    expect((fetchMock as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBe(
+      fetchCountAfterActivate,
+    )
+    expect(updates.at(-1)?.status).toBe('awaiting_consent')
+    expect(await provider.getPendingConsent()).not.toBeNull()
   })
 
   it('completes activation with a Vertex inference config and schedules a token refresh', async () => {

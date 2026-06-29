@@ -30,7 +30,7 @@ export class CustomerAccessProvider extends BaseAccessProvider {
     }
 
     // Transient identity failure: don't invalidate the managed key. The periodic refresh retries.
-    const deviceId = this.resolveDeviceIdOrSkip('[CustomerAccess]')
+    const deviceId = this.resolveDeviceIdOrSkip()
     if (deviceId === null) return
 
     const result = await this.fetchCustomerKey(deviceId)
@@ -62,7 +62,7 @@ export class CustomerAccessProvider extends BaseAccessProvider {
     let deviceId: string
     let signedUrl: string
     try {
-      deviceId = this.deviceIdentity.getDeviceId()
+      deviceId = this.resolveDeviceIdInteractive()
       signedUrl = await this.fetchSignedLink('/v2/subscription/checkout-link', deviceId, { plan })
     } catch (error) {
       log.warn('[CustomerAccess] Failed to mint checkout link:', error)
@@ -82,7 +82,7 @@ export class CustomerAccessProvider extends BaseAccessProvider {
   }
 
   public async openSubscriptionPortal(): Promise<void> {
-    const deviceId = this.deviceIdentity.getDeviceId()
+    const deviceId = this.resolveDeviceIdInteractive()
     const signedUrl = await this.fetchSignedLink('/v2/subscription/portal-link', deviceId)
     await shell.openExternal(signedUrl)
     log.info('[CustomerAccess] Opened subscription portal in system browser')
