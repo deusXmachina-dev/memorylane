@@ -72,6 +72,25 @@ describe('DeviceIdentity', () => {
     expect(fs.readFileSync(configPath, 'utf-8')).toBe(fileBefore)
   })
 
+  it('regenerates a fresh id when the stored file is malformed JSON', () => {
+    fs.writeFileSync(configPath, '{ not valid json')
+
+    // No id was ever recoverable here, so generating is correct (not a throw).
+    const id = new DeviceIdentity().getDeviceId()
+    expect(id).toMatch(/^[0-9a-f]{64}$/)
+
+    // The garbage was replaced with a real, readable identity.
+    expect(new DeviceIdentity().getDeviceId()).toBe(id)
+  })
+
+  it('regenerates a fresh id when the stored file is missing the deviceId field', () => {
+    fs.writeFileSync(configPath, JSON.stringify({ somethingElse: true }))
+
+    const id = new DeviceIdentity().getDeviceId()
+    expect(id).toMatch(/^[0-9a-f]{64}$/)
+    expect(new DeviceIdentity().getDeviceId()).toBe(id)
+  })
+
   it('recovers the original id once secure storage comes back', () => {
     const original = new DeviceIdentity().getDeviceId()
 

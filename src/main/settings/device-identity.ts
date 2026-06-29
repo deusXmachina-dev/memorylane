@@ -101,21 +101,41 @@ export class DeviceIdentity {
       return { status: 'unreadable', reason: 'secure storage unavailable' }
     }
 
+    // I/O failure on a file that exists: the encrypted id is still on disk, so
+    // treat it as unreadable (retry) rather than regenerate over a real id.
+    let configData: string
     try {
-      const configData = fs.readFileSync(this.configPath, 'utf-8')
-      const config = JSON.parse(configData)
-
-      if (!config.deviceId) {
-        return { status: 'unreadable', reason: 'stored file missing deviceId field' }
-      }
-
-      return {
-        status: 'ok',
-        deviceId: safeStorage.decryptString(Buffer.from(config.deviceId, 'base64')),
-      }
+      configData = fs.readFileSync(this.configPath, 'utf-8')
     } catch (error) {
       log.error('[DeviceIdentity] Error reading stored device ID:', error)
-      return { status: 'unreadable', reason: 'read or decrypt failed', cause: error }
+      return { status: 'unreadable', reason: 'read failed', cause: error }
+    }
+
+    // Malformed or missing-field content never held a usable identity (an
+    // interrupted first-run write, manual tampering). There's no id to protect,
+    // so regenerate rather than brick the install forever.
+    let encryptedDeviceId: unknown
+    try {
+      encryptedDeviceId = JSON.parse(configData).deviceId
+    } catch (error) {
+      log.warn('[DeviceIdentity] Stored device ID is malformed JSON; regenerating:', error)
+      return { status: 'absent' }
+    }
+    if (typeof encryptedDeviceId !== 'string' || encryptedDeviceId.length === 0) {
+      log.warn('[DeviceIdentity] Stored device ID is missing the deviceId field; regenerating')
+      return { status: 'absent' }
+    }
+
+    // Decryption failed on a structurally valid file: a real id exists but is
+    // unreadable right now. Never regenerate — that would destroy the bound id.
+    try {
+      return {
+        status: 'ok',
+        deviceId: safeStorage.decryptString(Buffer.from(encryptedDeviceId, 'base64')),
+      }
+    } catch (error) {
+      log.error('[DeviceIdentity] Error decrypting stored device ID:', error)
+      return { status: 'unreadable', reason: 'decrypt failed', cause: error }
     }
   }
 }
