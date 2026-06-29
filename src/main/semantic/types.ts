@@ -47,6 +47,12 @@ export interface ActivitySemanticServiceConfig {
    * tests; production uses globalThis.fetch.
    */
   fetchImpl?: typeof globalThis.fetch
+  /**
+   * File path for persisting LLM health across restarts, so the status panel
+   * shows the genuine last-known state on launch instead of an unverified
+   * `unknown`. Omit (e.g. in tests) to keep health in-memory only.
+   */
+  healthStatePath?: string
 }
 
 export interface SemanticAttempt {

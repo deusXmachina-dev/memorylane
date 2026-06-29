@@ -1,3 +1,4 @@
+import * as fs from 'fs'
 import { ACTIVITY_CONFIG, VISUAL_DETECTOR_CONFIG } from '@constants'
 import log from '../logger'
 import { UsageTracker } from '../services/usage-tracker'
@@ -42,6 +43,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
   private readonly summaryModeTracker: SummaryModeTrackerLike
   private readonly debugDumper: ActivitySemanticServiceConfig['debugDumper']
   private readonly fetchImpl: typeof globalThis.fetch | undefined
+  private readonly healthStatePath: string | undefined
   private readonly videoUnsupportedKeys = new Set<string>()
   private readonly unsubscribeProvider: () => void
 
@@ -71,6 +73,8 @@ export class ActivitySemanticService implements SemanticServiceContract {
     this.summaryModeTracker = config?.summaryModeTracker ?? new SummaryModeTracker()
     this.debugDumper = config?.debugDumper
     this.fetchImpl = config?.fetchImpl
+    this.healthStatePath = config?.healthStatePath
+    this.loadPersistedHealth()
 
     if (!Number.isFinite(this.maxVideoBytes) || this.maxVideoBytes <= 0) {
       throw new Error('maxVideoBytes must be > 0')
@@ -508,6 +512,39 @@ export class ActivitySemanticService implements SemanticServiceContract {
       lastAttemptAt: null,
       lastSuccessAt: null,
     }
+    this.persistHealth()
+  }
+
+  /** Rehydrate health from disk so a restart shows the genuine last-known state. */
+  private loadPersistedHealth(): void {
+    if (!this.healthStatePath || !fs.existsSync(this.healthStatePath)) {
+      return
+    }
+    try {
+      const raw = JSON.parse(fs.readFileSync(this.healthStatePath, 'utf-8')) as Partial<
+        typeof this.llmHealth
+      >
+      this.llmHealth = {
+        consecutiveFailures:
+          typeof raw.consecutiveFailures === 'number' ? raw.consecutiveFailures : 0,
+        lastError: typeof raw.lastError === 'string' ? raw.lastError : null,
+        lastAttemptAt: typeof raw.lastAttemptAt === 'number' ? raw.lastAttemptAt : null,
+        lastSuccessAt: typeof raw.lastSuccessAt === 'number' ? raw.lastSuccessAt : null,
+      }
+    } catch (error) {
+      log.warn('[ActivitySemanticService] failed to load persisted LLM health:', error)
+    }
+  }
+
+  private persistHealth(): void {
+    if (!this.healthStatePath) {
+      return
+    }
+    try {
+      fs.writeFileSync(this.healthStatePath, JSON.stringify(this.llmHealth))
+    } catch (error) {
+      log.warn('[ActivitySemanticService] failed to persist LLM health:', error)
+    }
   }
 
   private recordLlmSuccess(): void {
@@ -517,6 +554,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
     this.llmHealth.lastError = null
     this.llmHealth.lastAttemptAt = now
     this.llmHealth.lastSuccessAt = now
+    this.persistHealth()
     if (recoveredFrom > 0) {
       log.info(
         `[ActivitySemanticService] LLM recovered after ${recoveredFrom} consecutive failure(s)`,
@@ -542,6 +580,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
     this.llmHealth.consecutiveFailures += 1
     this.llmHealth.lastError = lastFailure?.error ?? 'Unknown LLM error'
     this.llmHealth.lastAttemptAt = Date.now()
+    this.persistHealth()
     // Log only the passing→failing transition; per-request failures would be noise.
     if (wasHealthy) {
       log.warn(`[ActivitySemanticService] LLM started failing: ${this.llmHealth.lastError}`)
@@ -582,6 +621,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
       this.llmHealth.consecutiveFailures += 1
       this.llmHealth.lastError = detail
       this.llmHealth.lastAttemptAt = Date.now()
+      this.persistHealth()
       log.warn(
         '[ActivitySemanticService] Connection test failed',
         JSON.stringify({ model, durationMs: Date.now() - startedAt, error: detail }),

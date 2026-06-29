@@ -131,6 +131,7 @@ export async function createMainRuntime(params: {
     requestTimeoutMs: params.semanticRequestTimeoutMs,
     videoModels: initialVideoModels,
     snapshotModels: initialSnapshotModels,
+    healthStatePath: path.join(userDataPath, 'llm-health.json'),
   })
 
   semanticService.setUserContext(() => storage.userContext.get()?.shortSummary ?? null)
