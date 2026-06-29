@@ -21,7 +21,7 @@ vi.mock('../logger', () => ({
 
 import { CustomerAccessProvider } from './customer-access-provider'
 import { MANAGED_KEY_CONFIG } from '../../shared/constants'
-import type { DeviceIdentity } from '../settings/device-identity'
+import { DeviceIdentityUnavailableError, type DeviceIdentity } from '../settings/device-identity'
 
 type FetchCall = [unknown, RequestInit | undefined]
 
@@ -240,6 +240,24 @@ describe('CustomerAccessProvider', () => {
       await provider.refreshAccessState()
 
       expect(payloads).toEqual([])
+    })
+
+    it('keeps the managed key and skips the backend when device identity is unavailable', async () => {
+      const fetchMock = vi.fn() as unknown as typeof fetch
+      globalThis.fetch = fetchMock
+      const throwingIdentity = {
+        getDeviceId: () => {
+          throw new DeviceIdentityUnavailableError('secure storage unavailable')
+        },
+      } as unknown as DeviceIdentity
+      const provider = new CustomerAccessProvider(throwingIdentity)
+      const payloads: unknown[] = []
+      provider.setUpdateCallback((_, payload) => payloads.push(payload))
+
+      await provider.refreshAccessState()
+
+      expect(payloads).toEqual([])
+      expect((fetchMock as unknown as { mock: { calls: unknown[] } }).mock.calls).toHaveLength(0)
     })
 
     it('invalidates the managed key on an authoritative 200 {key: null}', async () => {

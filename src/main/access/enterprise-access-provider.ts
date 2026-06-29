@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { ENTERPRISE_BACKEND_CONFIG } from '../../shared/constants'
 import type { ConsentOutcome, PendingConsent } from '../../shared/types'
 import log from '../logger'
-import type { DeviceIdentity } from '../settings/device-identity'
+import { DeviceIdentityUnavailableError, type DeviceIdentity } from '../settings/device-identity'
 import { parseActivationCode } from './activation-code'
 import { BaseAccessProvider } from './base-access-provider'
 import {
@@ -123,7 +123,18 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     if (this.accessState.enterpriseActivationStatus === 'awaiting_consent') {
       return
     }
-    const deviceId = this.deviceIdentity.getDeviceId()
+    let deviceId: string
+    try {
+      deviceId = this.deviceIdentity.getDeviceId()
+    } catch (error) {
+      if (error instanceof DeviceIdentityUnavailableError) {
+        // Transient: don't transition to activation_failed, which would falsely
+        // de-activate the device. The periodic refresh retries.
+        log.warn('[EnterpriseAccess] Device identity unavailable, skipping refresh:', error.message)
+        return
+      }
+      throw error
+    }
     try {
       const activated = await this.fetchEnterpriseStatus(deviceId)
       if (!activated) {

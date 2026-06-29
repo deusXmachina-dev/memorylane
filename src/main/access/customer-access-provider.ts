@@ -3,7 +3,7 @@ import { MANAGED_KEY_CONFIG } from '../../shared/constants'
 import type { ConsentOutcome, PendingConsent, SubscriptionPlan } from '../../shared/types'
 import { isSameRegistrableDomain } from '../../shared/url-utils'
 import log from '../logger'
-import type { DeviceIdentity } from '../settings/device-identity'
+import { DeviceIdentityUnavailableError, type DeviceIdentity } from '../settings/device-identity'
 import { BaseAccessProvider } from './base-access-provider'
 import {
   setCustomerPolling,
@@ -31,7 +31,19 @@ export class CustomerAccessProvider extends BaseAccessProvider {
       return
     }
 
-    const result = await this.fetchCustomerKey(this.deviceIdentity.getDeviceId())
+    let deviceId: string
+    try {
+      deviceId = this.deviceIdentity.getDeviceId()
+    } catch (error) {
+      if (error instanceof DeviceIdentityUnavailableError) {
+        // Transient: don't invalidate the managed key. The periodic refresh retries.
+        log.warn('[CustomerAccess] Device identity unavailable, skipping refresh:', error.message)
+        return
+      }
+      throw error
+    }
+
+    const result = await this.fetchCustomerKey(deviceId)
     switch (result.kind) {
       case 'key':
         log.info('[CustomerAccess] Received managed customer key')
@@ -57,9 +69,10 @@ export class CustomerAccessProvider extends BaseAccessProvider {
       return
     }
 
-    const deviceId = this.deviceIdentity.getDeviceId()
+    let deviceId: string
     let signedUrl: string
     try {
+      deviceId = this.deviceIdentity.getDeviceId()
       signedUrl = await this.fetchSignedLink('/v2/subscription/checkout-link', deviceId, { plan })
     } catch (error) {
       log.warn('[CustomerAccess] Failed to mint checkout link:', error)
