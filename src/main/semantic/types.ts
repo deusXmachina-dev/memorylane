@@ -55,6 +55,8 @@ export interface SemanticAttempt {
   durationMs: number
   success: boolean
   error?: string
+  /** HTTP status of a failed attempt, when available (null for network/timeout). */
+  httpStatus?: number | null
   promptTokens?: number
   completionTokens?: number
 }

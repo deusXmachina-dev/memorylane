@@ -13,6 +13,7 @@ import {
   isLikelyVideoUnsupportedError,
   videoUnsupportedCacheKey,
 } from './custom-endpoint-video-fallback'
+import { extractHttpStatus, isHealthAffectingStatus } from './error-classify'
 import { invokeViaGenerateText, invokeRawVideoCompletion } from './invoke'
 import { tryLoadVideoAsDataUrl, encodeSnapshots } from './media'
 import { trySemanticModelChain } from './model-chain'
@@ -525,7 +526,12 @@ export class ActivitySemanticService implements SemanticServiceContract {
 
   private updateLlmHealthFromDiagnostics(diagnostics: SemanticRunDiagnostics): void {
     const failedAttempts = diagnostics.attempts.filter((attempt) => !attempt.success)
-    const actionableFailures = failedAttempts.filter((attempt) => attempt.error !== 'empty summary')
+    // Only genuine connectivity/config failures count toward health. Skip empty
+    // summaries and transient provider responses (429/529) — see DEU-176.
+    const actionableFailures = failedAttempts.filter(
+      (attempt) =>
+        attempt.error !== 'empty summary' && isHealthAffectingStatus(attempt.httpStatus ?? null),
+    )
 
     if (actionableFailures.length === 0) {
       return
@@ -564,6 +570,15 @@ export class ActivitySemanticService implements SemanticServiceContract {
       )
     } catch (error) {
       const detail = describeSemanticError(error)
+      // Transient provider responses (429/529) don't mean the connection is
+      // broken — leave the prior state untouched. See DEU-176.
+      if (!isHealthAffectingStatus(extractHttpStatus(error))) {
+        log.debug(
+          '[ActivitySemanticService] Connection test hit a transient error; ignoring',
+          JSON.stringify({ model, durationMs: Date.now() - startedAt, error: detail }),
+        )
+        return
+      }
       this.llmHealth.consecutiveFailures += 1
       this.llmHealth.lastError = detail
       this.llmHealth.lastAttemptAt = Date.now()

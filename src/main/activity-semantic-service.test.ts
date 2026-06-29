@@ -527,6 +527,61 @@ describe('ActivitySemanticService', () => {
     })
   })
 
+  it('does not mark LLM failing on transient (429) inference errors', async () => {
+    const tempDir = createTempDir()
+    tempDirs.push(tempDir)
+    const videoPath = createVideoFile(tempDir)
+
+    const { service, fetchMock } = setupService({
+      snapshotModels: [],
+      pipelinePreference: 'video',
+    })
+    fetchMock.setHandler(() => httpError(429, { error: 'rate limited' }))
+
+    await service.summarizeFromVideo({
+      activity: makeActivity(),
+      videoPath,
+    })
+
+    expect(service.getLlmHealthStatus()).toEqual({
+      configured: true,
+      state: 'unknown',
+      consecutiveFailures: 0,
+      lastError: null,
+      lastAttemptAt: null,
+    })
+  })
+
+  it('marks LLM failing on a 500 inference error', async () => {
+    const tempDir = createTempDir()
+    tempDirs.push(tempDir)
+    const videoPath = createVideoFile(tempDir)
+
+    const { service, fetchMock } = setupService({
+      snapshotModels: [],
+      pipelinePreference: 'video',
+    })
+    fetchMock.setHandler(() => httpError(500, { error: 'server error' }))
+
+    await service.summarizeFromVideo({
+      activity: makeActivity(),
+      videoPath,
+    })
+
+    expect(service.getLlmHealthStatus().state).toBe('failing')
+    expect(service.getLlmHealthStatus().consecutiveFailures).toBe(1)
+  })
+
+  it('marks LLM failing on a 401 connection test', async () => {
+    const { service, fetchMock } = setupService()
+    fetchMock.setHandler(() => httpError(401, { error: 'unauthorized' }))
+
+    await service.testConnection()
+
+    expect(service.getLlmHealthStatus().state).toBe('failing')
+    expect(service.getLlmHealthStatus().consecutiveFailures).toBe(1)
+  })
+
   it('falls from video pipeline to snapshot pipeline', async () => {
     const tempDir = createTempDir()
     tempDirs.push(tempDir)
