@@ -8,6 +8,7 @@ import {
   applyParaphrasedSummaries,
   buildWindowedActivities,
   cloneOccurrence,
+  fixtureName,
   largestGapOffset,
   placeOccurrences,
   placeTask,
@@ -449,5 +450,35 @@ describe('renderTaskFixtureGoldenMd', () => {
     expect(parsed.sightings.map((s) => s.verdict)).toEqual(['keep', 'keep'])
     expect(parsed.sightings[0].activityIds).toEqual(['jaro-01-o1', 'jaro-02-o1'])
     expect(parsed.sightings[1].title).toBe('T (2/2)')
+  })
+})
+
+describe('fixtureName', () => {
+  it('keeps existing names for deterministic variants', () => {
+    expect(fixtureName('2026-06-10', 'jaro-contract', 'contiguous', 1, 'none')).toBe(
+      '2026-06-10-jaro-contract',
+    )
+    expect(fixtureName('2026-06-10', 'jaro-contract', 'multitask', 1, 'none')).toBe(
+      '2026-06-10-jaro-contract-multitask',
+    )
+    // reorder stays unmarked so the existing x3 fixtures don't get renamed
+    expect(fixtureName('2026-06-10', 'jaro-contract', 'multitask', 3, 'reorder')).toBe(
+      '2026-06-10-jaro-contract-multitask-x3',
+    )
+  })
+
+  it('tags llm variants so they do not collide with reorder', () => {
+    expect(fixtureName('2026-06-10', 'jaro-contract', 'contiguous', 3, 'llm')).toBe(
+      '2026-06-10-jaro-contract-x3-llm',
+    )
+    expect(fixtureName('2026-06-10', 'jaro-contract', 'multitask', 3, 'llm')).toBe(
+      '2026-06-10-jaro-contract-multitask-x3-llm',
+    )
+  })
+
+  it('respects the slug', () => {
+    expect(fixtureName('2026-06-10', 'petr-admin', 'contiguous', 1, 'none')).toBe(
+      '2026-06-10-petr-admin',
+    )
   })
 })

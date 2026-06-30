@@ -165,6 +165,24 @@ export function renderSightingGoldenMd(
 
 export type PlacementMode = 'contiguous' | 'multitask'
 
+/**
+ * Names a fixture dir so it's self-describing and collision-free across the
+ * variation axes: `<day>-<slug>[-multitask][-xN][-llm]`. `reorder`/`none` stay
+ * unmarked so deterministic variants keep their existing names.
+ */
+export function fixtureName(
+  day: string,
+  slug: string,
+  placement: PlacementMode,
+  occurrences: number,
+  vary: string, // 'none' | 'reorder' | 'llm'
+): string {
+  const multitask = placement === 'multitask' ? '-multitask' : ''
+  const repeat = occurrences > 1 ? `-x${occurrences}` : ''
+  const varyTag = vary === 'llm' ? '-llm' : ''
+  return `${day}-${slug}${multitask}${repeat}${varyTag}`
+}
+
 export interface SemanticTaskResult {
   /** Task activities with offsets RELATIVE to the task start (laid out
    *  back-to-back). Absolute offsets are assigned later by `placeTask`. */
