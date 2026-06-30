@@ -68,7 +68,9 @@ describe('observation-controller', () => {
     expect(state.phase).toBe('idle')
     expect(state.lastRun?.appsAdded).toBe(2)
     expect(state.lastRun?.urlsAdded).toBe(1)
-    expect(state.lastRun?.apps).toEqual(expect.arrayContaining(['slackmacgap', 'whatsapp']))
+    expect(state.lastRun?.apps).toEqual(
+      expect.arrayContaining(['com.tinyspeck.slackmacgap', 'net.whatsapp.whatsapp']),
+    )
     expect(state.lastRun?.urls).toEqual(['bank.example.com'])
   })
 
@@ -104,8 +106,8 @@ describe('observation-controller', () => {
     ctrl.stop('user')
 
     const state = ctrl.getState()
-    expect(state.lastRun?.apps).not.toContain('chrome')
-    expect(state.lastRun?.apps).toContain('slackmacgap')
+    expect(state.lastRun?.apps).not.toContain('com.google.chrome')
+    expect(state.lastRun?.apps).toContain('com.tinyspeck.slackmacgap')
     expect(state.lastRun?.urls).toEqual(['docs.google.com'])
   })
 

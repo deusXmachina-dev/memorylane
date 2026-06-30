@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
+import type { InstalledApp } from '../../shared/types'
 import { CaptureSettingsManager } from './capture-settings-manager'
 import {
   VISUAL_DETECTOR_CONFIG,
@@ -353,6 +354,55 @@ describe('CaptureSettingsManager', () => {
       const map = manager.get().modelsByVendor
       expect(map.openrouter?.patternDetectionModel).toBe('moonshotai/kimi-k2.5')
       expect(map.google?.patternDetectionModel).toBe('gemini-2.5-pro')
+    })
+  })
+
+  describe('migrateAppTokens', () => {
+    const installedApps: InstalledApp[] = [
+      { displayName: 'MemoryLane', matchToken: 'com.memorylane.app' },
+      { displayName: 'Slack', matchToken: 'com.tinyspeck.slackmacgap' },
+    ]
+
+    it('rewrites legacy tokens to bundle ids once, then no-ops on reload', async () => {
+      fs.writeFileSync(configPath, JSON.stringify({ excludedApps: ['app', 'slackmacgap'] }))
+      const manager = new CaptureSettingsManager(configPath)
+
+      let calls = 0
+      const getApps = async (): Promise<InstalledApp[]> => {
+        calls++
+        return installedApps
+      }
+
+      expect(await manager.migrateAppTokens(getApps)).toBe(true)
+      expect(manager.get().excludedApps).toEqual([
+        'com.memorylane.app',
+        'com.tinyspeck.slackmacgap',
+      ])
+      expect(calls).toBe(1)
+
+      // Version was stamped and persisted: a fresh instance does not migrate again.
+      const reloaded = new CaptureSettingsManager(configPath)
+      expect(await reloaded.migrateAppTokens(getApps)).toBe(false)
+      expect(calls).toBe(1) // installed-apps list not enumerated a second time
+      expect(reloaded.get().excludedApps).toEqual([
+        'com.memorylane.app',
+        'com.tinyspeck.slackmacgap',
+      ])
+    })
+
+    it('stamps the version without enumerating apps when there are no exclusions', async () => {
+      fs.writeFileSync(configPath, JSON.stringify({ typingDebounceMs: 3000 })) // legacy: no version
+      const manager = new CaptureSettingsManager(configPath)
+
+      let calls = 0
+      expect(
+        await manager.migrateAppTokens(async () => {
+          calls++
+          return installedApps
+        }),
+      ).toBe(false)
+      expect(calls).toBe(0)
+      expect(JSON.parse(fs.readFileSync(configPath, 'utf-8')).appMatchSchemaVersion).toBe(1)
     })
   })
 

@@ -4,6 +4,7 @@ import * as path from 'path'
 import log from '../logger'
 import type {
   CaptureSettings,
+  InstalledApp,
   SemanticPipelineMode,
   Vendor,
   VendorModelSelection,
@@ -11,7 +12,11 @@ import type {
 import { VENDORS } from '../../shared/types'
 import type { AppEdition } from '../../shared/edition'
 import { getVendorDefaults } from '../../shared/vendor-defaults'
-import { normalizeExcludedApps, normalizeWildcardPatterns } from '../capture-exclusions'
+import {
+  migrateExcludedAppTokens,
+  normalizeExcludedApps,
+  normalizeWildcardPatterns,
+} from '../capture-exclusions'
 import {
   VISUAL_DETECTOR_CONFIG,
   INTERACTION_MONITOR_CONFIG,
@@ -125,6 +130,11 @@ function defaultUploadDetailLevel(edition: AppEdition): CaptureSettings['uploadD
 // their old "contains" behavior carries over as a wildcard.
 const URL_MATCH_SCHEMA_VERSION = 1
 
+// Bump when the meaning of stored excluded-app entries changes. v1: entries are
+// full bundle ids (macOS) / exe names (Windows). `migrateAppTokens` upgrades
+// pre-v1 last-segment/localized-name tokens to bundle ids on first launch.
+const APP_MATCH_SCHEMA_VERSION = 1
+
 const DEFAULTS: CaptureSettings = {
   autoStartEnabled: true,
   visualThreshold: VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT,
@@ -142,6 +152,7 @@ const DEFAULTS: CaptureSettings = {
   excludedApps: [],
   excludedUrlPatterns: [],
   urlMatchSchemaVersion: URL_MATCH_SCHEMA_VERSION,
+  appMatchSchemaVersion: APP_MATCH_SCHEMA_VERSION,
   activeVendor: 'openrouter',
   semanticVideoModel: OPENROUTER_DEFAULTS.semanticVideoModel,
   semanticSnapshotModel: OPENROUTER_DEFAULTS.semanticSnapshotModel,
@@ -285,6 +296,9 @@ export class CaptureSettingsManager {
           excludedApps: normalizeExcludedApps(data.excludedApps),
           excludedUrlPatterns,
           urlMatchSchemaVersion: URL_MATCH_SCHEMA_VERSION,
+          // Preserve the stored value (absent → 0) so the post-load, app-list-aware
+          // migration (migrateAppTokens) can tell a pre-v1 file from a current one.
+          appMatchSchemaVersion: data.appMatchSchemaVersion ?? 0,
           maxScreenshotsForLlm:
             typeof data.maxScreenshotsForLlm === 'number'
               ? data.maxScreenshotsForLlm
@@ -394,6 +408,38 @@ export class CaptureSettingsManager {
       semanticPipelineMode: next.semanticPipelineMode,
       modelsByVendor: updatedMap,
     })
+  }
+
+  /**
+   * One-time, best-effort upgrade of pre-v1 excluded-app tokens (last segment /
+   * localized name) to full bundle ids, using the installed-apps list to resolve
+   * them. Version-gated, so it only runs — and only pays the app-enumeration cost
+   * — on the first launch after upgrading. Returns whether tokens were rewritten.
+   */
+  public async migrateAppTokens(getInstalledApps: () => Promise<InstalledApp[]>): Promise<boolean> {
+    if ((this.settings.appMatchSchemaVersion ?? 0) >= APP_MATCH_SCHEMA_VERSION) return false
+
+    // Nothing to migrate — just stamp the version so we don't enumerate apps again.
+    if (this.settings.excludedApps.length === 0) {
+      this.save({ appMatchSchemaVersion: APP_MATCH_SCHEMA_VERSION })
+      return false
+    }
+
+    let installedApps: InstalledApp[]
+    try {
+      installedApps = await getInstalledApps()
+    } catch (error) {
+      // Leave the version unstamped so we retry on a later launch.
+      log.warn('[CaptureSettings] Skipping excluded-app migration (failed to list apps):', error)
+      return false
+    }
+
+    const before = this.settings.excludedApps
+    const migrated = migrateExcludedAppTokens(before, installedApps)
+    this.save({ excludedApps: migrated, appMatchSchemaVersion: APP_MATCH_SCHEMA_VERSION })
+    const changed = this.settings.excludedApps.join(' ') !== before.join(' ')
+    if (changed) log.info('[CaptureSettings] Migrated excluded-app tokens to bundle ids')
+    return changed
   }
 
   public reset(): void {

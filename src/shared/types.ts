@@ -234,6 +234,7 @@ export interface CaptureSettings {
   excludedApps: string[]
   excludedUrlPatterns: string[]
   urlMatchSchemaVersion?: number
+  appMatchSchemaVersion?: number
   activeVendor: Vendor
   semanticVideoModel: string
   semanticSnapshotModel: string
@@ -252,6 +253,7 @@ export interface VendorModelSelection {
 
 export interface InstalledApp {
   displayName: string
+  /** Identity the matcher keys on: bundle id (macOS) / exe name (Windows). */
   matchToken: string
 }
 
