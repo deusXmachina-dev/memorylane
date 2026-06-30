@@ -47,6 +47,7 @@ import { loadGoldenMd } from '../src/main/eval/golden-md'
 import {
   applyParaphrasedSummaries,
   cloneOccurrence,
+  fixtureName,
   placeOccurrences,
   renderTaskFixtureGoldenMd,
   semanticGoldenToTask,
@@ -336,8 +337,7 @@ async function main(): Promise<void> {
         })
         const taskActivities = placed.flat()
         const all = [...noise, ...taskActivities].sort((x, y) => x.offsetMin - y.offsetMin)
-        const suffix = `${placement === 'multitask' ? '-multitask' : ''}${a.occurrences > 1 ? `-x${a.occurrences}` : ''}`
-        const name = `${day}-jaro-contract${suffix}`
+        const name = fixtureName(day, 'jaro-contract', placement, a.occurrences, vary)
         const goldenMd = renderTaskFixtureGoldenMd(name, blocks, all)
         const manifest: TaskFixtureManifest = {
           name,
