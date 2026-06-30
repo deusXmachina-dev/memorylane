@@ -26,6 +26,7 @@ import { startPowerMonitoring, shouldPause } from './power-monitor'
 import { CaptureStateManager } from './settings/capture-state-manager'
 import { CaptureSettingsManager } from './settings/capture-settings-manager'
 import { DeviceIdentity } from './settings/device-identity'
+import { listInstalledApps } from './apps/installed-apps'
 import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
 import { PatternDetector } from './services/pattern-detector'
 import { TaskMiner } from './services/task-miner'
@@ -191,6 +192,10 @@ app.on('ready', async () => {
       )
     }
   }
+  // First-launch upgrade of pre-v1 excluded-app tokens to bundle ids. Must run
+  // before initialCaptureSettings is read below so the runtime starts with the
+  // migrated tokens.
+  await captureSettingsManager.migrateAppTokens(listInstalledApps)
   const captureStateManager = new CaptureStateManager()
   const deviceIdentity = new DeviceIdentity()
   captureSettingsManager.applyToConstants()

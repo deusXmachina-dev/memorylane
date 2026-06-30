@@ -1,4 +1,5 @@
 import { domainOf } from '../shared/url-utils'
+import type { InstalledApp } from '../shared/types'
 
 export interface ExclusionWindowContext {
   processName?: string
@@ -21,7 +22,10 @@ export function normalizeToken(value: string): string {
     token = token.slice(0, -4)
   }
 
-  if (token.endsWith('.app')) {
+  // `.app` is stripped from a bare app name (`Signal.app` → `signal`) but kept on
+  // a reverse-DNS bundle id whose tail happens to be `.app` (`com.memorylane.app`),
+  // so the id stays unique instead of collapsing to `com.memorylane`.
+  if (token.endsWith('.app') && !token.slice(0, -4).includes('.')) {
     token = token.slice(0, -4)
   }
 
@@ -30,9 +34,11 @@ export function normalizeToken(value: string): string {
   return alias ?? token
 }
 
+// An app's match token is its full bundle id (macOS), normalized. The whole id —
+// not just the last segment — keeps it unique, so `com.microsoft.excel` blocks
+// only Excel, never a sibling like `com.microsoft.word`.
 export function tokenFromBundleId(bundleId: string): string {
-  const last = bundleId.split('.').pop() ?? bundleId
-  return normalizeToken(last)
+  return normalizeToken(bundleId)
 }
 
 const APP_TOKEN_ALIASES: Record<string, string> = {
@@ -52,6 +58,47 @@ const APP_TOKEN_ALIASES: Record<string, string> = {
 
 function normalizePatternToken(value: string): string {
   return value.trim().toLowerCase()
+}
+
+// True when `token` is one of the legacy forms a previous build could have stored
+// for `app`: the bundle id's last segment (`slackmacgap`), the localized/display
+// name (`slack`), or an over-stripped bundle id that lost its `.app`/`.exe` tail
+// (`com.memorylane` for `com.memorylane.app`).
+function isLegacyTokenFor(token: string, app: InstalledApp): boolean {
+  const id = app.matchToken
+  return (
+    id === token ||
+    id.startsWith(`${token}.`) ||
+    normalizeToken(id.split('.').pop() ?? '') === token ||
+    normalizeToken(app.displayName) === token
+  )
+}
+
+// A reverse-DNS bundle id (`com.vendor.app`) has two or more dots — the current
+// macOS match-token form. Anything shorter is a legacy last-segment/display-name
+// token or a Windows exe name. Expects an already-normalized token.
+export function isBundleIdToken(token: string): boolean {
+  return token.split('.').length - 1 >= 2
+}
+
+// Upgrade legacy excluded-app tokens to the current match token. A reverse-DNS
+// bundle id is already the current form, so leave it; anything shorter is a
+// legacy form and gets fuzzy-mapped to the one installed app it identifies
+// (ambiguous or unknown tokens are left as-is — best-effort, never guess). On
+// Windows the exe-name token resolves to itself, so this is a no-op.
+export function migrateExcludedAppTokens(
+  excludedApps: readonly string[],
+  installedApps: readonly InstalledApp[],
+): string[] {
+  return excludedApps.map((entry) => {
+    const token = normalizeToken(entry)
+    if (isBundleIdToken(token)) return entry
+
+    const resolved = new Set(
+      installedApps.filter((app) => isLegacyTokenFor(token, app)).map((app) => app.matchToken),
+    )
+    return resolved.size === 1 ? [...resolved][0] : entry
+  })
 }
 
 export function normalizeExcludedApps(values: readonly string[] | undefined): string[] {
@@ -107,27 +154,22 @@ function wildcardToRegex(pattern: string): RegExp {
   return regex
 }
 
+// An app is identified by one thing per platform: its bundle id on macOS, its
+// executable name on Windows. We match on that alone — no last-segment or
+// localized-name fallbacks — so each id is unique and can't sweep up siblings.
+// `processName` is the macOS localized name (ignored when a bundle id is present)
+// and the Windows exe name; it's the fallback only for the rare process that
+// reports no bundle id.
 function collectCandidates(window: ExclusionWindowContext | undefined): string[] {
   if (!window) return []
 
-  const candidates: string[] = []
+  const identity = window.bundleId
+    ? normalizeToken(window.bundleId)
+    : window.processName
+      ? normalizeToken(window.processName)
+      : ''
 
-  if (window.processName) {
-    candidates.push(normalizeToken(window.processName))
-  }
-
-  if (window.bundleId) {
-    const normalizedBundleId = normalizeToken(window.bundleId)
-    candidates.push(normalizedBundleId)
-
-    const bundleIdParts = normalizedBundleId.split('.')
-    const lastPart = bundleIdParts[bundleIdParts.length - 1]
-    if (lastPart) {
-      candidates.push(lastPart)
-    }
-  }
-
-  return candidates.filter((candidate) => candidate.length > 0)
+  return identity.length > 0 ? [identity] : []
 }
 
 export function getExcludedAppMatch(
