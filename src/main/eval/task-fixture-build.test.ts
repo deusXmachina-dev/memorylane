@@ -5,11 +5,16 @@ import { StorageService } from '../storage'
 import { applyMigrations } from '../storage/migrator'
 import { createStoredActivity, deleteDbFiles } from '../storage/test-utils'
 import {
+  applyParaphrasedSummaries,
   buildWindowedActivities,
+  cloneOccurrence,
   largestGapOffset,
+  placeOccurrences,
   placeTask,
   renderSightingGoldenMd,
+  renderTaskFixtureGoldenMd,
   semanticGoldenToTask,
+  type SemanticTaskResult,
 } from './task-fixture-build'
 import { parseTaskGoldenMd } from './task-golden-md'
 import type { GoldenActivity } from './golden-md'
@@ -209,6 +214,13 @@ describe('largestGapOffset', () => {
     expect(largestGapOffset([noiseAt(0, 5)], 10, 583)).toBe(583)
     expect(largestGapOffset([], 10, 583)).toBe(583)
   })
+
+  it('rejects a gap that only equals the span (needs a 1-min buffer so it cannot overlap)', () => {
+    // gap = 20 − (0+5) = 15, exactly the span → must NOT fit (would overlap by 1).
+    expect(largestGapOffset([noiseAt(0, 5), noiseAt(20, 5)], 15, 999)).toBe(999)
+    // one more minute of room and it fits, starting right after the first activity.
+    expect(largestGapOffset([noiseAt(0, 5), noiseAt(21, 5)], 15, 999)).toBe(6)
+  })
 })
 
 describe('placeTask', () => {
@@ -242,5 +254,200 @@ describe('placeTask', () => {
       )
       expect(between.length).toBeGreaterThanOrEqual(1)
     }
+  })
+})
+
+describe('placeTask multitask — sparse noise', () => {
+  const task = semanticGoldenToTask({
+    idPrefix: 't',
+    title: 'T',
+    description: 'd',
+    goldens: [
+      golden({ startOffsetMs: 0, endOffsetMs: 60_000, summary: 'a' }),
+      golden({ startOffsetMs: 60_000, endOffsetMs: 120_000, summary: 'b' }),
+      golden({ startOffsetMs: 120_000, endOffsetMs: 180_000, summary: 'c' }),
+    ],
+  }).activities // 3 steps
+
+  it('reduces interruptions (with a warning) and keeps a gap between every step', () => {
+    const noise = Array.from({ length: 6 }, (_, i) => noiseAt(300 + i * 5, 1))
+    const warnings: string[] = []
+    const placed = placeTask(task, noise, 'multitask', {
+      interruptions: 3,
+      onWarn: (m) => warnings.push(m),
+    })
+    const offsets = placed.map((a) => a.offsetMin)
+    // anchors stay distinct — no two steps collapse onto the same minute
+    expect(offsets.every((o, i) => i === 0 || o > offsets[i - 1])).toBe(true)
+    expect(warnings.some((w) => /reduced interruptions 3/.test(w))).toBe(true)
+    // after the reduction there is still ≥1 noise activity between consecutive steps
+    for (let i = 1; i < offsets.length; i++) {
+      const between = noise.filter(
+        (nn) => nn.offsetMin > offsets[i - 1] && nn.offsetMin < offsets[i],
+      )
+      expect(between.length).toBeGreaterThanOrEqual(1)
+    }
+  })
+
+  it('warns and does not collapse steps when there is less noise than steps', () => {
+    const noise = [noiseAt(100, 1), noiseAt(105, 1)] // 2 noise, 3 steps
+    const warnings: string[] = []
+    const placed = placeTask(task, noise, 'multitask', {
+      interruptions: 2,
+      onWarn: (m) => warnings.push(m),
+    })
+    const offsets = placed.map((a) => a.offsetMin)
+    expect(new Set(offsets).size).toBe(offsets.length) // all distinct
+    expect(offsets.every((o, i) => i === 0 || o > offsets[i - 1])).toBe(true)
+    expect(warnings.length).toBeGreaterThan(0)
+  })
+})
+
+describe('placeTask contiguous — bounds', () => {
+  const task = semanticGoldenToTask({
+    idPrefix: 't',
+    title: 'T',
+    description: 'd',
+    goldens: [
+      golden({ startOffsetMs: 0, endOffsetMs: 60_000, summary: 'a' }),
+      golden({ startOffsetMs: 60_000, endOffsetMs: 120_000, summary: 'b' }),
+      golden({ startOffsetMs: 120_000, endOffsetMs: 180_000, summary: 'c' }),
+    ],
+  }).activities // span 3
+
+  it('never runs past end-of-day (no stacking on the final minute)', () => {
+    // Only space is just before a late single activity → edge fallback, clamped.
+    const noise = [noiseAt(1435, 5)]
+    const placed = placeTask(task, noise, 'contiguous', {})
+    const offsets = placed.map((a) => a.offsetMin)
+    expect(Math.max(...offsets)).toBeLessThanOrEqual(24 * 60 - 1)
+    expect(new Set(offsets).size).toBe(offsets.length) // distinct, not clamped together
+    // internal back-to-back spacing preserved
+    expect(offsets[1] - offsets[0]).toBe(1)
+    expect(offsets[2] - offsets[1]).toBe(1)
+  })
+})
+
+// --- recurring tasks --------------------------------------------------------
+
+function baseTask(): SemanticTaskResult {
+  return semanticGoldenToTask({
+    idPrefix: 'jaro',
+    title: 'Contract setup',
+    description: 'Did the thing.',
+    goldens: [
+      golden({ startOffsetMs: 0, endOffsetMs: 60_000, appName: 'Drive', summary: 'create folder' }),
+      golden({
+        startOffsetMs: 60_000,
+        endOffsetMs: 120_000,
+        appName: 'Docs',
+        summary: 'copy agreement',
+      }),
+      golden({
+        startOffsetMs: 120_000,
+        endOffsetMs: 180_000,
+        appName: 'Docs',
+        summary: 'fill terms',
+      }),
+    ],
+  })
+}
+
+describe('cloneOccurrence', () => {
+  it('total=1: keeps base ids and title (no suffix, no reorder)', () => {
+    const o = cloneOccurrence(baseTask(), { index: 1, total: 1, reorder: true })
+    expect(o.activities.map((a) => a.id)).toEqual(['jaro-01', 'jaro-02', 'jaro-03'])
+    expect(o.block.title).toBe('Contract setup')
+    expect(o.block.activityIds).toEqual(['jaro-01', 'jaro-02', 'jaro-03'])
+  })
+
+  it('total>1: suffixes ids, tags the title, reorders later occurrences', () => {
+    const o1 = cloneOccurrence(baseTask(), { index: 1, total: 3, reorder: true })
+    const o2 = cloneOccurrence(baseTask(), { index: 2, total: 3, reorder: true })
+
+    expect(o1.activities.map((a) => a.id)).toEqual(['jaro-01-o1', 'jaro-02-o1', 'jaro-03-o1'])
+    expect(o1.block.title).toBe('Contract setup (1/3)')
+    // occurrence 1 keeps order; occurrence 2 swaps the second pair (pos 1<->2).
+    expect(o2.activities.map((a) => a.id)).toEqual(['jaro-01-o2', 'jaro-03-o2', 'jaro-02-o2'])
+    expect(o2.block.title).toBe('Contract setup (2/3)')
+    expect(o2.activities.map((a) => a.offsetMin)).toEqual([0, 1, 2]) // re-laid back-to-back
+
+    // ids are disjoint across occurrences (fixture-unique)
+    const ids1 = new Set(o1.activities.map((a) => a.id))
+    expect(o2.activities.every((a) => !ids1.has(a.id))).toBe(true)
+  })
+})
+
+describe('applyParaphrasedSummaries', () => {
+  it('swaps summaries by index, keeps ids/offsets/block', () => {
+    const o = cloneOccurrence(baseTask(), { index: 1, total: 1 })
+    const out = applyParaphrasedSummaries(o, ['A', '', 'C']) // empty keeps the original
+    expect(out.activities.map((a) => a.summary)).toEqual(['A', 'copy agreement', 'C'])
+    expect(out.activities.map((a) => a.id)).toEqual(o.activities.map((a) => a.id))
+    expect(out.block).toBe(o.block)
+  })
+})
+
+describe('placeOccurrences', () => {
+  it('places each occurrence in its own slice of noise; ids stay unique', () => {
+    const occ = [1, 2, 3].map((k) =>
+      cloneOccurrence(baseTask(), { index: k, total: 3, reorder: true }),
+    )
+    const noise = Array.from({ length: 12 }, (_, i) => noiseAt(60 + i * 60, 5))
+    const { placed, warnings } = placeOccurrences(
+      occ.map((o) => o.activities),
+      noise,
+      'contiguous',
+      {},
+    )
+    expect(placed).toHaveLength(3)
+    const range = (p: TaskFixtureActivity[]): { min: number; max: number } => ({
+      min: Math.min(...p.map((a) => a.offsetMin)),
+      max: Math.max(...p.map((a) => a.offsetMin)),
+    })
+    const r = placed.map(range)
+    expect(r[0].max).toBeLessThan(r[1].min) // temporally separated
+    expect(r[1].max).toBeLessThan(r[2].min)
+    const allIds = placed.flat().map((a) => a.id)
+    expect(new Set(allIds).size).toBe(allIds.length)
+    expect(warnings).toEqual([])
+  })
+
+  it('warns when there is less noise than occurrences', () => {
+    const occ = [1, 2, 3].map((k) => cloneOccurrence(baseTask(), { index: k, total: 3 }))
+    const noise = [noiseAt(60, 5), noiseAt(600, 5)] // 2 noise, 3 occurrences
+    const { placed, warnings } = placeOccurrences(
+      occ.map((o) => o.activities),
+      noise,
+      'contiguous',
+      {},
+    )
+    expect(placed).toHaveLength(3)
+    expect(warnings.some((w) => /won't be separated/.test(w))).toBe(true)
+  })
+})
+
+describe('renderTaskFixtureGoldenMd', () => {
+  it('renders N keep blocks that round-trip to N sightings', () => {
+    const blocks = [
+      {
+        title: 'T (1/2)',
+        apps: ['Drive'],
+        activityIds: ['jaro-01-o1', 'jaro-02-o1'],
+        description: 'd1',
+      },
+      {
+        title: 'T (2/2)',
+        apps: ['Docs'],
+        activityIds: ['jaro-01-o2', 'jaro-02-o2'],
+        description: 'd2',
+      },
+    ]
+    const md = renderTaskFixtureGoldenMd('rec', blocks, [noiseAt(10)])
+    const parsed = parseTaskGoldenMd(md)
+    expect(parsed.sightings).toHaveLength(2)
+    expect(parsed.sightings.map((s) => s.verdict)).toEqual(['keep', 'keep'])
+    expect(parsed.sightings[0].activityIds).toEqual(['jaro-01-o1', 'jaro-02-o1'])
+    expect(parsed.sightings[1].title).toBe('T (2/2)')
   })
 })
