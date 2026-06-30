@@ -74,18 +74,25 @@ function isLegacyTokenFor(token: string, app: InstalledApp): boolean {
   )
 }
 
+// A reverse-DNS bundle id (`com.vendor.app`) has two or more dots — the current
+// macOS match-token form. Anything shorter is a legacy last-segment/display-name
+// token or a Windows exe name. Expects an already-normalized token.
+export function isBundleIdToken(token: string): boolean {
+  return token.split('.').length - 1 >= 2
+}
+
 // Upgrade legacy excluded-app tokens to the current match token. A reverse-DNS
-// bundle id (two or more dots) is already the current form, so leave it; anything
-// shorter is a legacy form and gets fuzzy-mapped to the one installed app it
-// identifies (ambiguous or unknown tokens are left as-is — best-effort, never
-// guess). On Windows the exe-name token resolves to itself, so this is a no-op.
+// bundle id is already the current form, so leave it; anything shorter is a
+// legacy form and gets fuzzy-mapped to the one installed app it identifies
+// (ambiguous or unknown tokens are left as-is — best-effort, never guess). On
+// Windows the exe-name token resolves to itself, so this is a no-op.
 export function migrateExcludedAppTokens(
   excludedApps: readonly string[],
   installedApps: readonly InstalledApp[],
 ): string[] {
   return excludedApps.map((entry) => {
     const token = normalizeToken(entry)
-    if (token.split('.').length - 1 >= 2) return entry
+    if (isBundleIdToken(token)) return entry
 
     const resolved = new Set(
       installedApps.filter((app) => isLegacyTokenFor(token, app)).map((app) => app.matchToken),

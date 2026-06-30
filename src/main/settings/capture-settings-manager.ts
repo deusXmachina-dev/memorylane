@@ -13,6 +13,7 @@ import { VENDORS } from '../../shared/types'
 import type { AppEdition } from '../../shared/edition'
 import { getVendorDefaults } from '../../shared/vendor-defaults'
 import {
+  isBundleIdToken,
   migrateExcludedAppTokens,
   normalizeExcludedApps,
   normalizeToken,
@@ -455,7 +456,7 @@ export class CaptureSettingsManager {
     if (process.platform === 'darwin') {
       for (let i = 0; i < before.length; i++) {
         const token = normalizeToken(before[i])
-        if (migrated[i] !== before[i] || token.split('.').length - 1 >= 2) continue
+        if (migrated[i] !== before[i] || isBundleIdToken(token)) continue
         if (installedApps.some((app) => app.matchToken === token)) continue
         log.warn(
           `[CaptureSettings] Excluded app "${before[i]}" could not be migrated to a bundle id and will no longer match`,
