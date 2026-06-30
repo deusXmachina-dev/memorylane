@@ -1,4 +1,4 @@
-import log from '../logger'
+import log from '@main/utils/logger'
 import { MODEL_PRICING_USD_PER_MILLION } from './constants'
 import { describeSemanticError } from './response-utils'
 import type { UsageTrackerLike } from './types'

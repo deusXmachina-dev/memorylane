@@ -9,7 +9,7 @@
 
 import * as fs from 'fs'
 import { StorageService } from '../src/main/storage'
-import { getDefaultDbPath } from '../src/main/paths'
+import { getDefaultDbPath } from '../src/main/utils/paths'
 
 interface CLIArgs {
   dbPath: string

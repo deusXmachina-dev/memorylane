@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from 'child_process'
 import * as fs from 'fs'
 import * as readline from 'readline'
-import log from '../logger'
+import log from '@main/utils/logger'
 import {
   buildMacCommandPayload,
   buildMacSpawnArgs,

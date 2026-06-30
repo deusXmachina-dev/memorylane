@@ -1,15 +1,22 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { InMemoryStream } from '../streams/in-memory-stream'
-import { ActivityProducer, type ActivityProducerStats } from '../activity-producer'
-import { ActivityExtractor } from '../activity-extractor'
-import type { Activity, ActivityProducerConfig, DroppedActivityInfo } from '../activity-types'
+import { ActivityProducer, type ActivityProducerStats } from '@main/activity/activity-producer'
+import { ActivityExtractor } from '@main/activity/activity-extractor'
+import type {
+  Activity,
+  ActivityProducerConfig,
+  DroppedActivityInfo,
+} from '@main/activity/activity-types'
 import type {
   ActivitySink,
   ActivityTransformer,
   ExtractedActivity,
-} from '../activity-extraction-types'
-import type { ActivityEmbeddingService, ActivityOcrService } from '../activity-transformer-types'
+} from '@main/activity/activity-extraction-types'
+import type {
+  ActivityEmbeddingService,
+  ActivityOcrService,
+} from '@main/activity/activity-transformer-types'
 import type { Frame } from '../recorder/screen-capturer'
 import type { EventWindow } from '../../shared/types'
 import type { SemanticRunDiagnostics } from '../semantic/types'

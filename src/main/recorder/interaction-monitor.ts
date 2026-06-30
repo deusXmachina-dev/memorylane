@@ -4,7 +4,7 @@ import { INTERACTION_MONITOR_CONFIG } from '@constants'
 import { InteractionContext } from '../../shared/types'
 import { addAppWatcherListener, AppWatcherEvent } from './app-watcher'
 import { resolveAppWatcherDisplay } from './app-watcher-display'
-import log from '../logger'
+import log from '@main/utils/logger'
 
 // State
 let isRunning = false

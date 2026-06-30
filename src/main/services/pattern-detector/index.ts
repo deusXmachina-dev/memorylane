@@ -18,7 +18,7 @@
 import type { StorageService } from '../../storage'
 import type { InferenceProvider } from '../../llm'
 import { PATTERN_DETECTION_CONFIG } from '../../../shared/constants'
-import log from '../../logger'
+import log from '@main/utils/logger'
 import { EmbeddingService } from '../../processor/embedding'
 import type { PatternDetectorConfig, DetectionRunResult, ProgressCallback } from './types'
 import { DEFAULT_DETECTOR_CONFIG } from './types'

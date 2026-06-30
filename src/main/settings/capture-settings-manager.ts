@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import log from '../logger'
+import log from '@main/utils/logger'
 import type {
   CaptureSettings,
   InstalledApp,
@@ -18,7 +18,7 @@ import {
   normalizeExcludedApps,
   normalizeToken,
   normalizeWildcardPatterns,
-} from '../capture-exclusions'
+} from '@main/capture/capture-exclusions'
 import {
   VISUAL_DETECTOR_CONFIG,
   INTERACTION_MONITOR_CONFIG,
@@ -27,7 +27,7 @@ import {
 import {
   DEFAULT_CAPTURE_HOTKEY_ACCELERATOR,
   normalizeCaptureHotkeyAccelerator,
-} from '../hotkey-capture'
+} from '@main/capture/hotkey-capture'
 
 function normalizeVendor(value: unknown): Vendor {
   return typeof value === 'string' && (VENDORS as readonly string[]).includes(value)

@@ -1,4 +1,4 @@
-import log from '../logger'
+import log from '@main/utils/logger'
 import { SCREEN_CAPTURER_CONFIG } from '@constants'
 import { createScreenCaptureBackend, type ScreenCaptureBackend } from './native-screenshot'
 import type { DurableStream } from '../streams/stream'

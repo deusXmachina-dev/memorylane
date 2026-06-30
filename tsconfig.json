@@ -3,6 +3,7 @@
   "compilerOptions": {
     "paths": {
       "@/*": ["./src/*"],
+      "@main/*": ["./src/main/*"],
       "@components/*": ["./src/renderer/components/*"],
       "@constants": ["./src/shared/constants"],
       "@types": ["./src/shared/types"]

@@ -9,7 +9,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import * as yazl from 'yazl'
-import log from '../logger'
+import log from '@main/utils/logger'
 import type { DumpedFrame, FixtureManifest } from './types'
 import type { EvalEventWindow, EvalFixtureLoad, EvalFixtureSummary } from '../../shared/eval-review'
 import type { EventWindow, InteractionContext } from '../../shared/types'

@@ -2,7 +2,7 @@ import { app, safeStorage } from 'electron'
 import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as path from 'path'
-import log from '../logger'
+import log from '@main/utils/logger'
 import { createPublicInstallationId } from './public-installation-id'
 
 /**

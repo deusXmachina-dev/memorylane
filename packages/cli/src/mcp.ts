@@ -32,13 +32,13 @@ process.stdout.write = process.stderr.write.bind(process.stderr) as typeof proce
 // ---------------------------------------------------------------------------
 // Imports
 // ---------------------------------------------------------------------------
-import { setLogger } from '@main/logger'
+import { setLogger } from '@main/utils/logger'
 
 const noop = (): void => {}
 setLogger({ debug: noop, info: noop })
 
 import { MemoryLaneMCPServer } from '@main/mcp/server'
-import { getDefaultDbPath } from '@main/paths'
+import { getDefaultDbPath } from '@main/utils/paths'
 import { resolveDbPath } from './config'
 import { isNativeBindingError, formatNativeBindingHint } from './native-error'
 

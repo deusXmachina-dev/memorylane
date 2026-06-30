@@ -30,7 +30,7 @@ loadEnv()
 import * as fs from 'fs'
 import * as path from 'path'
 import { VENDOR_PRESETS } from '../src/shared/vendor-defaults'
-import type { SemanticPipelinePreference } from '../src/main/activity-semantic-service'
+import type { SemanticPipelinePreference } from '../src/main/semantic/activity-semantic-service'
 import { scoreDeterministic } from '../src/main/eval/deterministic'
 import { judgeSummary, judgeEquivalence } from '../src/main/eval/judge'
 import { priceUsd, sumCosts } from '../src/main/eval/cost'

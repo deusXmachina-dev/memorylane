@@ -8,7 +8,7 @@
 // Side-effect import: sets process.env.PATH for onnxruntime DLLs on Windows.
 // Must be the first import — onnxruntime-node is loaded transitively via
 // runtime → embedding → @huggingface/transformers during static import resolution.
-import './onnxruntime-path-fix'
+import '@main/system/onnxruntime-path-fix'
 
 import { app, globalShortcut } from 'electron'
 import path from 'node:path'
@@ -17,12 +17,12 @@ import {
   canSyncAutoStartSetting,
   shouldStartHiddenOnLaunch,
   syncAutoStartSetting,
-} from './auto-start'
-import { createCaptureCoordinator } from './capture-orchestrator'
-import { createCaptureHotkeyManager } from './capture-hotkey-manager'
-import log from './logger'
-import './logger-electron'
-import { startPowerMonitoring, shouldPause } from './power-monitor'
+} from '@main/system/auto-start'
+import { createCaptureCoordinator } from '@main/capture/capture-orchestrator'
+import { createCaptureHotkeyManager } from '@main/capture/capture-hotkey-manager'
+import log from '@main/utils/logger'
+import '@main/utils/logger-electron'
+import { startPowerMonitoring, shouldPause } from '@main/monitoring/power-monitor'
 import { CaptureStateManager } from './settings/capture-state-manager'
 import { CaptureSettingsManager } from './settings/capture-settings-manager'
 import { DeviceIdentity } from './settings/device-identity'
@@ -30,7 +30,7 @@ import { listInstalledApps } from './apps/installed-apps'
 import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
 import { PatternDetector } from './services/pattern-detector'
 import { TaskMiner } from './services/task-miner'
-import { TASK_MINING_ENABLED } from './feature-flags'
+import { TASK_MINING_ENABLED } from '@main/system/feature-flags'
 import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
 import { DatabaseUploadSync } from './services/database-upload-sync'
@@ -40,9 +40,12 @@ import { RemoteBlacklistService } from './services/remote-blacklist-service'
 import { readRemoteBlacklist, writeRemoteBlacklist } from './services/remote-blacklist-store'
 import { createMainRuntime, type MainRuntime } from './runtime'
 import { registerEvalMediaScheme, registerEvalMediaProtocol } from './eval/eval-media-protocol'
-import { createObservationController, type ObservationController } from './observation-controller'
-import { getAppDirectoryName } from './paths'
-import { loadAppEditionConfig } from './edition'
+import {
+  createObservationController,
+  type ObservationController,
+} from '@main/capture/observation-controller'
+import { getAppDirectoryName } from '@main/utils/paths'
+import { loadAppEditionConfig } from '@main/system/edition'
 import { ENTERPRISE_BACKEND_CONFIG } from '../shared/constants'
 
 // Keep single-instance behavior in packaged app, but allow dev to run
@@ -340,7 +343,7 @@ app.on('ready', async () => {
   })
 
   if (editionConfig.edition === 'customer') {
-    const { initAutoUpdater } = await import('./updater')
+    const { initAutoUpdater } = await import('@main/system/updater')
     const { sendUpdateState } = await import('./ui/main-window')
     initAutoUpdater(() => {
       void updateTrayMenu()

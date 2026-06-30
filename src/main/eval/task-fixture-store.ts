@@ -11,7 +11,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import * as yazl from 'yazl'
-import log from '../logger'
+import log from '@main/utils/logger'
 import type { TaskFixtureActivity, TaskFixtureManifest } from './task-types'
 import type { TaskFixtureLoad, TaskFixtureSummary } from '../../shared/eval-review'
 

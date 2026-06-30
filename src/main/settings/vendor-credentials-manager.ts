@@ -1,6 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import log from '../logger'
+import log from '@main/utils/logger'
 import type { Vendor, VendorCredentials, VendorStatus } from '../../shared/types'
 import { VENDORS } from '../../shared/types'
 import { isPrivateNetworkHost, registrableDomain } from '../../shared/url-utils'

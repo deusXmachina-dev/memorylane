@@ -4,7 +4,7 @@ import type { StorageService } from '../../storage'
 import type { Sighting } from '../../storage/sighting-repository'
 import type { EmbeddingService } from '../../processor/embedding'
 import type { InferenceProvider } from '../../llm'
-import log from '../../logger'
+import log from '@main/utils/logger'
 import type { TaskMinerConfig, MiningRunResult, ProgressCallback } from './types'
 import { DEFAULT_MINER_CONFIG } from './types'
 import {

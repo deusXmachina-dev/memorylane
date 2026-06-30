@@ -1,5 +1,5 @@
 import * as fs from 'fs'
-import type { ActivityFrame } from '../activity-types'
+import type { ActivityFrame } from '@main/activity/activity-types'
 import { dHashDifferencePercent, loadImageDHash } from './visual-diff'
 
 export async function selectSnapshotFrames(params: {

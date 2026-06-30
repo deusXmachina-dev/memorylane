@@ -7,7 +7,7 @@ import { OPENROUTER_BASE_URL } from './adapters'
 import { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
 import type { Vendor } from '../../shared/types'
 
-vi.mock('../logger', () => ({
+vi.mock('@main/utils/logger', () => ({
   default: {
     debug: vi.fn(),
     info: vi.fn(),

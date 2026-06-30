@@ -1,4 +1,4 @@
-import type { ActivityFrame } from '../activity-types'
+import type { ActivityFrame } from '@main/activity/activity-types'
 import type { SummaryOutcome } from './summary-reason'
 
 export type SemanticMode = 'video' | 'snapshot'

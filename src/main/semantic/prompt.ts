@@ -1,5 +1,5 @@
 import type { InteractionContext } from '../../shared/types'
-import type { Activity } from '../activity-types'
+import type { Activity } from '@main/activity/activity-types'
 import type { SemanticMode } from './types'
 
 export function buildSemanticPrompt(

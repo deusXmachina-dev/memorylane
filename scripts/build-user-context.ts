@@ -23,7 +23,7 @@ loadEnv()
 
 import * as fs from 'fs'
 import { StorageService } from '../src/main/storage/index'
-import { getDefaultDbPath } from '../src/main/paths'
+import { getDefaultDbPath } from '../src/main/utils/paths'
 import { UserContextBuilder } from '../src/main/services/user-context-builder'
 import { USER_CONTEXT_CONFIG } from '../src/shared/constants'
 import { loadCliInferenceProvider } from './cli-inference-provider'

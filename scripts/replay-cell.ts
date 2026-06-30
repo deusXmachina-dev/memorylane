@@ -1,13 +1,13 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import { DefaultActivityTransformer } from '../src/main/activity-transformer'
+import { DefaultActivityTransformer } from '../src/main/activity/activity-transformer'
 import { FfmpegVideoStitcher } from '../src/main/video/video-stitcher'
 import {
   ActivitySemanticService,
   type SemanticFileDebugDumper,
   type SemanticPipelinePreference,
-} from '../src/main/activity-semantic-service'
+} from '../src/main/semantic/activity-semantic-service'
 import { activityOcrService } from '../src/main/processor/ocr'
 import {
   replayFixture,

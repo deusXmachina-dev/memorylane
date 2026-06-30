@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3'
-import log from '../logger'
+import log from '@main/utils/logger'
 import { migrations } from './migrations'
 
 export interface Migration {

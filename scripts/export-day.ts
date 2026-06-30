@@ -26,7 +26,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { StorageService } from '../src/main/storage'
-import { getDefaultDbPath } from '../src/main/paths'
+import { getDefaultDbPath } from '../src/main/utils/paths'
 import { renderTaskGoldenMd } from '../src/main/eval/task-golden-md'
 import { toFixtureActivity } from '../src/main/eval/task-fixture-build'
 import { TASK_FIXTURE_SCHEMA_VERSION, type TaskFixtureManifest } from '../src/main/eval/task-types'

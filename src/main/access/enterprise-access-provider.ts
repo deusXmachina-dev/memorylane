@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { ENTERPRISE_BACKEND_CONFIG } from '../../shared/constants'
 import type { ConsentOutcome, PendingConsent } from '../../shared/types'
-import log from '../logger'
+import log from '@main/utils/logger'
 import type { DeviceIdentity } from '../settings/device-identity'
 import { parseActivationCode } from './activation-code'
 import { BaseAccessProvider, DEVICE_IDENTITY_RETRY_MESSAGE } from './base-access-provider'

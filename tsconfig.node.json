@@ -5,6 +5,8 @@
     "outDir": "dist/node",
     "types": ["node"],
     "paths": {
+      "@/*": ["./src/*"],
+      "@main/*": ["./src/main/*"],
       "@constants": ["./src/shared/constants"]
     }
   },

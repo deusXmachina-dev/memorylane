@@ -1,4 +1,4 @@
-import { StreamJsonlDumper } from '../stream-jsonl-dumper'
+import { StreamJsonlDumper } from '@main/debug/stream-jsonl-dumper'
 import type { DumpedActivity } from './types'
 
 /**

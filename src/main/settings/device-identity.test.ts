@@ -4,7 +4,7 @@ import * as path from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DeviceIdentity, DeviceIdentityUnavailableError } from './device-identity'
 
-vi.mock('../logger', () => ({
+vi.mock('@main/utils/logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 

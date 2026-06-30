@@ -5,7 +5,7 @@ import * as path from 'path'
 import { EvalFixtureStore } from './eval-fixture-store'
 import type { FixtureManifest } from './types'
 
-vi.mock('../logger', () => ({
+vi.mock('@main/utils/logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 

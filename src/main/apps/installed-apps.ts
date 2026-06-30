@@ -3,8 +3,8 @@ import * as os from 'os'
 import * as path from 'path'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
-import log from '../logger'
-import { normalizeToken, tokenFromBundleId } from '../capture-exclusions'
+import log from '@main/utils/logger'
+import { normalizeToken, tokenFromBundleId } from '@main/capture/capture-exclusions'
 import type { InstalledApp } from '../../shared/types'
 
 const execFileAsync = promisify(execFile)

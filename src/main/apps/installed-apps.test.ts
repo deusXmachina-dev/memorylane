@@ -3,7 +3,7 @@ import type { Dirent } from 'fs'
 
 vi.mock('fs/promises', () => ({ readdir: vi.fn() }))
 vi.mock('child_process', () => ({ execFile: vi.fn() }))
-vi.mock('../logger', () => ({
+vi.mock('@main/utils/logger', () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))
 
