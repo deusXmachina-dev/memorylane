@@ -404,6 +404,23 @@ describe('CaptureSettingsManager', () => {
       expect(calls).toBe(0)
       expect(JSON.parse(fs.readFileSync(configPath, 'utf-8')).appMatchSchemaVersion).toBe(1)
     })
+
+    it('does not stamp the version when no apps could be enumerated, so it retries', async () => {
+      fs.writeFileSync(configPath, JSON.stringify({ excludedApps: ['app', 'slackmacgap'] }))
+      const manager = new CaptureSettingsManager(configPath)
+
+      // Enumeration returned empty (transient failure) — leave tokens and version untouched.
+      expect(await manager.migrateAppTokens(async () => [])).toBe(false)
+      expect(manager.get().excludedApps).toEqual(['app', 'slackmacgap'])
+      expect(JSON.parse(fs.readFileSync(configPath, 'utf-8')).appMatchSchemaVersion ?? 0).toBe(0)
+
+      // A later launch with a populated list completes the migration.
+      expect(await manager.migrateAppTokens(async () => installedApps)).toBe(true)
+      expect(manager.get().excludedApps).toEqual([
+        'com.memorylane.app',
+        'com.tinyspeck.slackmacgap',
+      ])
+    })
   })
 
   describe('reset', () => {

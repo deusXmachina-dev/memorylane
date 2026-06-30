@@ -15,6 +15,7 @@ import { getVendorDefaults } from '../../shared/vendor-defaults'
 import {
   migrateExcludedAppTokens,
   normalizeExcludedApps,
+  normalizeToken,
   normalizeWildcardPatterns,
 } from '../capture-exclusions'
 import {
@@ -434,9 +435,33 @@ export class CaptureSettingsManager {
       return false
     }
 
+    // An empty list (a transient enumeration failure that didn't throw) can't
+    // resolve anything; leave the version unstamped and retry on a later launch
+    // rather than permanently abandoning the migration with tokens unchanged.
+    if (installedApps.length === 0) {
+      log.warn('[CaptureSettings] Skipping excluded-app migration (no installed apps enumerated)')
+      return false
+    }
+
     const before = this.settings.excludedApps
     const migrated = migrateExcludedAppTokens(before, installedApps)
     this.save({ excludedApps: migrated, appMatchSchemaVersion: APP_MATCH_SCHEMA_VERSION })
+
+    // On macOS the matcher keys on bundle ids only, so a legacy short-name token
+    // we couldn't resolve (ambiguous or unknown) will silently stop matching.
+    // Surface it so a lapsed exclusion is diagnosable. A token is lapsed when it
+    // was left unchanged, isn't already a reverse-DNS bundle id, and matches no
+    // installed app's identity (the last check spares aliased ids like `whatsapp`).
+    if (process.platform === 'darwin') {
+      for (let i = 0; i < before.length; i++) {
+        const token = normalizeToken(before[i])
+        if (migrated[i] !== before[i] || token.split('.').length - 1 >= 2) continue
+        if (installedApps.some((app) => app.matchToken === token)) continue
+        log.warn(
+          `[CaptureSettings] Excluded app "${before[i]}" could not be migrated to a bundle id and will no longer match`,
+        )
+      }
+    }
     const changed = this.settings.excludedApps.join(' ') !== before.join(' ')
     if (changed) log.info('[CaptureSettings] Migrated excluded-app tokens to bundle ids')
     return changed
