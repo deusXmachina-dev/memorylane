@@ -1,6 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import log from '../logger'
+import log from '@main/utils/logger'
 import type { ManagedExclusions } from '../../shared/types'
 
 const FILE_NAME = 'remote-blacklist.json'

@@ -16,7 +16,7 @@ const mockLogger = {
   error: vi.fn(),
   debug: vi.fn(),
 }
-vi.mock('../logger', () => ({
+vi.mock('@main/utils/logger', () => ({
   default: mockLogger,
 }))
 

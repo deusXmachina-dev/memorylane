@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import * as fsPromises from 'node:fs/promises'
 import path from 'node:path'
 import * as yauzl from 'yauzl'
-import log from '../logger'
+import log from '@main/utils/logger'
 import type { DatabaseImportResult } from '../../shared/types'
 
 interface ImportDatabaseOptions {

@@ -10,11 +10,11 @@ import {
   TimelineEntry,
 } from './formatting'
 import { setDbPath, clearDbPath, type DbPathSource } from './config'
-import { getDefaultDbPath } from '../paths'
+import { getDefaultDbPath } from '@main/utils/paths'
 import type { AppEdition } from '../../shared/edition'
 import type { StorageService, PatternWithStats, PatternSighting } from '../storage'
 import type { EmbeddingService } from '../processor/embedding'
-import log from '../logger'
+import log from '@main/utils/logger'
 
 export interface MCPServices {
   storage: StorageService

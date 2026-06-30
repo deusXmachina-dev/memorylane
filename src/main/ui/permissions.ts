@@ -2,7 +2,7 @@
 
 import { spawn } from 'node:child_process'
 import { systemPreferences, shell, desktopCapturer } from 'electron'
-import log from '../logger'
+import log from '@main/utils/logger'
 
 export type PermissionState = 'granted' | 'denied' | 'unknown'
 

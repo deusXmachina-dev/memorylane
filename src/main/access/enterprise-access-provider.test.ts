@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../logger', () => ({
+vi.mock('@main/utils/logger', () => ({
   default: {
     debug: vi.fn(),
     info: vi.fn(),

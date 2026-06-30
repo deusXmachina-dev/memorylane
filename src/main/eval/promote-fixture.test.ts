@@ -6,7 +6,7 @@ import sharp from 'sharp'
 import { promoteCapture } from './promote-fixture'
 import { parseGoldenMd } from './golden-md'
 
-vi.mock('../logger', () => ({
+vi.mock('@main/utils/logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 

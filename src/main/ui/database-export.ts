@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import * as fsPromises from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import log from '../logger'
+import log from '@main/utils/logger'
 import { buildTimestampedZipName, createZipWithFiles, ensureZipExtension } from './zip'
 import type { DatabaseExportResult } from '../../shared/types'
 

@@ -1,13 +1,13 @@
 import * as fs from 'fs'
 import { ACTIVITY_CONFIG, VISUAL_DETECTOR_CONFIG } from '@constants'
-import log from '../logger'
+import log from '@main/utils/logger'
 import { UsageTracker } from '../services/usage-tracker'
 import { SummaryModeTracker } from '../services/summary-mode-tracker'
-import type { Activity } from '../activity-types'
+import type { Activity } from '@main/activity/activity-types'
 import type {
   ActivitySemanticService as SemanticServiceContract,
   SemanticSummary,
-} from '../activity-transformer-types'
+} from '@main/activity/activity-transformer-types'
 import type { InferenceProvider } from '../llm'
 import { deriveSummaryOutcome } from './summary-reason'
 import {

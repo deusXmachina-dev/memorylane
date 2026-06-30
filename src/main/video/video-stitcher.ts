@@ -6,7 +6,7 @@ import type {
   ActivityVideoAsset,
   ActivityVideoFrameInput,
   ActivityVideoStitcher,
-} from '../activity-transformer-types'
+} from '@main/activity/activity-transformer-types'
 
 const DEFAULT_FRAME_DURATION_MS = 1_000
 const FFMPEG_EXECUTABLE_ENV = 'MEMORYLANE_FFMPEG_EXECUTABLE'

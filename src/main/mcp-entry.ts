@@ -13,10 +13,10 @@
  */
 
 import { Writable } from 'node:stream'
-import { setLogger } from './logger'
-import { loadAppEditionConfig } from './edition'
+import { setLogger } from '@main/utils/logger'
+import { loadAppEditionConfig } from '@main/system/edition'
 import { MemoryLaneMCPServer } from './mcp/server'
-import { getDefaultDbPath } from './paths'
+import { getDefaultDbPath } from '@main/utils/paths'
 import { resolveDbPath } from './mcp/config'
 
 // ---------------------------------------------------------------------------

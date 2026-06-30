@@ -4,7 +4,7 @@ import type {
   PendingConsent,
   SubscriptionPlan,
 } from '../../shared/types'
-import log from '../logger'
+import log from '@main/utils/logger'
 import { DeviceIdentityUnavailableError, type DeviceIdentity } from '../settings/device-identity'
 import type { AccessProvider, AccessStateCallback, AccessUpdatePayload } from './types'
 

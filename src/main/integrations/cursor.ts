@@ -8,7 +8,7 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as os from 'node:os'
-import log from '../logger'
+import log from '@main/utils/logger'
 import { buildAppMcpEntry, getMcpEntryScriptPath } from './app-mcp-entry'
 import {
   detectLegacyAppSignal,

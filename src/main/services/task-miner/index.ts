@@ -22,7 +22,7 @@
 import type { StorageService } from '../../storage'
 import type { InferenceProvider } from '../../llm'
 import { PATTERN_DETECTION_CONFIG } from '../../../shared/constants'
-import log from '../../logger'
+import log from '@main/utils/logger'
 import { EmbeddingService } from '../../processor/embedding'
 import { isSameDay, formatApiError } from '../pattern-detector/helpers'
 import type { TaskMinerConfig, MiningRunResult, ProgressCallback } from './types'

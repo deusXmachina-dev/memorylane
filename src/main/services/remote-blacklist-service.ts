@@ -1,4 +1,4 @@
-import log from '../logger'
+import log from '@main/utils/logger'
 import type { ManagedExclusions } from '../../shared/types'
 import { ENTERPRISE_BACKEND_CONFIG } from '../../shared/constants'
 import { coerceManagedExclusions } from './remote-blacklist-store'

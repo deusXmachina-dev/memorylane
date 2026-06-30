@@ -1,6 +1,6 @@
 import { startAppWatcherMac, stopAppWatcherMac, isAppWatcherRunningMac } from './app-watcher-mac'
 import { startAppWatcherWin, stopAppWatcherWin, isAppWatcherRunningWin } from './app-watcher-win'
-import log from '../logger'
+import log from '@main/utils/logger'
 
 export interface AppWatcherEvent {
   type: 'app_change' | 'window_change' | 'ready' | 'error'

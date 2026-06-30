@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ActivityFrame } from '../activity-types'
+import type { ActivityFrame } from '@main/activity/activity-types'
 import { selectSnapshotFrames } from './sampling'
 
 vi.mock('./visual-diff', () => ({

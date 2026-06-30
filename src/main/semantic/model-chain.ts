@@ -1,4 +1,4 @@
-import log from '../logger'
+import log from '@main/utils/logger'
 import { extractHttpStatus } from './error-classify'
 import { describeSemanticError, safeJsonStringify } from './response-utils'
 import type {

@@ -3,7 +3,7 @@ import type { SearchFilters } from '../../shared/types'
 import type { StoredActivity, ActivitySummary, ActivityDetail } from './types'
 import { vectorToBlob, blobToVector, sanitizeFtsQuery, SQLITE_VEC_KNN_MAX } from './utils'
 import { NON_WEBSITE_HOSTS } from '../../shared/app-utils'
-import log from '../logger'
+import log from '@main/utils/logger'
 
 interface CountRow {
   readonly count: number

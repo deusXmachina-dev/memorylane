@@ -7,10 +7,10 @@ import { EvalRecorder, sanitizeFixtureName } from './eval-recorder'
 import { InMemoryStream } from '../streams/in-memory-stream'
 import type { Frame } from '../recorder/screen-capturer'
 import type { EventWindow } from '../../shared/types'
-import type { PipelineHarness } from '../pipeline-harness'
-import type { RuntimeCaptureController } from '../capture-controller'
+import type { PipelineHarness } from '@main/activity/pipeline-harness'
+import type { RuntimeCaptureController } from '@main/capture/capture-controller'
 
-vi.mock('../logger', () => ({
+vi.mock('@main/utils/logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 

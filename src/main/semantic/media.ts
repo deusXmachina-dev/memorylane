@@ -3,7 +3,7 @@ import * as path from 'path'
 import sharp from 'sharp'
 import { LLM_IMAGE_MAX_WIDTH } from './constants'
 import type { EncodedImage, VideoAssetData } from './types'
-import type { ActivityFrame } from '../activity-types'
+import type { ActivityFrame } from '@main/activity/activity-types'
 
 /** Why a stitched video could not be loaded for the video pipeline. */
 export type VideoLoadRejection = 'missing' | 'empty' | 'oversize'

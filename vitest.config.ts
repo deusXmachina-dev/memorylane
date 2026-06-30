@@ -7,6 +7,8 @@ const buildTimeBackendUrl =
 export default defineConfig({
   resolve: {
     alias: {
+      '@main': resolve(__dirname, 'src/main'),
+      '@': resolve(__dirname, 'src'),
       '@constants': resolve(__dirname, 'src/shared/constants'),
     },
   },

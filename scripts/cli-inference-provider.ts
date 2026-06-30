@@ -20,7 +20,7 @@ import { CaptureSettingsManager } from '../src/main/settings/capture-settings-ma
 import { VendorCredentialsManager } from '../src/main/settings/vendor-credentials-manager'
 import { InferenceProviderImpl } from '../src/main/llm'
 import type { InferenceProvider } from '../src/main/llm'
-import { getAppDataPath } from '../src/main/paths'
+import { getAppDataPath } from '../src/main/utils/paths'
 import { VENDORS, type Vendor } from '../src/shared/types'
 
 const DEFAULT_API_KEY_ENV: Record<Vendor, string> = {

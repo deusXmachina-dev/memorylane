@@ -10,7 +10,7 @@ function setPlatform(platform: NodeJS.Platform): void {
 }
 
 function mockLogger(): void {
-  vi.doMock('../logger', () => ({
+  vi.doMock('@main/utils/logger', () => ({
     default: { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn() },
   }))
 }
@@ -192,7 +192,7 @@ describe('app-watcher backend selection and fan-out', () => {
       stopAppWatcherWin: vi.fn(),
       isAppWatcherRunningWin: vi.fn().mockReturnValue(false),
     }))
-    vi.doMock('../logger', () => ({
+    vi.doMock('@main/utils/logger', () => ({
       default: { warn, info: vi.fn(), debug: vi.fn(), error: vi.fn() },
     }))
 

@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import log from '../logger'
+import log from '@main/utils/logger'
 import { isSameDay } from './pattern-detector/helpers'
 import { type StripOptions } from './strip-database-for-upload'
 

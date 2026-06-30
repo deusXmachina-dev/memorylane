@@ -41,7 +41,7 @@ vi.mock('./app-watcher', () => ({
 vi.mock('./app-watcher-display', () => ({
   resolveAppWatcherDisplay: vi.fn(() => ({ displayId: 1, source: 'window' })),
 }))
-vi.mock('../logger', () => ({
+vi.mock('@main/utils/logger', () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))
 

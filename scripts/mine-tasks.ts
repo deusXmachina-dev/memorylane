@@ -27,7 +27,7 @@ loadEnv()
 
 import * as fs from 'fs'
 import { StorageService } from '../src/main/storage/index'
-import { getDefaultDbPath } from '../src/main/paths'
+import { getDefaultDbPath } from '../src/main/utils/paths'
 import { TaskMiner } from '../src/main/services/task-miner'
 import { PATTERN_DETECTION_CONFIG } from '../src/shared/constants'
 import { loadCliInferenceProvider } from './cli-inference-provider'

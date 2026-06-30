@@ -1,7 +1,7 @@
 import { pipeline, env } from '@huggingface/transformers'
-import log from '../logger'
-import type { ActivityEmbeddingService } from '../activity-transformer-types'
-import { getBundledModelPath, getModelCacheDir } from '../paths'
+import log from '@main/utils/logger'
+import type { ActivityEmbeddingService } from '@main/activity/activity-transformer-types'
+import { getBundledModelPath, getModelCacheDir } from '@main/utils/paths'
 
 // 'all-MiniLM-L6-v2' is a good balance of speed and quality for local embeddings.
 const MODEL_NAME = 'Xenova/all-MiniLM-L6-v2'

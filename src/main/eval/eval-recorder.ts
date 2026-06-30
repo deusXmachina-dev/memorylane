@@ -16,12 +16,12 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
-import log from '../logger'
+import log from '@main/utils/logger'
 import type { StreamSubscription } from '../streams/stream'
-import type { PipelineHarness } from '../pipeline-harness'
-import type { RuntimeCaptureController } from '../capture-controller'
-import { FrameDebugDumper } from '../frame-debug-dump'
-import { EventWindowDebugDumper } from '../event-window-debug-dump'
+import type { PipelineHarness } from '@main/activity/pipeline-harness'
+import type { RuntimeCaptureController } from '@main/capture/capture-controller'
+import { FrameDebugDumper } from '@main/debug/frame-debug-dump'
+import { EventWindowDebugDumper } from '@main/debug/event-window-debug-dump'
 import { ActivityDebugDumper } from './activity-debug-dump'
 import { promoteCapture, type PromoteCaptureResult } from './promote-fixture'
 

@@ -4,11 +4,11 @@
 
 import { app, Tray, Menu, nativeImage } from 'electron'
 import path from 'node:path'
-import log from '../logger'
+import log from '@main/utils/logger'
 import { formatBytes, formatNumber } from '../utils/formatters'
 import type { StorageService } from '../storage'
 import { openMainWindow } from './main-window'
-import { getUpdateState, quitAndInstall } from '../updater'
+import { getUpdateState, quitAndInstall } from '@main/system/updater'
 import { createTrayPrivacyState } from './tray-privacy-state'
 import { CAPTURE_PAUSE_CONFIG, formatPauseDuration } from '../../shared/constants'
 

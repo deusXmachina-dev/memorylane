@@ -2,7 +2,7 @@ import type { LanguageModel } from 'ai'
 import type { Vendor, VendorCredentials } from '../../shared/types'
 import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
 import { createSdkProvider, rawHttpBaseURL, vendorSupportsRawHttp } from './adapters'
-import log from '../logger'
+import log from '@main/utils/logger'
 
 export interface VendorRouteSnapshot {
   vendor: Vendor

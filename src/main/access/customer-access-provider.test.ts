@@ -10,7 +10,7 @@ vi.mock('electron', () => ({
   },
 }))
 
-vi.mock('../logger', () => ({
+vi.mock('@main/utils/logger', () => ({
   default: {
     debug: vi.fn(),
     info: vi.fn(),

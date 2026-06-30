@@ -9,7 +9,7 @@ import {
   INTERACTION_MONITOR_CONFIG,
   ACTIVITY_CONFIG,
 } from '../../shared/constants'
-import { DEFAULT_CAPTURE_HOTKEY_ACCELERATOR } from '../hotkey-capture'
+import { DEFAULT_CAPTURE_HOTKEY_ACCELERATOR } from '@main/capture/hotkey-capture'
 
 function makeTmpPath(): string {
   return path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ml-settings-test-')), 'settings.json')

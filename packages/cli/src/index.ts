@@ -1,7 +1,7 @@
 // NODE_ENV=production and console.log→stderr redirect are injected
 // by tsup banner (tsup.config.ts) so they run before any module init.
 
-import { setLogger } from '@main/logger'
+import { setLogger } from '@main/utils/logger'
 
 const noop = (): void => {}
 setLogger({ debug: noop, info: noop })
@@ -9,7 +9,7 @@ setLogger({ debug: noop, info: noop })
 import * as fs from 'fs'
 import * as path from 'path'
 import { StorageService } from '@main/storage'
-import { getDefaultDbPath } from '@main/paths'
+import { getDefaultDbPath } from '@main/utils/paths'
 import { parseTimeString } from '@main/mcp/parse-time'
 import { sampleEntries } from '@main/mcp/formatting'
 import { resolveDbPath, setDbPath, getConfigFilePath } from './config'

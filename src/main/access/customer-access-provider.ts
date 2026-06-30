@@ -2,7 +2,7 @@ import { shell } from 'electron'
 import { MANAGED_KEY_CONFIG } from '../../shared/constants'
 import type { ConsentOutcome, PendingConsent, SubscriptionPlan } from '../../shared/types'
 import { isSameRegistrableDomain } from '../../shared/url-utils'
-import log from '../logger'
+import log from '@main/utils/logger'
 import type { DeviceIdentity } from '../settings/device-identity'
 import { BaseAccessProvider } from './base-access-provider'
 import {

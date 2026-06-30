@@ -1,6 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import log from '../logger'
+import log from '@main/utils/logger'
 
 const DEFAULT_EXPORT_INTERVAL_MS = 24 * 60 * 60 * 1000
 

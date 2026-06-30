@@ -4,7 +4,7 @@ import * as path from 'path'
 import * as fs from 'fs'
 import { APP_WATCHER_CONFIG } from '@constants'
 import { AppWatcherEvent } from './app-watcher'
-import log from '../logger'
+import log from '@main/utils/logger'
 
 let proc: ChildProcess | null = null
 let onEvent: ((event: AppWatcherEvent) => void) | null = null

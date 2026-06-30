@@ -5,7 +5,7 @@ import * as path from 'path'
 import { TaskFixtureStore, sanitizeFixtureName } from './task-fixture-store'
 import { TASK_FIXTURE_SCHEMA_VERSION, type TaskFixtureActivity } from './task-types'
 
-vi.mock('../logger', () => ({
+vi.mock('@main/utils/logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 

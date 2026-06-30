@@ -157,9 +157,10 @@ The `enode.sh` wrapper sets `ELECTRON_RUN_AS_NODE=1` and executes the command th
 - Source maps enabled for debugging
 - Path aliases (configured in both Vite and TypeScript):
   - `@/` maps to `src/`
+  - `@main/` maps to `src/main/`
   - `@components/` maps to `src/renderer/components/`
   - `@types` maps to `src/shared/types`
-  - Use these aliases instead of deep relative paths in renderer code
+  - Use these aliases instead of deep relative paths. `src/main` modules import siblings via `@main/<dir>/...` so files stay movable between subdirectories.
 
 ## UI Guidelines
 

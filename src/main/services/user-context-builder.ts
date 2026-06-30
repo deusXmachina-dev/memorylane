@@ -14,7 +14,7 @@ import type { StorageService, ActivityDetail } from '../storage'
 import type { InferenceProvider } from '../llm'
 import type { UserContext } from '../storage/user-context-repository'
 import { USER_CONTEXT_CONFIG } from '../../shared/constants'
-import log from '../logger'
+import log from '@main/utils/logger'
 
 // ---------------------------------------------------------------------------
 // Config

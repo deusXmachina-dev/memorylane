@@ -1,5 +1,5 @@
 import { generateText } from 'ai'
-import log from '../logger'
+import log from '@main/utils/logger'
 import type { InferenceProvider } from '../llm'
 import { extractJsonObject } from '../services/pattern-detector/helpers'
 
