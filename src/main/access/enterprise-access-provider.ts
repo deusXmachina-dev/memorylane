@@ -105,7 +105,10 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
   private tokenRefreshTimer: ReturnType<typeof setTimeout> | null = null
   private pendingConsent: PendingConsentState | null = null
 
-  constructor(deviceIdentity: DeviceIdentity) {
+  constructor(
+    deviceIdentity: DeviceIdentity,
+    private readonly appVersion: string,
+  ) {
     super(createInitialAccessState('enterprise'), deviceIdentity)
   }
 
@@ -392,7 +395,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
         'Content-Type': 'application/json',
         ...bearer(tenantToken),
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, app_version: this.appVersion }),
     })
 
     if (response.status === 502) {

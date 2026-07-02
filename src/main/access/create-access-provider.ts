@@ -7,8 +7,9 @@ import type { AccessProvider } from './types'
 export function createAccessProvider(
   edition: AppEdition,
   deviceIdentity: DeviceIdentity,
+  appVersion: string,
 ): AccessProvider {
   return edition === 'enterprise'
-    ? new EnterpriseAccessProvider(deviceIdentity)
+    ? new EnterpriseAccessProvider(deviceIdentity, appVersion)
     : new CustomerAccessProvider(deviceIdentity)
 }

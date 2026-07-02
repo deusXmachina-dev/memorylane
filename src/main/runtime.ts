@@ -224,7 +224,7 @@ export async function createMainRuntime(params: {
   interactionMonitor.onInteraction(interactionHandler)
 
   const deviceIdentity = params.deviceIdentity ?? new DeviceIdentity()
-  const accessProvider = createAccessProvider(params.edition, deviceIdentity)
+  const accessProvider = createAccessProvider(params.edition, deviceIdentity, app.getVersion())
 
   // In-app eval recorder (Developer mode). Inert until start() is called; ships
   // in every build but does nothing unless the hidden UI invokes it.

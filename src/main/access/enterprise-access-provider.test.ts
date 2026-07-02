@@ -14,6 +14,7 @@ import { EnterpriseAccessProvider } from './enterprise-access-provider'
 import { ENTERPRISE_BACKEND_CONFIG } from '../../shared/constants'
 import { DeviceIdentityUnavailableError, type DeviceIdentity } from '../settings/device-identity'
 
+const TEST_APP_VERSION = '9.9.9'
 const TENANT_TOKEN = 'tt_GigKRAyNbQ1U8jBSEKTq7uiiufT392Si'
 const EMAIL = 'alice@corp.com'
 
@@ -78,7 +79,7 @@ describe('EnterpriseAccessProvider', () => {
     const responses = [descriptorResponse(), pdfResponse()]
     globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, TEST_APP_VERSION)
     const updates: Array<{ status: string | null }> = []
     provider.setUpdateCallback((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
@@ -96,7 +97,7 @@ describe('EnterpriseAccessProvider', () => {
     const fetchMock = vi.fn() as unknown as typeof fetch
     globalThis.fetch = fetchMock
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, TEST_APP_VERSION)
     const updates: Array<{ status: string | null; error: string | null }> = []
     provider.setUpdateCallback((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
@@ -114,7 +115,7 @@ describe('EnterpriseAccessProvider', () => {
       descriptorResponse({ contentType: 'text/html' }),
     ) as unknown as typeof fetch
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, TEST_APP_VERSION)
     const updates: Array<{ status: string | null }> = []
     provider.setUpdateCallback((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
@@ -129,7 +130,7 @@ describe('EnterpriseAccessProvider', () => {
     const fetchMock = vi.fn(async () => responses.shift() as Response) as unknown as typeof fetch
     globalThis.fetch = fetchMock
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, TEST_APP_VERSION)
     const updates: Array<{ status: string | null; error: string | null }> = []
     provider.setUpdateCallback((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
@@ -152,7 +153,7 @@ describe('EnterpriseAccessProvider', () => {
     ]
     globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, TEST_APP_VERSION)
     const updates: Array<{ status: string | null }> = []
     provider.setUpdateCallback((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
@@ -193,7 +194,7 @@ describe('EnterpriseAccessProvider', () => {
       return responses.shift() as Response
     }) as typeof fetch
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, TEST_APP_VERSION)
     const updates: Array<{ status: string | null; payload?: unknown }> = []
     provider.setUpdateCallback((state, payload) => {
       updates.push({ status: state.enterpriseActivationStatus, payload })
@@ -213,6 +214,7 @@ describe('EnterpriseAccessProvider', () => {
       device_id: 'device-123',
       email: EMAIL,
       outcome: 'accepted',
+      app_version: TEST_APP_VERSION,
     })
     expect(activateBody).not.toHaveProperty('document_version')
 
@@ -250,7 +252,7 @@ describe('EnterpriseAccessProvider', () => {
     ]
     globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, TEST_APP_VERSION)
     const updates: Array<{ status: string | null }> = []
     provider.setUpdateCallback((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
@@ -269,7 +271,7 @@ describe('EnterpriseAccessProvider', () => {
       json: async () => ({ state: 'pending_review' }),
     })) as unknown as typeof fetch
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, TEST_APP_VERSION)
     const updates: Array<{ status: string | null; error: string | null }> = []
     provider.setUpdateCallback((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
@@ -301,7 +303,7 @@ describe('EnterpriseAccessProvider', () => {
     ]
     globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, TEST_APP_VERSION)
     const updates: Array<{ status: string | null; payload?: unknown }> = []
     provider.setUpdateCallback((state, payload) => {
       updates.push({ status: state.enterpriseActivationStatus, payload })
@@ -329,7 +331,7 @@ describe('EnterpriseAccessProvider', () => {
       },
     } as unknown as DeviceIdentity
 
-    const provider = new EnterpriseAccessProvider(throwingIdentity)
+    const provider = new EnterpriseAccessProvider(throwingIdentity, TEST_APP_VERSION)
     const updates: Array<{ status: string | null }> = []
     provider.setUpdateCallback((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
@@ -385,7 +387,7 @@ describe('EnterpriseAccessProvider', () => {
     ]
     globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, TEST_APP_VERSION)
     const updates: Array<{ status: string | null; payload?: unknown }> = []
     provider.setUpdateCallback((state, payload) => {
       updates.push({ status: state.enterpriseActivationStatus, payload })
@@ -435,7 +437,7 @@ describe('EnterpriseAccessProvider', () => {
     const fetchMock = vi.fn(async () => responses.shift() as Response) as unknown as typeof fetch
     globalThis.fetch = fetchMock
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, TEST_APP_VERSION)
     await provider.activateEnterpriseLicense(ACTIVATION_CODE)
     await provider.submitConsentDecision('accepted')
 
@@ -451,6 +453,7 @@ describe('EnterpriseAccessProvider', () => {
       email: EMAIL,
       document_version: 7,
       outcome: 'accepted',
+      app_version: TEST_APP_VERSION,
     })
   })
 
@@ -474,7 +477,7 @@ describe('EnterpriseAccessProvider', () => {
     const fetchMock = vi.fn(async () => responses.shift() as Response) as unknown as typeof fetch
     globalThis.fetch = fetchMock
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, TEST_APP_VERSION)
     await provider.activateEnterpriseLicense(ACTIVATION_CODE)
     await provider.submitConsentDecision('accepted')
     await vi.advanceTimersByTimeAsync(ENTERPRISE_BACKEND_CONFIG.POLL_INTERVAL_MS)
@@ -510,7 +513,7 @@ describe('EnterpriseAccessProvider', () => {
     ]
     globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, TEST_APP_VERSION)
     const updates: Array<{ status: string | null }> = []
     provider.setUpdateCallback((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
@@ -547,7 +550,7 @@ describe('EnterpriseAccessProvider', () => {
     ]
     globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, TEST_APP_VERSION)
     const updates: Array<{ status: string | null }> = []
     provider.setUpdateCallback((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
@@ -572,7 +575,7 @@ describe('EnterpriseAccessProvider', () => {
     ]
     globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, TEST_APP_VERSION)
     const updates: Array<{ status: string | null }> = []
     provider.setUpdateCallback((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
@@ -590,7 +593,7 @@ describe('EnterpriseAccessProvider', () => {
     ) as unknown as typeof fetch
     globalThis.fetch = fetchMock
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, TEST_APP_VERSION)
     await provider.activateEnterpriseLicense(ACTIVATION_CODE)
 
     const before = (fetchMock as unknown as { mock: { calls: unknown[] } }).mock.calls.length
@@ -603,7 +606,7 @@ describe('EnterpriseAccessProvider', () => {
     const responses = [descriptorResponse(), pdfResponse()]
     globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, TEST_APP_VERSION)
     const updates: Array<{ status: string | null; error: string | null }> = []
     provider.setUpdateCallback((state) => {
       updates.push({
@@ -628,7 +631,7 @@ describe('EnterpriseAccessProvider', () => {
       json: async () => ({ error: 'unauthorized' }),
     })) as unknown as typeof fetch
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, TEST_APP_VERSION)
     const updates: Array<{ status: string | null; error: string | null }> = []
     provider.setUpdateCallback((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
@@ -646,7 +649,7 @@ describe('EnterpriseAccessProvider', () => {
       json: async () => ({ activated: false }),
     })) as unknown as typeof fetch
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, TEST_APP_VERSION)
     const updates: Array<{ status: string | null; payload?: unknown }> = []
     provider.setUpdateCallback((state, payload) => {
       updates.push({ status: state.enterpriseActivationStatus, payload })
