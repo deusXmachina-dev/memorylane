@@ -38,6 +38,8 @@ import { LogUploadSync } from './services/log-upload-sync'
 import { readLogUploadState, writeLogUploadState } from './services/log-upload-store'
 import { RemoteBlacklistService } from './services/remote-blacklist-service'
 import { readRemoteBlacklist, writeRemoteBlacklist } from './services/remote-blacklist-store'
+import { DeviceReportSync } from './services/device-report-sync'
+import { readDeviceReportState, writeDeviceReportState } from './services/device-report-store'
 import { createMainRuntime, type MainRuntime } from './runtime'
 import { registerEvalMediaScheme, registerEvalMediaProtocol } from './eval/eval-media-protocol'
 import {
@@ -46,7 +48,7 @@ import {
 } from '@main/capture/observation-controller'
 import { getAppDirectoryName } from '@main/utils/paths'
 import { loadAppEditionConfig } from '@main/system/edition'
-import { ENTERPRISE_BACKEND_CONFIG } from '../shared/constants'
+import { ENTERPRISE_BACKEND_CONFIG, MANAGED_KEY_CONFIG } from '../shared/constants'
 
 // Keep single-instance behavior in packaged app, but allow dev to run
 // alongside production for local debugging.
@@ -127,6 +129,7 @@ let rawDatabaseExportSync: RawDatabaseExportSync | null = null
 let databaseUploadSync: DatabaseUploadSync | null = null
 let logUploadSync: LogUploadSync | null = null
 let remoteBlacklist: RemoteBlacklistService | null = null
+let deviceReportSync: DeviceReportSync | null = null
 let observation: ObservationController | null = null
 
 // Blocks `app.quit()` until all subscribers to native helpers have released
@@ -143,6 +146,7 @@ app.on('before-quit', (event) => {
 
   runtime?.accessProvider.stopPeriodicRefresh()
   remoteBlacklist?.stop()
+  deviceReportSync?.stop()
   observation?.dispose()
 
   void Promise.allSettled([
@@ -241,6 +245,22 @@ app.on('ready', async () => {
     getInstallationId: () => deviceIdentity.getPublicInstallationId(),
   })
   rawDatabaseExportSync.start()
+
+  // Report the running app version in both editions so the fleet's version
+  // distribution is visible server-side. Picks the per-edition backend base URL.
+  const reportBackendUrl =
+    editionConfig.edition === 'enterprise'
+      ? ENTERPRISE_BACKEND_CONFIG.BACKEND_URL
+      : MANAGED_KEY_CONFIG.BACKEND_URL
+  deviceReportSync = new DeviceReportSync({
+    getDeviceId: () => deviceIdentity.getDeviceId(),
+    getBackendUrl: () => reportBackendUrl,
+    getVersion: () => app.getVersion(),
+    edition: editionConfig.edition,
+    readStored: () => readDeviceReportState(),
+    writeStored: (state) => writeDeviceReportState(state),
+  })
+  deviceReportSync.start()
 
   if (editionConfig.edition === 'enterprise') {
     databaseUploadSync = new DatabaseUploadSync({
