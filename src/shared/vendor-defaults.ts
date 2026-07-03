@@ -30,6 +30,8 @@ interface VendorModelDefaults {
 export const VENDOR_PRESETS: Record<Vendor, VendorPresets> = {
   openrouter: {
     semanticVideo: [
+      { id: 'google/gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite' },
+      { id: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash' },
       { id: 'google/gemini-2.5-flash-lite-preview-09-2025', label: 'Gemini 2.5 Flash Lite' },
       { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
     ],
