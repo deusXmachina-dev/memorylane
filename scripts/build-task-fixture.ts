@@ -41,7 +41,7 @@ loadEnv()
 import * as fs from 'fs'
 import * as path from 'path'
 import { StorageService } from '../src/main/storage'
-import { getDefaultDbPath } from '../src/main/paths'
+import { getDefaultDbPath } from '../src/main/utils/paths'
 import { PATTERN_DETECTION_CONFIG } from '../src/shared/constants'
 import { loadGoldenMd } from '../src/main/eval/golden-md'
 import {
