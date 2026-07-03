@@ -254,6 +254,10 @@ app.on('ready', async () => {
       : MANAGED_KEY_CONFIG.BACKEND_URL
   deviceReportSync = new DeviceReportSync({
     getDeviceId: () => deviceIdentity.getDeviceId(),
+    isActivated:
+      editionConfig.edition === 'enterprise'
+        ? () => runtime?.accessProvider.getAccessState().isEnterpriseActivated ?? false
+        : () => true,
     getBackendUrl: () => reportBackendUrl,
     getVersion: () => app.getVersion(),
     edition: editionConfig.edition,

@@ -24,6 +24,7 @@ describe('DeviceReportSync', () => {
   function makeService(
     overrides: Partial<{
       getDeviceId: () => string
+      isActivated: () => boolean
       getBackendUrl: () => string
       getVersion: () => string
       readStored: () => { version: string | null } | null
@@ -33,6 +34,7 @@ describe('DeviceReportSync', () => {
     const writeStored = overrides.writeStored ?? vi.fn()
     const service = new DeviceReportSync({
       getDeviceId: overrides.getDeviceId ?? (() => 'device-123'),
+      isActivated: overrides.isActivated ?? (() => true),
       getBackendUrl: overrides.getBackendUrl ?? (() => 'https://backend.test'),
       getVersion: overrides.getVersion ?? (() => '1.3.0'),
       edition: 'customer',
@@ -96,6 +98,22 @@ describe('DeviceReportSync', () => {
     await service.sync()
 
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('skips while inactive, then reports once activated', async () => {
+    const fetchMock = vi.fn(async () => okResponse())
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    let activated = false
+    const { service, writeStored } = makeService({ isActivated: () => activated })
+    await service.sync()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(writeStored).not.toHaveBeenCalled()
+
+    activated = true
+    await service.sync()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(writeStored).toHaveBeenCalledWith({ version: '1.3.0' })
   })
 
   it('does not record the version on a non-200 and retries on the next sync', async () => {

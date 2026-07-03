@@ -10,6 +10,8 @@ const DEFAULT_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
 
 export interface DeviceReportSyncParams {
   getDeviceId: () => string
+  /** Enterprise gates on activation; customer always reports (install-base count). */
+  isActivated: () => boolean
   getBackendUrl: () => string
   getVersion: () => string
   edition: AppEdition
@@ -22,16 +24,13 @@ export interface DeviceReportSyncParams {
 
 /**
  * Reports the running app version to the backend so the fleet's version
- * distribution is visible server-side. Runs in both editions (device identity is
- * edition-agnostic) and is not gated on activation or sync settings — the version
- * is low-sensitivity and we want accurate install-base counts.
- *
- * It reports at startup and thereafter only when the version differs from the
- * last one the backend confirmed. A failed report leaves the marker un-advanced,
- * so the timer retries until one lands; after that every tick is a no-op.
+ * distribution is visible server-side. Gated on `isActivated()` (enterprise waits
+ * for activation; customer always reports). Reports on change only; a failed or
+ * inactive pass leaves the marker un-advanced so the timer retries until it lands.
  */
 export class DeviceReportSync {
   private readonly getDeviceId: () => string
+  private readonly isActivated: () => boolean
   private readonly getBackendUrl: () => string
   private readonly getVersion: () => string
   private readonly edition: AppEdition
@@ -45,6 +44,7 @@ export class DeviceReportSync {
 
   constructor(params: DeviceReportSyncParams) {
     this.getDeviceId = params.getDeviceId
+    this.isActivated = params.isActivated
     this.getBackendUrl = params.getBackendUrl
     this.getVersion = params.getVersion
     this.edition = params.edition
@@ -68,11 +68,9 @@ export class DeviceReportSync {
     }
   }
 
-  /** One report pass. Skips while a prior pass is in flight, the backend URL is
-   * unset, or the running version was already confirmed; on a clean 200 it
-   * records the version so subsequent passes go quiet. */
+  /** One report pass; no-ops unless activated, configured, and on a new version. */
   async sync(): Promise<void> {
-    if (this.syncing) return
+    if (this.syncing || !this.isActivated()) return
     const base = this.getBackendUrl()
     if (!base) return
     const version = this.getVersion()
@@ -89,8 +87,6 @@ export class DeviceReportSync {
         },
         body: JSON.stringify({ app_version: version, platform: backendPlatformToken() }),
       })
-      // Any non-200 is a failure: leave lastReported un-advanced so the next tick
-      // retries. Only a clean 200 records the version.
       if (!response.ok) {
         throw new Error(`Device report failed (${response.status})`)
       }
