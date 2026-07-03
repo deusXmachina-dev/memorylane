@@ -1,4 +1,5 @@
 import log from '@main/utils/logger'
+import { backendPlatformToken } from '@main/utils/platform'
 import type { AppEdition } from '../../shared/edition'
 import type { DeviceReportState } from './device-report-store'
 
@@ -6,16 +7,6 @@ import type { DeviceReportState } from './device-report-store'
 // confirmed reported, every tick is a cheap no-op, so an hourly retry is plenty
 // to recover from a backend outage at startup without adding traffic.
 const DEFAULT_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
-
-function currentPlatform(): string {
-  // Match the token vocabulary the backend expects (mirrors the mapping in
-  // remote-blacklist-service.ts).
-  return process.platform === 'darwin'
-    ? 'macos'
-    : process.platform === 'win32'
-      ? 'windows'
-      : process.platform
-}
 
 export interface DeviceReportSyncParams {
   getDeviceId: () => string
@@ -96,7 +87,7 @@ export class DeviceReportSync {
           Authorization: `Bearer ${this.getDeviceId()}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ version, platform: currentPlatform(), edition: this.edition }),
+        body: JSON.stringify({ app_version: version, platform: backendPlatformToken() }),
       })
       // Any non-200 is a failure: leave lastReported un-advanced so the next tick
       // retries. Only a clean 200 records the version.

@@ -8,11 +8,7 @@ import { DeviceReportSync } from './device-report-sync'
 import { DeviceIdentityUnavailableError } from '../settings/device-identity'
 
 const EXPECTED_PLATFORM =
-  process.platform === 'darwin'
-    ? 'macos'
-    : process.platform === 'win32'
-      ? 'windows'
-      : process.platform
+  process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : null
 
 function okResponse(): Response {
   return { ok: true, status: 200, json: async () => ({}) } as unknown as Response
@@ -63,9 +59,8 @@ describe('DeviceReportSync', () => {
     expect(init.method).toBe('POST')
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer device-123')
     expect(JSON.parse(init.body as string)).toEqual({
-      version: '1.3.0',
+      app_version: '1.3.0',
       platform: EXPECTED_PLATFORM,
-      edition: 'customer',
     })
     expect(writeStored).toHaveBeenCalledWith({ version: '1.3.0' })
   })
