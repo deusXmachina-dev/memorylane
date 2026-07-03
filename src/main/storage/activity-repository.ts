@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3'
 import type { SearchFilters } from '../../shared/types'
 import type { StoredActivity, ActivitySummary, ActivityDetail } from './types'
-import { vectorToBlob, blobToVector, sanitizeFtsQuery, SQLITE_VEC_KNN_MAX } from './utils'
+import { vectorToBlob, sanitizeFtsQuery, SQLITE_VEC_KNN_MAX } from './utils'
 import { NON_WEBSITE_HOSTS } from '../../shared/app-utils'
 import log from '@main/utils/logger'
 
@@ -23,8 +23,8 @@ export class ActivityRepository {
     const insert = this.db.transaction(() => {
       this.db
         .prepare(
-          `INSERT INTO activities (id, start_timestamp, end_timestamp, app_name, window_title, tld, summary, summary_model, ocr_text, vector)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO activities (id, start_timestamp, end_timestamp, app_name, window_title, tld, summary, summary_model, ocr_text)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           activity.id,
@@ -36,7 +36,6 @@ export class ActivityRepository {
           activity.summary,
           activity.summaryModel,
           activity.ocrText,
-          blob,
         )
 
       this.db
@@ -166,7 +165,7 @@ export class ActivityRepository {
     const placeholders = ids.map(() => '?').join(', ')
     const rows = this.db
       .prepare(
-        `SELECT id, start_timestamp, end_timestamp, app_name, window_title, tld, summary, summary_model, ocr_text, vector
+        `SELECT id, start_timestamp, end_timestamp, app_name, window_title, tld, summary, summary_model, ocr_text
        FROM activities
        WHERE id IN (${placeholders})`,
       )
@@ -313,7 +312,9 @@ export class ActivityRepository {
       summary: row.summary as string,
       summaryModel: (row.summary_model as string) ?? '',
       ocrText: row.ocr_text as string,
-      vector: row.vector ? blobToVector(row.vector as Buffer) : [],
+      // Embeddings now live solely in activities_vec; getByIds no longer reads
+      // them back (no production caller needs the per-activity vector here).
+      vector: [],
     }
   }
 

@@ -15,6 +15,7 @@ import { migration as migration0003 } from './migrations/0003_fts_sync_triggers'
 import * as os from 'os'
 import * as path from 'path'
 import { v, deleteDbFiles } from './test-utils'
+import { blobToVector } from './utils'
 
 // ---------------------------------------------------------------------------
 // StorageService lifecycle and metadata
@@ -317,7 +318,12 @@ describe('context_events migration', () => {
     expect(row.summary).toBe('greeting')
     expect(row.windowTitle).toBe('')
     expect(row.tld).toBeNull()
-    expect(row.vector[0]).toBeCloseTo(0.1)
+    // The migrated embedding now lives in activities_vec, not on the row.
+    const vecRow = storage
+      .getDatabase()
+      .prepare('SELECT embedding FROM activities_vec WHERE id = ?')
+      .get('evt-1') as { embedding: Buffer }
+    expect(blobToVector(vecRow.embedding)[0]).toBeCloseTo(0.1)
 
     storage.close()
   })

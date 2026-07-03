@@ -5,6 +5,7 @@ import { applyMigrations } from './migrator'
 import * as os from 'os'
 import * as path from 'path'
 import { v, deleteDbFiles, createStoredActivity } from './test-utils'
+import { blobToVector } from './utils'
 
 describe('ActivityRepository', () => {
   const TEST_DB_PATH = path.join(os.tmpdir(), 'temp_repo_test.db')
@@ -39,8 +40,6 @@ describe('ActivityRepository', () => {
     expect(retrieved[0].summary).toBe('Editing TypeScript')
     expect(retrieved[0].appName).toBe('VS Code')
     expect(retrieved[0].ocrText).toBe('function hello()')
-    expect(retrieved[0].vector.length).toBe(384)
-    expect(retrieved[0].vector[0]).toBeCloseTo(0.1)
   })
 
   describe('searchFTS', () => {
@@ -541,17 +540,21 @@ describe('ActivityRepository', () => {
       const original = v(0.123456789, -0.987654321, 0.5)
       storage.activities.add(createStoredActivity({ id: 'precision-1', vector: original }))
 
-      const retrieved = storage.activities.getByIds(['precision-1'])
-      expect(retrieved.length).toBe(1)
-      expect(retrieved[0].vector.length).toBe(384)
+      // The embedding lives solely in activities_vec now; read it back from there.
+      const row = storage
+        .getDatabase()
+        .prepare('SELECT embedding FROM activities_vec WHERE id = ?')
+        .get('precision-1') as { embedding: Buffer }
+      const retrieved = blobToVector(row.embedding)
+      expect(retrieved.length).toBe(384)
 
       // Float32 has ~7 digits of precision
       for (let i = 0; i < 3; i++) {
-        expect(retrieved[0].vector[i]).toBeCloseTo(original[i], 5)
+        expect(retrieved[i]).toBeCloseTo(original[i], 5)
       }
       // Remaining values should be 0
       for (let i = 3; i < 384; i++) {
-        expect(retrieved[0].vector[i]).toBe(0)
+        expect(retrieved[i]).toBe(0)
       }
     })
   })

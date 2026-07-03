@@ -92,7 +92,7 @@ describe('stripDatabaseForUpload', () => {
     expect(triggers.map((t) => t.name)).not.toContain('activities_au')
   })
 
-  it('strips ocr_text but preserves vector column', async () => {
+  it('strips ocr_text (vector column no longer exists; embeddings live in activities_vec)', async () => {
     await setupAndBackup()
     stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'summary' })
 
@@ -102,7 +102,7 @@ describe('stripDatabaseForUpload', () => {
     db.close()
 
     expect(columnNames).not.toContain('ocr_text')
-    expect(columnNames).toContain('vector')
+    expect(columnNames).not.toContain('vector')
   })
 
   it('preserves activities data (kept columns)', async () => {

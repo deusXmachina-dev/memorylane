@@ -8,6 +8,7 @@ import { applyMigrations } from '@main/storage/migrator'
 import type { ExtractedActivity } from './activity-extraction-types'
 import type { Activity } from './activity-types'
 import { SqliteActivitySink } from './sqlite-activity-sink'
+import { blobToVector } from '@main/storage/utils'
 
 function makeActivity(id: string): Activity {
   return {
@@ -145,10 +146,16 @@ describe('SqliteActivitySink', () => {
           ocrText: 'function test() {}',
         }),
       )
-      expect(rows[0].vector).toHaveLength(384)
-      expect(rows[0].vector[0]).toBeCloseTo(0.1, 5)
-      expect(rows[0].vector[1]).toBeCloseTo(0.2, 5)
-      expect(rows[0].vector[2]).toBeCloseTo(0.3, 5)
+      // The embedding lands in activities_vec (the sole store); read it back.
+      const vecRow = storage
+        .getDatabase()
+        .prepare('SELECT embedding FROM activities_vec WHERE id = ?')
+        .get('real-storage-1') as { embedding: Buffer }
+      const embedding = blobToVector(vecRow.embedding)
+      expect(embedding).toHaveLength(384)
+      expect(embedding[0]).toBeCloseTo(0.1, 5)
+      expect(embedding[1]).toBeCloseTo(0.2, 5)
+      expect(embedding[2]).toBeCloseTo(0.3, 5)
     } finally {
       storage.close()
       deleteDbFiles()

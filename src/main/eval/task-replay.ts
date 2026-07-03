@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
+import { v5 as uuidv5 } from 'uuid'
 import { StorageService } from '../storage'
 import { applyMigrations } from '../storage/migrator'
 import { deleteDbFiles } from '../storage/test-utils'
@@ -46,6 +47,19 @@ export interface SeedOptions {
   lookbackDays: number
 }
 
+/** Fixed namespace so a fixture id always maps to the same opaque served id. */
+const EVAL_ID_NAMESPACE = 'b3f2a6d4-8e7c-5f1a-9c2b-0d1e2f3a4b5c'
+
+/**
+ * The opaque id a fixture activity is served to the miner under. Deterministic
+ * (same fixture id → same served id) but carries none of the fixture id's signal
+ * — no `jaro-` prefix, no ordinal, no `-oN` occurrence tag — so the model can't
+ * tell planted activities from noise, or their order/cluster, by id alone.
+ */
+export function servedActivityId(fixtureId: string): string {
+  return uuidv5(fixtureId, EVAL_ID_NAMESPACE)
+}
+
 /**
  * Seeds a fresh temp DB with the fixture's activities, placing each on the
  * target day (`dayStart + offsetMin*60_000`) so it lands inside the window the
@@ -54,7 +68,7 @@ export interface SeedOptions {
 export async function seedFixtureDb(
   activities: TaskFixtureActivity[],
   { embedder, lookbackDays }: SeedOptions,
-): Promise<{ storage: StorageService; dbPath: string }> {
+): Promise<{ storage: StorageService; dbPath: string; restoreId: Map<string, string> }> {
   const dbPath = path.join(
     os.tmpdir(),
     `eval-tasks-${process.pid}-${Date.now()}-${Math.floor(Math.random() * 1e6)}.db`,
@@ -63,13 +77,23 @@ export async function seedFixtureDb(
   const storage = new StorageService(dbPath)
   applyMigrations(storage.getDatabase())
 
+  // The scan prompt serializes each activity's `id` verbatim, so a fixture's
+  // readable ids (`jaro-2026-06-19-02` — sequential, occurrence-tagged) would tell
+  // the model which activities are the planted task, in what order, and which
+  // recurrence they belong to. Remint every activity to an opaque, deterministic
+  // id before it reaches the DB (and thus the model), keeping a map to restore the
+  // readable ids for scoring/reports. Planted and noise become id-indistinguishable.
+  const restoreId = new Map<string, string>()
+
   const { start } = getDayBoundaries(lookbackDays)
   for (const a of activities) {
+    const servedId = servedActivityId(a.id)
+    restoreId.set(servedId, a.id)
     const startTimestamp = start + a.offsetMin * 60_000
     const endTimestamp = startTimestamp + a.durationMin * 60_000
     const vector = await embedder.generateEmbedding(`${a.summary} ${a.ocrText}`.trim())
     storage.activities.add({
-      id: a.id,
+      id: servedId,
       startTimestamp,
       endTimestamp,
       appName: a.app,
@@ -82,7 +106,7 @@ export async function seedFixtureDb(
     } satisfies StoredActivity)
   }
 
-  return { storage, dbPath }
+  return { storage, dbPath, restoreId }
 }
 
 /** Reads the sightings produced by a mining run back out of the DB. */
@@ -108,7 +132,7 @@ export interface RunFixtureParams {
 
 /** Seeds a fixture, runs the real miner against it, returns its sightings. */
 export async function runTaskFixture(params: RunFixtureParams): Promise<TaskRunResult> {
-  const { storage, dbPath } = await seedFixtureDb(params.fixture.activities, {
+  const { storage, dbPath, restoreId } = await seedFixtureDb(params.fixture.activities, {
     embedder: params.embedder,
     lookbackDays: params.lookbackDays,
   })
@@ -120,8 +144,14 @@ export async function runTaskFixture(params: RunFixtureParams): Promise<TaskRunR
       { model: params.model, lookbackDays: params.lookbackDays },
       params.onProgress,
     )
+    // Restore readable fixture ids on the miner's output so the scorer, judge, and
+    // reports share golden.md's id space (the model only ever saw opaque ids).
+    const detected = collectDetected(storage, run.runId).map((s) => ({
+      ...s,
+      activityIds: s.activityIds.map((id) => restoreId.get(id) ?? id),
+    }))
     return {
-      detected: collectDetected(storage, run.runId),
+      detected,
       tokenUsage: run.tokenUsage,
       candidatesFromScan: run.candidatesFromScan,
       candidatesKept: run.candidatesKept,
