@@ -1,4 +1,5 @@
 import log from '@main/utils/logger'
+import { backendPlatformToken } from '@main/utils/platform'
 import type { ManagedExclusions } from '../../shared/types'
 import { ENTERPRISE_BACKEND_CONFIG } from '../../shared/constants'
 import { coerceManagedExclusions } from './remote-blacklist-store'
@@ -126,8 +127,7 @@ export class RemoteBlacklistService {
     const url = new URL('api/license/blacklist', base)
     // Narrow app tokens to this platform's identifiers (macOS bundle ids vs.
     // Windows process names); the device can't match the other's.
-    const platform =
-      process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : null
+    const platform = backendPlatformToken()
     if (platform) url.searchParams.set('platform', platform)
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${this.getDeviceId()}` },
