@@ -20,16 +20,16 @@ Below you will receive a complete list of activities for the day. Each finding y
 
 ## What counts as toil
 
-The signal is REPETITION and LOW COGNITIVE LOAD, not complexity:
-- Recurring micro-actions: re-checking a dashboard/usage/status page, re-opening the same view to poll for changes, repeatedly eyeballing output files or logs. Even a 30-second glance counts when it happens again and again.
-- Manual procedures run the same way each time: a deploy, a benchmark, a report build, a cleanup, restarting a dev server
-- Copy-pasting or shuttling data between apps (CRM → spreadsheet, email → ticket)
-- Filling out a form/quote/invoice with data pulled from elsewhere
-- Routine upkeep: merging bot/dependency PRs, re-running failed CI, pruning branches/worktrees, purging old files
-- A small mechanical action done only once or twice still counts if a script could do it (e.g. assigning a ticket, kicking off a routine job)
+The signal is REPETITION and LOW COGNITIVE LOAD, not complexity. Toil looks different in every profession — bookkeeping, recruiting, PR, support, engineering, operations — but the shape is the same:
+- Recurring micro-actions: re-checking a dashboard, inbox, order status, or metrics page; re-opening the same view to see if something changed; repeatedly eyeballing files or folders. Even a 30-second glance counts when it happens again and again.
+- Manual procedures run the same way each time: building the same report, processing an invoice batch, onboarding a new client/hire from a template, publishing an update, a routine cleanup
+- Copy-pasting or shuttling data between apps (email → spreadsheet, CRM → invoice, form response → tracker)
+- Filling out a form/quote/invoice/record with data pulled from elsewhere
+- Routine upkeep: approving routine requests, re-running a failed job, archiving or deleting old files/records/emails, tidying folders or boards
+- A small mechanical action done only once or twice still counts if a script could do it (e.g. assigning a ticket or task, kicking off a routine job, categorizing a transaction)
 
 NOT toil (skip these):
-- Creative or judgment work: writing/fixing feature code, reviewing substantive PRs, drafting docs or emails, designing, debugging a novel problem — even when that category recurs, each instance needs my brain
+- Creative or judgment work: writing or editing substantive content (a document, an email to a client, code, a design, a campaign), meaningfully reviewing someone's work, negotiating, analyzing, solving a novel problem — even when that category recurs, each instance needs my brain
 - Ambient life: reading email/news, chatting, browsing — no discrete automatable action
 - Vague habits with no concrete action ("you use Chrome a lot")
 
@@ -39,7 +39,7 @@ NOT toil (skip these):
 - A discrete multi-step task done once = one finding with that run's activities.
 - The same multi-step task done several separate times = one finding PER run. Report EVERY run — a procedure that repeats is the strongest automation signal there is.
 - Different goals = different findings. Never mix unrelated work in one finding; if an unrelated activity (e.g. a Slack interruption) happened in the middle, leave it OUT.
-- A finding with a SINGLE activity_id is valid and encouraged: one-click routine actions (assigning a ticket, kicking off a job or capture, merging a chore PR, purging/deleting files, installing a tool, categorizing rows) are toil even when they show up as one short activity.
+- A finding with a SINGLE activity_id is valid and encouraged: one-click routine actions (assigning a ticket or task, kicking off a routine job, approving a routine request, deleting/archiving files, categorizing a transaction) are toil even when they show up as one short activity.
 - Every finding MUST cite at least one real activity_id from the list below. Findings with no activity_ids will be discarded.
 
 ## Final pass (do this before answering)
@@ -74,7 +74,7 @@ export function buildGroundingSystemPrompt(candidate: Candidate): string {
 
   return `You are verifying whether a candidate piece of toil is real and grounded in actual activity. You are NOT matching it against anything — just confirming and tightening this one finding.
 
-Toil = dumb, repetitive, mechanical work a script, webhook, or agent could do: recurring micro-actions (re-checking a dashboard/status page, polling a view, eyeballing output files), manual procedures run the same way each time, data shuttling between apps, routine upkeep. A recurring 30-second glance IS toil — do not reject it for being small or "just checking". What is NOT toil: creative or judgment work (writing/fixing feature code, reviewing substantive PRs, drafting, designing) and ambient life (reading, chatting, browsing).
+Toil = dumb, repetitive, mechanical work a script, webhook, or agent could do — whatever the profession: recurring micro-actions (re-checking a dashboard, inbox, or status page; polling a view; eyeballing files), manual procedures run the same way each time (the same report, invoice batch, or template-driven setup), data shuttling between apps, routine upkeep. A recurring 30-second glance IS toil — do not reject it for being small or "just checking". What is NOT toil: creative or judgment work (writing or editing substantive content, meaningful review, analysis, design) and ambient life (reading, chatting, browsing).
 
 ## Candidate (from a superficial scan)
 - Title: ${candidate.title}

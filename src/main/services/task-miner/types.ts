@@ -11,13 +11,11 @@ export interface TaskMinerConfig {
   scanOnly: boolean
 }
 
-// Model + mode picked by the task-mining eval sweep (see
+// scanOnly picked by the task-mining eval sweep (see
 // findings/task-mining-benchmark.md): one-shot scan beat two-phase grounding
-// on both recall and cost across every model tried. Deliberately NOT
-// PATTERN_DETECTION_CONFIG.MODEL — that default still serves the legacy
-// pattern detector, where minimax-m3 is unevaluated.
+// on both recall and cost across every model tried.
 export const DEFAULT_MINER_CONFIG: TaskMinerConfig = {
-  model: 'minimax/minimax-m3',
+  model: PATTERN_DETECTION_CONFIG.MODEL,
   lookbackDays: PATTERN_DETECTION_CONFIG.LOOKBACK_DAYS,
   scanOnly: true,
 }

@@ -8,10 +8,13 @@ worse than false positives.
 
 ## Verdict
 
-**One-shot scan (no Phase 2 grounding) with `minimax/minimax-m3` is the new default.**
-84% mean recall at ~$0.04/day vs the shipped config's 26% at ~$0.13/day — 3.2× the
-recall at a third of the cost. Phase 2 tool-grounding _lowered_ recall on every model
-tried (it rejects real toil and drops occurrences) while multiplying calls 5–10×.
+**One-shot scan (no Phase 2 grounding) is the new default mode.** Phase 2
+tool-grounding _lowered_ recall on every model tried (it rejects real toil and
+drops occurrences) while multiplying calls 5–10×. Best model: `minimax/minimax-m3`
+at 84% mean recall and ~$0.04/day vs the shipped config's 26% at ~$0.13/day — 3.2×
+the recall at a third of the cost. The model is not hardcoded; the miner follows
+the shared default / user-set `patternDetectionModel`, so minimax-m3 is the
+recommendation to set there.
 
 ## Scorecard (final prompt + short ids + scan retry, scan-only)
 
@@ -77,9 +80,9 @@ more prompt surgery.
 
 ## Where things live
 
-- Default model + mode: `DEFAULT_MINER_CONFIG` in `src/main/services/task-miner/types.ts`
-  (deliberately decoupled from `PATTERN_DETECTION_CONFIG.MODEL`, which still serves
-  the legacy pattern detector).
+- Mode default: `DEFAULT_MINER_CONFIG` in `src/main/services/task-miner/types.ts`.
+  The model follows the shared `PATTERN_DETECTION_CONFIG.MODEL` / user-set
+  `patternDetectionModel`.
 - Mode flags: `npm run eval-tasks -- --two-phase`, `npm run mine-tasks -- --two-phase`
   (one-shot is the default for both).
 - Raw scorecards: `evals/task-mining/results/2026-07-03T*.{md,json}`.
