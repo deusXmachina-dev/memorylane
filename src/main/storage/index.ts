@@ -7,6 +7,7 @@ import log from '@main/utils/logger'
 import { ActivityRepository } from './activity-repository'
 import { PatternRepository } from './pattern-repository'
 import { SightingRepository } from './sighting-repository'
+import { ClusterRepository } from './cluster-repository'
 import { MiningRunRepository } from './mining-run-repository'
 import { UploadRunRepository } from './upload-run-repository'
 import { UserContextRepository } from './user-context-repository'
@@ -14,11 +15,13 @@ import { UserContextRepository } from './user-context-repository'
 export { ActivityRepository } from './activity-repository'
 export { PatternRepository } from './pattern-repository'
 export { SightingRepository } from './sighting-repository'
+export { ClusterRepository } from './cluster-repository'
 export { MiningRunRepository } from './mining-run-repository'
 export { UploadRunRepository } from './upload-run-repository'
 export { UserContextRepository } from './user-context-repository'
 export type { Pattern, PatternSighting, PatternWithStats } from './pattern-repository'
 export type { Sighting } from './sighting-repository'
+export type { Cluster, ClusterWithStats } from './cluster-repository'
 export type { UserContext } from './user-context-repository'
 export type { StoredActivity, ActivitySummary, ActivityDetail } from './types'
 
@@ -70,6 +73,7 @@ export class StorageService {
   readonly activities: ActivityRepository
   readonly patterns: PatternRepository
   readonly sightings: SightingRepository
+  readonly clusters: ClusterRepository
   readonly miningRuns: MiningRunRepository
   readonly uploadRuns: UploadRunRepository
   readonly userContext: UserContextRepository
@@ -98,6 +102,7 @@ export class StorageService {
       this.activities = new ActivityRepository(db)
       this.patterns = new PatternRepository(db)
       this.sightings = new SightingRepository(db)
+      this.clusters = new ClusterRepository(db)
       this.miningRuns = new MiningRunRepository(db)
       this.uploadRuns = new UploadRunRepository(db)
       this.userContext = new UserContextRepository(db)
