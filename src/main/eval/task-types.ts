@@ -141,6 +141,8 @@ export interface NewSighting {
 export interface TaskFixtureScore {
   fixture: string
   model: string
+  /** Miner mode: 'scan-only' (no Phase 2 grounding) or 'two-phase' (default). */
+  mode?: 'scan-only' | 'two-phase'
   // keep tasks (recall)
   positiveCount: number
   foundCount: number

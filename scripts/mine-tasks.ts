@@ -20,6 +20,8 @@
  *   npm run mine-tasks -- --date 2026-03-07    (analyze a specific calendar day)
  *   npm run mine-tasks -- --api-key <key>      (override env var)
  *   npm run mine-tasks -- --user-data <path>   (point at a non-default userData dir)
+ *   npm run mine-tasks -- --two-phase          (re-enable Phase 2 grounding calls;
+ *                                               scan-only/one-shot is the default)
  */
 
 import { config as loadEnv } from 'dotenv'
@@ -28,7 +30,7 @@ loadEnv()
 import * as fs from 'fs'
 import { StorageService } from '../src/main/storage/index'
 import { getDefaultDbPath } from '../src/main/utils/paths'
-import { TaskMiner } from '../src/main/services/task-miner'
+import { TaskMiner, DEFAULT_MINER_CONFIG } from '../src/main/services/task-miner'
 import { PATTERN_DETECTION_CONFIG } from '../src/shared/constants'
 import { loadCliInferenceProvider } from './cli-inference-provider'
 
@@ -43,6 +45,7 @@ interface CliArgs {
   userDataPath: string | undefined
   vendorOverride: string | undefined
   days: number
+  scanOnly: boolean
 }
 
 function parseArgs(): CliArgs {
@@ -53,6 +56,7 @@ function parseArgs(): CliArgs {
   let userDataPath: string | undefined
   let vendorOverride: string | undefined
   let days = PATTERN_DETECTION_CONFIG.LOOKBACK_DAYS
+  let scanOnly = DEFAULT_MINER_CONFIG.scanOnly
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--db-path' && args[i + 1]) {
@@ -77,6 +81,10 @@ function parseArgs(): CliArgs {
         process.exit(1)
       }
       i++
+    } else if (args[i] === '--scan-only') {
+      scanOnly = true
+    } else if (args[i] === '--two-phase') {
+      scanOnly = false
     } else if (args[i] === '--date' && args[i + 1]) {
       const target = new Date(args[i + 1] + 'T00:00:00')
       if (isNaN(target.getTime())) {
@@ -94,11 +102,12 @@ function parseArgs(): CliArgs {
     }
   }
 
-  return { dbPath, modelOverride, apiKey, userDataPath, vendorOverride, days }
+  return { dbPath, modelOverride, apiKey, userDataPath, vendorOverride, days, scanOnly }
 }
 
 async function main() {
-  const { dbPath, modelOverride, apiKey, userDataPath, vendorOverride, days } = parseArgs()
+  const { dbPath, modelOverride, apiKey, userDataPath, vendorOverride, days, scanOnly } =
+    parseArgs()
 
   if (!fs.existsSync(dbPath)) {
     console.error(`Database not found at: ${dbPath}`)
@@ -106,7 +115,7 @@ async function main() {
   }
 
   const handle = loadCliInferenceProvider({ apiKey, userDataPath, vendorOverride })
-  const model = modelOverride || handle.patternDetectionModel || PATTERN_DETECTION_CONFIG.MODEL
+  const model = modelOverride || handle.patternDetectionModel || DEFAULT_MINER_CONFIG.model
 
   const targetDay = new Date()
   targetDay.setDate(targetDay.getDate() - days)
@@ -137,6 +146,7 @@ async function main() {
       {
         model,
         lookbackDays: days,
+        scanOnly,
       },
       (msg) => {
         console.log(`  ${msg}`)

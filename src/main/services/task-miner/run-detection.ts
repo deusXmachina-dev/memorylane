@@ -20,6 +20,10 @@ import { buildScanSystemPrompt, buildGroundingSystemPrompt } from './prompts'
 
 const GROUNDING_MAX_STEPS = 8
 const SIGHTING_MAX_AGE_DAYS = 90
+// A scan that parses to zero candidates is almost always a malformed response,
+// not an empty day — and it silently loses the whole day. Retry a couple of
+// times; scans are the cheap call.
+const SCAN_MAX_ATTEMPTS = 3
 
 function emptyResult(
   runId: string,
@@ -88,26 +92,60 @@ export async function runDetection(
   // Phase 1: Scan — discover discrete task instances
   // =========================================================================
 
-  const serialized = serializeActivities(activities)
+  // Serve compact positional ids (a1..aN) to the scan instead of raw UUIDs —
+  // models mangle long opaque ids when citing them (dropping whole findings),
+  // and short handles cut prompt tokens. Mapped back right after parsing.
+  const realIdOf = new Map<string, string>()
+  const serialized = serializeActivities(activities).map((row, i) => {
+    const shortId = `a${i + 1}`
+    realIdOf.set(shortId, (row as { id: string }).id)
+    return { ...row, id: shortId }
+  })
   const scanPrompt = buildScanSystemPrompt(label, userContextStr)
   const scanUserMessage = `Here are all ${activities.length} activities from ${label}:\n\n\`\`\`json\n${JSON.stringify(serialized, null, 2)}\n\`\`\``
 
-  progress(`[Phase 1] Sending ${activities.length} activities to ${cfg.model}...`)
-  const scanResult = await generateText({
-    model: provider.languageModel(cfg.model),
-    system: scanPrompt,
-    prompt: scanUserMessage,
-  })
+  let rawCandidates: unknown[] = []
+  for (let attempt = 1; attempt <= SCAN_MAX_ATTEMPTS; attempt++) {
+    progress(
+      `[Phase 1] Sending ${activities.length} activities to ${cfg.model}...` +
+        (attempt > 1 ? ` (attempt ${attempt}/${SCAN_MAX_ATTEMPTS})` : ''),
+    )
+    const scanResult = await generateText({
+      model: provider.languageModel(cfg.model),
+      system: scanPrompt,
+      prompt: scanUserMessage,
+    })
 
-  scanInputTokens = scanResult.usage.inputTokens ?? 0
-  scanOutputTokens = scanResult.usage.outputTokens ?? 0
-  progress(`[Phase 1] Response received (${scanInputTokens} in / ${scanOutputTokens} out tokens)`)
+    scanInputTokens += scanResult.usage.inputTokens ?? 0
+    scanOutputTokens += scanResult.usage.outputTokens ?? 0
+    progress(
+      `[Phase 1] Response received (${scanResult.usage.inputTokens ?? 0} in / ${scanResult.usage.outputTokens ?? 0} out tokens)`,
+    )
 
-  const rawCandidates = extractJsonArray<unknown>(scanResult.text)
-  const { candidates, malformedCount, droppedNoActivityIds } =
-    normalizeScanCandidates(rawCandidates)
+    rawCandidates = extractJsonArray<unknown>(scanResult.text)
+    if (rawCandidates.length > 0) break
+    progress(
+      `[Phase 1] No candidates parsed from response${attempt < SCAN_MAX_ATTEMPTS ? ' — retrying' : ''}`,
+    )
+  }
+  const normalized = normalizeScanCandidates(rawCandidates)
+  const { malformedCount, droppedNoActivityIds } = normalized
+
+  // Map the scan's short ids back to real activity ids; drop ids the model
+  // invented and candidates left with no grounding.
+  let unmappedIds = 0
+  const candidates = normalized.candidates
+    .map((c) => {
+      const ids = c.activity_ids
+        .map((sid) => realIdOf.get(sid.trim()))
+        .filter((id): id is string => Boolean(id))
+      unmappedIds += c.activity_ids.length - ids.length
+      return { ...c, activity_ids: ids }
+    })
+    .filter((c) => c.activity_ids.length > 0)
   progress(
-    `[Phase 1] Parsed ${rawCandidates.length} candidates (${candidates.length} valid, ${malformedCount} malformed, ${droppedNoActivityIds} dropped for no activity_ids)`,
+    `[Phase 1] Parsed ${rawCandidates.length} candidates (${candidates.length} valid, ${malformedCount} malformed, ` +
+      `${droppedNoActivityIds + (normalized.candidates.length - candidates.length)} dropped for no activity_ids, ${unmappedIds} unknown ids)`,
   )
 
   if (candidates.length === 0) {
@@ -123,7 +161,8 @@ export async function runDetection(
 
   // =========================================================================
   // Phase 2: Ground — per-candidate confirmation with tool use, then write
-  // a grounded sighting (computed window). No pattern matching.
+  // a grounded sighting (computed window). No pattern matching. In scan-only
+  // mode the scan's candidates are written directly (no LLM confirmation).
   // =========================================================================
 
   const tools = buildVerificationTools(storage, embeddingService, start, end, progress)
@@ -131,60 +170,68 @@ export async function runDetection(
   // a sighting must stay inside the day being mined, so its final ids are
   // intersected with this window before the duration is computed.
   const dayActivityIds = new Set(activities.map((a) => a.id))
-  progress(`[Phase 2] Grounding ${candidates.length} candidates with tool access...`)
+  progress(
+    cfg.scanOnly
+      ? `[Phase 2] Scan-only: writing ${candidates.length} candidates without grounding calls`
+      : `[Phase 2] Grounding ${candidates.length} candidates with tool access...`,
+  )
 
   let candidatesKept = 0
   let candidatesRejected = 0
 
   for (const candidate of candidates) {
     try {
-      const groundPrompt = buildGroundingSystemPrompt(candidate)
+      let parsed: Record<string, unknown> = {}
+      if (!cfg.scanOnly) {
+        const groundPrompt = buildGroundingSystemPrompt(candidate)
 
-      const candidateActivities = storage.activities.getByIds(candidate.activity_ids)
-      const enrichedActivities = candidateActivities.map((a) => ({
-        id: a.id,
-        app: a.appName,
-        window_title: a.windowTitle,
-        time: new Date(a.startTimestamp).toISOString(),
-        end_time: new Date(a.endTimestamp).toISOString(),
-        summary: a.summary,
-      }))
+        const candidateActivities = storage.activities.getByIds(candidate.activity_ids)
+        const enrichedActivities = candidateActivities.map((a) => ({
+          id: a.id,
+          app: a.appName,
+          window_title: a.windowTitle,
+          time: new Date(a.startTimestamp).toISOString(),
+          end_time: new Date(a.endTimestamp).toISOString(),
+          summary: a.summary,
+        }))
 
-      const candidateInput = `Investigate this candidate task:\n\n\`\`\`json\n${JSON.stringify(
-        {
-          title: candidate.title,
-          description: candidate.description,
-          apps: candidate.apps,
-          activities: enrichedActivities,
-        },
-        null,
-        2,
-      )}\n\`\`\``
+        const candidateInput = `Investigate this candidate task:\n\n\`\`\`json\n${JSON.stringify(
+          {
+            title: candidate.title,
+            description: candidate.description,
+            apps: candidate.apps,
+            activities: enrichedActivities,
+          },
+          null,
+          2,
+        )}\n\`\`\``
 
-      const verifyResult = await generateText({
-        model: provider.languageModel(cfg.model),
-        system: groundPrompt,
-        prompt: candidateInput,
-        tools,
-        stopWhen: stepCountIs(GROUNDING_MAX_STEPS),
-      })
+        const verifyResult = await generateText({
+          model: provider.languageModel(cfg.model),
+          system: groundPrompt,
+          prompt: candidateInput,
+          tools,
+          stopWhen: stepCountIs(GROUNDING_MAX_STEPS),
+        })
 
-      verifyInputTokens += verifyResult.usage.inputTokens ?? 0
-      verifyOutputTokens += verifyResult.usage.outputTokens ?? 0
+        verifyInputTokens += verifyResult.usage.inputTokens ?? 0
+        verifyOutputTokens += verifyResult.usage.outputTokens ?? 0
 
-      const parsed = extractJsonObject<Record<string, unknown>>(verifyResult.text)
-      if (!parsed) {
-        candidatesRejected++
-        progress(`[Phase 2] Rejected "${candidate.title}": could not parse response`)
-        continue
-      }
+        const verifyParsed = extractJsonObject<Record<string, unknown>>(verifyResult.text)
+        if (!verifyParsed) {
+          candidatesRejected++
+          progress(`[Phase 2] Rejected "${candidate.title}": could not parse response`)
+          continue
+        }
 
-      if ((parsed.verdict as string) === 'reject') {
-        candidatesRejected++
-        progress(
-          `[Phase 2] Rejected: ${candidate.title} — ${(parsed.reason as string) || 'rejected'}`,
-        )
-        continue
+        if ((verifyParsed.verdict as string) === 'reject') {
+          candidatesRejected++
+          progress(
+            `[Phase 2] Rejected: ${candidate.title} — ${(verifyParsed.reason as string) || 'rejected'}`,
+          )
+          continue
+        }
+        parsed = verifyParsed
       }
 
       // Finalize activity_ids and resolve them to real activities. The window

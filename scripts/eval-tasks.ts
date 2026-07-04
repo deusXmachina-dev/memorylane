@@ -16,6 +16,8 @@
  *   npm run eval-tasks -- --fixture 2026-06-10 --label   (append found sightings to golden.md to thumbs)
  *   npm run eval-tasks -- --fixture 2026-06-10           (score against your keep/reject labels)
  *   npm run eval-tasks -- --model m1 --judge             (semantic-equivalence judge, paid)
+ *   npm run eval-tasks -- --two-phase                     (re-enable Phase 2 grounding calls;
+ *                                                          scan-only/one-shot is the default)
  */
 
 import { config as loadEnv } from 'dotenv'
@@ -25,6 +27,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { EmbeddingService } from '../src/main/processor/embedding'
 import { PATTERN_DETECTION_CONFIG } from '../src/shared/constants'
+import { DEFAULT_MINER_CONFIG } from '../src/main/services/task-miner/types'
 import { loadTaskFixture, runTaskFixture } from '../src/main/eval/task-replay'
 import { scoreTaskFixture, bestDetectedForGolden } from '../src/main/eval/task-score'
 import { renderLabelBlocks } from '../src/main/eval/task-golden-md'
@@ -48,11 +51,18 @@ interface CliArgs {
   models: string[]
   judge: boolean
   label: boolean
+  scanOnly: boolean
 }
 
 function parseArgs(): CliArgs {
   const args = process.argv.slice(2)
-  const a: CliArgs = { fixtures: [], models: [], judge: false, label: false }
+  const a: CliArgs = {
+    fixtures: [],
+    models: [],
+    judge: false,
+    label: false,
+    scanOnly: DEFAULT_MINER_CONFIG.scanOnly,
+  }
   const list = (s: string): string[] =>
     s
       .split(',')
@@ -82,6 +92,12 @@ function parseArgs(): CliArgs {
       case '--label':
         a.label = true
         break
+      case '--scan-only':
+        a.scanOnly = true
+        break
+      case '--two-phase':
+        a.scanOnly = false
+        break
     }
   }
   return a
@@ -110,9 +126,7 @@ async function main() {
 
   const handle = loadCliInferenceProvider()
   const models =
-    a.models.length > 0
-      ? a.models
-      : [handle.patternDetectionModel || PATTERN_DETECTION_CONFIG.MODEL]
+    a.models.length > 0 ? a.models : [handle.patternDetectionModel || DEFAULT_MINER_CONFIG.model]
   const judgeModel = models[0]
 
   console.log('=== Task-Mining Eval ===')
@@ -142,54 +156,64 @@ async function main() {
     const newByKey = new Map<string, NewSighting>()
     for (const model of models) {
       console.log(`\n--- ${fixture.manifest.name} × ${model} ---`)
-      const run = await runTaskFixture({
-        provider: handle.provider,
-        fixture,
-        model,
-        lookbackDays: LOOKBACK_DAYS,
-        embedder,
-        onProgress: (msg) => console.log(`  ${msg}`),
-      })
+      // One flaky API call must not kill the whole sweep — score what we have
+      // and move on to the next model/fixture.
+      try {
+        const run = await runTaskFixture({
+          provider: handle.provider,
+          fixture,
+          model,
+          lookbackDays: LOOKBACK_DAYS,
+          embedder,
+          scanOnly: a.scanOnly,
+          onProgress: (msg) => console.log(`  ${msg}`),
+        })
 
-      const judge = new Map<string, TaskJudgeScore>()
-      let judgeTokensIn = 0
-      let judgeTokensOut = 0
-      if (a.judge) {
-        for (const g of fixture.golden.sightings) {
-          if (g.verdict !== 'keep') continue
-          const best = bestDetectedForGolden(g.activityIds, run.detected)
-          if (!best) continue
-          const jr = await judgeSighting({
-            provider: handle.provider,
-            model: judgeModel,
-            golden: g,
-            detected: best.sighting,
-          })
-          if (jr) {
-            judge.set(g.title, { equivalence: jr.equivalence })
-            judgeTokensIn += jr.tokensIn
-            judgeTokensOut += jr.tokensOut
+        const judge = new Map<string, TaskJudgeScore>()
+        let judgeTokensIn = 0
+        let judgeTokensOut = 0
+        if (a.judge) {
+          for (const g of fixture.golden.sightings) {
+            if (g.verdict !== 'keep') continue
+            const best = bestDetectedForGolden(g.activityIds, run.detected)
+            if (!best) continue
+            const jr = await judgeSighting({
+              provider: handle.provider,
+              model: judgeModel,
+              golden: g,
+              detected: best.sighting,
+            })
+            if (jr) {
+              judge.set(g.title, { equivalence: jr.equivalence })
+              judgeTokensIn += jr.tokensIn
+              judgeTokensOut += jr.tokensOut
+            }
           }
         }
-      }
 
-      const score = scoreTaskFixture({
-        fixture,
-        model,
-        detected: run.detected,
-        tokenUsage: run.tokenUsage,
-        judge: a.judge ? judge : undefined,
-        judgeCostUsd: a.judge ? priceUsd(judgeModel, judgeTokensIn, judgeTokensOut) : null,
-      })
-      scores.push(score)
-      for (const n of score.newSightings) {
-        newByKey.set([...n.activityIds].sort().join(','), n)
+        const score = scoreTaskFixture({
+          fixture,
+          model,
+          detected: run.detected,
+          tokenUsage: run.tokenUsage,
+          judge: a.judge ? judge : undefined,
+          judgeCostUsd: a.judge ? priceUsd(judgeModel, judgeTokensIn, judgeTokensOut) : null,
+          mode: a.scanOnly ? 'scan-only' : 'two-phase',
+        })
+        scores.push(score)
+        for (const n of score.newSightings) {
+          newByKey.set([...n.activityIds].sort().join(','), n)
+        }
+        console.log(
+          `  → found ${score.foundCount}/${score.positiveCount}, ` +
+            `missed ${score.missedTitles.length}, reject-reproduced ${score.rejectedReproducedCount}, ` +
+            `new ${score.newCount}, detected ${score.detectedCount}`,
+        )
+      } catch (err) {
+        console.error(
+          `  ✖ ${fixture.manifest.name} × ${model} failed: ${err instanceof Error ? err.message : String(err)}`,
+        )
       }
-      console.log(
-        `  → found ${score.foundCount}/${score.positiveCount}, ` +
-          `missed ${score.missedTitles.length}, reject-reproduced ${score.rejectedReproducedCount}, ` +
-          `new ${score.newCount}, detected ${score.detectedCount}`,
-      )
     }
 
     if (a.label && newByKey.size > 0) {

@@ -18,8 +18,9 @@ export function renderTaskMarkdown(report: TaskEvalReport): string {
   )
   lines.push('|---|---|--:|--:|--:|--:|--:|--:|--:|')
   for (const f of report.fixtures) {
+    const model = f.mode === 'scan-only' ? `${f.model} (scan)` : f.model
     lines.push(
-      `| ${f.fixture} | ${f.model} | ${f.foundCount}/${f.positiveCount} | ${pct(f.recall)} | ` +
+      `| ${f.fixture} | ${model} | ${f.foundCount}/${f.positiveCount} | ${pct(f.recall)} | ` +
         `${f.rejectedReproducedCount}/${f.negativeCount} | ${f.newCount} | ` +
         `${pct(f.avgGroundingRecall)} | ${num(f.avgEquivalence)} | ${usd(f.costUsd)} |`,
     )
@@ -28,7 +29,7 @@ export function renderTaskMarkdown(report: TaskEvalReport): string {
   lines.push('## Detail')
   for (const f of report.fixtures) {
     lines.push('')
-    lines.push(`### ${f.fixture} | ${f.model}`)
+    lines.push(`### ${f.fixture} | ${f.model}${f.mode === 'scan-only' ? ' (scan-only)' : ''}`)
     lines.push(
       `> ${f.detectedCount} sighting(s) detected; ${f.foundCount}/${f.positiveCount} keep tasks found; ` +
         `${f.rejectedReproducedCount} reject(s) reproduced; ${f.newCount} new`,

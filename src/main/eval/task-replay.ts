@@ -8,6 +8,7 @@ import { deleteDbFiles } from '../storage/test-utils'
 import type { StoredActivity } from '../storage/types'
 import { getDayBoundaries } from '../services/pattern-detector/helpers'
 import { runDetection } from '../services/task-miner/run-detection'
+import { DEFAULT_MINER_CONFIG } from '../services/task-miner/types'
 import type { EmbeddingService } from '../processor/embedding'
 import type { InferenceProvider } from '../llm'
 import { readJsonl } from './jsonl'
@@ -127,6 +128,8 @@ export interface RunFixtureParams {
   model: string
   lookbackDays: number
   embedder: EmbeddingService
+  /** Skip Phase 2 grounding — the scan's candidates are written directly. */
+  scanOnly?: boolean
   onProgress?: (msg: string) => void
 }
 
@@ -141,7 +144,11 @@ export async function runTaskFixture(params: RunFixtureParams): Promise<TaskRunR
       params.provider,
       storage,
       params.embedder,
-      { model: params.model, lookbackDays: params.lookbackDays },
+      {
+        model: params.model,
+        lookbackDays: params.lookbackDays,
+        scanOnly: params.scanOnly ?? DEFAULT_MINER_CONFIG.scanOnly,
+      },
       params.onProgress,
     )
     // Restore readable fixture ids on the miner's output so the scorer, judge, and

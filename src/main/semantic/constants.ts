@@ -36,4 +36,24 @@ export const MODEL_PRICING_USD_PER_MILLION: Record<
     input_tokens_per_million: 0.25,
     completion_tokens_per_million: 1.5,
   },
+  'deepseek/deepseek-v4-flash': {
+    input_tokens_per_million: 0.09,
+    completion_tokens_per_million: 0.18,
+  },
+  'xiaomi/mimo-v2.5': {
+    input_tokens_per_million: 0.105,
+    completion_tokens_per_million: 0.28,
+  },
+  'tencent/hy3-preview': {
+    input_tokens_per_million: 0.063,
+    completion_tokens_per_million: 0.21,
+  },
+  'z-ai/glm-5.2': {
+    input_tokens_per_million: 0.93,
+    completion_tokens_per_million: 3.0,
+  },
+  'moonshotai/kimi-k2.5': {
+    input_tokens_per_million: 0.375,
+    completion_tokens_per_million: 2.025,
+  },
 }
