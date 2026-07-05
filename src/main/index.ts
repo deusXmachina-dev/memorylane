@@ -28,11 +28,9 @@ import { CaptureSettingsManager } from './settings/capture-settings-manager'
 import { DeviceIdentity } from './settings/device-identity'
 import { listInstalledApps } from './apps/installed-apps'
 import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
-import { PatternDetector } from './services/pattern-detector'
 import { TaskMiner } from './services/task-miner'
 import { runTaskBackfillIfNeeded } from './services/task-miner/backfill-bootstrap'
 import { createBackfillMarker } from './services/task-miner/backfill-marker'
-import { TASK_MINING_ENABLED } from '@main/system/feature-flags'
 import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
 import { DatabaseUploadSync } from './services/database-upload-sync'
@@ -125,7 +123,6 @@ app.on('window-all-closed', () => {
 
 let runtime: MainRuntime | null = null
 let userContextBuilder: UserContextBuilder | null = null
-let patternDetector: PatternDetector | null = null
 let taskMiner: TaskMiner | null = null
 let rawDatabaseExportSync: RawDatabaseExportSync | null = null
 let databaseUploadSync: DatabaseUploadSync | null = null
@@ -310,20 +307,12 @@ app.on('ready', async () => {
 
   userContextBuilder = new UserContextBuilder(runtime.storage, runtime.inferenceProvider)
   userContextBuilder.updateModel(captureSettingsManager.get().patternDetectionModel)
-  // ML_TASK_MINING (dev flag) swaps the scheduled miner: when ON, the new
-  // TaskMiner runs INSTEAD of the PatternDetector. When OFF (default), the
-  // existing pattern detector runs exactly as before — nothing changes.
-  if (TASK_MINING_ENABLED) {
-    log.info('[Main] ML_TASK_MINING=1 — scheduling TaskMiner instead of PatternDetector')
-    taskMiner = new TaskMiner(runtime.storage, runtime.inferenceProvider)
-    taskMiner.setEnabled(captureSettingsManager.get().patternDetectionEnabled)
-    taskMiner.updateModel(captureSettingsManager.get().patternDetectionModel)
-  } else {
-    patternDetector = new PatternDetector(runtime.storage, runtime.inferenceProvider)
-    patternDetector.setEnabled(captureSettingsManager.get().patternDetectionEnabled)
-    patternDetector.updateModel(captureSettingsManager.get().patternDetectionModel)
-  }
-  const scheduledMiner = patternDetector ?? taskMiner
+  // The TaskMiner (mining + clustering) is the scheduled analyzer. It uses the
+  // patternDetection* capture settings for its enable state and model.
+  taskMiner = new TaskMiner(runtime.storage, runtime.inferenceProvider)
+  taskMiner.setEnabled(captureSettingsManager.get().patternDetectionEnabled)
+  taskMiner.updateModel(captureSettingsManager.get().patternDetectionModel)
+  const scheduledMiner = taskMiner
   const captureCoordinator = createCaptureCoordinator({
     capture: runtime.capture,
     captureStateManager,
@@ -415,10 +404,9 @@ app.on('ready', async () => {
   runtime.accessProvider.startPeriodicRefresh()
 
   // One-time, background: seed the new sightings/clusters tables from existing
-  // history so the task view isn't empty after upgrading. Marker-gated, so it
-  // runs at most once per user; only in the TaskMiner world. Kicked off BEFORE
-  // capture resume: it synchronously claims priority so the startup daily run
-  // stands down and lets the backfill seed the tables unopposed.
+  // history so the task view isn't empty after upgrading. Marker-gated (runs at
+  // most once per user, TaskMiner world only). Must run before capture resume —
+  // see runTaskBackfillIfNeeded for the ordering.
   if (taskMiner) {
     void runTaskBackfillIfNeeded({
       taskMiner,

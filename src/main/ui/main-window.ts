@@ -34,6 +34,7 @@ import { integrations } from '../integrations'
 import { listInstalledApps } from '../apps/installed-apps'
 import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
 import { VENDORS } from '../../shared/types'
+import { computeRecurrence, resolveTitle } from './cluster-view'
 import { VENDOR_PRESETS, getVendorDefaults } from '../../shared/vendor-defaults'
 import { applyVendorSwitch } from './vendor-switch'
 import { applyModelSettings } from './model-settings'
@@ -50,6 +51,9 @@ import type { TaskSightingSummary } from '../../shared/eval-review'
 import type { AccessProvider } from '../access'
 import type {
   AccessState,
+  ClusterInfo,
+  ClusterSightingInfo,
+  ClusterDetailInfo,
   ConsentOutcome,
   LlmHealthStatus,
   MainWindowStatus,
@@ -752,108 +756,98 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     return deps.accessProvider.getAccessState().customerSubscriptionStatus ?? 'idle'
   })
 
-  // Patterns
-  handle('main-window:getPatterns', () => {
+  // Patterns (task clusters)
+  handle('main-window:getClusters', (): ClusterInfo[] => {
     if (!deps) return []
-    return deps.storage.patterns.getAllPatterns()
-  })
-
-  handle('main-window:getPatternDetail', (_event: IpcMainInvokeEvent, id: string) => {
-    if (!deps) return null
-    const detail = deps.storage.patterns.getPatternDetail(id)
-    if (!detail) return null
-
-    const allActivityIds = Array.from(new Set(detail.sightings.flatMap((s) => s.activityIds)))
-    const activities = deps.storage.activities.getByIds(allActivityIds)
-    const activityById = new Map(
-      activities.map((a) => [
-        a.id,
-        {
-          id: a.id,
-          startTimestamp: a.startTimestamp,
-          endTimestamp: a.endTimestamp,
-          appName: a.appName,
-          windowTitle: a.windowTitle,
-          tld: a.tld,
-          summary: a.summary,
-        },
-      ]),
-    )
-
-    return {
-      pattern: detail.pattern,
-      sightings: detail.sightings.map((s) => ({
-        id: s.id,
-        detectedAt: s.detectedAt,
-        evidence: s.evidence,
-        confidence: s.confidence,
-        durationEstimateMin: s.durationEstimateMin,
-        activities: s.activityIds
-          .map((aid) => activityById.get(aid))
-          .filter((a): a is NonNullable<typeof a> => a !== undefined),
-      })),
-    }
-  })
-
-  ipcMain.handle('main-window:approvePattern', (_event: IpcMainInvokeEvent, id: string) => {
-    if (!deps) return { success: false, error: 'Dependencies not initialized' }
-    try {
-      deps.storage.patterns.approvePattern(id)
-      return { success: true }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      log.warn(`[MainWindow] Failed to approve pattern ${id}:`, error)
-      return { success: false, error: message }
-    }
-  })
-
-  ipcMain.handle('main-window:rejectPattern', (_event: IpcMainInvokeEvent, id: string) => {
-    if (!deps) return { success: false, error: 'Dependencies not initialized' }
-    try {
-      deps.storage.patterns.rejectPattern(id)
-      return { success: true }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      log.warn(`[MainWindow] Failed to reject pattern ${id}:`, error)
-      return { success: false, error: message }
-    }
-  })
-
-  ipcMain.handle('main-window:completePattern', (_event: IpcMainInvokeEvent, id: string) => {
-    if (!deps) return { success: false, error: 'Dependencies not initialized' }
-    try {
-      deps.storage.patterns.completePattern(id)
-      return { success: true }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      log.warn(`[MainWindow] Failed to complete pattern ${id}:`, error)
-      return { success: false, error: message }
-    }
-  })
-
-  ipcMain.handle('main-window:uncompletePattern', (_event: IpcMainInvokeEvent, id: string) => {
-    if (!deps) return { success: false, error: 'Dependencies not initialized' }
-    try {
-      deps.storage.patterns.uncompletePattern(id)
-      return { success: true }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      log.warn(`[MainWindow] Failed to uncomplete pattern ${id}:`, error)
-      return { success: false, error: message }
-    }
-  })
-
-  ipcMain.handle(
-    'main-window:markPatternPromptCopied',
-    (_event: IpcMainInvokeEvent, id: string) => {
-      if (!deps) return { success: false, error: 'Dependencies not initialized' }
-      try {
-        deps.storage.patterns.markPromptCopied(id)
-        return { success: true }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error'
-        return { success: false, error: message }
+    const clusters = deps.storage.clusters.getAllWithStats()
+    // One digest query for all members → recurrence, avg span, title fallback (no N+1).
+    const byCluster = new Map<
+      string,
+      { startedAts: number[]; spansMin: number[]; titles: string[] }
+    >()
+    for (const row of deps.storage.clusters.getMemberDigest()) {
+      let entry = byCluster.get(row.clusterId)
+      if (!entry) {
+        entry = { startedAts: [], spansMin: [], titles: [] }
+        byCluster.set(row.clusterId, entry)
       }
+      entry.startedAts.push(row.startedAt)
+      entry.spansMin.push(Math.max(0, row.endedAt - row.startedAt) / 60_000)
+      entry.titles.push(row.title)
+    }
+    const now = Date.now()
+    return clusters.map((c) => {
+      const members = byCluster.get(c.id) ?? { startedAts: [], spansMin: [], titles: [] }
+      const recurrence = computeRecurrence(members.startedAts, now)
+      const avgSpanMin =
+        members.spansMin.length > 0
+          ? members.spansMin.reduce((sum, v) => sum + v, 0) / members.spansMin.length
+          : 0
+      return {
+        id: c.id,
+        title: resolveTitle(c.label, members.titles),
+        description: c.description,
+        apps: c.apps,
+        timesSeen: c.timesSeen,
+        avgInteractionMin: avgSpanMin,
+        firstSeenAt: c.firstSeenAt,
+        lastSeenAt: c.lastSeenAt,
+        createdAt: c.createdAt,
+        recurrence: recurrence.buckets,
+        recurrenceUnit: recurrence.unit,
+      }
+    })
+  })
+
+  handle(
+    'main-window:getClusterDetail',
+    (_event: IpcMainInvokeEvent, id: string): ClusterDetailInfo | null => {
+      if (!deps) return null
+      const cluster = deps.storage.clusters.getById(id)
+      if (!cluster) return null
+
+      const members = deps.storage.clusters.getMembers(id) // Sighting[], started_at ASC
+      const startedAts = members.map((m) => m.startedAt)
+      const appsSet = new Set<string>()
+      for (const m of members) for (const app of m.apps) appsSet.add(app)
+      // Interaction = wall-clock span (first activity start → last activity end).
+      const spanSumMin = members.reduce(
+        (sum, m) => sum + Math.max(0, m.endedAt - m.startedAt) / 60_000,
+        0,
+      )
+      const recurrence = computeRecurrence(startedAts, Date.now())
+
+      const info: ClusterInfo = {
+        id: cluster.id,
+        title: resolveTitle(
+          cluster.label,
+          members.map((m) => m.title),
+        ),
+        description: cluster.description,
+        apps: [...appsSet],
+        timesSeen: members.length,
+        avgInteractionMin: members.length > 0 ? spanSumMin / members.length : 0,
+        firstSeenAt: members.length > 0 ? Math.min(...startedAts) : null,
+        lastSeenAt: members.length > 0 ? Math.max(...members.map((m) => m.endedAt)) : null,
+        createdAt: cluster.createdAt,
+        recurrence: recurrence.buckets,
+        recurrenceUnit: recurrence.unit,
+      }
+
+      const sightings: ClusterSightingInfo[] = members
+        .slice()
+        .reverse() // newest-first for the instances list
+        .map((m) => ({
+          id: m.id,
+          title: m.title,
+          description: m.description,
+          apps: m.apps,
+          startedAt: m.startedAt,
+          endedAt: m.endedAt,
+          activityIds: m.activityIds,
+        }))
+
+      return { cluster: info, sightings }
     },
   )
 

@@ -35,7 +35,7 @@ import type {
   CaptureSettings,
   MainWindowStats,
   McpRegistrationStatus,
-  PatternInfo,
+  ClusterInfo,
   PermissionState,
   PermissionStatus,
   UpdateInfo,
@@ -63,7 +63,7 @@ export function MainWindowApp(): React.JSX.Element {
   const [toggling, setToggling] = useState(false)
   const [stats, setStats] = useState<MainWindowStats | null>(null)
   const [mcpStatus, setMcpStatus] = useState<McpRegistrationStatus | null>(null)
-  const [patterns, setPatterns] = useState<PatternInfo[] | null>(null)
+  const [clusters, setClusters] = useState<ClusterInfo[] | null>(null)
   const [initialLoaded, setInitialLoaded] = useState(false)
   const [lastCompletedStepIndex, setLastCompletedStepIndex] = useState<number>(() =>
     readLastCompletedIndex(localStorageAdapter),
@@ -141,11 +141,11 @@ export function MainWindowApp(): React.JSX.Element {
     }
   }, [api])
 
-  const loadPatterns = useCallback(async () => {
+  const loadClusters = useCallback(async () => {
     try {
-      setPatterns(await api.getPatterns())
+      setClusters(await api.getClusters())
     } catch {
-      setPatterns([])
+      setClusters([])
     }
   }, [api])
 
@@ -164,7 +164,7 @@ export function MainWindowApp(): React.JSX.Element {
       loadCredentials(),
       loadStats(),
       loadMcpStatus(),
-      loadPatterns(),
+      loadClusters(),
       loadPermissionStatus(),
     ])
   }, [
@@ -173,7 +173,7 @@ export function MainWindowApp(): React.JSX.Element {
     loadCredentials,
     loadStats,
     loadMcpStatus,
-    loadPatterns,
+    loadClusters,
     loadPermissionStatus,
   ])
 
@@ -309,14 +309,14 @@ export function MainWindowApp(): React.JSX.Element {
       setCapturing(status.capturing)
       setPausedUntilMs(status.pausedUntilMs)
       void loadStats()
-      void loadPatterns()
+      void loadClusters()
       void activitiesRefreshRef.current()
     })
     void loadAll().then(() => {
       setInitialLoaded(true)
     })
     return () => unsubscribe()
-  }, [api, loadAll, loadStats, loadPatterns])
+  }, [api, loadAll, loadStats, loadClusters])
 
   useEffect(() => {
     const unsubscribe = api.onSubscriptionUpdate(() => {
@@ -386,7 +386,7 @@ export function MainWindowApp(): React.JSX.Element {
       loadCredentials(),
       loadStats(),
       loadMcpStatus(),
-      loadPatterns(),
+      loadClusters(),
       loadPermissionStatus(),
       activitiesRefreshRef.current(),
     ])
@@ -395,7 +395,7 @@ export function MainWindowApp(): React.JSX.Element {
     loadCredentials,
     loadStats,
     loadMcpStatus,
-    loadPatterns,
+    loadClusters,
     loadPermissionStatus,
   ])
 
@@ -588,13 +588,7 @@ export function MainWindowApp(): React.JSX.Element {
           />
         )
       case 'patterns':
-        return (
-          <PatternsPage
-            api={api}
-            patterns={patterns}
-            onPatternsChange={() => void loadPatterns()}
-          />
-        )
+        return <PatternsPage api={api} clusters={clusters} />
       case 'settings':
         return (
           <SettingsPage

@@ -183,6 +183,23 @@ export class ClusterRepository {
     return row.count
   }
 
+  /**
+   * Lightweight per-member rows across all clusters in one query — used to
+   * derive recurrence buckets, avg wall-clock span, and title fallbacks without
+   * an N+1.
+   */
+  getMemberDigest(): { clusterId: string; startedAt: number; endedAt: number; title: string }[] {
+    return this.db
+      .prepare(
+        `SELECT cs.cluster_id AS clusterId, s.started_at AS startedAt,
+                s.ended_at AS endedAt, s.title AS title
+         FROM cluster_sightings cs
+         JOIN sightings s ON s.id = cs.sighting_id
+         ORDER BY s.started_at ASC`,
+      )
+      .all() as { clusterId: string; startedAt: number; endedAt: number; title: string }[]
+  }
+
   addMembership(clusterId: string, sightingId: string, addedAt: number): void {
     this.db
       .prepare(

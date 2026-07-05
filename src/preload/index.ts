@@ -68,15 +68,9 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   saveCaptureSettings: (settings: Record<string, unknown>) =>
     ipcRenderer.invoke('main-window:saveCaptureSettings', settings),
   resetCaptureSettings: () => ipcRenderer.invoke('main-window:resetCaptureSettings'),
-  // Patterns
-  getPatterns: () => ipcRenderer.invoke('main-window:getPatterns'),
-  getPatternDetail: (id: string) => ipcRenderer.invoke('main-window:getPatternDetail', id),
-  approvePattern: (id: string) => ipcRenderer.invoke('main-window:approvePattern', id),
-  rejectPattern: (id: string) => ipcRenderer.invoke('main-window:rejectPattern', id),
-  completePattern: (id: string) => ipcRenderer.invoke('main-window:completePattern', id),
-  uncompletePattern: (id: string) => ipcRenderer.invoke('main-window:uncompletePattern', id),
-  markPatternPromptCopied: (id: string) =>
-    ipcRenderer.invoke('main-window:markPatternPromptCopied', id),
+  // Patterns (task clusters)
+  getClusters: () => ipcRenderer.invoke('main-window:getClusters'),
+  getClusterDetail: (id: string) => ipcRenderer.invoke('main-window:getClusterDetail', id),
   // Theme
   getTheme: () => ipcRenderer.invoke('main-window:getTheme') as Promise<'dark' | 'light'>,
   onThemeChanged: (callback: (theme: 'dark' | 'light') => void) => {

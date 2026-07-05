@@ -282,45 +282,50 @@ export interface PermissionStatus {
   screenRecording: PermissionState
 }
 
-export interface PatternInfo {
+/** A recurring task cluster with stats derived from its member sightings. */
+export type RecurrenceUnit = 'day' | 'week'
+
+/** One bar of the recurrence histogram: bucket start (epoch ms) + sighting count. */
+export interface RecurrenceBucket {
+  start: number
+  count: number
+}
+
+export interface ClusterInfo {
   id: string
-  name: string
+  /** Resolved for display: cluster label, or the most common member title. */
+  title: string
   description: string
   apps: string[]
-  automationIdea: string
-  createdAt: number
-  rejectedAt: number | null
-  promptCopiedAt: number | null
-  approvedAt: number | null
-  completedAt: number | null
-  sightingCount: number
+  timesSeen: number
+  /** Average wall-clock span of a sighting (first activity start → last end), in minutes. */
+  avgInteractionMin: number
+  firstSeenAt: number | null
   lastSeenAt: number | null
-  lastConfidence: number | null
-  estimatedHoursPerWeek: number | null
+  createdAt: number
+  /** Recurrence histogram, oldest→newest — drives the sparkline and bars. */
+  recurrence: RecurrenceBucket[]
+  /** Whether each recurrence bucket is a day or a week. */
+  recurrenceUnit: RecurrenceUnit
 }
 
-export interface PatternActivityRef {
+/** A single occurrence of a cluster (one mined sighting). */
+export interface ClusterSightingInfo {
   id: string
-  startTimestamp: number
-  endTimestamp: number
-  appName: string
-  windowTitle: string
-  tld: string | null
-  summary: string
+  title: string
+  description: string
+  apps: string[]
+  /** Wall-clock span: first activity start → last activity end. */
+  startedAt: number
+  endedAt: number
+  /** Underlying activity ids — handle for the "Copy prompt for Claude" flow. */
+  activityIds: string[]
 }
 
-export interface PatternSightingInfo {
-  id: string
-  detectedAt: number
-  evidence: string
-  confidence: number
-  durationEstimateMin: number | null
-  activities: PatternActivityRef[]
-}
-
-export interface PatternDetailInfo {
-  pattern: PatternInfo
-  sightings: PatternSightingInfo[]
+export interface ClusterDetailInfo {
+  cluster: ClusterInfo
+  /** Member sightings, newest-first. */
+  sightings: ClusterSightingInfo[]
 }
 
 /** The tenant's centrally-synced capture blacklist, surfaced read-only in the
@@ -366,14 +371,9 @@ export interface MainWindowAPI {
   getCaptureSettings: () => Promise<CaptureSettings>
   saveCaptureSettings: (settings: Partial<CaptureSettings>) => Promise<SaveResult>
   resetCaptureSettings: () => Promise<SaveResult>
-  // Patterns
-  getPatterns: () => Promise<PatternInfo[]>
-  getPatternDetail: (id: string) => Promise<PatternDetailInfo | null>
-  approvePattern: (id: string) => Promise<SaveResult>
-  rejectPattern: (id: string) => Promise<SaveResult>
-  completePattern: (id: string) => Promise<SaveResult>
-  uncompletePattern: (id: string) => Promise<SaveResult>
-  markPatternPromptCopied: (id: string) => Promise<SaveResult>
+  // Patterns (task clusters)
+  getClusters: () => Promise<ClusterInfo[]>
+  getClusterDetail: (id: string) => Promise<ClusterDetailInfo | null>
   // Theme
   getTheme: () => Promise<'dark' | 'light'>
   onThemeChanged: (callback: (theme: 'dark' | 'light') => void) => void
