@@ -62,3 +62,14 @@ export interface MiningRunResult {
 }
 
 export type ProgressCallback = (message: string) => void
+
+/** Outcome of a one-time multi-day backfill (see TaskMiner.backfill). */
+export interface BackfillSummary {
+  daysMined: number
+  daysSkipped: number
+  daysFailed: number
+  /** The single clustering pass run after all days are mined. */
+  clustering?: ClusteringRunSummary
+  /** Set when the backfill did not run at all because a guard tripped. */
+  skipped?: 'no-provider' | 'busy'
+}

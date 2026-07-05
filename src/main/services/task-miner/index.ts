@@ -25,11 +25,11 @@
 
 import type { StorageService } from '../../storage'
 import type { InferenceProvider } from '../../llm'
-import { PATTERN_DETECTION_CONFIG } from '../../../shared/constants'
+import { PATTERN_DETECTION_CONFIG, TASK_BACKFILL } from '../../../shared/constants'
 import log from '@main/utils/logger'
 import { EmbeddingService } from '../../processor/embedding'
-import { isSameDay, formatApiError } from '../pattern-detector/helpers'
-import type { TaskMinerConfig, MiningRunResult, ProgressCallback } from './types'
+import { isSameDay, formatApiError, getDayBoundaries } from '../pattern-detector/helpers'
+import type { TaskMinerConfig, MiningRunResult, ProgressCallback, BackfillSummary } from './types'
 import { DEFAULT_MINER_CONFIG } from './types'
 import { runDetection } from './run-detection'
 import { runClustering } from './clustering'
@@ -42,6 +42,7 @@ export { DEFAULT_MINER_CONFIG }
 export class TaskMiner {
   private running = false
   private settleTimer: ReturnType<typeof setTimeout> | null = null
+  private backfillPending = false
   private model: string = DEFAULT_MINER_CONFIG.model
   private enabled = true
   private readonly embeddingService = new EmbeddingService()
@@ -62,10 +63,24 @@ export class TaskMiner {
   }
 
   /**
+   * Stand the scheduled daily run down while the one-time backfill is queued or
+   * running. The backfill seeds many days at once and records today's run, so a
+   * concurrent daily run would be redundant — and worse, racing for the shared
+   * settle timer would preempt the backfill. Set this before capture resume.
+   */
+  setBackfillPending(pending: boolean): void {
+    this.backfillPending = pending
+  }
+
+  /**
    * Try to schedule a mining run. Call this on screen unlock / wake.
    */
   scheduleRun(): void {
     if (!this.enabled) return
+    if (this.backfillPending) {
+      log.info('[TaskMiner] One-time backfill pending — deferring scheduled run')
+      return
+    }
     if (this.running || this.settleTimer) return
 
     if (!this.provider || !this.provider.isConfigured()) {
@@ -115,7 +130,84 @@ export class TaskMiner {
     return result
   }
 
+  /**
+   * One-time backfill: mine the last `days` calendar days into sightings, then
+   * run a single clustering pass. Idempotent — days that already have sightings
+   * are skipped, so a prior daily run or an interrupted backfill is safe to
+   * re-run. Clustering is deferred to one final pass (~`days` scan calls + 1
+   * review call, not one per day); that pass is order-independent, so scan order
+   * doesn't affect cluster ids. Holds the `running` guard so a scheduled run
+   * can't overlap.
+   */
+  async backfill(
+    provider: InferenceProvider,
+    opts: { days?: number; onProgress?: ProgressCallback } = {},
+  ): Promise<BackfillSummary> {
+    const days = opts.days ?? TASK_BACKFILL.DAYS
+
+    if (!provider.isConfigured()) {
+      log.info('[TaskMiner] Backfill skipped: no inference provider configured')
+      return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'no-provider' }
+    }
+    if (this.running || this.settleTimer) {
+      log.info('[TaskMiner] Backfill skipped: a mining run is already in progress')
+      return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'busy' }
+    }
+
+    const progress = (msg: string) => {
+      log.info(`[TaskMiner] ${msg}`)
+      opts.onProgress?.(msg)
+    }
+
+    this.running = true
+    try {
+      let daysMined = 0
+      let daysSkipped = 0
+      let daysFailed = 0
+
+      for (let d = days; d >= 1; d--) {
+        const { start, end, label } = getDayBoundaries(d)
+        if (this.storage.sightings.hasInWindow(start, end)) {
+          daysSkipped++
+          progress(`Backfill: ${label} already mined, skipping`)
+          continue
+        }
+        try {
+          // Defer clustering — one pass at the end is far cheaper than per-day.
+          await runDetection(
+            provider,
+            this.storage,
+            this.embeddingService,
+            { model: this.model, scanOnly: true, lookbackDays: d, clustering: false },
+            opts.onProgress,
+          )
+          daysMined++
+        } catch (error) {
+          daysFailed++
+          log.error(`[TaskMiner] Backfill day ${label} failed:`, formatApiError(error))
+        }
+      }
+
+      progress(
+        `Backfill mined ${daysMined} day(s) (${daysSkipped} already present, ` +
+          `${daysFailed} failed); running final clustering pass`,
+      )
+      const clustering = await this.cluster(
+        provider,
+        { ...DEFAULT_MINER_CONFIG, model: this.model, clustering: true },
+        opts.onProgress,
+      )
+      return { daysMined, daysSkipped, daysFailed, clustering }
+    } finally {
+      this.running = false
+    }
+  }
+
   private async execute(provider: InferenceProvider): Promise<void> {
+    if (this.running) {
+      log.info('[TaskMiner] Run already in progress, skipping scheduled run')
+      return
+    }
     this.running = true
     try {
       const result = await runDetection(provider, this.storage, this.embeddingService, {

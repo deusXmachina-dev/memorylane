@@ -97,6 +97,20 @@ export class SightingRepository {
     return row.count
   }
 
+  /**
+   * True if any sighting started within the inclusive window `[start, end]`
+   * (the boundaries returned by `getDayBoundaries`). Used by the one-time
+   * backfill to skip days that have already been mined, so it stays idempotent
+   * and resumes cheaply after an interruption.
+   */
+  hasInWindow(start: number, end: number): boolean {
+    return (
+      this.db
+        .prepare('SELECT 1 FROM sightings WHERE started_at >= ? AND started_at <= ? LIMIT 1')
+        .get(start, end) !== undefined
+    )
+  }
+
   /** Delete sightings older than `maxAgeDays` (DB hygiene). */
   pruneOlderThan(maxAgeDays = 90, now: number = Date.now()): number {
     const cutoff = now - maxAgeDays * 86_400_000

@@ -124,6 +124,15 @@ export const PATTERN_DETECTION_CONFIG = {
   SETTLE_DELAY_MS: 60 * 1000, // 1 min after unlock before running
 }
 
+// One-time seed of the sightings/clusters tables from existing history, run once
+// per user on the first launch after upgrading. VERSION marks the completed
+// backfill (in {userData}/task-backfill.json); a bump re-runs it to fill missing
+// days and recluster — it does not re-mine days that already have sightings.
+export const TASK_BACKFILL = {
+  VERSION: 1,
+  DAYS: 30, // Calendar days back to mine (day-by-day, oldest → newest)
+}
+
 // User-initiated timed capture pause (auto-resumes when the timer elapses).
 // Presets are shared between the tray menu and the main-window control.
 export const CAPTURE_PAUSE_CONFIG = {
