@@ -25,6 +25,15 @@ export function renderTaskMarkdown(report: TaskEvalReport): string {
         `${pct(f.avgGroundingRecall)} | ${num(f.avgEquivalence)} | ${usd(f.costUsd)} |`,
     )
   }
+  if (report.failures?.length) {
+    lines.push('')
+    lines.push('## Failed runs (not in scorecard)')
+    lines.push('')
+    for (const f of report.failures) {
+      const model = f.mode === 'scan-only' ? `${f.model} (scan)` : f.model
+      lines.push(`- ✖ ${f.fixture} × ${model} — ${f.error}`)
+    }
+  }
   lines.push('')
   lines.push('## Detail')
   for (const f of report.fixtures) {

@@ -5,12 +5,12 @@ import type { Sighting } from '../../storage/sighting-repository'
 import type { EmbeddingService } from '../../processor/embedding'
 import type { InferenceProvider } from '../../llm'
 import log from '@main/utils/logger'
-import type { TaskMinerConfig, MiningRunResult, ProgressCallback } from './types'
+import type { TaskMinerConfig, MiningRunResult, ProgressCallback, Candidate } from './types'
 import { DEFAULT_MINER_CONFIG } from './types'
 import {
   getDayBoundaries,
   serializeActivities,
-  extractJsonArray,
+  tryExtractJsonArray,
   extractJsonObject,
 } from '../pattern-detector/helpers'
 import { buildVerificationTools } from '../pattern-detector/tools'
@@ -20,9 +20,9 @@ import { buildScanSystemPrompt, buildGroundingSystemPrompt } from './prompts'
 
 const GROUNDING_MAX_STEPS = 8
 const SIGHTING_MAX_AGE_DAYS = 90
-// A scan that parses to zero candidates is almost always a malformed response,
-// not an empty day — and it silently loses the whole day. Retry a couple of
-// times; scans are the cheap call.
+// A malformed scan response — no parseable JSON, or candidates that all fail
+// validation / cite unknown ids — silently loses the whole day, so retry it.
+// A response that parses to `[]` is a legitimate empty day, not a failure.
 const SCAN_MAX_ATTEMPTS = 3
 
 function emptyResult(
@@ -98,13 +98,45 @@ export async function runDetection(
   const realIdOf = new Map<string, string>()
   const serialized = serializeActivities(activities).map((row, i) => {
     const shortId = `a${i + 1}`
-    realIdOf.set(shortId, (row as { id: string }).id)
+    realIdOf.set(shortId, activities[i].id)
     return { ...row, id: shortId }
   })
   const scanPrompt = buildScanSystemPrompt(label, userContextStr)
   const scanUserMessage = `Here are all ${activities.length} activities from ${label}:\n\n\`\`\`json\n${JSON.stringify(serialized, null, 2)}\n\`\`\``
 
-  let rawCandidates: unknown[] = []
+  // Parses one scan response through validation and short-id mapping, dropping
+  // ids the model invented and candidates left with no grounding. Returns null
+  // when the response held no JSON array at all.
+  const parseScanResponse = (text: string) => {
+    const raw = tryExtractJsonArray<unknown>(text)
+    if (raw === null) return null
+    const {
+      candidates: normalizedCandidates,
+      malformedCount,
+      droppedNoActivityIds,
+    } = normalizeScanCandidates(raw)
+    let unmappedIds = 0
+    const candidates: Candidate[] = normalizedCandidates
+      .map((c) => {
+        const ids = c.activity_ids
+          .map((sid) => realIdOf.get(sid.trim()))
+          .filter((id): id is string => Boolean(id))
+        unmappedIds += c.activity_ids.length - ids.length
+        return { ...c, activity_ids: ids }
+      })
+      .filter((c) => c.activity_ids.length > 0)
+    const droppedUnmappedCandidates = normalizedCandidates.length - candidates.length
+    return {
+      raw,
+      candidates,
+      malformedCount,
+      droppedNoActivityIds,
+      droppedUnmappedCandidates,
+      unmappedIds,
+    }
+  }
+
+  let scan: ReturnType<typeof parseScanResponse> = null
   for (let attempt = 1; attempt <= SCAN_MAX_ATTEMPTS; attempt++) {
     progress(
       `[Phase 1] Sending ${activities.length} activities to ${cfg.model}...` +
@@ -122,31 +154,29 @@ export async function runDetection(
       `[Phase 1] Response received (${scanResult.usage.inputTokens ?? 0} in / ${scanResult.usage.outputTokens ?? 0} out tokens)`,
     )
 
-    rawCandidates = extractJsonArray<unknown>(scanResult.text)
-    if (rawCandidates.length > 0) break
+    scan = parseScanResponse(scanResult.text)
+    if (scan === null) {
+      progress(
+        `[Phase 1] No JSON array in response${attempt < SCAN_MAX_ATTEMPTS ? ' — retrying' : ''}`,
+      )
+      continue
+    }
+    // A parsed `[]` is an empty day; parsed-but-unusable candidates are a
+    // failed response worth retrying.
+    if (scan.raw.length === 0 || scan.candidates.length > 0) break
     progress(
-      `[Phase 1] No candidates parsed from response${attempt < SCAN_MAX_ATTEMPTS ? ' — retrying' : ''}`,
+      `[Phase 1] Parsed ${scan.raw.length} candidates but none usable${attempt < SCAN_MAX_ATTEMPTS ? ' — retrying' : ''}`,
     )
   }
-  const normalized = normalizeScanCandidates(rawCandidates)
-  const { malformedCount, droppedNoActivityIds } = normalized
 
-  // Map the scan's short ids back to real activity ids; drop ids the model
-  // invented and candidates left with no grounding.
-  let unmappedIds = 0
-  const candidates = normalized.candidates
-    .map((c) => {
-      const ids = c.activity_ids
-        .map((sid) => realIdOf.get(sid.trim()))
-        .filter((id): id is string => Boolean(id))
-      unmappedIds += c.activity_ids.length - ids.length
-      return { ...c, activity_ids: ids }
-    })
-    .filter((c) => c.activity_ids.length > 0)
-  progress(
-    `[Phase 1] Parsed ${rawCandidates.length} candidates (${candidates.length} valid, ${malformedCount} malformed, ` +
-      `${droppedNoActivityIds + (normalized.candidates.length - candidates.length)} dropped for no activity_ids, ${unmappedIds} unknown ids)`,
-  )
+  const rawCandidates = scan?.raw ?? []
+  const candidates = scan?.candidates ?? []
+  if (scan) {
+    progress(
+      `[Phase 1] Parsed ${scan.raw.length} candidates (${candidates.length} valid, ${scan.malformedCount} malformed, ` +
+        `${scan.droppedNoActivityIds + scan.droppedUnmappedCandidates} dropped for no activity_ids, ${scan.unmappedIds} unknown ids)`,
+    )
+  }
 
   if (candidates.length === 0) {
     progress('No grounded candidates, done')
@@ -165,7 +195,9 @@ export async function runDetection(
   // mode the scan's candidates are written directly (no LLM confirmation).
   // =========================================================================
 
-  const tools = buildVerificationTools(storage, embeddingService, start, end, progress)
+  const tools = cfg.scanOnly
+    ? undefined
+    : buildVerificationTools(storage, embeddingService, start, end, progress)
   // The grounding tools (search/browse) can surface activities from other days;
   // a sighting must stay inside the day being mined, so its final ids are
   // intersected with this window before the duration is computed.

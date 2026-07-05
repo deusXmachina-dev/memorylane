@@ -1,15 +1,16 @@
 /**
  * Task mining module (in development behind the ML_TASK_MINING flag).
  *
- * Two-phase mining that writes grounded *sightings* (task instances). It does
- * NOT match, dedup, or assign patterns — sightings are append-only and carved
+ * Mining that writes grounded *sightings* (task instances). It does NOT
+ * match, dedup, or assign patterns — sightings are append-only and carved
  * in stone.
  *   Phase 1 (Scan): one LLM call over a full day's activities discovers
  *     discrete task-instance candidates, each grounded in real activity_ids.
- *   Phase 2 (Ground): each candidate gets its own tool-equipped LLM call to
- *     confirm it's a real task and finalize its activity_ids. The time window
- *     and interaction time are then COMPUTED from those activities (never
- *     LLM-estimated) and a sighting is written.
+ *   Phase 2 (Ground): optional per-candidate tool-equipped LLM confirmation.
+ *     OFF by default (scanOnly) — the eval sweep showed grounding lowers
+ *     recall at higher cost (findings/task-mining-benchmark.md).
+ * The time window and interaction time are COMPUTED from the final activities
+ * (never LLM-estimated) before each sighting is written.
  *
  * After mining, a clustering pass (see ./clustering) groups sightings into
  * persistent recurring-process clusters with stable ids.

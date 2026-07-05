@@ -43,25 +43,34 @@ export function generatePatternId(name: string): string {
   return uuidv5(name.toLowerCase().trim(), PATTERN_NAMESPACE)
 }
 
-export function extractJsonArray<T>(content: string): T[] {
+/**
+ * Like extractJsonArray, but distinguishes failure from an empty answer:
+ * null when no JSON array could be parsed, the (possibly empty) array when
+ * the response contained one.
+ */
+export function tryExtractJsonArray<T>(content: string): T[] | null {
   const jsonMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
   const jsonStr = jsonMatch ? jsonMatch[1] : content
 
   try {
     const parsed = JSON.parse(jsonStr)
-    if (Array.isArray(parsed)) return parsed as T[]
-    return []
+    return Array.isArray(parsed) ? (parsed as T[]) : null
   } catch {
     const arrayMatch = jsonStr.match(/\[[\s\S]*\]/)
     if (arrayMatch) {
       try {
-        return JSON.parse(arrayMatch[0]) as T[]
+        const parsed = JSON.parse(arrayMatch[0])
+        return Array.isArray(parsed) ? (parsed as T[]) : null
       } catch {
-        return []
+        return null
       }
     }
-    return []
+    return null
   }
+}
+
+export function extractJsonArray<T>(content: string): T[] {
+  return tryExtractJsonArray<T>(content) ?? []
 }
 
 export function extractJsonObject<T>(content: string): T | null {

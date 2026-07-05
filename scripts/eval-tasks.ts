@@ -39,6 +39,7 @@ import type {
   TaskEvalReport,
   TaskFixtureScore,
   TaskJudgeScore,
+  TaskRunFailure,
 } from '../src/main/eval/task-types'
 import { loadCliInferenceProvider } from './cli-inference-provider'
 
@@ -141,6 +142,7 @@ async function main() {
   await embedder.init()
 
   const scores: TaskFixtureScore[] = []
+  const failures: TaskRunFailure[] = []
 
   for (const dir of dirs) {
     const fixture = loadTaskFixture(dir)
@@ -210,9 +212,14 @@ async function main() {
             `new ${score.newCount}, detected ${score.detectedCount}`,
         )
       } catch (err) {
-        console.error(
-          `  ✖ ${fixture.manifest.name} × ${model} failed: ${err instanceof Error ? err.message : String(err)}`,
-        )
+        const error = err instanceof Error ? err.message : String(err)
+        failures.push({
+          fixture: fixture.manifest.name,
+          model,
+          mode: a.scanOnly ? 'scan-only' : 'two-phase',
+          error,
+        })
+        console.error(`  ✖ ${fixture.manifest.name} × ${model} failed: ${error}`)
       }
     }
 
@@ -232,12 +239,17 @@ async function main() {
     vendor: handle.vendor,
     judgeModel: a.judge ? judgeModel : null,
     fixtures: scores,
+    failures,
   }
 
   const mdPath = writeTaskReport(RESULTS_DIR, report)
   console.log('\n=== Scorecard ===')
   console.log(renderTaskMarkdown(report))
   console.log(`\nWrote ${path.relative(process.cwd(), mdPath)}`)
+  if (failures.length > 0) {
+    console.error(`\n${failures.length} run(s) failed — scorecard is partial.`)
+    process.exitCode = 1
+  }
 }
 
 main().catch((err) => {
