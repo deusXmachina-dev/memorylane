@@ -39,9 +39,18 @@ export const VENDOR_PRESETS: Record<Vendor, VendorPresets> = {
       { id: 'mistralai/mistral-small-3.2-24b-instruct', label: 'Mistral Small 3.2' },
       { id: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
     ],
+    // Task-miner models, ordered by the 2026-07-03 sweep
+    // (findings/task-mining-benchmark.md); first entry is the default and heads
+    // the fallback chain. ZDR-capable models only — the sweep's cheapest option
+    // (tencent/hy3-preview, 78% @ $0.006) is deliberately excluded because it
+    // has NO ZDR endpoints on OpenRouter and fails under a zero-data-retention
+    // key policy. minimax-m3 won on recall (84% @ ~$0.04/day); mimo-v2.5 is the
+    // value pick (82% @ $0.015); gemini-2.5-flash is the reliable lower-recall
+    // fallback (the previous default).
     patternDetection: [
+      { id: 'minimax/minimax-m3', label: 'MiniMax M3' },
+      { id: 'xiaomi/mimo-v2.5', label: 'MiMo V2.5' },
       { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-      { id: 'moonshotai/kimi-k2.5', label: 'Kimi K2.5' },
     ],
   },
   google: {
