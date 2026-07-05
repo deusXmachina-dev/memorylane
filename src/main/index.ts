@@ -30,6 +30,7 @@ import { listInstalledApps } from './apps/installed-apps'
 import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
 import { PatternDetector } from './services/pattern-detector'
 import { TaskMiner } from './services/task-miner'
+import { runTaskBackfillIfNeeded } from './services/task-miner/backfill-bootstrap'
 import { TASK_MINING_ENABLED } from '@main/system/feature-flags'
 import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
@@ -413,6 +414,17 @@ app.on('ready', async () => {
   runtime.accessProvider.startPeriodicRefresh()
 
   captureCoordinator.resumeCaptureIfDesired('startup')
+
+  // One-time, background: seed the new sightings/clusters tables from existing
+  // history so the task view isn't empty after upgrading. Version-gated, so it
+  // runs at most once per user; only in the TaskMiner world.
+  if (taskMiner) {
+    void runTaskBackfillIfNeeded({
+      taskMiner,
+      provider: runtime.inferenceProvider,
+      settings: captureSettingsManager,
+    })
+  }
 
   if (!startHidden) {
     openMainWindow()

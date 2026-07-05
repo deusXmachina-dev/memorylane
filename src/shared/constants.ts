@@ -124,6 +124,15 @@ export const PATTERN_DETECTION_CONFIG = {
   SETTLE_DELAY_MS: 60 * 1000, // 1 min after unlock before running
 }
 
+// One-time task-mining backfill (runs once per user, on the first launch after
+// upgrading, to seed the new sightings/clusters tables from existing history).
+// VERSION is a one-time gate stored in capture-settings.json; bump it to force a
+// re-backfill for everyone. Mirrors the *SchemaVersion one-time-migration idiom.
+export const TASK_BACKFILL = {
+  VERSION: 1,
+  DAYS: 30, // Calendar days back to mine (day-by-day, oldest → newest)
+}
+
 // User-initiated timed capture pause (auto-resumes when the timer elapses).
 // Presets are shared between the tray menu and the main-window control.
 export const CAPTURE_PAUSE_CONFIG = {

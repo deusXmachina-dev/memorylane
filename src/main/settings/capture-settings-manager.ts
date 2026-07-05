@@ -23,6 +23,7 @@ import {
   VISUAL_DETECTOR_CONFIG,
   INTERACTION_MONITOR_CONFIG,
   ACTIVITY_CONFIG,
+  TASK_BACKFILL,
 } from '../../shared/constants'
 import {
   DEFAULT_CAPTURE_HOTKEY_ACCELERATOR,
@@ -155,6 +156,9 @@ const DEFAULTS: CaptureSettings = {
   excludedUrlPatterns: [],
   urlMatchSchemaVersion: URL_MATCH_SCHEMA_VERSION,
   appMatchSchemaVersion: APP_MATCH_SCHEMA_VERSION,
+  // Fresh installs have no history to backfill, so they start already-done.
+  // Existing users' files lack this key → load() reads it as 0 → backfill runs.
+  taskBackfillVersion: TASK_BACKFILL.VERSION,
   activeVendor: 'openrouter',
   semanticVideoModel: OPENROUTER_DEFAULTS.semanticVideoModel,
   semanticSnapshotModel: OPENROUTER_DEFAULTS.semanticSnapshotModel,
@@ -301,6 +305,9 @@ export class CaptureSettingsManager {
           // Preserve the stored value (absent → 0) so the post-load, app-list-aware
           // migration (migrateAppTokens) can tell a pre-v1 file from a current one.
           appMatchSchemaVersion: data.appMatchSchemaVersion ?? 0,
+          // Same idiom: absent → 0 marks an existing install whose new
+          // sightings/clusters tables still need the one-time backfill.
+          taskBackfillVersion: data.taskBackfillVersion ?? 0,
           maxScreenshotsForLlm:
             typeof data.maxScreenshotsForLlm === 'number'
               ? data.maxScreenshotsForLlm
