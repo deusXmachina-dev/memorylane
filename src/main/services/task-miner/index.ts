@@ -42,6 +42,7 @@ export { DEFAULT_MINER_CONFIG }
 export class TaskMiner {
   private running = false
   private settleTimer: ReturnType<typeof setTimeout> | null = null
+  private backfillPending = false
   private model: string = DEFAULT_MINER_CONFIG.model
   private enabled = true
   private readonly embeddingService = new EmbeddingService()
@@ -62,10 +63,24 @@ export class TaskMiner {
   }
 
   /**
+   * Stand the scheduled daily run down while the one-time backfill is queued or
+   * running. The backfill seeds many days at once and records today's run, so a
+   * concurrent daily run would be redundant — and worse, racing for the shared
+   * settle timer would preempt the backfill. Set this before capture resume.
+   */
+  setBackfillPending(pending: boolean): void {
+    this.backfillPending = pending
+  }
+
+  /**
    * Try to schedule a mining run. Call this on screen unlock / wake.
    */
   scheduleRun(): void {
     if (!this.enabled) return
+    if (this.backfillPending) {
+      log.info('[TaskMiner] One-time backfill pending — deferring scheduled run')
+      return
+    }
     if (this.running || this.settleTimer) return
 
     if (!this.provider || !this.provider.isConfigured()) {
