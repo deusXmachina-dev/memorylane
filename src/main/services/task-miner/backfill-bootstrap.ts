@@ -25,12 +25,9 @@ export interface TaskBackfillBootstrapDeps {
  * retries on a later launch. Non-destructive — it never wipes user data;
  * `TaskMiner.backfill` skips days that already have sightings.
  *
- * The backfill and the startup daily run share the same settle delay, so a naive
- * background start races the scheduled run and usually loses (deferring the seed
- * a whole launch). To avoid that, this **synchronously** marks the miner's
- * backfill as pending before it awaits — so the scheduled run armed by capture
- * resume stands down and lets the backfill seed the tables unopposed. Call it
- * BEFORE capture resume for the pending flag to be seen.
+ * Must be called BEFORE capture resume: it synchronously claims miner priority
+ * (see `setBackfillPending`) so the scheduled daily run stands down instead of
+ * winning the shared settle delay and deferring the seed a whole launch.
  */
 export async function runTaskBackfillIfNeeded(deps: TaskBackfillBootstrapDeps): Promise<void> {
   const { taskMiner, provider, marker } = deps

@@ -5,11 +5,10 @@ import { TASK_BACKFILL } from '../../../shared/constants'
 
 /**
  * Persistent completion marker for the one-time task-mining backfill, stored in
- * its own `{userData}/task-backfill.json`. A stored version below the current
- * `TASK_BACKFILL.VERSION` counts as incomplete, so a bump re-runs the backfill
- * (filling missing days and reclustering — never re-mining days that already
- * have sightings). Fresh installs have no file yet; their first backfill is a
- * near-no-op that stamps the marker.
+ * its own `{userData}/task-backfill.json`. Gated by `TASK_BACKFILL.VERSION` (a
+ * stored version below the current one counts as incomplete — see the constant
+ * for the re-backfill semantics). Fresh installs have no file yet; their first
+ * backfill is a near-no-op that stamps the marker.
  */
 export interface BackfillMarker {
   /** True once a backfill at (or above) the current version has completed. */
@@ -20,7 +19,6 @@ export interface BackfillMarker {
 
 interface MarkerFile {
   version?: number
-  completedAt?: number
 }
 
 export function createBackfillMarker(userDataPath: string): BackfillMarker {
@@ -39,7 +37,7 @@ export function createBackfillMarker(userDataPath: string): BackfillMarker {
       }
     },
     markComplete(): void {
-      const data: MarkerFile = { version: TASK_BACKFILL.VERSION, completedAt: Date.now() }
+      const data: MarkerFile = { version: TASK_BACKFILL.VERSION }
       fs.writeFileSync(filePath, JSON.stringify(data, null, 2))
     },
   }

@@ -134,10 +134,10 @@ export class TaskMiner {
    * One-time backfill: mine the last `days` calendar days into sightings, then
    * run a single clustering pass. Idempotent — days that already have sightings
    * are skipped, so a prior daily run or an interrupted backfill is safe to
-   * re-run. Runs oldest → newest so incremental cluster ids form the same way
-   * daily runs would. Clustering is deferred to one final pass (30 scan calls +
-   * 1 review call, not 30). Holds the `running` guard so a scheduled run can't
-   * overlap.
+   * re-run. Clustering is deferred to one final pass (~`days` scan calls + 1
+   * review call, not one per day); that pass is order-independent, so scan order
+   * doesn't affect cluster ids. Holds the `running` guard so a scheduled run
+   * can't overlap.
    */
   async backfill(
     provider: InferenceProvider,
