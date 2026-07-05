@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3'
 import type { SearchFilters } from '../../shared/types'
 import type { StoredActivity, ActivitySummary, ActivityDetail } from './types'
-import { vectorToBlob, sanitizeFtsQuery, SQLITE_VEC_KNN_MAX } from './utils'
+import { vectorToBlob, blobToVector, sanitizeFtsQuery, SQLITE_VEC_KNN_MAX } from './utils'
 import { NON_WEBSITE_HOSTS } from '../../shared/app-utils'
 import log from '@main/utils/logger'
 
@@ -172,6 +172,25 @@ export class ActivityRepository {
       .all(...ids) as Record<string, unknown>[]
 
     return rows.map((row) => this.rowToStored(row))
+  }
+
+  /**
+   * Read raw embeddings back out of activities_vec. Missing ids (e.g. pruned
+   * activities) are simply absent from the result.
+   */
+  getVectorsByIds(ids: readonly string[]): Map<string, number[]> {
+    const result = new Map<string, number[]>()
+    if (ids.length === 0) return result
+
+    const placeholders = ids.map(() => '?').join(', ')
+    const rows = this.db
+      .prepare(`SELECT id, embedding FROM activities_vec WHERE id IN (${placeholders})`)
+      .all(...ids) as { id: string; embedding: Buffer }[]
+
+    for (const row of rows) {
+      result.set(row.id, blobToVector(row.embedding))
+    }
+    return result
   }
 
   /**

@@ -1,0 +1,239 @@
+/**
+ * Persistent, incremental clustering over task-miner sightings.
+ *
+ * Sightings are carved in stone; everything here is a derived, rebuildable
+ * view — but cluster ids are STABLE across runs, so "seen X times" grows week
+ * over week. Deterministic-first: signatures, centroid attachment, union-find
+ * grouping, and all stats are pure computation; the LLM only writes
+ * labels/descriptions and adjudicates merge/split proposals over groups it is
+ * shown. Existing clusters are never split — stable identity beats
+ * retroactive perfection, and the tight attach threshold makes over-merging
+ * an existing cluster rare. LLM failure degrades to unlabeled clusters that
+ * are retried on the next run.
+ */
+
+import { v4 as uuidv4 } from 'uuid'
+import type { StorageService } from '@main/storage'
+import type { Cluster } from '@main/storage/cluster-repository'
+import type { InferenceProvider } from '@main/llm'
+import log from '@main/utils/logger'
+import { formatApiError } from '../../pattern-detector/helpers'
+import type { ProgressCallback } from '../types'
+import { dot } from './vector-math'
+import { computeAndStoreSignatures, recomputeCentroid } from './signatures'
+import { attachToCentroids, clusterLeftovers } from './attach'
+import type { ClusteringRunSummary, ReviewCluster, ReviewInput } from './types'
+import { CLUSTERING_CONFIG, emptyClusteringSummary } from './types'
+import { runLlmReview, type ReviewCallResult } from './llm-review'
+import { validateAndApply, mergePairKey, type ReviewGuards } from './apply-review'
+
+export type { ClusteringRunSummary } from './types'
+export { CLUSTERING_CONFIG } from './types'
+
+export interface ClusteringDeps {
+  storage: StorageService
+  /** Absent → deterministic steps only (offline / tests). */
+  provider?: InferenceProvider
+  model: string
+  now?: number
+  onProgress?: ProgressCallback
+  /** Injectable LLM step for tests; defaults to the real review call. */
+  review?: (input: ReviewInput) => Promise<ReviewCallResult>
+}
+
+export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRunSummary> {
+  const { storage, provider, model } = deps
+  const now = deps.now ?? Date.now()
+  const summary = emptyClusteringSummary()
+
+  const progress = (msg: string) => {
+    log.info(`[TaskMiner] ${msg}`)
+    deps.onProgress?.(msg)
+  }
+
+  // 1. Consistency: drop memberships/signatures of pruned sightings, delete
+  //    emptied clusters, refresh centroids of clusters that lost members.
+  const pruned = storage.clusters.pruneOrphans()
+  if (pruned.droppedMemberships || pruned.deletedClusters) {
+    progress(
+      `[Clustering] Pruned ${pruned.droppedMemberships} memberships, ` +
+        `deleted ${pruned.deletedClusters} empty clusters`,
+    )
+  }
+  for (const clusterId of pruned.touchedClusterIds) recomputeCentroid(storage, clusterId, now)
+
+  // 2. Signatures for sightings never seen by the clusterer. On the first run
+  //    after the migration this is the whole retained backlog — bootstrap is
+  //    the same code path.
+  const unprocessed = storage.clusters.getUnprocessedSightings()
+  const { signatures, unclustered } = computeAndStoreSignatures(storage, unprocessed, now)
+  summary.newSignatures = unprocessed.length
+  summary.unclustered = unclustered
+  if (unprocessed.length === 0 && pruned.touchedClusterIds.length === 0) {
+    return summary
+  }
+  progress(
+    `[Clustering] ${unprocessed.length} new sightings ` +
+      `(${signatures.length} with signatures, ${unclustered} without vectors)`,
+  )
+
+  // 3. Attach to existing clusters by centroid similarity. Centroids are
+  //    frozen for the whole pass so results don't depend on sighting order.
+  const existing = storage.clusters.getAll()
+  const centroids = existing
+    .filter((c): c is Cluster & { centroid: number[] } => c.centroid !== null)
+    .map((c) => ({ clusterId: c.id, centroid: c.centroid }))
+  const { attached, leftovers } = attachToCentroids(
+    signatures,
+    centroids,
+    CLUSTERING_CONFIG.SIMILARITY_THRESHOLD,
+  )
+  const touched = new Set<string>(pruned.touchedClusterIds)
+  for (const { sightingId, clusterId } of attached) {
+    storage.clusters.addMembership(clusterId, sightingId, now)
+    touched.add(clusterId)
+  }
+  summary.attached = attached.length
+
+  // 4. First-cut grouping of what didn't attach anywhere: single-linkage
+  //    union-find at the same threshold. Every component — singletons
+  //    included — becomes a cluster, so recurrence can grow from 1.
+  const newClusterIds = new Set<string>()
+  for (const group of clusterLeftovers(leftovers, CLUSTERING_CONFIG.SIMILARITY_THRESHOLD)) {
+    const clusterId = uuidv4()
+    storage.clusters.create({
+      id: clusterId,
+      label: '',
+      description: '',
+      centroid: null,
+      labelModel: '',
+      labeledSize: 0,
+      createdAt: now,
+      updatedAt: now,
+    })
+    for (const sightingId of group) storage.clusters.addMembership(clusterId, sightingId, now)
+    newClusterIds.add(clusterId)
+    touched.add(clusterId)
+  }
+  summary.newClusters = newClusterIds.size
+
+  // 5. Refresh centroids of every touched cluster.
+  for (const clusterId of touched) recomputeCentroid(storage, clusterId, now)
+  if (attached.length || newClusterIds.size) {
+    progress(
+      `[Clustering] Attached ${attached.length} sightings to existing clusters, ` +
+        `created ${newClusterIds.size} new clusters`,
+    )
+  }
+
+  // 6. LLM review: label new/grown clusters, adjudicate merges among
+  //    near-threshold centroid pairs, split clusters born this run.
+  const input = buildReviewInput(storage, touched, newClusterIds)
+  if (input.clusters.length === 0) return summary
+  if (!provider) {
+    progress('[Clustering] No inference provider — skipping LLM review')
+    return summary
+  }
+
+  try {
+    const review = deps.review
+      ? await deps.review(input)
+      : await runLlmReview(provider, model, input, progress)
+    summary.tokenUsage = review.tokenUsage
+    if (!review.output) {
+      summary.llmError = 'Could not parse review response'
+      return summary
+    }
+
+    const guards: ReviewGuards = {
+      reviewableIds: new Set(input.clusters.map((c) => c.id)),
+      newClusterIds,
+      mergeCandidatePairs: new Set(input.mergeCandidates.map(([a, b]) => mergePairKey(a, b))),
+    }
+    const applied = validateAndApply(storage, review.output, guards, model, now, progress)
+    summary.merged = applied.merged
+    summary.split = applied.split
+    summary.labeled = applied.labeled
+    progress(
+      `[Clustering] Review applied: ${applied.labeled} labeled, ` +
+        `${applied.merged} merged, ${applied.split} split`,
+    )
+  } catch (error) {
+    summary.llmError = formatApiError(error)
+    log.error('[TaskMiner] Clustering LLM review failed:', summary.llmError)
+  }
+
+  return summary
+}
+
+/**
+ * What the LLM gets to see: clusters needing a (re)label, plus every cluster
+ * involved in a merge candidate. Singleton clusters are only shown when a
+ * merge involves them — they get no label of their own (readers fall back to
+ * the member title).
+ */
+function buildReviewInput(
+  storage: StorageService,
+  touched: Set<string>,
+  newClusterIds: Set<string>,
+): ReviewInput {
+  const all = storage.clusters.getAll()
+  const byId = new Map(all.map((c) => [c.id, c]))
+  const memberCount = new Map(all.map((c) => [c.id, storage.clusters.getMemberCount(c.id)]))
+
+  const needsLabel = (c: Cluster): boolean => {
+    const count = memberCount.get(c.id) ?? 0
+    if (count < 2) return false
+    // Relabel once a cluster doubles since its last labeling (semantic drift).
+    return c.label === '' || count >= 2 * Math.max(1, c.labeledSize)
+  }
+
+  // Merge candidates: touched clusters vs all others, centroid cosine in the
+  // "probably the same process, let the LLM decide" band below the automatic
+  // attach threshold.
+  const mergeCandidates: [string, string][] = []
+  const inMerge = new Set<string>()
+  const seenPairs = new Set<string>()
+  for (const id of touched) {
+    const a = byId.get(id)
+    if (!a?.centroid) continue
+    for (const b of all) {
+      if (b.id === id || !b.centroid) continue
+      const key = mergePairKey(id, b.id)
+      if (seenPairs.has(key)) continue
+      seenPairs.add(key)
+      if (dot(a.centroid, b.centroid) >= CLUSTERING_CONFIG.MERGE_CANDIDATE_THRESHOLD) {
+        mergeCandidates.push([id, b.id])
+        inMerge.add(id)
+        inMerge.add(b.id)
+      }
+    }
+  }
+
+  const reviewIds = new Set<string>([
+    ...all.filter((c) => needsLabel(c)).map((c) => c.id),
+    ...inMerge,
+  ])
+
+  const clusters: ReviewCluster[] = [...reviewIds].map((id) => {
+    const cluster = byId.get(id)!
+    const members = storage.clusters.getMembers(id)
+    // Members come back oldest-first; show the most recent sample.
+    const sample = members.slice(-CLUSTERING_CONFIG.MAX_SAMPLE_MEMBERS)
+    return {
+      id,
+      new: newClusterIds.has(id),
+      label: cluster.label,
+      members: sample.map((s) => ({
+        sighting_id: s.id,
+        title: s.title,
+        description: s.description,
+        apps: s.apps,
+        interaction_min: s.interactionMin,
+        date: new Date(s.startedAt).toISOString().slice(0, 10),
+      })),
+    }
+  })
+
+  return { clusters, mergeCandidates }
+}

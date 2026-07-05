@@ -20,6 +20,9 @@
  *   npm run mine-tasks -- --date 2026-03-07    (analyze a specific calendar day)
  *   npm run mine-tasks -- --api-key <key>      (override env var)
  *   npm run mine-tasks -- --user-data <path>   (point at a non-default userData dir)
+ *   npm run mine-tasks -- --two-phase          (re-enable Phase 2 grounding calls;
+ *                                               scan-only/one-shot is the default)
+ *   npm run mine-tasks -- --no-clustering      (skip the post-mining clustering pass)
  */
 
 import { config as loadEnv } from 'dotenv'
@@ -27,8 +30,9 @@ loadEnv()
 
 import * as fs from 'fs'
 import { StorageService } from '../src/main/storage/index'
+import { applyMigrations } from '../src/main/storage/migrator'
 import { getDefaultDbPath } from '../src/main/utils/paths'
-import { TaskMiner } from '../src/main/services/task-miner'
+import { TaskMiner, DEFAULT_MINER_CONFIG } from '../src/main/services/task-miner'
 import { PATTERN_DETECTION_CONFIG } from '../src/shared/constants'
 import { loadCliInferenceProvider } from './cli-inference-provider'
 
@@ -43,6 +47,8 @@ interface CliArgs {
   userDataPath: string | undefined
   vendorOverride: string | undefined
   days: number
+  scanOnly: boolean
+  clustering: boolean
 }
 
 function parseArgs(): CliArgs {
@@ -53,6 +59,8 @@ function parseArgs(): CliArgs {
   let userDataPath: string | undefined
   let vendorOverride: string | undefined
   let days = PATTERN_DETECTION_CONFIG.LOOKBACK_DAYS
+  let scanOnly = DEFAULT_MINER_CONFIG.scanOnly
+  let clustering = DEFAULT_MINER_CONFIG.clustering
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--db-path' && args[i + 1]) {
@@ -77,6 +85,12 @@ function parseArgs(): CliArgs {
         process.exit(1)
       }
       i++
+    } else if (args[i] === '--scan-only') {
+      scanOnly = true
+    } else if (args[i] === '--two-phase') {
+      scanOnly = false
+    } else if (args[i] === '--no-clustering') {
+      clustering = false
     } else if (args[i] === '--date' && args[i + 1]) {
       const target = new Date(args[i + 1] + 'T00:00:00')
       if (isNaN(target.getTime())) {
@@ -94,11 +108,20 @@ function parseArgs(): CliArgs {
     }
   }
 
-  return { dbPath, modelOverride, apiKey, userDataPath, vendorOverride, days }
+  return { dbPath, modelOverride, apiKey, userDataPath, vendorOverride, days, scanOnly, clustering }
 }
 
 async function main() {
-  const { dbPath, modelOverride, apiKey, userDataPath, vendorOverride, days } = parseArgs()
+  const {
+    dbPath,
+    modelOverride,
+    apiKey,
+    userDataPath,
+    vendorOverride,
+    days,
+    scanOnly,
+    clustering,
+  } = parseArgs()
 
   if (!fs.existsSync(dbPath)) {
     console.error(`Database not found at: ${dbPath}`)
@@ -106,7 +129,7 @@ async function main() {
   }
 
   const handle = loadCliInferenceProvider({ apiKey, userDataPath, vendorOverride })
-  const model = modelOverride || handle.patternDetectionModel || PATTERN_DETECTION_CONFIG.MODEL
+  const model = modelOverride || handle.patternDetectionModel || DEFAULT_MINER_CONFIG.model
 
   const targetDay = new Date()
   targetDay.setDate(targetDay.getDate() - days)
@@ -120,6 +143,9 @@ async function main() {
   console.log('')
 
   const storageService = new StorageService(dbPath)
+  // The clustering pass writes to tables the app may not have created yet
+  // (it migrates on startup); migrations are idempotent.
+  applyMigrations(storageService.getDatabase())
 
   const count = storageService.activities.count()
   console.log(`Activities in DB: ${count}`)
@@ -137,6 +163,8 @@ async function main() {
       {
         model,
         lookbackDays: days,
+        scanOnly,
+        clustering,
       },
       (msg) => {
         console.log(`  ${msg}`)
@@ -175,9 +203,52 @@ async function main() {
         )
       }
     }
+
+    if (result.clustering) {
+      const c = result.clustering
+      console.log('\n=== Clustering ===')
+      console.log(`New signatures:   ${c.newSignatures} (${c.unclustered} without usable vectors)`)
+      console.log(`Attached:         ${c.attached} to existing clusters`)
+      console.log(`New clusters:     ${c.newClusters}`)
+      console.log(`Review:           ${c.labeled} labeled, ${c.merged} merged, ${c.split} split`)
+      console.log(`Tokens (review):  ${c.tokenUsage.input} in / ${c.tokenUsage.output} out`)
+      if (c.llmError) console.log(`Review error:     ${c.llmError}`)
+
+      const clusters = storageService.clusters.getAllWithStats()
+      if (clusters.length > 0) {
+        console.log(`\n=== Clusters (${clusters.length}) ===`)
+        for (const cl of clusters) {
+          // Unlabeled clusters fall back to the most common member title.
+          const label = cl.label || mostCommonTitle(storageService.clusters.getMembers(cl.id))
+          console.log(`\n  ${label}${cl.label ? '' : ' [unlabeled]'}`)
+          if (cl.description) console.log(`    ${cl.description}`)
+          console.log(
+            `    Seen ${cl.timesSeen}x | avg ${cl.avgInteractionMin.toFixed(1)} min interaction` +
+              (cl.lastSeenAt
+                ? ` | last ${new Date(cl.lastSeenAt).toISOString().slice(0, 10)}`
+                : ''),
+          )
+          if (cl.apps.length > 0) console.log(`    Apps: ${cl.apps.join(', ')}`)
+        }
+      }
+    }
   } finally {
     storageService.close()
   }
+}
+
+function mostCommonTitle(sightings: { title: string }[]): string {
+  const counts = new Map<string, number>()
+  for (const s of sightings) counts.set(s.title, (counts.get(s.title) ?? 0) + 1)
+  let best = '(unlabeled)'
+  let bestCount = 0
+  for (const [title, count] of counts) {
+    if (count > bestCount) {
+      best = title
+      bestCount = count
+    }
+  }
+  return best
 }
 
 main().catch((err) => {

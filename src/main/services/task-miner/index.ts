@@ -1,15 +1,19 @@
 /**
  * Task mining module (in development behind the ML_TASK_MINING flag).
  *
- * Two-phase mining that writes grounded *sightings* (task instances). It does
- * NOT match, dedup, or assign patterns — sightings are append-only and carved
+ * Mining that writes grounded *sightings* (task instances). It does NOT
+ * match, dedup, or assign patterns — sightings are append-only and carved
  * in stone.
  *   Phase 1 (Scan): one LLM call over a full day's activities discovers
  *     discrete task-instance candidates, each grounded in real activity_ids.
- *   Phase 2 (Ground): each candidate gets its own tool-equipped LLM call to
- *     confirm it's a real task and finalize its activity_ids. The time window
- *     and interaction time are then COMPUTED from those activities (never
- *     LLM-estimated) and a sighting is written.
+ *   Phase 2 (Ground): optional per-candidate tool-equipped LLM confirmation.
+ *     OFF by default (scanOnly) — the eval sweep showed grounding lowers
+ *     recall at higher cost (findings/task-mining-benchmark.md).
+ * The time window and interaction time are COMPUTED from the final activities
+ * (never LLM-estimated) before each sighting is written.
+ *
+ * After mining, a clustering pass (see ./clustering) groups sightings into
+ * persistent recurring-process clusters with stable ids.
  *
  * Includes built-in scheduling: call scheduleRun() on screen unlock and the
  * service handles interval guards, settle delays, and error isolation.
@@ -28,8 +32,11 @@ import { isSameDay, formatApiError } from '../pattern-detector/helpers'
 import type { TaskMinerConfig, MiningRunResult, ProgressCallback } from './types'
 import { DEFAULT_MINER_CONFIG } from './types'
 import { runDetection } from './run-detection'
+import { runClustering } from './clustering'
+import type { ClusteringRunSummary } from './clustering'
 
 export type { TaskMinerConfig, MiningRunResult, ProgressCallback }
+export type { ClusteringRunSummary }
 export { DEFAULT_MINER_CONFIG }
 
 export class TaskMiner {
@@ -96,13 +103,16 @@ export class TaskMiner {
     config: Partial<TaskMinerConfig> = {},
     onProgress?: ProgressCallback,
   ): Promise<MiningRunResult> {
-    return runDetection(
+    const cfg = { ...DEFAULT_MINER_CONFIG, model: this.model, ...config }
+    const result = await runDetection(
       provider,
       this.storage,
       this.embeddingService,
-      { model: this.model, ...config },
+      cfg,
       onProgress,
     )
+    result.clustering = await this.cluster(provider, cfg, onProgress)
+    return result
   }
 
   private async execute(provider: InferenceProvider): Promise<void> {
@@ -116,10 +126,46 @@ export class TaskMiner {
           `(${result.candidatesRejected} rejected), ` +
           `tokens: ${result.tokenUsage.total.input}in/${result.tokenUsage.total.output}out`,
       )
+      const clustering = await this.cluster(provider, {
+        ...DEFAULT_MINER_CONFIG,
+        model: this.model,
+      })
+      if (clustering) {
+        log.info(
+          `[TaskMiner] Clustering complete: +${clustering.attached} attached, ` +
+            `${clustering.newClusters} new clusters, ${clustering.labeled} labeled` +
+            (clustering.llmError ? ` (LLM review failed: ${clustering.llmError})` : ''),
+        )
+      }
     } catch (error) {
       log.error('[TaskMiner] Run failed:', formatApiError(error))
     } finally {
       this.running = false
+    }
+  }
+
+  /**
+   * Post-mining clustering pass. Isolated so a clustering failure never marks
+   * the mining run failed — sightings are already written, and every
+   * deterministic clustering step commits independently, so the next run
+   * resumes cleanly.
+   */
+  private async cluster(
+    provider: InferenceProvider,
+    cfg: TaskMinerConfig,
+    onProgress?: ProgressCallback,
+  ): Promise<ClusteringRunSummary | undefined> {
+    if (!cfg.clustering) return undefined
+    try {
+      return await runClustering({
+        storage: this.storage,
+        provider,
+        model: cfg.model,
+        onProgress,
+      })
+    } catch (error) {
+      log.error('[TaskMiner] Clustering failed:', formatApiError(error))
+      return undefined
     }
   }
 }

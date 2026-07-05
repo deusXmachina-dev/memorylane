@@ -5,12 +5,12 @@ import type { Sighting } from '../../storage/sighting-repository'
 import type { EmbeddingService } from '../../processor/embedding'
 import type { InferenceProvider } from '../../llm'
 import log from '@main/utils/logger'
-import type { TaskMinerConfig, MiningRunResult, ProgressCallback } from './types'
+import type { TaskMinerConfig, MiningRunResult, ProgressCallback, Candidate } from './types'
 import { DEFAULT_MINER_CONFIG } from './types'
 import {
   getDayBoundaries,
   serializeActivities,
-  extractJsonArray,
+  tryExtractJsonArray,
   extractJsonObject,
 } from '../pattern-detector/helpers'
 import { buildVerificationTools } from '../pattern-detector/tools'
@@ -20,6 +20,10 @@ import { buildScanSystemPrompt, buildGroundingSystemPrompt } from './prompts'
 
 const GROUNDING_MAX_STEPS = 8
 const SIGHTING_MAX_AGE_DAYS = 90
+// A malformed scan response — no parseable JSON, or candidates that all fail
+// validation / cite unknown ids — silently loses the whole day, so retry it.
+// A response that parses to `[]` is a legitimate empty day, not a failure.
+const SCAN_MAX_ATTEMPTS = 3
 
 function emptyResult(
   runId: string,
@@ -88,27 +92,91 @@ export async function runDetection(
   // Phase 1: Scan — discover discrete task instances
   // =========================================================================
 
-  const serialized = serializeActivities(activities)
+  // Serve compact positional ids (a1..aN) to the scan instead of raw UUIDs —
+  // models mangle long opaque ids when citing them (dropping whole findings),
+  // and short handles cut prompt tokens. Mapped back right after parsing.
+  const realIdOf = new Map<string, string>()
+  const serialized = serializeActivities(activities).map((row, i) => {
+    const shortId = `a${i + 1}`
+    realIdOf.set(shortId, activities[i].id)
+    return { ...row, id: shortId }
+  })
   const scanPrompt = buildScanSystemPrompt(label, userContextStr)
   const scanUserMessage = `Here are all ${activities.length} activities from ${label}:\n\n\`\`\`json\n${JSON.stringify(serialized, null, 2)}\n\`\`\``
 
-  progress(`[Phase 1] Sending ${activities.length} activities to ${cfg.model}...`)
-  const scanResult = await generateText({
-    model: provider.languageModel(cfg.model),
-    system: scanPrompt,
-    prompt: scanUserMessage,
-  })
+  // Parses one scan response through validation and short-id mapping, dropping
+  // ids the model invented and candidates left with no grounding. Returns null
+  // when the response held no JSON array at all.
+  const parseScanResponse = (text: string) => {
+    const raw = tryExtractJsonArray<unknown>(text)
+    if (raw === null) return null
+    const {
+      candidates: normalizedCandidates,
+      malformedCount,
+      droppedNoActivityIds,
+    } = normalizeScanCandidates(raw)
+    let unmappedIds = 0
+    const candidates: Candidate[] = normalizedCandidates
+      .map((c) => {
+        const ids = c.activity_ids
+          .map((sid) => realIdOf.get(sid.trim()))
+          .filter((id): id is string => Boolean(id))
+        unmappedIds += c.activity_ids.length - ids.length
+        return { ...c, activity_ids: ids }
+      })
+      .filter((c) => c.activity_ids.length > 0)
+    const droppedUnmappedCandidates = normalizedCandidates.length - candidates.length
+    return {
+      raw,
+      candidates,
+      malformedCount,
+      droppedNoActivityIds,
+      droppedUnmappedCandidates,
+      unmappedIds,
+    }
+  }
 
-  scanInputTokens = scanResult.usage.inputTokens ?? 0
-  scanOutputTokens = scanResult.usage.outputTokens ?? 0
-  progress(`[Phase 1] Response received (${scanInputTokens} in / ${scanOutputTokens} out tokens)`)
+  let scan: ReturnType<typeof parseScanResponse> = null
+  for (let attempt = 1; attempt <= SCAN_MAX_ATTEMPTS; attempt++) {
+    progress(
+      `[Phase 1] Sending ${activities.length} activities to ${cfg.model}...` +
+        (attempt > 1 ? ` (attempt ${attempt}/${SCAN_MAX_ATTEMPTS})` : ''),
+    )
+    const scanResult = await generateText({
+      model: provider.languageModel(cfg.model),
+      system: scanPrompt,
+      prompt: scanUserMessage,
+    })
 
-  const rawCandidates = extractJsonArray<unknown>(scanResult.text)
-  const { candidates, malformedCount, droppedNoActivityIds } =
-    normalizeScanCandidates(rawCandidates)
-  progress(
-    `[Phase 1] Parsed ${rawCandidates.length} candidates (${candidates.length} valid, ${malformedCount} malformed, ${droppedNoActivityIds} dropped for no activity_ids)`,
-  )
+    scanInputTokens += scanResult.usage.inputTokens ?? 0
+    scanOutputTokens += scanResult.usage.outputTokens ?? 0
+    progress(
+      `[Phase 1] Response received (${scanResult.usage.inputTokens ?? 0} in / ${scanResult.usage.outputTokens ?? 0} out tokens)`,
+    )
+
+    scan = parseScanResponse(scanResult.text)
+    if (scan === null) {
+      progress(
+        `[Phase 1] No JSON array in response${attempt < SCAN_MAX_ATTEMPTS ? ' — retrying' : ''}`,
+      )
+      continue
+    }
+    // A parsed `[]` is an empty day; parsed-but-unusable candidates are a
+    // failed response worth retrying.
+    if (scan.raw.length === 0 || scan.candidates.length > 0) break
+    progress(
+      `[Phase 1] Parsed ${scan.raw.length} candidates but none usable${attempt < SCAN_MAX_ATTEMPTS ? ' — retrying' : ''}`,
+    )
+  }
+
+  const rawCandidates = scan?.raw ?? []
+  const candidates = scan?.candidates ?? []
+  if (scan) {
+    progress(
+      `[Phase 1] Parsed ${scan.raw.length} candidates (${candidates.length} valid, ${scan.malformedCount} malformed, ` +
+        `${scan.droppedNoActivityIds + scan.droppedUnmappedCandidates} dropped for no activity_ids, ${scan.unmappedIds} unknown ids)`,
+    )
+  }
 
   if (candidates.length === 0) {
     progress('No grounded candidates, done')
@@ -123,68 +191,79 @@ export async function runDetection(
 
   // =========================================================================
   // Phase 2: Ground — per-candidate confirmation with tool use, then write
-  // a grounded sighting (computed window). No pattern matching.
+  // a grounded sighting (computed window). No pattern matching. In scan-only
+  // mode the scan's candidates are written directly (no LLM confirmation).
   // =========================================================================
 
-  const tools = buildVerificationTools(storage, embeddingService, start, end, progress)
+  const tools = cfg.scanOnly
+    ? undefined
+    : buildVerificationTools(storage, embeddingService, start, end, progress)
   // The grounding tools (search/browse) can surface activities from other days;
   // a sighting must stay inside the day being mined, so its final ids are
   // intersected with this window before the duration is computed.
   const dayActivityIds = new Set(activities.map((a) => a.id))
-  progress(`[Phase 2] Grounding ${candidates.length} candidates with tool access...`)
+  progress(
+    cfg.scanOnly
+      ? `[Phase 2] Scan-only: writing ${candidates.length} candidates without grounding calls`
+      : `[Phase 2] Grounding ${candidates.length} candidates with tool access...`,
+  )
 
   let candidatesKept = 0
   let candidatesRejected = 0
 
   for (const candidate of candidates) {
     try {
-      const groundPrompt = buildGroundingSystemPrompt(candidate)
+      let parsed: Record<string, unknown> = {}
+      if (!cfg.scanOnly) {
+        const groundPrompt = buildGroundingSystemPrompt(candidate)
 
-      const candidateActivities = storage.activities.getByIds(candidate.activity_ids)
-      const enrichedActivities = candidateActivities.map((a) => ({
-        id: a.id,
-        app: a.appName,
-        window_title: a.windowTitle,
-        time: new Date(a.startTimestamp).toISOString(),
-        end_time: new Date(a.endTimestamp).toISOString(),
-        summary: a.summary,
-      }))
+        const candidateActivities = storage.activities.getByIds(candidate.activity_ids)
+        const enrichedActivities = candidateActivities.map((a) => ({
+          id: a.id,
+          app: a.appName,
+          window_title: a.windowTitle,
+          time: new Date(a.startTimestamp).toISOString(),
+          end_time: new Date(a.endTimestamp).toISOString(),
+          summary: a.summary,
+        }))
 
-      const candidateInput = `Investigate this candidate task:\n\n\`\`\`json\n${JSON.stringify(
-        {
-          title: candidate.title,
-          description: candidate.description,
-          apps: candidate.apps,
-          activities: enrichedActivities,
-        },
-        null,
-        2,
-      )}\n\`\`\``
+        const candidateInput = `Investigate this candidate task:\n\n\`\`\`json\n${JSON.stringify(
+          {
+            title: candidate.title,
+            description: candidate.description,
+            apps: candidate.apps,
+            activities: enrichedActivities,
+          },
+          null,
+          2,
+        )}\n\`\`\``
 
-      const verifyResult = await generateText({
-        model: provider.languageModel(cfg.model),
-        system: groundPrompt,
-        prompt: candidateInput,
-        tools,
-        stopWhen: stepCountIs(GROUNDING_MAX_STEPS),
-      })
+        const verifyResult = await generateText({
+          model: provider.languageModel(cfg.model),
+          system: groundPrompt,
+          prompt: candidateInput,
+          tools,
+          stopWhen: stepCountIs(GROUNDING_MAX_STEPS),
+        })
 
-      verifyInputTokens += verifyResult.usage.inputTokens ?? 0
-      verifyOutputTokens += verifyResult.usage.outputTokens ?? 0
+        verifyInputTokens += verifyResult.usage.inputTokens ?? 0
+        verifyOutputTokens += verifyResult.usage.outputTokens ?? 0
 
-      const parsed = extractJsonObject<Record<string, unknown>>(verifyResult.text)
-      if (!parsed) {
-        candidatesRejected++
-        progress(`[Phase 2] Rejected "${candidate.title}": could not parse response`)
-        continue
-      }
+        const verifyParsed = extractJsonObject<Record<string, unknown>>(verifyResult.text)
+        if (!verifyParsed) {
+          candidatesRejected++
+          progress(`[Phase 2] Rejected "${candidate.title}": could not parse response`)
+          continue
+        }
 
-      if ((parsed.verdict as string) === 'reject') {
-        candidatesRejected++
-        progress(
-          `[Phase 2] Rejected: ${candidate.title} — ${(parsed.reason as string) || 'rejected'}`,
-        )
-        continue
+        if ((verifyParsed.verdict as string) === 'reject') {
+          candidatesRejected++
+          progress(
+            `[Phase 2] Rejected: ${candidate.title} — ${(verifyParsed.reason as string) || 'rejected'}`,
+          )
+          continue
+        }
+        parsed = verifyParsed
       }
 
       // Finalize activity_ids and resolve them to real activities. The window

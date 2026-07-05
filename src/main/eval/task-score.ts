@@ -83,6 +83,8 @@ export interface ScoreParams {
   judge?: Map<string, TaskJudgeScore>
   judgeCostUsd?: number | null
   matchThreshold?: number
+  /** Miner mode the run used (recorded on the score for the report). */
+  mode?: 'scan-only' | 'two-phase'
 }
 
 export function scoreTaskFixture(params: ScoreParams): TaskFixtureScore {
@@ -165,6 +167,7 @@ export function scoreTaskFixture(params: ScoreParams): TaskFixtureScore {
   return {
     fixture: params.fixture.manifest.name,
     model: params.model,
+    mode: params.mode,
     positiveCount: positives.length,
     foundCount: found.length,
     recall: positives.length ? found.length / positives.length : 0,

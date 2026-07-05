@@ -1,4 +1,5 @@
 import { PATTERN_DETECTION_CONFIG } from '../../../shared/constants'
+import type { ClusteringRunSummary } from './clustering/types'
 
 // ---------------------------------------------------------------------------
 // Config
@@ -7,11 +8,20 @@ import { PATTERN_DETECTION_CONFIG } from '../../../shared/constants'
 export interface TaskMinerConfig {
   model: string
   lookbackDays: number
+  /** Skip Phase 2 (per-candidate tool-equipped grounding); scan output is final. */
+  scanOnly: boolean
+  /** Run the clustering pass over sightings after mining. */
+  clustering: boolean
 }
 
+// scanOnly picked by the task-mining eval sweep (see
+// findings/task-mining-benchmark.md): one-shot scan beat two-phase grounding
+// on both recall and cost across every model tried.
 export const DEFAULT_MINER_CONFIG: TaskMinerConfig = {
   model: PATTERN_DETECTION_CONFIG.MODEL,
   lookbackDays: PATTERN_DETECTION_CONFIG.LOOKBACK_DAYS,
+  scanOnly: true,
+  clustering: true,
 }
 
 // ---------------------------------------------------------------------------
@@ -47,6 +57,8 @@ export interface MiningRunResult {
     verify: { input: number; output: number }
     total: { input: number; output: number }
   }
+  /** Present when the post-mining clustering pass ran. */
+  clustering?: ClusteringRunSummary
 }
 
 export type ProgressCallback = (message: string) => void

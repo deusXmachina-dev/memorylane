@@ -141,6 +141,8 @@ export interface NewSighting {
 export interface TaskFixtureScore {
   fixture: string
   model: string
+  /** Miner mode: 'scan-only' (default; no Phase 2 grounding) or 'two-phase'. */
+  mode?: 'scan-only' | 'two-phase'
   // keep tasks (recall)
   positiveCount: number
   foundCount: number
@@ -165,11 +167,21 @@ export interface TaskFixtureScore {
   goldenScores: GoldenSightingScore[]
 }
 
+/** A fixture × model run that threw and produced no score. */
+export interface TaskRunFailure {
+  fixture: string
+  model: string
+  mode: 'scan-only' | 'two-phase'
+  error: string
+}
+
 export interface TaskEvalReport {
   generatedAt: string
   vendor: string
   judgeModel: string | null
   fixtures: TaskFixtureScore[]
+  /** Absent in reports written before failures were recorded. */
+  failures?: TaskRunFailure[]
 }
 
 /** Per-golden judge result, keyed by golden title when scoring. */
