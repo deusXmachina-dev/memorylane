@@ -124,10 +124,10 @@ export const PATTERN_DETECTION_CONFIG = {
   SETTLE_DELAY_MS: 60 * 1000, // 1 min after unlock before running
 }
 
-// One-time task-mining backfill (runs once per user, on the first launch after
-// upgrading, to seed the new sightings/clusters tables from existing history).
-// VERSION is a one-time gate stored in capture-settings.json; bump it to force a
-// re-backfill for everyone. Mirrors the *SchemaVersion one-time-migration idiom.
+// One-time seed of the sightings/clusters tables from existing history, run once
+// per user on the first launch after upgrading. VERSION marks the completed
+// backfill (in {userData}/task-backfill.json); a bump re-runs it to fill missing
+// days and recluster — it does not re-mine days that already have sightings.
 export const TASK_BACKFILL = {
   VERSION: 1,
   DAYS: 30, // Calendar days back to mine (day-by-day, oldest → newest)

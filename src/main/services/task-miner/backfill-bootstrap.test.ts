@@ -88,6 +88,18 @@ describe('runTaskBackfillIfNeeded', () => {
     expect(setBackfillPending).toHaveBeenLastCalledWith(false)
   })
 
+  it('does not stamp when some days failed, so the gaps are re-mined next launch', async () => {
+    const marker = makeMarker(false)
+    const { taskMiner, setBackfillPending } = makeMiner({
+      daysMined: 4,
+      daysSkipped: 25,
+      daysFailed: 1,
+    })
+    await runTaskBackfillIfNeeded({ taskMiner, provider: makeProvider(true), marker, delayMs: 0 })
+    expect(marker.markComplete).not.toHaveBeenCalled()
+    expect(setBackfillPending).toHaveBeenLastCalledWith(false)
+  })
+
   it('does not stamp, but releases priority, when the backfill throws (retries next launch)', async () => {
     const marker = makeMarker(false)
     const { taskMiner, setBackfillPending } = makeMiner(new Error('boom'))

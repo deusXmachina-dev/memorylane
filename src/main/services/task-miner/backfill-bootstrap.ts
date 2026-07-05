@@ -58,10 +58,21 @@ export async function runTaskBackfillIfNeeded(deps: TaskBackfillBootstrapDeps): 
       )
       return
     }
+    // Don't stamp if any day failed — a failed day wrote no sightings, so leaving
+    // the marker unset lets the next launch re-mine just the gaps (hasInWindow
+    // skips the days that succeeded).
+    if (summary.daysFailed > 0) {
+      log.warn(
+        `[TaskMiner] One-time backfill left ${summary.daysFailed} day(s) unmined ` +
+          `(${summary.daysMined} mined, ${summary.daysSkipped} already present); ` +
+          `will retry the gaps next launch`,
+      )
+      return
+    }
     marker.markComplete()
     log.info(
       `[TaskMiner] One-time backfill complete: ${summary.daysMined} mined, ` +
-        `${summary.daysSkipped} already present, ${summary.daysFailed} failed`,
+        `${summary.daysSkipped} already present`,
     )
   } catch (error) {
     log.error('[TaskMiner] One-time backfill failed; will retry next launch:', error)

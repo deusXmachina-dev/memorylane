@@ -4,13 +4,12 @@ import log from '@main/utils/logger'
 import { TASK_BACKFILL } from '../../../shared/constants'
 
 /**
- * Persistent, one-time-completion marker for the task-mining backfill.
- *
- * Lives in its own `{userData}/task-backfill.json` file (not capture-settings)
- * so the one-time upgrade migration doesn't ride along in user settings. Gated
- * by `TASK_BACKFILL.VERSION`: bump the constant to force a re-backfill for
- * everyone. Fresh installs simply have no file yet — their first backfill is a
- * near-no-op (no history to mine) that then stamps the marker.
+ * Persistent completion marker for the one-time task-mining backfill, stored in
+ * its own `{userData}/task-backfill.json`. A stored version below the current
+ * `TASK_BACKFILL.VERSION` counts as incomplete, so a bump re-runs the backfill
+ * (filling missing days and reclustering — never re-mining days that already
+ * have sightings). Fresh installs have no file yet; their first backfill is a
+ * near-no-op that stamps the marker.
  */
 export interface BackfillMarker {
   /** True once a backfill at (or above) the current version has completed. */
