@@ -4,10 +4,10 @@
 // clean Windows machine without the VC++ redistributable the loader fails with
 // "The specified module could not be found" (error 126) at startup.
 //
-// The DLLs are copied into build/win-runtime/, shipped to resources/vcruntime
-// via electron-builder (win.extraResources), and that dir is prepended to PATH
-// at runtime in src/main/system/onnxruntime-path-fix.ts so they resolve when the
-// native module is dlopen'd under LOAD_WITH_ALTERED_SEARCH_PATH.
+// The DLLs are copied into build/win-runtime/, then placed next to
+// onnxruntime_binding.node at package time by build/bundle-win-runtime.js so they
+// resolve when the native module is dlopen'd under LOAD_WITH_ALTERED_SEARCH_PATH,
+// which searches the addon's own directory but not reliably PATH.
 const fs = require('fs')
 const path = require('path')
 const { spawnSync } = require('child_process')

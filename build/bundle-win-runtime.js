@@ -21,10 +21,16 @@ exports.default = async function bundleWinRuntime(context) {
   const dlls = fs.existsSync(stagedDir)
     ? fs.readdirSync(stagedDir).filter((f) => f.toLowerCase().endsWith('.dll'))
     : []
+  // Only make:win stages the runtime (via scripts/copy-vc-runtime-win.js, which
+  // fails loud if the DLLs can't be sourced). A win pack without staging — e.g. a
+  // dev `npm run package --dir` on a machine that already has the redistributable
+  // — should still succeed; skip rather than fail the build.
   if (dlls.length === 0) {
-    throw new Error(
-      '[vc-runtime] build/win-runtime has no DLLs; run scripts/copy-vc-runtime-win.js before packaging.',
+    console.warn(
+      '[vc-runtime] afterPack: build/win-runtime has no DLLs; skipping runtime co-location. ' +
+        'Run scripts/copy-vc-runtime-win.js (make:win does) to ship the VC++ runtime for clean machines.',
     )
+    return
   }
 
   const binRoot = path.join(
