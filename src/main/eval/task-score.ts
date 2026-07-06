@@ -1,5 +1,6 @@
 import { priceUsd } from './cost'
 import type {
+  CitedIdCounts,
   DetectedSighting,
   GoldenSighting,
   GoldenSightingScore,
@@ -12,11 +13,17 @@ import type {
 /**
  * Deterministic scoring for task mining against a LABELED golden (keep/reject).
  * No LLM. For each `keep` task, the detected sighting that best overlaps its
- * activity ids is the match (recall + grounding). Each detection is then bucketed:
- *   - reproduced a `reject` block  → precision regression (the dumb thing again)
- *   - matched no golden block      → new candidate to triage
+ * activity ids is the match (recall + grounding). Every detection then lands in
+ * exactly one bucket:
+ *   - found            → explained a found `keep` task
+ *   - reject-reproduced → ≥ threshold of a `reject` block (the dumb thing again)
+ *   - unreviewed       → ≥ threshold of a `?` block (parked, awaiting a verdict)
+ *   - partial-graze    → overlaps some block, best ratio below threshold
+ *   - new              → zero overlap with any block → candidate to triage
  * The golden is NOT assumed complete, so a `new` detection is reported, not
- * counted as failure. The optional judge map adds a semantic-equivalence signal.
+ * counted as failure. Cited activity ids are also classified against the labels
+ * for id-level precision. The optional judge map adds a semantic-equivalence
+ * signal.
  *
  * Pure functions — unit-testable with stub DetectedSighting[] and no network.
  */
@@ -94,6 +101,7 @@ export function scoreTaskFixture(params: ScoreParams): TaskFixtureScore {
 
   const positives = golden.sightings.filter((s) => s.verdict === 'keep')
   const negatives = golden.sightings.filter((s) => s.verdict === 'reject')
+  const unreviewed = golden.sightings.filter((s) => s.verdict === 'unreviewed')
   const matchCount = new Map<string, number>()
   // Detections that explained a found positive — excluded from reject/new buckets.
   const explainedDetIds = new Set<string>()
@@ -137,15 +145,24 @@ export function scoreTaskFixture(params: ScoreParams): TaskFixtureScore {
     }
   })
 
-  // Bucket every other detection: reproduced a reject, or brand new (matches no
-  // golden block of any verdict — keep/reject/unreviewed all suppress "new").
+  // Bucket every other detection: reject-reproduced, unreviewed, new (zero
+  // overlap with any block), or partial-graze (the leftover).
   const rejectedReproducedTitles = new Set<string>()
   const newSightings: NewSighting[] = []
+  let rejectsReproducedCount = 0
+  let unreviewedMatchedCount = 0
+  let partialGrazeCount = 0
   for (const d of detected) {
     if (explainedDetIds.has(d.id)) continue
     const negMatch = bestGoldenForDetection(d, negatives)
     if (negMatch && negMatch.ratio >= threshold) {
       rejectedReproducedTitles.add(negMatch.golden.title)
+      rejectsReproducedCount++
+      continue
+    }
+    const unrevMatch = bestGoldenForDetection(d, unreviewed)
+    if (unrevMatch && unrevMatch.ratio >= threshold) {
+      unreviewedMatchedCount++
       continue
     }
     const anyMatch = bestGoldenForDetection(d, golden.sightings)
@@ -157,8 +174,23 @@ export function scoreTaskFixture(params: ScoreParams): TaskFixtureScore {
         apps: d.apps,
         activityIds: d.activityIds,
       })
+    } else {
+      partialGrazeCount++
     }
-    // else: a weak partial of a known block — neither a clean find nor new.
+  }
+
+  // Id-level precision: every cited id, classified against the labels
+  // (unreviewed-block ids stay unlabeled).
+  const keepIds = new Set(positives.flatMap((g) => g.activityIds))
+  const rejectIds = new Set(negatives.flatMap((g) => g.activityIds))
+  const citedIds: CitedIdCounts = { inKeep: 0, inReject: 0, unlabeled: 0, total: 0 }
+  for (const d of detected) {
+    for (const id of new Set(d.activityIds)) {
+      citedIds.total++
+      if (keepIds.has(id)) citedIds.inKeep++
+      else if (rejectIds.has(id)) citedIds.inReject++
+      else citedIds.unlabeled++
+    }
   }
 
   const bundledSightingIds = [...matchCount.entries()].filter(([, n]) => n > 1).map(([id]) => id)
@@ -175,8 +207,14 @@ export function scoreTaskFixture(params: ScoreParams): TaskFixtureScore {
     negativeCount: negatives.length,
     rejectedReproducedCount: rejectedReproducedTitles.size,
     rejectedReproducedTitles: [...rejectedReproducedTitles],
+    foundDetectionsCount: explainedDetIds.size,
+    rejectsReproducedCount,
+    unreviewedMatchedCount,
+    partialGrazeCount,
     newCount: newSightings.length,
     newSightings,
+    citedIds,
+    idPrecision: citedIds.total ? citedIds.inKeep / citedIds.total : null,
     bundledSightingIds,
     avgGroundingRecall: mean(found.map((s) => s.grounding.recall)),
     avgGroundingPrecision: mean(found.map((s) => s.grounding.precision)),

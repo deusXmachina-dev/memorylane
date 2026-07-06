@@ -91,9 +91,25 @@ describe('scoreTaskFixture', () => {
     })
     expect(score.rejectedReproducedCount).toBe(1)
     expect(score.rejectedReproducedTitles).toEqual(['Idle browsing'])
+    expect(score.rejectsReproducedCount).toBe(1)
     expect(score.newCount).toBe(0)
     // The keep task wasn't produced.
     expect(score.missedTitles).toEqual(['Submit expense report'])
+  })
+
+  it('counts every detection reproducing the same reject block', () => {
+    const score = scoreTaskFixture({
+      fixture: fixture([golden('Idle browsing', 'reject', ['b1', 'b2'])]),
+      model: 'm',
+      detected: [
+        detected('q1', 'Research session', ['b1', 'b2']),
+        detected('q2', 'Browsing recap', ['b1', 'b2']),
+      ],
+      tokenUsage: ZERO_TOKENS,
+    })
+    // Title set dedupes; the detection-level count does not.
+    expect(score.rejectedReproducedCount).toBe(1)
+    expect(score.rejectsReproducedCount).toBe(2)
   })
 
   it('reports a detection matching no golden block as new (not a failure)', () => {
@@ -119,7 +135,56 @@ describe('scoreTaskFixture', () => {
     })
     // Not scored as keep/reject, but already parked → not "new".
     expect(score.newCount).toBe(0)
+    expect(score.unreviewedMatchedCount).toBe(1)
     expect(score.positiveCount).toBe(0)
+  })
+
+  it('puts every detection in exactly one bucket', () => {
+    const score = scoreTaskFixture({
+      fixture: fixture([
+        golden('Keep task', 'keep', ['a1', 'a2', 'a3']),
+        golden('Reject task', 'reject', ['b1', 'b2']),
+        golden('Parked', 'unreviewed', ['c1', 'c2']),
+      ]),
+      model: 'm',
+      detected: [
+        detected('f', 'Found it', ['a1', 'a2']),
+        detected('r', 'Dumb again', ['b1', 'b2']),
+        detected('u', 'Parked again', ['c1', 'c2']),
+        detected('g', 'Graze', ['a3', 'x1', 'x2']),
+        detected('n', 'Brand new', ['z1', 'z2']),
+      ],
+      tokenUsage: ZERO_TOKENS,
+    })
+    expect(score.foundDetectionsCount).toBe(1)
+    expect(score.rejectsReproducedCount).toBe(1)
+    expect(score.unreviewedMatchedCount).toBe(1)
+    expect(score.partialGrazeCount).toBe(1)
+    expect(score.newCount).toBe(1)
+    expect(
+      score.foundDetectionsCount +
+        score.rejectsReproducedCount +
+        score.unreviewedMatchedCount +
+        score.partialGrazeCount +
+        score.newCount,
+    ).toBe(score.detectedCount)
+  })
+
+  it('buckets a sub-threshold overlap as graze, not new or unreviewed', () => {
+    const score = scoreTaskFixture({
+      fixture: fixture([
+        golden('Keep task', 'keep', ['a1', 'a2', 'a3']),
+        golden('Parked', 'unreviewed', ['c1', 'c2', 'c3']),
+      ]),
+      model: 'm',
+      detected: [detected('g1', 'Keep graze', ['a1']), detected('g2', 'Parked graze', ['c1'])],
+      tokenUsage: ZERO_TOKENS,
+    })
+    // g1 is the best match for the keep but covers < 50% → the keep is missed.
+    expect(score.foundCount).toBe(0)
+    expect(score.partialGrazeCount).toBe(2)
+    expect(score.unreviewedMatchedCount).toBe(0)
+    expect(score.newCount).toBe(0)
   })
 
   it('flags one detection that bundles multiple keep tasks', () => {
@@ -161,5 +226,52 @@ describe('scoreTaskFixture', () => {
     expect(score.recall).toBe(0)
     expect(score.missedTitles).toEqual(['Submit expense report'])
     expect(score.goldenScores[0].matchedSightingId).toBeNull()
+  })
+})
+
+describe('id precision', () => {
+  it('classifies every cited id as inKeep / inReject / unlabeled', () => {
+    const score = scoreTaskFixture({
+      fixture: fixture([
+        golden('Keep task', 'keep', ['a1', 'a2']),
+        golden('Reject task', 'reject', ['b1']),
+        golden('Parked', 'unreviewed', ['c1']),
+      ]),
+      model: 'm',
+      // Ids in the '?' block (c1) and unknown ids (z1) are both unlabeled.
+      detected: [detected('d', 'Mixed bag', ['a1', 'a2', 'b1', 'c1', 'z1'])],
+      tokenUsage: ZERO_TOKENS,
+    })
+    expect(score.citedIds).toEqual({ inKeep: 2, inReject: 1, unlabeled: 2, total: 5 })
+    expect(score.idPrecision).toBe(2 / 5)
+  })
+
+  it('counts citations across detections, not unique ids', () => {
+    const score = scoreTaskFixture({
+      fixture: fixture([
+        golden('Keep task', 'keep', ['a1', 'a2']),
+        golden('Reject task', 'reject', ['b1', 'b2']),
+      ]),
+      model: 'm',
+      detected: [
+        detected('d1', 'Good', ['a1', 'a2']),
+        detected('d2', 'Junk', ['b1', 'b2']),
+        detected('d3', 'More junk', ['b1', 'b2']),
+      ],
+      tokenUsage: ZERO_TOKENS,
+    })
+    expect(score.citedIds).toEqual({ inKeep: 2, inReject: 4, unlabeled: 0, total: 6 })
+    expect(score.idPrecision).toBe(2 / 6)
+  })
+
+  it('is null with no detections', () => {
+    const score = scoreTaskFixture({
+      fixture: fixture([golden('Keep task', 'keep', ['a1', 'a2'])]),
+      model: 'm',
+      detected: [],
+      tokenUsage: ZERO_TOKENS,
+    })
+    expect(score.citedIds.total).toBe(0)
+    expect(score.idPrecision).toBeNull()
   })
 })

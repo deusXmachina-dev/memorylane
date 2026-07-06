@@ -14,11 +14,12 @@ import {
   extractJsonObject,
 } from '../pattern-detector/helpers'
 import { buildVerificationTools } from '../pattern-detector/tools'
-import { computeEpisodeWindow } from './helpers'
+import { computeEpisodeWindow, splitIntoEpisodes } from './helpers'
 import { normalizeScanCandidates } from './candidate-normalizer'
 import { buildScanSystemPrompt, buildGroundingSystemPrompt } from './prompts'
 
 const GROUNDING_MAX_STEPS = 8
+const MIN_EPISODE_ACTIVITIES = 2
 const SIGHTING_MAX_AGE_DAYS = 90
 // A malformed scan response — no parseable JSON, or candidates that all fail
 // validation / cite unknown ids — silently loses the whole day, so retry it.
@@ -209,6 +210,7 @@ export async function runDetection(
   )
 
   let candidatesKept = 0
+  let sightingsWritten = 0
   let candidatesRejected = 0
 
   for (const candidate of candidates) {
@@ -290,24 +292,39 @@ export async function runDetection(
       const title = (parsed.title as string) || candidate.title
       const description = (parsed.description as string) || candidate.description
       const apps = (parsed.apps as string[]) || candidate.apps
-      const { startedAt, endedAt, interactionMin } = computeEpisodeWindow(resolved)
 
-      storage.sightings.add({
-        id: uuidv4(),
-        title,
-        description,
-        apps,
-        activityIds: resolved.map((a) => a.id),
-        startedAt,
-        endedAt,
-        interactionMin,
-        runId,
-        detectedAt: now,
-      } satisfies Sighting)
+      // One sighting = one occurrence. A candidate may bundle a recurring action's
+      // occurrences scattered across the day; split them on idle gaps so each
+      // contiguous sitting becomes its own sighting with an honest window.
+      // Single-activity occurrences are noise, not task runs — dropped.
+      const episodes = splitIntoEpisodes(resolved).filter((e) => e.length >= MIN_EPISODE_ACTIVITIES)
+      if (episodes.length === 0) {
+        candidatesRejected++
+        progress(
+          `[Phase 2] Rejected "${title}": no occurrence with ${MIN_EPISODE_ACTIVITIES}+ activities`,
+        )
+        continue
+      }
+      for (const episode of episodes) {
+        const { startedAt, endedAt, interactionMin } = computeEpisodeWindow(episode)
+        storage.sightings.add({
+          id: uuidv4(),
+          title,
+          description,
+          apps,
+          activityIds: episode.map((a) => a.id),
+          startedAt,
+          endedAt,
+          interactionMin,
+          runId,
+          detectedAt: now,
+        } satisfies Sighting)
+      }
 
       candidatesKept++
+      sightingsWritten += episodes.length
       progress(
-        `[Phase 2] Kept: ${title} (${interactionMin} min across ${resolved.length} activities)`,
+        `[Phase 2] Kept: ${title} (${resolved.length} activities → ${episodes.length} occurrence${episodes.length === 1 ? '' : 's'})`,
       )
     } catch (error) {
       candidatesRejected++
@@ -320,12 +337,12 @@ export async function runDetection(
   storage.miningRuns.record(now)
 
   progress(
-    `Run complete: ${candidates.length} candidates → ${candidatesKept} sightings (${candidatesRejected} rejected)`,
+    `Run complete: ${candidates.length} candidates → ${sightingsWritten} sightings (${candidatesKept} kept, ${candidatesRejected} rejected)`,
   )
 
   return {
     runId,
-    sightingsFound: candidatesKept,
+    sightingsFound: sightingsWritten,
     candidatesFromScan: rawCandidates.length,
     candidatesKept,
     candidatesRejected,

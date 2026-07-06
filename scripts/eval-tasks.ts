@@ -34,6 +34,7 @@ import { renderLabelBlocks } from '../src/main/eval/task-golden-md'
 import { renderTaskMarkdown, writeTaskReport } from '../src/main/eval/task-report'
 import { judgeSighting } from '../src/main/eval/task-judge'
 import { priceUsd } from '../src/main/eval/cost'
+import { pct } from '../src/main/eval/format'
 import type {
   NewSighting,
   TaskEvalReport,
@@ -208,8 +209,10 @@ async function main() {
         }
         console.log(
           `  → found ${score.foundCount}/${score.positiveCount}, ` +
-            `missed ${score.missedTitles.length}, reject-reproduced ${score.rejectedReproducedCount}, ` +
-            `new ${score.newCount}, detected ${score.detectedCount}`,
+            `missed ${score.missedTitles.length}, reject-reproduced ${score.rejectedReproducedCount} ` +
+            `(${score.rejectsReproducedCount} det), unreviewed ${score.unreviewedMatchedCount}, ` +
+            `graze ${score.partialGrazeCount}, new ${score.newCount}, detected ${score.detectedCount}, ` +
+            `id-prec ${pct(score.idPrecision)} (${score.citedIds.inKeep}/${score.citedIds.total})`,
         )
       } catch (err) {
         const error = err instanceof Error ? err.message : String(err)
@@ -232,6 +235,20 @@ async function main() {
         `\n  📝 Appended ${newByKey.size} candidate(s) to ${path.relative(process.cwd(), goldenPath)} — set each Verdict to keep/reject.`,
       )
     }
+  }
+
+  if (scores.length > 0) {
+    const sum = (f: (s: TaskFixtureScore) => number): number =>
+      scores.reduce((acc, s) => acc + f(s), 0)
+    const inKeep = sum((s) => s.citedIds.inKeep)
+    const idTotal = sum((s) => s.citedIds.total)
+    console.log(
+      `\nAggregate: id-prec ${pct(idTotal ? inKeep / idTotal : null)} (${inKeep}/${idTotal} ids, ` +
+        `${sum((s) => s.citedIds.inReject)} reject, ${sum((s) => s.citedIds.unlabeled)} unlabeled); ` +
+        `detections: ${sum((s) => s.foundDetectionsCount)} found / ${sum((s) => s.rejectsReproducedCount)} reject / ` +
+        `${sum((s) => s.unreviewedMatchedCount)} unreviewed / ${sum((s) => s.partialGrazeCount)} graze / ` +
+        `${sum((s) => s.newCount)} new`,
+    )
   }
 
   const report: TaskEvalReport = {

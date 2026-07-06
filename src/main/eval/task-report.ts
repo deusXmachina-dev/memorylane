@@ -14,15 +14,15 @@ export function renderTaskMarkdown(report: TaskEvalReport): string {
   lines.push('## Scorecard')
   lines.push('')
   lines.push(
-    '| Fixture | Model | Found (keep) | Recall | Reject reproduced | New | Grounding | Equiv | Cost |',
+    '| Fixture | Model | Found (keep) | Recall | Reject reproduced | Graze | New | Id-prec | Grounding | Equiv | Cost |',
   )
-  lines.push('|---|---|--:|--:|--:|--:|--:|--:|--:|')
+  lines.push('|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|')
   for (const f of report.fixtures) {
     const model = f.mode === 'scan-only' ? `${f.model} (scan)` : f.model
     lines.push(
       `| ${f.fixture} | ${model} | ${f.foundCount}/${f.positiveCount} | ${pct(f.recall)} | ` +
-        `${f.rejectedReproducedCount}/${f.negativeCount} | ${f.newCount} | ` +
-        `${pct(f.avgGroundingRecall)} | ${num(f.avgEquivalence)} | ${usd(f.costUsd)} |`,
+        `${f.rejectedReproducedCount}/${f.negativeCount} | ${f.partialGrazeCount} | ${f.newCount} | ` +
+        `${pct(f.idPrecision)} | ${pct(f.avgGroundingRecall)} | ${num(f.avgEquivalence)} | ${usd(f.costUsd)} |`,
     )
   }
   if (report.failures?.length) {
@@ -42,6 +42,12 @@ export function renderTaskMarkdown(report: TaskEvalReport): string {
     lines.push(
       `> ${f.detectedCount} sighting(s) detected; ${f.foundCount}/${f.positiveCount} keep tasks found; ` +
         `${f.rejectedReproducedCount} reject(s) reproduced; ${f.newCount} new`,
+    )
+    lines.push(
+      `> detections: ${f.foundDetectionsCount} found / ${f.rejectsReproducedCount} reject / ` +
+        `${f.unreviewedMatchedCount} unreviewed / ${f.partialGrazeCount} graze / ${f.newCount} new; ` +
+        `ids: ${f.citedIds.inKeep} keep / ${f.citedIds.inReject} reject / ${f.citedIds.unlabeled} unlabeled ` +
+        `→ id-prec ${pct(f.idPrecision)}`,
     )
     if (f.rejectedReproducedTitles.length)
       lines.push(`> ⚠ reproduced rejects: ${f.rejectedReproducedTitles.join('; ')}`)

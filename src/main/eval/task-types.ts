@@ -8,6 +8,7 @@
  * the REAL miner and scores its output against those labels:
  *   - found   — reproduced a `keep` task (recall over what you've labeled good)
  *   - rejected-reproduced — reproduced a `reject` (the miner doing the dumb thing)
+ *   - unreviewed / partial-graze — hit a `?` block, or grazed a block below threshold
  *   - new     — matched no label yet → triage it (thumbs it next time)
  *
  * The golden is NOT assumed complete: a `new` sighting is a candidate to review,
@@ -138,6 +139,15 @@ export interface NewSighting {
   activityIds: string[]
 }
 
+/** Activity ids cited across all detections, classified against the golden labels. */
+export interface CitedIdCounts {
+  inKeep: number
+  inReject: number
+  /** Not in any keep/reject block — includes ids in unreviewed (`?`) blocks. */
+  unlabeled: number
+  total: number
+}
+
 export interface TaskFixtureScore {
   fixture: string
   model: string
@@ -151,11 +161,27 @@ export interface TaskFixtureScore {
   missedTitles: string[]
   // reject tasks (precision regression)
   negativeCount: number
+  /** Distinct reject blocks reproduced (title-level). */
   rejectedReproducedCount: number
   rejectedReproducedTitles: string[]
-  // unlabeled output
+  // Per-detection buckets — every detection lands in exactly one; the five
+  // counts (foundDetections/rejectsReproduced/unreviewedMatched/partialGraze/new)
+  // sum to detectedCount.
+  /** Detections that explained a found keep task. */
+  foundDetectionsCount: number
+  /** Detections covering ≥ threshold of a reject block (counts each detection). */
+  rejectsReproducedCount: number
+  /** Detections covering ≥ threshold of an unreviewed (`?`) block. */
+  unreviewedMatchedCount: number
+  /** Detections whose best golden overlap is partial and below threshold. */
+  partialGrazeCount: number
+  // unlabeled output (zero overlap with any golden block)
   newCount: number
   newSightings: NewSighting[]
+  // id-level precision over every cited activity id
+  citedIds: CitedIdCounts
+  /** citedIds.inKeep / citedIds.total (null with no cited ids). */
+  idPrecision: number | null
   /** Detections that matched 2+ distinct keep tasks (one sighting bundling several). */
   bundledSightingIds: string[]
   avgGroundingRecall: number | null
