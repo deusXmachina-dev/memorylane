@@ -1,6 +1,6 @@
-# MemoryLane v1.3.1-beta.1
+# MemoryLane v1.3.1
 
-Windows hotfix (prerelease): the app no longer crashes at startup on clean machines.
+Windows hotfix: the app no longer crashes at startup on clean machines.
 
 ## What's Changed
 
@@ -21,4 +21,4 @@ Windows hotfix (prerelease): the app no longer crashes at startup on clean machi
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.3.0...v1.3.1-beta.1
+https://github.com/deusXmachina-dev/memorylane/compare/v1.3.0...v1.3.1
