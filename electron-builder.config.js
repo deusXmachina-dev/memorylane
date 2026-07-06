@@ -97,6 +97,7 @@ module.exports = {
     'node_modules/onnxruntime-node/**/*',
     '**/*.node',
   ],
+  afterPack: 'build/bundle-win-runtime.js',
   afterSign: 'build/notarize.js',
   afterAllArtifactBuild: 'build/notarize-pkg.js',
   mac: macConfig,
@@ -106,11 +107,6 @@ module.exports = {
         from: 'build/rust',
         to: 'rust',
         filter: ['app-watcher-windows.exe', 'screenshot-capturer-windows.exe'],
-      },
-      {
-        from: 'build/win-runtime',
-        to: 'vcruntime',
-        filter: ['*.dll'],
       },
     ],
     azureSignOptions: {
