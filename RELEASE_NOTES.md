@@ -1,10 +1,10 @@
-# MemoryLane v1.4.0-alpha.2
+# MemoryLane v1.4.0-alpha.3
 
 Alpha preview of v1.4.0. Fixes a Windows startup crash on clean machines and adds one-shot task-mining with persistent clustering.
 
 ## What's Changed
 
-- **Fix Windows startup crash on clean machines**: bundles the x64 VC++ runtime with the app, so onnxruntime loads even where the Visual C++ redistributable isn't installed (previously failed with "The specified module could not be found") (#211).
+- **Fix Windows startup crash on clean machines**: co-locates the x64 VC++ runtime next to the onnxruntime addon so it actually resolves at load time — the alpha.2 fix bundled the runtime but placed it where the loader never found it, so clean machines still crashed with "The specified module could not be found" (#212, follow-up to #211).
 - **One-shot task mining**: single-scan default with persistent sighting clustering, plus a one-time in-app backfill on upgrade (#208).
 - **Default task-miner model**: OpenRouter defaults to minimax-m3 (ZDR-only preset list).
 - **Default video model**: OpenRouter semantic video defaults to Gemini 3.1 Flash Lite (#207).
@@ -24,4 +24,4 @@ Alpha preview of v1.4.0. Fixes a Windows startup crash on clean machines and add
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.4.0-alpha.1...v1.4.0-alpha.2
+https://github.com/deusXmachina-dev/memorylane/compare/v1.4.0-alpha.2...v1.4.0-alpha.3
