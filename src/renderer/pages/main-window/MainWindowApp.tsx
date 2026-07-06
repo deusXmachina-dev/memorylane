@@ -35,7 +35,7 @@ import type {
   CaptureSettings,
   MainWindowStats,
   McpRegistrationStatus,
-  ClusterInfo,
+  ClustersView,
   PermissionState,
   PermissionStatus,
   UpdateInfo,
@@ -63,7 +63,7 @@ export function MainWindowApp(): React.JSX.Element {
   const [toggling, setToggling] = useState(false)
   const [stats, setStats] = useState<MainWindowStats | null>(null)
   const [mcpStatus, setMcpStatus] = useState<McpRegistrationStatus | null>(null)
-  const [clusters, setClusters] = useState<ClusterInfo[] | null>(null)
+  const [clusters, setClusters] = useState<ClustersView | null>(null)
   const [initialLoaded, setInitialLoaded] = useState(false)
   const [lastCompletedStepIndex, setLastCompletedStepIndex] = useState<number>(() =>
     readLastCompletedIndex(localStorageAdapter),
@@ -145,7 +145,7 @@ export function MainWindowApp(): React.JSX.Element {
     try {
       setClusters(await api.getClusters())
     } catch {
-      setClusters([])
+      setClusters({ clusters: [], hiddenCount: 0 })
     }
   }, [api])
 

@@ -4,6 +4,7 @@
  * title fallback when a cluster hasn't been LLM-labeled yet.
  */
 
+import { CLUSTER_VIEW_CONFIG } from '../../shared/constants'
 import type { RecurrenceBucket, RecurrenceUnit } from '../../shared/types'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -22,6 +23,23 @@ function bucketStart(index: number, unit: RecurrenceUnit): number {
 export interface Recurrence {
   unit: RecurrenceUnit
   buckets: RecurrenceBucket[]
+}
+
+export function mean(values: number[]): number {
+  if (values.length === 0) return 0
+  return values.reduce((sum, v) => sum + v, 0) / values.length
+}
+
+/**
+ * Noise floor for the Patterns list: a cluster seen once is hidden unless its
+ * total active time already clears the floor. Genuine micro-toil graduates on
+ * its second sighting; one-off work never does.
+ */
+export function isBelowNoiseFloor(timesSeen: number, totalActiveMin: number): boolean {
+  return (
+    timesSeen < CLUSTER_VIEW_CONFIG.MIN_TIMES_SEEN &&
+    totalActiveMin < CLUSTER_VIEW_CONFIG.SINGLETON_MIN_TOTAL_ACTIVE_MIN
+  )
 }
 
 /**

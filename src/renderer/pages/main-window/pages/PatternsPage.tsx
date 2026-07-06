@@ -1,11 +1,11 @@
 import * as React from 'react'
-import type { ClusterInfo, MainWindowAPI } from '@types'
+import type { ClustersView, MainWindowAPI } from '@types'
 import { PageLayout } from '../components/shell/PageLayout'
 import { ClustersSection } from '../components/ClustersSection'
 
 interface PatternsPageProps {
   api: MainWindowAPI
-  clusters: ClusterInfo[] | null
+  clusters: ClustersView | null
 }
 
 export function PatternsPage({ api, clusters }: PatternsPageProps): React.JSX.Element {
@@ -22,7 +22,11 @@ export function PatternsPage({ api, clusters }: PatternsPageProps): React.JSX.El
       {clusters === null ? (
         <div className="text-sm text-muted-foreground">Loading…</div>
       ) : (
-        <ClustersSection api={api} clusters={clusters} />
+        <ClustersSection
+          api={api}
+          clusters={clusters.clusters}
+          hiddenCount={clusters.hiddenCount}
+        />
       )}
     </PageLayout>
   )

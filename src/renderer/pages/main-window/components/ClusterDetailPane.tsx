@@ -30,17 +30,6 @@ function formatSightingTime(timestamp: number): string {
   })
 }
 
-function formatRelative(timestamp: number | null): string {
-  if (timestamp === null) return 'never'
-  const diff = Date.now() - timestamp
-  const minutes = Math.floor(diff / 60_000)
-  if (minutes < 60) return `${Math.max(0, minutes)} min ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
-}
-
 function formatInteraction(min: number): string {
   if (min >= 60) return `${(min / 60).toFixed(1)}h`
   return `${Math.max(1, Math.round(min))}m`
@@ -177,11 +166,19 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-4 gap-3 border-y py-4">
-            <Stat value={String(cluster.timesSeen)} label="Times seen" />
-            <Stat value={formatInteraction(cluster.avgInteractionMin)} label="Avg interaction" />
-            <Stat value={formatMonthDay(cluster.firstSeenAt)} label="First seen" />
-            <Stat value={formatRelative(cluster.lastSeenAt)} label="Last seen" />
+          <div className="border-y py-4">
+            <div className="grid grid-cols-4 gap-3">
+              <Stat value={String(cluster.timesSeen)} label="Times seen" />
+              <Stat value={formatInteraction(cluster.avgActiveMin)} label="Active / run" />
+              <Stat value={formatInteraction(cluster.avgSpanMin)} label="Span / run" />
+              <Stat value={formatInteraction(cluster.totalActiveMin)} label="Total active (90d)" />
+            </div>
+            {cluster.avgIdleMin >= 2 && (
+              <p className="mt-3 text-[11px] text-muted-foreground">
+                ~{Math.round(cluster.avgIdleMin)}m inactive per run — the span includes breaks and
+                interruptions.
+              </p>
+            )}
           </div>
 
           {/* Recurrence */}
@@ -232,7 +229,7 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
                           </Badge>
                         ))}
                         <span className="tabular-nums">
-                          {formatInteraction((s.endedAt - s.startedAt) / 60_000)}
+                          {formatInteraction(s.activeMin)} active
                         </span>
                         <span aria-hidden>·</span>
                         <span className="tabular-nums">{formatSightingTime(s.startedAt)}</span>

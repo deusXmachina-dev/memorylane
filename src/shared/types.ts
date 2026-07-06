@@ -298,8 +298,14 @@ export interface ClusterInfo {
   description: string
   apps: string[]
   timesSeen: number
-  /** Average wall-clock span of a sighting (first activity start → last end), in minutes. */
-  avgInteractionMin: number
+  /** Mean per-run active time (sum of cited-activity durations), in minutes. */
+  avgActiveMin: number
+  /** Mean per-run wall-clock span (first activity start → last end), in minutes. */
+  avgSpanMin: number
+  /** Mean per-run inactive time inside the span: max(0, span − active), in minutes. */
+  avgIdleMin: number
+  /** Active minutes summed across all kept sightings (sightings are pruned at 90 days). */
+  totalActiveMin: number
   firstSeenAt: number | null
   lastSeenAt: number | null
   createdAt: number
@@ -318,6 +324,8 @@ export interface ClusterSightingInfo {
   /** Wall-clock span: first activity start → last activity end. */
   startedAt: number
   endedAt: number
+  /** Active time (sum of cited-activity durations), in minutes. */
+  activeMin: number
   /** Underlying activity ids — handle for the "Copy prompt for Claude" flow. */
   activityIds: string[]
 }
@@ -326,6 +334,13 @@ export interface ClusterDetailInfo {
   cluster: ClusterInfo
   /** Member sightings, newest-first. */
   sightings: ClusterSightingInfo[]
+}
+
+/** getClusters payload: visible clusters plus how many the noise floor hid. */
+export interface ClustersView {
+  clusters: ClusterInfo[]
+  /** Clusters hidden as one-off noise (seen once, below the total-time floor). */
+  hiddenCount: number
 }
 
 /** The tenant's centrally-synced capture blacklist, surfaced read-only in the
@@ -372,7 +387,7 @@ export interface MainWindowAPI {
   saveCaptureSettings: (settings: Partial<CaptureSettings>) => Promise<SaveResult>
   resetCaptureSettings: () => Promise<SaveResult>
   // Patterns (task clusters)
-  getClusters: () => Promise<ClusterInfo[]>
+  getClusters: () => Promise<ClustersView>
   getClusterDetail: (id: string) => Promise<ClusterDetailInfo | null>
   // Theme
   getTheme: () => Promise<'dark' | 'light'>

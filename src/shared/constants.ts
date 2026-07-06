@@ -124,6 +124,14 @@ export const PATTERN_DETECTION_CONFIG = {
   SETTLE_DELAY_MS: 60 * 1000, // 1 min after unlock before running
 }
 
+// Noise floor for the Patterns view: clusters seen once are hidden unless they
+// already cost meaningful time. Presentation-only — clustering, storage, and
+// sync are untouched, so a hidden singleton still attaches tomorrow's sighting.
+export const CLUSTER_VIEW_CONFIG = {
+  MIN_TIMES_SEEN: 2,
+  SINGLETON_MIN_TOTAL_ACTIVE_MIN: 20,
+}
+
 // One-time seed of the sightings/clusters tables from existing history, run once
 // per user on the first launch after upgrading. VERSION marks the completed
 // backfill (in {userData}/task-backfill.json); a bump re-runs it to fill missing

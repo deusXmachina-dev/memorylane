@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeRecurrence, resolveTitle } from './cluster-view'
+import { computeRecurrence, isBelowNoiseFloor, mean, resolveTitle } from './cluster-view'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const NOW = Date.UTC(2026, 6, 6, 12, 0, 0) // 2026-07-06, mid-day UTC
@@ -62,5 +62,29 @@ describe('resolveTitle', () => {
   it('returns a fallback when nothing is available', () => {
     expect(resolveTitle('', [])).toBe('Untitled task')
     expect(resolveTitle('   ', ['  '])).toBe('Untitled task')
+  })
+})
+
+describe('mean', () => {
+  it('returns 0 for an empty list', () => {
+    expect(mean([])).toBe(0)
+  })
+
+  it('averages values', () => {
+    expect(mean([4, 8])).toBe(6)
+  })
+})
+
+describe('isBelowNoiseFloor', () => {
+  it('hides a singleton with little total time', () => {
+    expect(isBelowNoiseFloor(1, 5)).toBe(true)
+  })
+
+  it('keeps a singleton once its total time clears the floor', () => {
+    expect(isBelowNoiseFloor(1, 20)).toBe(false)
+  })
+
+  it('keeps anything seen twice, however small', () => {
+    expect(isBelowNoiseFloor(2, 0)).toBe(false)
   })
 })

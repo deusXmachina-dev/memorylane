@@ -18,9 +18,15 @@ const INITIAL_VISIBLE = 5
 interface ClustersSectionProps {
   api: MainWindowAPI
   clusters: ClusterInfo[]
+  /** Clusters hidden by the noise floor (seen once, little total time). */
+  hiddenCount: number
 }
 
-export function ClustersSection({ api, clusters }: ClustersSectionProps): React.JSX.Element {
+export function ClustersSection({
+  api,
+  clusters,
+  hiddenCount,
+}: ClustersSectionProps): React.JSX.Element {
   const [sort, setSort] = useState<SortId>('seen')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
@@ -40,7 +46,7 @@ export function ClustersSection({ api, clusters }: ClustersSectionProps): React.
         copy.sort((a, b) => (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0))
         break
       case 'longest':
-        copy.sort((a, b) => b.avgInteractionMin - a.avgInteractionMin)
+        copy.sort((a, b) => b.avgActiveMin - a.avgActiveMin)
         break
       case 'seen':
       default:
@@ -59,7 +65,7 @@ export function ClustersSection({ api, clusters }: ClustersSectionProps): React.
   )
 
   const visible = expanded ? sorted : sorted.slice(0, INITIAL_VISIBLE)
-  const hiddenCount = sorted.length - visible.length
+  const collapsedCount = sorted.length - visible.length
 
   if (detectionEnabled === false) {
     return (
@@ -101,8 +107,9 @@ export function ClustersSection({ api, clusters }: ClustersSectionProps): React.
 
       {clusters.length === 0 ? (
         <div className="text-sm text-muted-foreground py-12 text-center">
-          No patterns yet. Keep using your computer — MemoryLane surfaces recurring tasks once it
-          has enough history.
+          {hiddenCount > 0
+            ? `No recurring patterns yet. ${hiddenCount} one-off group${hiddenCount === 1 ? '' : 's'} will appear here if seen again.`
+            : 'No patterns yet. Keep using your computer — MemoryLane surfaces recurring tasks once it has enough history.'}
         </div>
       ) : (
         <div className="grid grid-cols-[360px_1fr] gap-4 flex-1 min-h-0">
@@ -116,12 +123,12 @@ export function ClustersSection({ api, clusters }: ClustersSectionProps): React.
                   onSelect={() => setSelectedId(c.id)}
                 />
               ))}
-              {hiddenCount > 0 && (
+              {collapsedCount > 0 && (
                 <button
                   onClick={() => setExpanded(true)}
                   className="w-full text-left px-3 py-2 text-xs uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  + {hiddenCount} more
+                  + {collapsedCount} more
                 </button>
               )}
               {expanded && sorted.length > INITIAL_VISIBLE && (
@@ -131,6 +138,12 @@ export function ClustersSection({ api, clusters }: ClustersSectionProps): React.
                 >
                   Show fewer
                 </button>
+              )}
+              {hiddenCount > 0 && (
+                <p className="px-3 py-2 text-[11px] text-muted-foreground">
+                  {hiddenCount} one-off group{hiddenCount === 1 ? '' : 's'} hidden — shown once seen
+                  again.
+                </p>
               )}
             </div>
           </ScrollArea>

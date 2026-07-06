@@ -49,7 +49,7 @@ export function ClusterListItem({
           values={cluster.recurrence.map((b) => b.count)}
           className="text-muted-foreground/60 shrink-0"
         />
-        <span className="tabular-nums">{formatAvg(cluster.avgInteractionMin)}</span>
+        <span className="tabular-nums">{formatAvg(cluster.avgActiveMin)}</span>
         <span aria-hidden>·</span>
         <span>{formatRelative(cluster.lastSeenAt)}</span>
       </div>

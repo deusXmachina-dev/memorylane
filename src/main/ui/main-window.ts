@@ -34,7 +34,7 @@ import { integrations } from '../integrations'
 import { listInstalledApps } from '../apps/installed-apps'
 import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
 import { VENDORS } from '../../shared/types'
-import { computeRecurrence, resolveTitle } from './cluster-view'
+import { computeRecurrence, isBelowNoiseFloor, mean, resolveTitle } from './cluster-view'
 import { VENDOR_PRESETS, getVendorDefaults } from '../../shared/vendor-defaults'
 import { applyVendorSwitch } from './vendor-switch'
 import { applyModelSettings } from './model-settings'
@@ -54,6 +54,7 @@ import type {
   ClusterInfo,
   ClusterSightingInfo,
   ClusterDetailInfo,
+  ClustersView,
   ConsentOutcome,
   LlmHealthStatus,
   MainWindowStatus,
@@ -757,39 +758,46 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   })
 
   // Patterns (task clusters)
-  handle('main-window:getClusters', (): ClusterInfo[] => {
-    if (!deps) return []
+  handle('main-window:getClusters', (): ClustersView => {
+    if (!deps) return { clusters: [], hiddenCount: 0 }
     const clusters = deps.storage.clusters.getAllWithStats()
-    // One digest query for all members → recurrence, avg span, title fallback (no N+1).
+    // One digest query for all members → recurrence, duration stats, title fallback (no N+1).
     const byCluster = new Map<
       string,
-      { startedAts: number[]; spansMin: number[]; titles: string[] }
+      { startedAts: number[]; spansMin: number[]; activeMins: number[]; titles: string[] }
     >()
     for (const row of deps.storage.clusters.getMemberDigest()) {
       let entry = byCluster.get(row.clusterId)
       if (!entry) {
-        entry = { startedAts: [], spansMin: [], titles: [] }
+        entry = { startedAts: [], spansMin: [], activeMins: [], titles: [] }
         byCluster.set(row.clusterId, entry)
       }
       entry.startedAts.push(row.startedAt)
       entry.spansMin.push(Math.max(0, row.endedAt - row.startedAt) / 60_000)
+      entry.activeMins.push(Math.max(0, row.interactionMin))
       entry.titles.push(row.title)
     }
     const now = Date.now()
-    return clusters.map((c) => {
-      const members = byCluster.get(c.id) ?? { startedAts: [], spansMin: [], titles: [] }
+    const infos = clusters.map((c) => {
+      const members = byCluster.get(c.id) ?? {
+        startedAts: [],
+        spansMin: [],
+        activeMins: [],
+        titles: [],
+      }
       const recurrence = computeRecurrence(members.startedAts, now)
-      const avgSpanMin =
-        members.spansMin.length > 0
-          ? members.spansMin.reduce((sum, v) => sum + v, 0) / members.spansMin.length
-          : 0
+      const avgSpanMin = mean(members.spansMin)
+      const avgActiveMin = mean(members.activeMins)
       return {
         id: c.id,
         title: resolveTitle(c.label, members.titles),
         description: c.description,
         apps: c.apps,
         timesSeen: c.timesSeen,
-        avgInteractionMin: avgSpanMin,
+        avgActiveMin,
+        avgSpanMin,
+        avgIdleMin: Math.max(0, avgSpanMin - avgActiveMin),
+        totalActiveMin: members.activeMins.reduce((sum, v) => sum + v, 0),
         firstSeenAt: c.firstSeenAt,
         lastSeenAt: c.lastSeenAt,
         createdAt: c.createdAt,
@@ -797,6 +805,8 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         recurrenceUnit: recurrence.unit,
       }
     })
+    const visible = infos.filter((c) => !isBelowNoiseFloor(c.timesSeen, c.totalActiveMin))
+    return { clusters: visible, hiddenCount: infos.length - visible.length }
   })
 
   handle(
@@ -810,11 +820,10 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       const startedAts = members.map((m) => m.startedAt)
       const appsSet = new Set<string>()
       for (const m of members) for (const app of m.apps) appsSet.add(app)
-      // Interaction = wall-clock span (first activity start → last activity end).
-      const spanSumMin = members.reduce(
-        (sum, m) => sum + Math.max(0, m.endedAt - m.startedAt) / 60_000,
-        0,
-      )
+      const spansMin = members.map((m) => Math.max(0, m.endedAt - m.startedAt) / 60_000)
+      const activeMins = members.map((m) => Math.max(0, m.interactionMin))
+      const avgSpanMin = mean(spansMin)
+      const avgActiveMin = mean(activeMins)
       const recurrence = computeRecurrence(startedAts, Date.now())
 
       const info: ClusterInfo = {
@@ -826,7 +835,10 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         description: cluster.description,
         apps: [...appsSet],
         timesSeen: members.length,
-        avgInteractionMin: members.length > 0 ? spanSumMin / members.length : 0,
+        avgActiveMin,
+        avgSpanMin,
+        avgIdleMin: Math.max(0, avgSpanMin - avgActiveMin),
+        totalActiveMin: activeMins.reduce((sum, v) => sum + v, 0),
         firstSeenAt: members.length > 0 ? Math.min(...startedAts) : null,
         lastSeenAt: members.length > 0 ? Math.max(...members.map((m) => m.endedAt)) : null,
         createdAt: cluster.createdAt,
@@ -844,6 +856,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
           apps: m.apps,
           startedAt: m.startedAt,
           endedAt: m.endedAt,
+          activeMin: Math.max(0, m.interactionMin),
           activityIds: m.activityIds,
         }))
 

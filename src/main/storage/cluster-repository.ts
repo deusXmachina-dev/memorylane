@@ -28,7 +28,8 @@ export interface Cluster {
 /** Cluster plus stats computed on read from member sightings (never stored). */
 export interface ClusterWithStats extends Cluster {
   timesSeen: number
-  avgInteractionMin: number
+  /** Mean per-sighting active time (sum of cited-activity durations), minutes. */
+  avgActiveMin: number
   firstSeenAt: number | null
   lastSeenAt: number | null
   apps: string[]
@@ -156,7 +157,7 @@ export class ClusterRepository {
     return rows.map((row) => ({
       ...this.rowToCluster(row),
       timesSeen: (row.times_seen as number) ?? 0,
-      avgInteractionMin: (row.avg_interaction_min as number) ?? 0,
+      avgActiveMin: (row.avg_interaction_min as number) ?? 0,
       firstSeenAt: (row.first_seen_at as number) ?? null,
       lastSeenAt: (row.last_seen_at as number) ?? null,
       apps: [...(appsByCluster.get(row.id as string) ?? [])],
@@ -185,19 +186,31 @@ export class ClusterRepository {
 
   /**
    * Lightweight per-member rows across all clusters in one query — used to
-   * derive recurrence buckets, avg wall-clock span, and title fallbacks without
+   * derive recurrence buckets, duration stats, and title fallbacks without
    * an N+1.
    */
-  getMemberDigest(): { clusterId: string; startedAt: number; endedAt: number; title: string }[] {
+  getMemberDigest(): {
+    clusterId: string
+    startedAt: number
+    endedAt: number
+    interactionMin: number
+    title: string
+  }[] {
     return this.db
       .prepare(
         `SELECT cs.cluster_id AS clusterId, s.started_at AS startedAt,
-                s.ended_at AS endedAt, s.title AS title
+                s.ended_at AS endedAt, s.interaction_min AS interactionMin, s.title AS title
          FROM cluster_sightings cs
          JOIN sightings s ON s.id = cs.sighting_id
          ORDER BY s.started_at ASC`,
       )
-      .all() as { clusterId: string; startedAt: number; endedAt: number; title: string }[]
+      .all() as {
+      clusterId: string
+      startedAt: number
+      endedAt: number
+      interactionMin: number
+      title: string
+    }[]
   }
 
   addMembership(clusterId: string, sightingId: string, addedAt: number): void {
