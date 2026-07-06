@@ -3,6 +3,17 @@ interface TimeBounded {
   endTimestamp: number
 }
 
+// The scan prompt requires every finding description to end with exactly one
+// "Replace with: <mechanism>." sentence. Tolerant of case and trailing period.
+export const MECHANISM_RE = /replace with:\s*(.+?)\.?\s*$/i
+
+/** The mechanism sentence's payload from a sighting description, or null. */
+export function parseReplaceWith(description: string): string | null {
+  const match = MECHANISM_RE.exec(description.trim())
+  const mechanism = match?.[1]?.trim().replace(/[.\s]+$/, '')
+  return mechanism ? mechanism : null
+}
+
 /**
  * Compute a sighting's time window and on-task interaction time directly from
  * its constituent activities — never from an LLM estimate.

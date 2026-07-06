@@ -1,9 +1,12 @@
 import { v4 as uuidv4 } from 'uuid'
 import type { StorageService } from '@main/storage'
+import type { ClusterVerdict } from '@main/storage/cluster-repository'
+import { CLUSTER_KINDS, MECHANISM_KINDS } from '../../../../shared/types'
+import type { ClusterKind, MechanismKind } from '../../../../shared/types'
 import { UnionFind } from './union-find'
 import { meanPool, normalize } from './vector-math'
 import { recomputeCentroid } from './signatures'
-import type { ReviewOutput } from './types'
+import type { ReviewClusterVerdict, ReviewOutput } from './types'
 import type { ProgressCallback } from '../types'
 
 /**
@@ -21,6 +24,29 @@ export interface ReviewGuards {
 
 export function mergePairKey(a: string, b: string): string {
   return a < b ? `${a}|${b}` : `${b}|${a}`
+}
+
+/**
+ * Whitelist the LLM's classification into a storable verdict. Fail closed:
+ * anything off-enum — including a "procedure" without a concrete mechanism —
+ * coerces to kind '' so the cluster is re-reviewed next run instead of
+ * persisting garbage. Non-procedure kinds never carry a mechanism.
+ */
+export function sanitizeVerdict(raw: ReviewClusterVerdict): ClusterVerdict {
+  const kind = (CLUSTER_KINDS as readonly string[]).includes(raw.kind ?? '')
+    ? (raw.kind as ClusterKind)
+    : ''
+  if (kind === 'procedure') {
+    const mechanismKind = (MECHANISM_KINDS as readonly string[]).includes(raw.mechanism_kind ?? '')
+      ? (raw.mechanism_kind as MechanismKind)
+      : ''
+    const mechanism = (raw.mechanism ?? '').trim()
+    if (mechanismKind === '' || mechanismKind === 'none' || mechanism === '') {
+      return { kind: '', mechanismKind: '', mechanism: '' }
+    }
+    return { kind, mechanismKind, mechanism }
+  }
+  return { kind, mechanismKind: kind === '' ? '' : 'none', mechanism: '' }
 }
 
 /**
@@ -87,6 +113,18 @@ export function validateAndApply(
         storage.clusters.getMemberCount(survivor.id),
         now,
       )
+      // The survivor inherits a verdict from any merged sibling if it has none
+      // itself — merges assert "same process", so the judgment carries over.
+      if (survivor.kind === '') {
+        const donor = clusters.find((c) => c.kind !== '')
+        if (donor) {
+          storage.clusters.updateVerdict(
+            survivor.id,
+            { kind: donor.kind, mechanismKind: donor.mechanismKind, mechanism: donor.mechanism },
+            now,
+          )
+        }
+      }
       recomputeCentroid(storage, survivor.id, now)
       labeled++
     }
@@ -139,6 +177,10 @@ export function validateAndApply(
             label: group.label,
             description: group.description,
             centroid: normalize(meanPool(groupVectors) ?? []),
+            // Split groups are new processes — classified on the next review.
+            kind: '',
+            mechanismKind: '',
+            mechanism: '',
             labelModel: model,
             labeledSize: group.sightingIds.length,
             createdAt: now,
@@ -163,6 +205,11 @@ export function validateAndApply(
           storage.clusters.getMemberCount(verdict.id),
           now,
         )
+        // Only touch the stored verdict when the LLM offered one — an omitted
+        // kind on a relabel must not wipe an earlier classification.
+        if (verdict.kind !== undefined) {
+          storage.clusters.updateVerdict(verdict.id, sanitizeVerdict(verdict), now)
+        }
         labeled++
       }
     }

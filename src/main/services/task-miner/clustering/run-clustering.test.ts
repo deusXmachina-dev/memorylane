@@ -99,12 +99,24 @@ describe('runClustering', () => {
     expect(stats[0].timesSeen).toBe(1)
   })
 
-  it('labels multi-member clusters through the injected review step', async () => {
+  it('labels and classifies multi-member clusters through the injected review step', async () => {
     addActivity('a1', v(1))
     addActivity('a2', v(1))
     addActivity('a3', v(0, 1))
-    storage.sightings.add(createSighting({ id: 's1', activityIds: ['a1'] }))
-    storage.sightings.add(createSighting({ id: 's2', activityIds: ['a2'] }))
+    storage.sightings.add(
+      createSighting({
+        id: 's1',
+        activityIds: ['a1'],
+        description: 'Did the thing. Replace with: a cron script.',
+      }),
+    )
+    storage.sightings.add(
+      createSighting({
+        id: 's2',
+        activityIds: ['a2'],
+        description: 'Did the thing again. Replace with: a cron script.',
+      }),
+    )
     storage.sightings.add(createSighting({ id: 's3', activityIds: ['a3'] }))
 
     let seenInput: ReviewInput | null = null
@@ -122,6 +134,9 @@ describe('runClustering', () => {
               id: c.id,
               label: 'Do the recurring thing',
               description: 'Typically opens TestApp and does the thing.',
+              kind: 'procedure',
+              mechanism_kind: 'script',
+              mechanism: 'A nightly cron script that does the thing.',
             })),
           },
           tokenUsage: { input: 100, output: 50 },
@@ -133,6 +148,12 @@ describe('runClustering', () => {
     expect(seenInput!.clusters).toHaveLength(1)
     expect(seenInput!.clusters[0].new).toBe(true)
     expect(seenInput!.clusters[0].members).toHaveLength(2)
+    expect(seenInput!.clusters[0].stats).toEqual({
+      times_seen: 2,
+      span_days: 1,
+      median_active_min: 5,
+    })
+    expect(seenInput!.clusters[0].replace_with).toEqual(['a cron script'])
     expect(summary.labeled).toBe(1)
     expect(summary.tokenUsage).toEqual({ input: 100, output: 50 })
 
@@ -140,6 +161,47 @@ describe('runClustering', () => {
     expect(labeled.label).toBe('Do the recurring thing')
     expect(labeled.labelModel).toBe('test-model')
     expect(labeled.labeledSize).toBe(2)
+    expect(labeled.kind).toBe('procedure')
+    expect(labeled.mechanismKind).toBe('script')
+    expect(labeled.mechanism).toBe('A nightly cron script that does the thing.')
+  })
+
+  it('re-reviews a labeled cluster whose kind verdict is still missing', async () => {
+    addActivity('a1', v(1))
+    addActivity('a2', v(1))
+    storage.sightings.add(createSighting({ id: 's1', activityIds: ['a1'] }))
+    storage.sightings.add(createSighting({ id: 's2', activityIds: ['a2'] }))
+
+    // First review labels but omits the kind (old-style response).
+    await runClustering({
+      storage,
+      provider: {} as InferenceProvider,
+      model: 'test-model',
+      now: 10_000,
+      review: async (input) => ({
+        output: {
+          clusters: input.clusters.map((c) => ({ id: c.id, label: 'Thing', description: '' })),
+        },
+        tokenUsage: { input: 0, output: 0 },
+      }),
+    })
+    expect(storage.clusters.getAll().find((c) => c.label === 'Thing')!.kind).toBe('')
+
+    // A later run re-shows it (kind === '') even though nothing else changed.
+    addActivity('a9', v(0, 1))
+    storage.sightings.add(createSighting({ id: 's9', activityIds: ['a9'] }))
+    let seenInput: ReviewInput | null = null
+    await runClustering({
+      storage,
+      provider: {} as InferenceProvider,
+      model: 'test-model',
+      now: 20_000,
+      review: async (input) => {
+        seenInput = input
+        return { output: {}, tokenUsage: { input: 0, output: 0 } }
+      },
+    })
+    expect(seenInput!.clusters.map((c) => c.label)).toContain('Thing')
   })
 
   it('survives a throwing review step without losing deterministic progress', async () => {

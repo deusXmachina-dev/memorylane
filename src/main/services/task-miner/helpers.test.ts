@@ -1,5 +1,22 @@
 import { describe, it, expect } from 'vitest'
-import { computeEpisodeWindow } from './helpers'
+import { computeEpisodeWindow, parseReplaceWith } from './helpers'
+
+describe('parseReplaceWith', () => {
+  it('extracts the mechanism tail', () => {
+    expect(parseReplaceWith('Filed the report. Replace with: a scheduled export.')).toBe(
+      'a scheduled export',
+    )
+  })
+
+  it('tolerates case and a missing trailing period', () => {
+    expect(parseReplaceWith('Did it. replace with: a webhook')).toBe('a webhook')
+  })
+
+  it('returns null when the sentence is absent or empty', () => {
+    expect(parseReplaceWith('Just did the thing.')).toBeNull()
+    expect(parseReplaceWith('Replace with: .')).toBeNull()
+  })
+})
 
 describe('computeEpisodeWindow', () => {
   it('derives the window from min start / max end and sums interaction time', () => {

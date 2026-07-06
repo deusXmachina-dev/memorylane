@@ -18,6 +18,7 @@ import type { Cluster } from '@main/storage/cluster-repository'
 import type { InferenceProvider } from '@main/llm'
 import log from '@main/utils/logger'
 import { formatApiError } from '../../pattern-detector/helpers'
+import { parseReplaceWith } from '../helpers'
 import type { ProgressCallback } from '../types'
 import { dot } from './vector-math'
 import { computeAndStoreSignatures, recomputeCentroid } from './signatures'
@@ -106,6 +107,9 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
       label: '',
       description: '',
       centroid: null,
+      kind: '',
+      mechanismKind: '',
+      mechanism: '',
       labelModel: '',
       labeledSize: 0,
       createdAt: now,
@@ -167,12 +171,15 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
 }
 
 /**
- * What the LLM gets to see: clusters needing a (re)label, plus every cluster
- * involved in a merge candidate. Singleton clusters are only shown when a
- * merge involves them — they get no label of their own (readers fall back to
- * the member title).
+ * What the LLM gets to see: clusters needing a (re)label or a kind verdict,
+ * plus every cluster involved in a merge candidate. Singleton clusters are
+ * only shown when a merge involves them — they get no label of their own
+ * (readers fall back to the member title). The label/classify set is capped
+ * per run so a backlog drains gradually; merge candidates ride along uncapped.
+ *
+ * Exported for the review-input snapshot dumper (fixture authoring).
  */
-function buildReviewInput(
+export function buildReviewInput(
   storage: StorageService,
   touched: Set<string>,
   newClusterIds: Set<string>,
@@ -181,11 +188,12 @@ function buildReviewInput(
   const byId = new Map(all.map((c) => [c.id, c]))
   const memberCount = new Map(all.map((c) => [c.id, storage.clusters.getMemberCount(c.id)]))
 
-  const needsLabel = (c: Cluster): boolean => {
+  const needsReview = (c: Cluster): boolean => {
     const count = memberCount.get(c.id) ?? 0
     if (count < 2) return false
-    // Relabel once a cluster doubles since its last labeling (semantic drift).
-    return c.label === '' || count >= 2 * Math.max(1, c.labeledSize)
+    // Relabel once a cluster doubles since its last labeling (semantic drift);
+    // kind === '' means the classify verdict is still missing.
+    return c.label === '' || c.kind === '' || count >= 2 * Math.max(1, c.labeledSize)
   }
 
   // Merge candidates: touched clusters vs all others, centroid cosine in the
@@ -210,30 +218,74 @@ function buildReviewInput(
     }
   }
 
-  const reviewIds = new Set<string>([
-    ...all.filter((c) => needsLabel(c)).map((c) => c.id),
-    ...inMerge,
-  ])
+  // Cap the label/classify backlog deterministically: biggest clusters first
+  // (most user-visible), then oldest, so the same clusters aren't starved.
+  const capped = all
+    .filter((c) => needsReview(c))
+    .sort(
+      (a, b) =>
+        (memberCount.get(b.id) ?? 0) - (memberCount.get(a.id) ?? 0) || a.createdAt - b.createdAt,
+    )
+    .slice(0, CLUSTERING_CONFIG.MAX_REVIEW_CLUSTERS_PER_RUN)
 
-  const clusters: ReviewCluster[] = [...reviewIds].map((id) => {
-    const cluster = byId.get(id)!
-    const members = storage.clusters.getMembers(id)
-    // Members come back oldest-first; show the most recent sample.
-    const sample = members.slice(-CLUSTERING_CONFIG.MAX_SAMPLE_MEMBERS)
-    return {
-      id,
-      new: newClusterIds.has(id),
-      label: cluster.label,
-      members: sample.map((s) => ({
-        sighting_id: s.id,
-        title: s.title,
-        description: s.description,
-        apps: s.apps,
-        interaction_min: s.interactionMin,
-        date: new Date(s.startedAt).toISOString().slice(0, 10),
-      })),
-    }
-  })
+  const reviewIds = new Set<string>([...capped.map((c) => c.id), ...inMerge])
+
+  const clusters: ReviewCluster[] = [...reviewIds].map((id) =>
+    toReviewCluster(storage, byId.get(id)!, newClusterIds.has(id)),
+  )
 
   return { clusters, mergeCandidates }
+}
+
+/**
+ * Serialize one cluster the way the review LLM sees it — code-computed stats
+ * over all members, parsed mechanism tails, most-recent member sample. Also
+ * used by the review-input snapshot dumper.
+ */
+export function toReviewCluster(
+  storage: StorageService,
+  cluster: Cluster,
+  isNew: boolean,
+): ReviewCluster {
+  const members = storage.clusters.getMembers(cluster.id)
+  // Members come back oldest-first; show the most recent sample.
+  const sample = members.slice(-CLUSTERING_CONFIG.MAX_SAMPLE_MEMBERS)
+  const spanMs =
+    members.length > 0 ? members[members.length - 1].startedAt - members[0].startedAt : 0
+  const replaceWith = new Set<string>()
+  for (const s of [...members].reverse()) {
+    const mechanism = parseReplaceWith(s.description)
+    if (mechanism) replaceWith.add(mechanism)
+    if (replaceWith.size >= MAX_REPLACE_WITH_TAILS) break
+  }
+  return {
+    id: cluster.id,
+    new: isNew,
+    label: cluster.label,
+    stats: {
+      times_seen: members.length,
+      span_days: Math.floor(spanMs / DAY_MS) + 1,
+      median_active_min: median(members.map((m) => m.interactionMin)),
+    },
+    replace_with: [...replaceWith],
+    members: sample.map((s) => ({
+      sighting_id: s.id,
+      title: s.title,
+      description: s.description,
+      apps: s.apps,
+      interaction_min: s.interactionMin,
+      date: new Date(s.startedAt).toISOString().slice(0, 10),
+    })),
+  }
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+const MAX_REPLACE_WITH_TAILS = 5
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  const raw = sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+  return Math.round(raw * 10) / 10
 }

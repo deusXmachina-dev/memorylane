@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import type { ClusterKind, MechanismKind } from '../../shared/types'
 import type { Sighting } from './sighting-repository'
 import { vectorToBlob, blobToVector } from './utils'
 
@@ -18,11 +19,22 @@ export interface Cluster {
   description: string
   /** Unit-normalized mean of member signatures; null until first computed. */
   centroid: number[] | null
+  /** LLM classification; '' = not yet judged (drains through review over runs). */
+  kind: ClusterKind
+  mechanismKind: MechanismKind
+  /** Consolidated "Replace with" recommendation for 'procedure' clusters. */
+  mechanism: string
   labelModel: string
   /** Member count at the last labeling — relabel once the cluster doubles. */
   labeledSize: number
   createdAt: number
   updatedAt: number
+}
+
+export interface ClusterVerdict {
+  kind: ClusterKind
+  mechanismKind: MechanismKind
+  mechanism: string
 }
 
 /** Cluster plus stats computed on read from member sightings (never stored). */
@@ -92,14 +104,18 @@ export class ClusterRepository {
   create(cluster: Cluster): void {
     this.db
       .prepare(
-        `INSERT INTO clusters (id, label, description, centroid, label_model, labeled_size, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO clusters (id, label, description, centroid, kind, mechanism_kind, mechanism,
+                               label_model, labeled_size, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         cluster.id,
         cluster.label,
         cluster.description,
         cluster.centroid ? vectorToBlob(cluster.centroid) : null,
+        cluster.kind,
+        cluster.mechanismKind,
+        cluster.mechanism,
         cluster.labelModel,
         cluster.labeledSize,
         cluster.createdAt,
@@ -253,6 +269,16 @@ export class ClusterRepository {
       .run(label, description, labelModel, labeledSize, updatedAt, clusterId)
   }
 
+  updateVerdict(clusterId: string, verdict: ClusterVerdict, updatedAt: number): void {
+    this.db
+      .prepare(
+        `UPDATE clusters
+         SET kind = ?, mechanism_kind = ?, mechanism = ?, updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(verdict.kind, verdict.mechanismKind, verdict.mechanism, updatedAt, clusterId)
+  }
+
   /** Delete a cluster and its memberships (member sightings are untouched). */
   delete(clusterId: string): void {
     this.db.prepare(`DELETE FROM cluster_sightings WHERE cluster_id = ?`).run(clusterId)
@@ -320,6 +346,9 @@ export class ClusterRepository {
       label: row.label as string,
       description: row.description as string,
       centroid: row.centroid ? blobToVector(row.centroid as Buffer) : null,
+      kind: row.kind as ClusterKind,
+      mechanismKind: row.mechanism_kind as MechanismKind,
+      mechanism: row.mechanism as string,
       labelModel: row.label_model as string,
       labeledSize: row.labeled_size as number,
       createdAt: row.created_at as number,

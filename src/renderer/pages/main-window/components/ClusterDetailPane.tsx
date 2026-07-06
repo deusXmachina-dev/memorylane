@@ -159,6 +159,11 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
                 {cluster.description}
               </p>
             )}
+            {cluster.kind === 'procedure' && cluster.mechanism && (
+              <p className="mt-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm leading-relaxed">
+                <span className="font-medium">Replace with:</span> {cluster.mechanism}
+              </p>
+            )}
             {cluster.apps.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-1">
                 {cluster.apps.map((app) => (
