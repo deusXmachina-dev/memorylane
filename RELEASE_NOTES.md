@@ -1,13 +1,13 @@
-# MemoryLane v1.4.0-alpha.1
+# MemoryLane v1.4.0-alpha.2
 
-Alpha preview of v1.4.0: enterprise device version reporting, plus more reliable app exclusions and device identity.
+Alpha preview of v1.4.0. Fixes a Windows startup crash on clean machines and adds one-shot task-mining with persistent clustering.
 
 ## What's Changed
 
-- **Device version reporting (enterprise)**: each device reports its installed app version to the backend, so IT can see what's deployed across the fleet (#206).
-- **More reliable app exclusions**: excluded apps are matched by bundle id (macOS) / executable name (Windows) instead of display name, so exclusions survive renames and localization (#201).
-- **Stable device identity**: a transient storage hiccup no longer regenerates the device id (#199).
-- **Reactive LLM health checks**: connectivity is re-checked in response to actual failures instead of probing on every window focus (#198).
+- **Fix Windows startup crash on clean machines**: bundles the x64 VC++ runtime with the app, so onnxruntime loads even where the Visual C++ redistributable isn't installed (previously failed with "The specified module could not be found") (#211).
+- **One-shot task mining**: single-scan default with persistent sighting clustering, plus a one-time in-app backfill on upgrade (#208).
+- **Default task-miner model**: OpenRouter defaults to minimax-m3 (ZDR-only preset list).
+- **Default video model**: OpenRouter semantic video defaults to Gemini 3.1 Flash Lite (#207).
 
 ## Known Issues & Limitations
 
@@ -24,4 +24,4 @@ Alpha preview of v1.4.0: enterprise device version reporting, plus more reliable
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.3.0...v1.4.0-alpha.1
+https://github.com/deusXmachina-dev/memorylane/compare/v1.4.0-alpha.1...v1.4.0-alpha.2
