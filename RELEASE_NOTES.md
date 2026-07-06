@@ -1,12 +1,10 @@
-# MemoryLane v1.3.0
+# MemoryLane v1.3.1-beta.1
 
-Centrally-managed exclusions for enterprise, plus more debuggable logging and a more reliable daily upload.
+Windows hotfix (prerelease): the app no longer crashes at startup on clean machines.
 
 ## What's Changed
 
-- **Centrally-synced capture blacklist (enterprise)**: IT can push a managed app/URL exclusion list that's enforced on every device alongside the user's own list. Org-set entries appear in a read-only locked block and update live when the policy changes; they can't be removed locally (#193, #195).
-- **More debuggable logging**: bigger log files (10 MB) so several hours of history survive rotation, a quieter `info` level, and capture of previously-unlogged crashes and stats-file errors. Enterprise devices can sync logs to the backend automatically (change-gated, throttled) or on demand via **Sync logs now** for support bundles (#196).
-- **Reliable daily database upload (enterprise)**: the managed database upload now runs exactly once per active calendar day via an hourly idempotent poll that survives sleep and clock drift, closing a rare double-upload race (#192).
+- **Fixed startup crash on clean Windows machines**: on Windows without the Microsoft VC++ redistributable (including ARM machines running the x64 build under emulation), the app crashed at launch with "The specified module could not be found" before the tray loaded, because `onnxruntime_binding.node` couldn't resolve the VC++ runtime. The required runtime DLLs are now bundled beside the native module, so no separate redistributable install is needed.
 
 ## Known Issues & Limitations
 
@@ -23,4 +21,4 @@ Centrally-managed exclusions for enterprise, plus more debuggable logging and a 
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.2.1...v1.3.0
+https://github.com/deusXmachina-dev/memorylane/compare/v1.3.0...v1.3.1-beta.1
