@@ -144,6 +144,7 @@ build/swift/
 build/rust/
 build/ffmpeg/
 build/models/
+build/win-runtime/
 native/windows/app-watcher/target/
 native/windows/screenshot-capturer/target/
 

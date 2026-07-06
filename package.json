@@ -17,7 +17,7 @@
     "package": "npm run build && npm run build:swift && electron-builder --config electron-builder.config.js --dir",
     "make": "npm run build && npm run build:swift && npm run build:model && electron-builder --config electron-builder.config.js --publish never",
     "make:mac": "npm run build && npm run build:swift && npm run build:model && electron-builder --config electron-builder.config.js --mac --publish never",
-    "make:win": "npm run build && npm run build:rust && npm run build:model && electron-builder --config electron-builder.config.js --win --publish never",
+    "make:win": "npm run build && npm run build:rust && npm run build:model && node ./scripts/copy-vc-runtime-win.js && electron-builder --config electron-builder.config.js --win --publish never",
     "make:customer:mac": "cross-env EDITION=customer npm run make:mac",
     "make:enterprise:mac": "cross-env EDITION=enterprise npm run make:mac",
     "make:customer:win": "cross-env EDITION=customer npm run make:win",
