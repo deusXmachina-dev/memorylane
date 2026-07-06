@@ -1,15 +1,13 @@
 /**
  * Must be imported BEFORE any module that transitively loads onnxruntime-node.
  *
- * On Windows, onnxruntime_binding.node depends on onnxruntime.dll and
- * DirectML.dll in the same directory, and both statically import the x64 VC++
- * runtime (vcruntime140*.dll / msvcp140*.dll). The Windows DLL loader doesn't
- * always find sibling DLLs inside the deeply nested asar.unpacked path, and
- * clean machines may lack the VC++ redistributable entirely — either failing
- * with "The specified module could not be found" at load time. We ship the VC++
- * runtime in resources/vcruntime (see scripts/copy-vc-runtime-win.js) and add
- * both directories to PATH at module-evaluation time — before any subsequent
- * static import can trigger a require('onnxruntime-node').
+ * On Windows, onnxruntime_binding.node depends on onnxruntime.dll, DirectML.dll,
+ * and the x64 VC++ runtime (vcruntime140*.dll / msvcp140*.dll). All of these live
+ * in the addon's own directory — onnxruntime.dll/DirectML.dll ship there, and the
+ * VC++ runtime is copied in at package time (see build/bundle-win-runtime.js) so
+ * clean machines without the VC++ redistributable can still load it. We also add
+ * that directory to PATH at module-evaluation time — before any subsequent static
+ * import can trigger a require('onnxruntime-node').
  */
 import path from 'node:path'
 import { app } from 'electron'
@@ -25,6 +23,5 @@ if (process.platform === 'win32' && app.isPackaged) {
     'win32',
     process.arch,
   )
-  const vcRuntimeDir = path.join(process.resourcesPath, 'vcruntime')
-  process.env.PATH = `${vcRuntimeDir};${onnxBinDir};${process.env.PATH ?? ''}`
+  process.env.PATH = `${onnxBinDir};${process.env.PATH ?? ''}`
 }
