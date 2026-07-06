@@ -107,6 +107,11 @@ module.exports = {
         to: 'rust',
         filter: ['app-watcher-windows.exe', 'screenshot-capturer-windows.exe'],
       },
+      {
+        from: 'build/win-runtime',
+        to: 'vcruntime',
+        filter: ['*.dll'],
+      },
     ],
     azureSignOptions: {
       publisherName: 'SenseFlow, Inc.',
