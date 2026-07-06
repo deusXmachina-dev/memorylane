@@ -12,9 +12,16 @@ const fs = require('fs')
 const path = require('path')
 const { spawnSync } = require('child_process')
 
+// This script only runs from make:win, so a non-Windows host here means a
+// Windows target is being cross-built — where the VC++ runtime DLLs can't be
+// sourced. Fail loudly rather than silently shipping a build that crashes on
+// clean machines. Build Windows artifacts on a Windows host.
 if (process.platform !== 'win32') {
-  console.log('[vc-runtime] Skipping VC++ runtime staging on non-Windows platform.')
-  process.exit(0)
+  console.error(
+    '[vc-runtime] Cannot stage the x64 VC++ runtime on a non-Windows host. ' +
+      'Build Windows artifacts (make:win) on a Windows machine so onnxruntime loads on clean installs.',
+  )
+  process.exit(1)
 }
 
 const repoRoot = path.resolve(__dirname, '..')
