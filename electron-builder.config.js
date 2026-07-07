@@ -50,7 +50,7 @@ module.exports = {
   },
   appId,
   productName,
-  copyright: 'Copyright © 2026 Filip Kubis',
+  copyright: 'Copyright © 2026 SenseFlow, Inc',
   directories: {
     buildResources: 'assets',
     output: `dist/${edition}`,
