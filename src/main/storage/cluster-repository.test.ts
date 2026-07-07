@@ -130,9 +130,9 @@ describe('ClusterRepository', () => {
   })
 
   it('pruneOrphans drops rows for deleted sightings and empties clusters', () => {
-    storage.sightings.add(createSighting({ id: 'stays', detectedAt: Date.now() }))
-    storage.sightings.add(createSighting({ id: 'goes1', detectedAt: 0 }))
-    storage.sightings.add(createSighting({ id: 'goes2', detectedAt: 0 }))
+    storage.sightings.add(createSighting({ id: 'stays', startedAt: Date.now() }))
+    storage.sightings.add(createSighting({ id: 'goes1', startedAt: 0 }))
+    storage.sightings.add(createSighting({ id: 'goes2', startedAt: 0 }))
     storage.clusters.upsertSignature('stays', v(1), 100)
     storage.clusters.upsertSignature('goes1', v(0, 1), 100)
 

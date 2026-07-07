@@ -1,5 +1,5 @@
 /**
- * Task mining module (in development behind the ML_TASK_MINING flag).
+ * Task mining module (the scheduled background miner).
  *
  * Mining that writes grounded *sightings* (task instances). It does NOT
  * match, dedup, or assign patterns — sightings are append-only and carved

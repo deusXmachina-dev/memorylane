@@ -30,10 +30,7 @@ export function createCaptureCoordinator(params: {
   captureStateManager: CaptureStateManager
   isPaused: () => boolean
   userContextBuilder: UserContextBuilder | null
-  /**
-   * The scheduled background miner. Structural so either PatternDetector or
-   * TaskMiner (selected by the ML_TASK_MINING flag) can be passed in.
-   */
+  /** The scheduled background miner (TaskMiner; structural for tests). */
   patternDetector: { scheduleRun(): void } | null
   /**
    * Notifies the UI (tray + renderer) after any capture-state transition

@@ -85,8 +85,10 @@ describe('runClustering', () => {
   it('drops pruned sightings from clusters and deletes emptied clusters', async () => {
     addActivity('a1', v(1))
     addActivity('a2', v(0, 1))
-    storage.sightings.add(createSighting({ id: 'stays', activityIds: ['a1'] }))
-    storage.sightings.add(createSighting({ id: 'goes', activityIds: ['a2'], detectedAt: 0 }))
+    storage.sightings.add(
+      createSighting({ id: 'stays', activityIds: ['a1'], startedAt: Date.now() }),
+    )
+    storage.sightings.add(createSighting({ id: 'goes', activityIds: ['a2'], startedAt: 0 }))
 
     await runClustering({ storage, model: 'test-model', now: 10_000 })
     expect(storage.clusters.getAll()).toHaveLength(2)

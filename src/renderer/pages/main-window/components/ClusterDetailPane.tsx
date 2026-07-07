@@ -4,8 +4,9 @@ import { Badge } from '@components/ui/badge'
 import { Button } from '@components/ui/button'
 import { ScrollArea } from '@components/ui/scroll-area'
 import { ChevronDown, ChevronUp, Copy } from 'lucide-react'
+import { CLUSTER_VIEW_CONFIG } from '@/shared/constants'
 import type { ClusterDetailInfo, ClusterInfo, ClusterSightingInfo, MainWindowAPI } from '@types'
-import { formatFrequency } from './ClusterListItem'
+import { formatFrequency, formatMinutes, formatShortDate } from './activities/format'
 import { RecurrenceBars } from './RecurrenceBars'
 
 interface ClusterDetailPaneProps {
@@ -17,11 +18,6 @@ interface ClusterDetailPaneProps {
 const LOADING_DELAY_MS = 150
 const INITIAL_SIGHTINGS = 3
 
-function formatMonthDay(timestamp: number | null): string {
-  if (timestamp === null) return '—'
-  return new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-}
-
 function formatSightingTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString(undefined, {
     month: 'short',
@@ -29,11 +25,6 @@ function formatSightingTime(timestamp: number): string {
     hour: 'numeric',
     minute: '2-digit',
   })
-}
-
-function formatInteraction(min: number): string {
-  if (min >= 60) return `${(min / 60).toFixed(1)}h`
-  return `${Math.max(1, Math.round(min))}m`
 }
 
 function buildCopyPrompt(cluster: ClusterInfo, sightings: ClusterSightingInfo[]): string {
@@ -88,6 +79,7 @@ function Stat({ value, label }: { value: string; label: string }): React.JSX.Ele
 export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): React.JSX.Element {
   const [detail, setDetail] = useState<ClusterDetailInfo | null>(null)
   const [showLoading, setShowLoading] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
   const [showAll, setShowAll] = useState(false)
   const timerRef = useRef<number | null>(null)
 
@@ -95,6 +87,7 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
     let cancelled = false
     setDetail(null)
     setShowLoading(false)
+    setLoadFailed(false)
     setShowAll(false)
     if (timerRef.current !== null) window.clearTimeout(timerRef.current)
     timerRef.current = window.setTimeout(() => {
@@ -118,6 +111,7 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
         if (cancelled) return
         clearTimer()
         setShowLoading(false)
+        setLoadFailed(true)
       })
     return () => {
       cancelled = true
@@ -151,7 +145,8 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
               Cluster ·{' '}
               {formatFrequency(cluster.timesPerWeek) &&
                 `${formatFrequency(cluster.timesPerWeek)} · `}
-              Seen {cluster.timesSeen}× since {formatMonthDay(cluster.firstSeenAt)}
+              Seen {cluster.timesSeen}× since{' '}
+              {cluster.firstSeenAt === null ? '—' : formatShortDate(cluster.firstSeenAt)}
             </div>
             <h2 className="mt-1 text-xl font-semibold leading-tight">{cluster.title}</h2>
             {cluster.description && (
@@ -173,7 +168,8 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
                 ))}
               </div>
             )}
-            <Button size="sm" onClick={handleCopyPrompt} className="mt-4">
+            {/* Disabled until sightings load — the prompt embeds their activity ids. */}
+            <Button size="sm" onClick={handleCopyPrompt} disabled={!detail} className="mt-4">
               <Copy className="w-3.5 h-3.5 mr-1.5" />
               Copy prompt for Claude
             </Button>
@@ -183,9 +179,12 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
           <div className="border-y py-4">
             <div className="grid grid-cols-4 gap-3">
               <Stat value={String(cluster.timesSeen)} label="Times seen" />
-              <Stat value={formatInteraction(cluster.avgSpanMin)} label="Span / run" />
-              <Stat value={formatInteraction(cluster.avgActiveMin)} label="Active / run" />
-              <Stat value={formatInteraction(cluster.totalActiveMin)} label="Total active (90d)" />
+              <Stat value={formatMinutes(cluster.avgSpanMin)} label="Span / run" />
+              <Stat value={formatMinutes(cluster.avgActiveMin)} label="Active / run" />
+              <Stat
+                value={formatMinutes(cluster.totalActiveMin)}
+                label={`Total active (${CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS}d)`}
+              />
             </div>
             {cluster.avgIdleMin >= 2 && (
               <p className="mt-3 text-[11px] text-muted-foreground">
@@ -223,6 +222,10 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
               <div className="mt-3 text-xs text-muted-foreground">Loading sightings…</div>
             )}
 
+            {loadFailed && (
+              <div className="mt-3 text-xs text-destructive">Couldn't load sightings.</div>
+            )}
+
             {detail && sightings.length === 0 && (
               <div className="mt-3 text-xs text-muted-foreground">No sightings recorded.</div>
             )}
@@ -242,9 +245,7 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
                             {app}
                           </Badge>
                         ))}
-                        <span className="tabular-nums">
-                          {formatInteraction(s.activeMin)} active
-                        </span>
+                        <span className="tabular-nums">{formatMinutes(s.activeMin)} active</span>
                         <span aria-hidden>·</span>
                         <span className="tabular-nums">{formatSightingTime(s.startedAt)}</span>
                       </div>

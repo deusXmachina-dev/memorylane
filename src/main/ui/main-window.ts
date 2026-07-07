@@ -347,7 +347,6 @@ async function buildStats(): Promise<MainWindowStats> {
       dbSize: 0,
       dateRange: { oldest: null, newest: null },
       apiUsage: null,
-      totalRepetitiveHoursPerWeek: null,
     }
   }
 
@@ -371,22 +370,7 @@ async function buildStats(): Promise<MainWindowStats> {
     totalCost: stats.totalCost,
   }
 
-  let totalRepetitiveHoursPerWeek: number | null = null
-  try {
-    const patterns = deps.storage.patterns.getAllPatterns()
-    const activeWithDuration = patterns.filter(
-      (p) => p.completedAt === null && p.estimatedHoursPerWeek !== null,
-    )
-    if (activeWithDuration.length > 0) {
-      totalRepetitiveHoursPerWeek =
-        Math.round(activeWithDuration.reduce((sum, p) => sum + p.estimatedHoursPerWeek!, 0) * 10) /
-        10
-    }
-  } catch (error) {
-    log.error('[MainWindow] Error computing pattern duration stats:', error)
-  }
-
-  return { activityCount, dbSize, dateRange, apiUsage, totalRepetitiveHoursPerWeek }
+  return { activityCount, dbSize, dateRange, apiUsage }
 }
 
 /**
@@ -782,6 +766,9 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     const infos = deps.storage.clusters
       .getAll()
       .map((c) => buildClusterInfo(c, membersByCluster.get(c.id) ?? [], observedDays, now))
+      // Clusters with no in-window members are dead rows awaiting cleanup, not
+      // "hidden noise" — exclude them from the view and the hidden count.
+      .filter((c) => c.timesSeen > 0)
     const visible = infos.filter((c) => !isBelowNoiseFloor(c.timesSeen, c.totalActiveMin))
     return { clusters: visible, hiddenCount: infos.length - visible.length }
   })
@@ -790,13 +777,9 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     'main-window:getClusterDetail',
     (_event: IpcMainInvokeEvent, id: string): ClusterDetailInfo | null => {
       if (!deps) return null
-      const cluster = deps.storage.clusters.getById(id)
-      if (!cluster) return null
+      if (!deps.storage.clusters.getById(id)) return null
 
       const members = deps.storage.clusters.getMembers(id) // Sighting[], started_at ASC
-      const now = Date.now()
-      const info = buildClusterInfo(cluster, members, countObservedDays(now), now)
-
       const sightings: ClusterSightingInfo[] = members
         .slice()
         .reverse() // newest-first for the instances list
@@ -811,7 +794,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
           activityIds: m.activityIds,
         }))
 
-      return { cluster: info, sightings }
+      return { sightings }
     },
   )
 

@@ -1,5 +1,6 @@
 import { cn } from '@/renderer/lib/utils'
 import type { RecurrenceBucket, RecurrenceUnit } from '@types'
+import { formatShortDate } from './activities/format'
 
 interface RecurrenceBarsProps {
   /** Recurrence buckets, oldest→newest. */
@@ -9,17 +10,16 @@ interface RecurrenceBarsProps {
 }
 
 function formatBucket(start: number, unit: RecurrenceUnit): string {
-  const label = new Date(start).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  const label = formatShortDate(start)
   return unit === 'week' ? `Week of ${label}` : label
 }
 
 function axisStartLabel(start: number, unit: RecurrenceUnit): string {
-  return new Date(start)
-    .toLocaleDateString(
-      undefined,
-      unit === 'week' ? { month: 'short' } : { month: 'short', day: 'numeric' },
-    )
-    .toUpperCase()
+  const label =
+    unit === 'week'
+      ? new Date(start).toLocaleDateString(undefined, { month: 'short' })
+      : formatShortDate(start)
+  return label.toUpperCase()
 }
 
 /**

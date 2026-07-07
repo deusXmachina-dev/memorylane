@@ -214,7 +214,6 @@ export interface MainWindowStats {
   dbSize: number
   dateRange: { oldest: number | null; newest: number | null }
   apiUsage: { requestCount: number; totalCost: number } | null
-  totalRepetitiveHoursPerWeek: number | null
 }
 
 export interface CaptureSettings {
@@ -345,7 +344,6 @@ export interface ClusterSightingInfo {
 }
 
 export interface ClusterDetailInfo {
-  cluster: ClusterInfo
   /** Member sightings, newest-first. */
   sightings: ClusterSightingInfo[]
 }

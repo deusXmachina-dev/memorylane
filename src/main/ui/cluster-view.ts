@@ -5,20 +5,31 @@
  * yet.
  */
 
-import { CLUSTER_VIEW_CONFIG } from '../../shared/constants'
-import type { ClusterInfo, ClusterKind, RecurrenceBucket, RecurrenceUnit } from '../../shared/types'
+import { CLUSTER_VIEW_CONFIG } from '@/shared/constants'
+import type { ClusterInfo, ClusterKind, RecurrenceBucket, RecurrenceUnit } from '@types'
 
 const DAY_MS = 24 * 60 * 60 * 1000
-const WEEK_MS = 7 * DAY_MS
-// 1970-01-05 was a Monday; anchor week buckets (UTC) to it.
-const EPOCH_MONDAY_MS = 4 * DAY_MS
+// 1970-01-05 (day index 4) was a Monday; anchor week buckets to it.
+const EPOCH_MONDAY_DAY = 4
 
-function bucketIndex(ts: number, unit: RecurrenceUnit): number {
-  return unit === 'day' ? Math.floor(ts / DAY_MS) : Math.floor((ts - EPOCH_MONDAY_MS) / WEEK_MS)
+/**
+ * Days since epoch of the timestamp's LOCAL calendar day — buckets must match
+ * the local days the rest of the stats (observedDays, day headings) use.
+ */
+function localDayIndex(ts: number): number {
+  return Math.floor((ts - new Date(ts).getTimezoneOffset() * 60_000) / DAY_MS)
 }
 
+function bucketIndex(ts: number, unit: RecurrenceUnit): number {
+  const day = localDayIndex(ts)
+  return unit === 'day' ? day : Math.floor((day - EPOCH_MONDAY_DAY) / 7)
+}
+
+/** Local midnight of the bucket's first calendar day (renders correctly via toLocaleDateString). */
 function bucketStart(index: number, unit: RecurrenceUnit): number {
-  return unit === 'day' ? index * DAY_MS : index * WEEK_MS + EPOCH_MONDAY_MS
+  const day = unit === 'day' ? index : index * 7 + EPOCH_MONDAY_DAY
+  const utc = new Date(day * DAY_MS)
+  return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate()).getTime()
 }
 
 export interface Recurrence {
@@ -63,7 +74,9 @@ export function computeRecurrence(
 ): Recurrence {
   if (startedAts.length === 0) return { unit: 'day', buckets: [] }
   const first = Math.min(...startedAts)
-  const spanDays = Math.max(0, (nowMs - first) / DAY_MS)
+  // Span in calendar days (bucket indices), not fractional days — a fractional
+  // span under maxBuckets can still straddle maxBuckets+1 calendar days.
+  const spanDays = bucketIndex(nowMs, 'day') - bucketIndex(first, 'day')
   const unit: RecurrenceUnit = spanDays < maxBuckets ? 'day' : 'week'
   const nowIdx = bucketIndex(nowMs, unit)
   const counts = new Map<number, number>()
@@ -103,10 +116,14 @@ export function buildClusterInfo(
     kind: ClusterKind
     mechanism: string
   },
-  members: ClusterMember[],
+  allMembers: ClusterMember[],
   observedDays: number,
   now: number,
 ): ClusterInfo {
+  // Window the numerator to the same period as observedDays — pruning only
+  // runs during mining runs, so stored members can outlive the stats window.
+  const windowStart = now - CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS * DAY_MS
+  const members = allMembers.filter((m) => m.startedAt >= windowStart)
   const startedAts = members.map((m) => m.startedAt)
   const spansMin = members.map((m) => Math.max(0, m.endedAt - m.startedAt) / 60_000)
   const activeMins = members.map((m) => Math.max(0, m.interactionMin))

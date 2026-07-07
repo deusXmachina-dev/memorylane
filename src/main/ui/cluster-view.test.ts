@@ -11,15 +11,22 @@ import {
 const DAY_MS = 24 * 60 * 60 * 1000
 const NOW = Date.UTC(2026, 6, 6, 12, 0, 0) // 2026-07-06, mid-day UTC
 
+// Buckets are local calendar days; expectations must be TZ-agnostic.
+const localMidnight = (ts: number): number => {
+  const d = new Date(ts)
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
+}
+
 describe('computeRecurrence', () => {
   it('returns empty for no sightings', () => {
     expect(computeRecurrence([], NOW)).toEqual({ unit: 'day', buckets: [] })
   })
 
-  it('uses day buckets for a short span', () => {
+  it('uses day buckets for a short span, starting at local midnight', () => {
     const r = computeRecurrence([NOW], NOW)
     expect(r.unit).toBe('day')
-    expect(r.buckets).toEqual([{ start: Date.UTC(2026, 6, 6), count: 1 }])
+    expect(r.buckets).toEqual([{ start: localMidnight(NOW), count: 1 }])
   })
 
   it('zero-fills day gaps', () => {
@@ -38,6 +45,15 @@ describe('computeRecurrence', () => {
     expect(r.unit).toBe('week')
     expect(r.buckets.reduce((s, b) => s + b.count, 0)).toBe(2)
     expect(r.buckets[r.buckets.length - 1].count).toBe(1)
+  })
+
+  it('switches to week buckets when a fractional span straddles maxBuckets+1 calendar days', () => {
+    // 01:00 local; 23.5 days back lands 24 calendar days earlier — day buckets
+    // would drop the oldest sighting.
+    const now = localMidnight(NOW) + 60 * 60 * 1000
+    const r = computeRecurrence([now - 23.5 * DAY_MS, now], now)
+    expect(r.unit).toBe('week')
+    expect(r.buckets.reduce((s, b) => s + b.count, 0)).toBe(2)
   })
 
   it('caps to the most recent maxBuckets', () => {
@@ -154,6 +170,33 @@ describe('buildClusterInfo', () => {
     expect(info.mechanism).toBe('A nightly sync.')
     expect(info.recurrenceUnit).toBe('day')
     expect(info.recurrence.reduce((sum, b) => sum + b.count, 0)).toBe(2)
+  })
+
+  it('excludes members older than the stats window', () => {
+    const info = buildClusterInfo(
+      head,
+      [
+        {
+          startedAt: NOW - 100 * DAY_MS,
+          endedAt: NOW - 100 * DAY_MS + 600_000,
+          interactionMin: 4,
+          title: 'Old run',
+          apps: ['Excel'],
+        },
+        {
+          startedAt: NOW - DAY_MS,
+          endedAt: NOW - DAY_MS + 600_000,
+          interactionMin: 4,
+          title: 'Recent run',
+          apps: ['Mail'],
+        },
+      ],
+      10,
+      NOW,
+    )
+    expect(info.timesSeen).toBe(1)
+    expect(info.firstSeenAt).toBe(NOW - DAY_MS)
+    expect(info.apps).toEqual(['Mail'])
   })
 
   it('handles a memberless cluster without stats or recurrence', () => {

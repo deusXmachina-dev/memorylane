@@ -1,33 +1,11 @@
 import type { ClusterInfo } from '@types'
+import { formatFrequency, formatMinutes, formatRelative } from './activities/format'
 import { Sparkline } from './Sparkline'
 
 interface ClusterListItemProps {
   cluster: ClusterInfo
   selected: boolean
   onSelect: () => void
-}
-
-function formatAvg(min: number): string {
-  if (min >= 60) return `avg ${(min / 60).toFixed(1)}h`
-  return `avg ${Math.max(1, Math.round(min))}m`
-}
-
-export function formatFrequency(perWeek: number): string {
-  if (perWeek <= 0) return ''
-  if (perWeek >= 0.95) return `~${Math.round(perWeek)}×/wk`
-  const perMonth = perWeek * (30.44 / 7)
-  return perMonth >= 0.95 ? `~${Math.round(perMonth)}×/mo` : '<1×/mo'
-}
-
-function formatRelative(timestamp: number | null): string {
-  if (timestamp === null) return 'never'
-  const diff = Date.now() - timestamp
-  const minutes = Math.floor(diff / 60_000)
-  if (minutes < 60) return `${Math.max(0, minutes)} min ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
 }
 
 export function ClusterListItem({
@@ -62,7 +40,7 @@ export function ClusterListItem({
             <span aria-hidden>·</span>
           </>
         )}
-        <span className="tabular-nums">{formatAvg(cluster.avgSpanMin)}</span>
+        <span className="tabular-nums">avg {formatMinutes(cluster.avgSpanMin)}</span>
         <span aria-hidden>·</span>
         <span>{formatRelative(cluster.lastSeenAt)}</span>
       </div>

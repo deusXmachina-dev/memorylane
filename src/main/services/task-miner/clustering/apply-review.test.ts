@@ -87,6 +87,27 @@ describe('validateAndApply', () => {
     expect(storage.clusters.getMemberCount('older')).toBe(2)
   })
 
+  it('clears the survivor verdict on merge so the merged cluster is re-classified', () => {
+    seedCluster('older', 100, ['s1'])
+    seedCluster('newer', 200, ['s2'])
+    storage.clusters.updateVerdict('older', { kind: 'procedure', mechanism: 'A script.' }, 200)
+
+    validateAndApply(
+      storage,
+      { merges: [{ merge: ['newer', 'older'], label: 'Merged process', description: '' }] },
+      guards({
+        reviewableIds: new Set(['older', 'newer']),
+        mergeCandidatePairs: new Set([mergePairKey('older', 'newer')]),
+      }),
+      'test-model',
+      5000,
+    )
+
+    const survivor = storage.clusters.getById('older')!
+    expect(survivor.kind).toBe('')
+    expect(survivor.mechanism).toBe('')
+  })
+
   it('rejects merges that were not proposed as candidates', () => {
     seedCluster('a', 100, ['s1'])
     seedCluster('b', 200, ['s2'])
@@ -265,6 +286,23 @@ describe('validateAndApply', () => {
 
     const cluster = storage.clusters.getById('c1')!
     expect(cluster.label).toBe('Renamed')
+    expect(cluster.kind).toBe('procedure')
+    expect(cluster.mechanism).toBe('A script.')
+  })
+
+  it('does not wipe an existing verdict when a relabel kind fails sanitization', () => {
+    seedCluster('c1', 100, ['s1', 's2'])
+    storage.clusters.updateVerdict('c1', { kind: 'procedure', mechanism: 'A script.' }, 200)
+
+    validateAndApply(
+      storage,
+      { clusters: [{ id: 'c1', label: 'Renamed', description: '', kind: 'Procedure' }] },
+      guards({ reviewableIds: new Set(['c1']) }),
+      'test-model',
+      5000,
+    )
+
+    const cluster = storage.clusters.getById('c1')!
     expect(cluster.kind).toBe('procedure')
     expect(cluster.mechanism).toBe('A script.')
   })

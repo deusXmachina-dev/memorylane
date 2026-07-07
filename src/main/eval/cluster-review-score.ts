@@ -8,9 +8,9 @@
  * the number that must be ~0 before `kind` may gate or roll up anything.
  */
 
-import type { ClusterKind } from '../../shared/types'
-import type { ReviewInput, ReviewOutput } from '../services/task-miner/clustering/types'
-import { sanitizeVerdict } from '../services/task-miner/clustering/apply-review'
+import type { ClusterKind } from '@types'
+import type { ReviewInput, ReviewOutput } from '@main/services/task-miner/clustering/types'
+import { sanitizeVerdict } from '@main/services/task-miner/clustering/apply-review'
 
 export interface ClusterReviewFixture {
   name: string

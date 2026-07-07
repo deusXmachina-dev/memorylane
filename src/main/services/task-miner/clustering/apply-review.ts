@@ -1,8 +1,8 @@
 import { v4 as uuidv4 } from 'uuid'
 import type { StorageService } from '@main/storage'
 import type { ClusterVerdict } from '@main/storage/cluster-repository'
-import { CLUSTER_KINDS } from '../../../../shared/types'
-import type { ClusterKind } from '../../../../shared/types'
+import { CLUSTER_KINDS } from '@/shared/types'
+import type { ClusterKind } from '@types'
 import { UnionFind } from './union-find'
 import { meanPool, normalize } from './vector-math'
 import { recomputeCentroid } from './signatures'
@@ -29,8 +29,8 @@ export function mergePairKey(a: string, b: string): string {
 /**
  * Whitelist the LLM's classification into a storable verdict. Fail closed:
  * anything off-enum — including a "procedure" without a concrete mechanism —
- * coerces to kind '' so the cluster is re-reviewed next run instead of
- * persisting garbage. Non-procedure kinds never carry a mechanism.
+ * coerces to kind '' (the unclassified sentinel, never persisted over an
+ * earlier classification). Non-procedure kinds never carry a mechanism.
  */
 export function sanitizeVerdict(raw: ReviewClusterVerdict): ClusterVerdict {
   const kind = (CLUSTER_KINDS as readonly string[]).includes(raw.kind ?? '')
@@ -105,6 +105,9 @@ export function validateAndApply(
         storage.clusters.getMemberCount(survivor.id),
         now,
       )
+      // The survivor's verdict was judged against only its pre-merge members —
+      // clear it so the merged cluster is re-classified on the next review.
+      storage.clusters.updateVerdict(survivor.id, { kind: '', mechanism: '' }, now)
       recomputeCentroid(storage, survivor.id, now)
       labeled++
     }
@@ -184,10 +187,14 @@ export function validateAndApply(
           storage.clusters.getMemberCount(verdict.id),
           now,
         )
-        // Only touch the stored verdict when the LLM offered one — an omitted
-        // kind on a relabel must not wipe an earlier classification.
+        // Only persist a valid verdict — an omitted or unsanitizable kind on a
+        // relabel must not wipe an earlier classification. An unclassified
+        // cluster keeps kind '' and is re-reviewed next run either way.
         if (verdict.kind !== undefined) {
-          storage.clusters.updateVerdict(verdict.id, sanitizeVerdict(verdict), now)
+          const sanitized = sanitizeVerdict(verdict)
+          if (sanitized.kind !== '') {
+            storage.clusters.updateVerdict(verdict.id, sanitized, now)
+          }
         }
         labeled++
       }

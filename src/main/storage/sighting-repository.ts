@@ -111,10 +111,14 @@ export class SightingRepository {
     )
   }
 
-  /** Delete sightings older than `maxAgeDays` (DB hygiene). */
+  /**
+   * Delete sightings older than `maxAgeDays` (DB hygiene). Keyed on
+   * `started_at` — the field cluster stats window on — so backfilled
+   * sightings (recent `detected_at`, old `started_at`) age out with the rest.
+   */
   pruneOlderThan(maxAgeDays = 90, now: number = Date.now()): number {
     const cutoff = now - maxAgeDays * 86_400_000
-    return this.db.prepare('DELETE FROM sightings WHERE detected_at < ?').run(cutoff).changes
+    return this.db.prepare('DELETE FROM sightings WHERE started_at < ?').run(cutoff).changes
   }
 
   private rowToSighting(row: Record<string, unknown>): Sighting {
