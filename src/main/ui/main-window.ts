@@ -34,13 +34,7 @@ import { integrations } from '../integrations'
 import { listInstalledApps } from '../apps/installed-apps'
 import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
 import { VENDORS } from '../../shared/types'
-import {
-  computeRecurrence,
-  isBelowNoiseFloor,
-  mean,
-  resolveTitle,
-  timesPerWeek,
-} from './cluster-view'
+import { buildClusterInfo, isBelowNoiseFloor, type ClusterMember } from './cluster-view'
 import { VENDOR_PRESETS, getVendorDefaults } from '../../shared/vendor-defaults'
 import { applyVendorSwitch } from './vendor-switch'
 import { applyModelSettings } from './model-settings'
@@ -57,7 +51,6 @@ import type { TaskSightingSummary } from '../../shared/eval-review'
 import type { AccessProvider } from '../access'
 import type {
   AccessState,
-  ClusterInfo,
   ClusterSightingInfo,
   ClusterDetailInfo,
   ClustersView,
@@ -763,61 +756,32 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     return deps.accessProvider.getAccessState().customerSubscriptionStatus ?? 'idle'
   })
 
+  // Frequency denominator: distinct captured days in the same window sightings
+  // are retained for, so timesSeen and observedDays cover the same period.
+  const countObservedDays = (now: number): number => {
+    if (!deps) return 0
+    const windowStart = now - CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS * 24 * 60 * 60 * 1000
+    return deps.storage.activities.countDistinctActiveDays(windowStart, now)
+  }
+
   // Patterns (task clusters)
   handle('main-window:getClusters', (): ClustersView => {
     if (!deps) return { clusters: [], hiddenCount: 0 }
-    const clusters = deps.storage.clusters.getAllWithStats()
-    // One digest query for all members → recurrence, duration stats, title fallback (no N+1).
-    const byCluster = new Map<
-      string,
-      { startedAts: number[]; spansMin: number[]; activeMins: number[]; titles: string[] }
-    >()
-    for (const row of deps.storage.clusters.getMemberDigest()) {
-      let entry = byCluster.get(row.clusterId)
-      if (!entry) {
-        entry = { startedAts: [], spansMin: [], activeMins: [], titles: [] }
-        byCluster.set(row.clusterId, entry)
+    // One digest query for all members → stats, recurrence, title fallback (no N+1).
+    const membersByCluster = new Map<string, ClusterMember[]>()
+    for (const { clusterId, ...member } of deps.storage.clusters.getMemberDigest()) {
+      let list = membersByCluster.get(clusterId)
+      if (!list) {
+        list = []
+        membersByCluster.set(clusterId, list)
       }
-      entry.startedAts.push(row.startedAt)
-      entry.spansMin.push(Math.max(0, row.endedAt - row.startedAt) / 60_000)
-      entry.activeMins.push(Math.max(0, row.interactionMin))
-      entry.titles.push(row.title)
+      list.push(member)
     }
     const now = Date.now()
-    const windowStart = now - CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS * 24 * 60 * 60 * 1000
-    const observedDays = deps.storage.activities.countDistinctActiveDays(windowStart, now)
-    const infos = clusters.map((c) => {
-      const members = byCluster.get(c.id) ?? {
-        startedAts: [],
-        spansMin: [],
-        activeMins: [],
-        titles: [],
-      }
-      const recurrence = computeRecurrence(members.startedAts, now)
-      const avgSpanMin = mean(members.spansMin)
-      const avgActiveMin = mean(members.activeMins)
-      return {
-        id: c.id,
-        title: resolveTitle(c.label, members.titles),
-        description: c.description,
-        apps: c.apps,
-        timesSeen: c.timesSeen,
-        timesPerWeek: timesPerWeek(c.timesSeen, observedDays),
-        observedDays,
-        avgActiveMin,
-        avgSpanMin,
-        avgIdleMin: Math.max(0, avgSpanMin - avgActiveMin),
-        totalActiveMin: members.activeMins.reduce((sum, v) => sum + v, 0),
-        kind: c.kind,
-        mechanismKind: c.mechanismKind,
-        mechanism: c.mechanism,
-        firstSeenAt: c.firstSeenAt,
-        lastSeenAt: c.lastSeenAt,
-        createdAt: c.createdAt,
-        recurrence: recurrence.buckets,
-        recurrenceUnit: recurrence.unit,
-      }
-    })
+    const observedDays = countObservedDays(now)
+    const infos = deps.storage.clusters
+      .getAll()
+      .map((c) => buildClusterInfo(c, membersByCluster.get(c.id) ?? [], observedDays, now))
     const visible = infos.filter((c) => !isBelowNoiseFloor(c.timesSeen, c.totalActiveMin))
     return { clusters: visible, hiddenCount: infos.length - visible.length }
   })
@@ -830,42 +794,8 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       if (!cluster) return null
 
       const members = deps.storage.clusters.getMembers(id) // Sighting[], started_at ASC
-      const startedAts = members.map((m) => m.startedAt)
-      const appsSet = new Set<string>()
-      for (const m of members) for (const app of m.apps) appsSet.add(app)
-      const spansMin = members.map((m) => Math.max(0, m.endedAt - m.startedAt) / 60_000)
-      const activeMins = members.map((m) => Math.max(0, m.interactionMin))
-      const avgSpanMin = mean(spansMin)
-      const avgActiveMin = mean(activeMins)
       const now = Date.now()
-      const recurrence = computeRecurrence(startedAts, now)
-      const windowStart = now - CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS * 24 * 60 * 60 * 1000
-      const observedDays = deps.storage.activities.countDistinctActiveDays(windowStart, now)
-
-      const info: ClusterInfo = {
-        id: cluster.id,
-        title: resolveTitle(
-          cluster.label,
-          members.map((m) => m.title),
-        ),
-        description: cluster.description,
-        apps: [...appsSet],
-        timesSeen: members.length,
-        timesPerWeek: timesPerWeek(members.length, observedDays),
-        observedDays,
-        avgActiveMin,
-        avgSpanMin,
-        avgIdleMin: Math.max(0, avgSpanMin - avgActiveMin),
-        totalActiveMin: activeMins.reduce((sum, v) => sum + v, 0),
-        kind: cluster.kind,
-        mechanismKind: cluster.mechanismKind,
-        mechanism: cluster.mechanism,
-        firstSeenAt: members.length > 0 ? Math.min(...startedAts) : null,
-        lastSeenAt: members.length > 0 ? Math.max(...members.map((m) => m.endedAt)) : null,
-        createdAt: cluster.createdAt,
-        recurrence: recurrence.buckets,
-        recurrenceUnit: recurrence.unit,
-      }
+      const info = buildClusterInfo(cluster, members, countObservedDays(now), now)
 
       const sightings: ClusterSightingInfo[] = members
         .slice()

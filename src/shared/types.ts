@@ -290,17 +290,6 @@ export interface PermissionStatus {
 export const CLUSTER_KINDS = ['procedure', 'monitoring', 'ambient', 'dev-loop', 'judgment'] as const
 export type ClusterKind = (typeof CLUSTER_KINDS)[number] | ''
 
-/** How a 'procedure' cluster could be eliminated. 'none' = judged not eliminable. */
-export const MECHANISM_KINDS = [
-  'script',
-  'integration',
-  'alert',
-  'platform_feature',
-  'process_change',
-  'none',
-] as const
-export type MechanismKind = (typeof MECHANISM_KINDS)[number] | ''
-
 /** A recurring task cluster with stats derived from its member sightings. */
 export type RecurrenceUnit = 'day' | 'week'
 
@@ -330,12 +319,10 @@ export interface ClusterInfo {
   /** Active minutes summed across all kept sightings (sightings are pruned at 90 days). */
   totalActiveMin: number
   kind: ClusterKind
-  mechanismKind: MechanismKind
   /** Consolidated "Replace with" recommendation; set only for 'procedure' clusters. */
   mechanism: string
   firstSeenAt: number | null
   lastSeenAt: number | null
-  createdAt: number
   /** Recurrence histogram, oldest→newest — drives the sparkline and bars. */
   recurrence: RecurrenceBucket[]
   /** Whether each recurrence bucket is a day or a week. */

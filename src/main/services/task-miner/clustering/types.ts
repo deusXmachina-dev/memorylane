@@ -71,8 +71,6 @@ export interface ReviewCluster {
     span_days: number
     median_active_min: number
   }
-  /** Distinct "Replace with:" tails parsed from member descriptions (most recent first, capped). */
-  replace_with: string[]
   members: ReviewSighting[]
 }
 
@@ -92,7 +90,6 @@ export interface ReviewClusterVerdict {
   label?: string
   description?: string
   kind?: string
-  mechanism_kind?: string
   mechanism?: string
   split?: ReviewSplitGroup[]
 }

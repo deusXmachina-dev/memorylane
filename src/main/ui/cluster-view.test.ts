@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  buildClusterInfo,
   computeRecurrence,
   isBelowNoiseFloor,
   mean,
@@ -103,5 +104,64 @@ describe('isBelowNoiseFloor', () => {
 
   it('keeps anything seen twice, however small', () => {
     expect(isBelowNoiseFloor(2, 0)).toBe(false)
+  })
+})
+
+describe('buildClusterInfo', () => {
+  const head = {
+    id: 'c1',
+    label: 'Process invoices',
+    description: 'Runs the batch.',
+    kind: 'procedure' as const,
+    mechanism: 'A nightly sync.',
+  }
+
+  it('derives stats, apps, and recurrence from the members', () => {
+    const info = buildClusterInfo(
+      head,
+      [
+        // 10-min span, 4 active → 6 idle
+        {
+          startedAt: NOW - DAY_MS,
+          endedAt: NOW - DAY_MS + 600_000,
+          interactionMin: 4,
+          title: 'Run A',
+          apps: ['Excel'],
+        },
+        // 2-min span, 2 active
+        {
+          startedAt: NOW - 120_000,
+          endedAt: NOW,
+          interactionMin: 2,
+          title: 'Run B',
+          apps: ['Excel', 'Mail'],
+        },
+      ],
+      10,
+      NOW,
+    )
+    expect(info.title).toBe('Process invoices')
+    expect(info.apps.sort()).toEqual(['Excel', 'Mail'])
+    expect(info.timesSeen).toBe(2)
+    expect(info.timesPerWeek).toBeCloseTo(1.4)
+    expect(info.avgSpanMin).toBeCloseTo(6)
+    expect(info.avgActiveMin).toBeCloseTo(3)
+    expect(info.avgIdleMin).toBeCloseTo(3)
+    expect(info.totalActiveMin).toBeCloseTo(6)
+    expect(info.firstSeenAt).toBe(NOW - DAY_MS)
+    expect(info.lastSeenAt).toBe(NOW)
+    expect(info.kind).toBe('procedure')
+    expect(info.mechanism).toBe('A nightly sync.')
+    expect(info.recurrenceUnit).toBe('day')
+    expect(info.recurrence.reduce((sum, b) => sum + b.count, 0)).toBe(2)
+  })
+
+  it('handles a memberless cluster without stats or recurrence', () => {
+    const info = buildClusterInfo({ ...head, label: '' }, [], 10, NOW)
+    expect(info.title).toBe('Untitled task')
+    expect(info.timesSeen).toBe(0)
+    expect(info.firstSeenAt).toBeNull()
+    expect(info.lastSeenAt).toBeNull()
+    expect(info.recurrence).toEqual([])
   })
 })

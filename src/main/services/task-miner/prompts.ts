@@ -88,7 +88,6 @@ If this is a real, grounded run:
 {
   "verdict": "keep",
   "title": "Refined title",
-  "subject": "The specific object this run acted on",
   "description": "What this run did, step by step — informed by the OCR and timeline — ENDING with exactly one sentence: Replace with: <the concrete script, integration, alert, or platform feature>.",
   "apps": ["App1", "App2"],
   "activity_ids": ["the exact, finalized set of supporting activity IDs"]

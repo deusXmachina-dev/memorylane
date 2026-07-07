@@ -114,9 +114,7 @@ async function main() {
         console.log(
           `  → kind ${score.kindCorrect}/${score.verdictCount}, ` +
             `false-eliminable ${score.falseEliminable}, missed-procedure ${score.missedProcedure}, ` +
-            `unclassified ${score.unclassified}, ` +
-            `merge ${score.mergeCorrect}/${score.mergeExpected} (+${score.mergeForbidden} forbidden), ` +
-            `split ${score.splitCorrect}/${score.splitExpected} (+${score.splitForbidden} forbidden)`,
+            `unclassified ${score.unclassified}`,
         )
       } catch (err) {
         console.error(`  ✖ failed: ${err instanceof Error ? err.message : String(err)}`)

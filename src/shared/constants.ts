@@ -124,16 +124,19 @@ export const PATTERN_DETECTION_CONFIG = {
   SETTLE_DELAY_MS: 60 * 1000, // 1 min after unlock before running
 }
 
+// Sightings older than this are pruned on every mining run; cluster stats use
+// the same window so the timesSeen numerator and observedDays denominator
+// cover the same period.
+export const SIGHTING_RETENTION_DAYS = 90
+
 // Noise floor for the Patterns view: clusters seen once are hidden unless they
 // already cost meaningful time. Presentation-only — clustering, storage, and
 // sync are untouched, so a hidden singleton still attaches tomorrow's sighting.
 export const CLUSTER_VIEW_CONFIG = {
   MIN_TIMES_SEEN: 2,
   SINGLETON_MIN_TOTAL_ACTIVE_MIN: 20,
-  // Window for cluster stats (frequency denominator). Must match
-  // SIGHTING_MAX_AGE_DAYS in task-miner/run-detection.ts so the timesSeen
-  // numerator covers the same period.
-  STATS_WINDOW_DAYS: 90,
+  /** Window for cluster stats (frequency denominator). */
+  STATS_WINDOW_DAYS: SIGHTING_RETENTION_DAYS,
 }
 
 // One-time seed of the sightings/clusters tables from existing history, run once

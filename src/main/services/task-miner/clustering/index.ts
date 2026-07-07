@@ -18,7 +18,6 @@ import type { Cluster } from '@main/storage/cluster-repository'
 import type { InferenceProvider } from '@main/llm'
 import log from '@main/utils/logger'
 import { formatApiError } from '../../pattern-detector/helpers'
-import { parseReplaceWith } from '../helpers'
 import type { ProgressCallback } from '../types'
 import { dot } from './vector-math'
 import { computeAndStoreSignatures, recomputeCentroid } from './signatures'
@@ -108,7 +107,6 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
       description: '',
       centroid: null,
       kind: '',
-      mechanismKind: '',
       mechanism: '',
       labelModel: '',
       labeledSize: 0,
@@ -176,10 +174,8 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
  * only shown when a merge involves them — they get no label of their own
  * (readers fall back to the member title). The label/classify set is capped
  * per run so a backlog drains gradually; merge candidates ride along uncapped.
- *
- * Exported for the review-input snapshot dumper (fixture authoring).
  */
-export function buildReviewInput(
+function buildReviewInput(
   storage: StorageService,
   touched: Set<string>,
   newClusterIds: Set<string>,
@@ -239,8 +235,8 @@ export function buildReviewInput(
 
 /**
  * Serialize one cluster the way the review LLM sees it — code-computed stats
- * over all members, parsed mechanism tails, most-recent member sample. Also
- * used by the review-input snapshot dumper.
+ * over all members, most-recent member sample. Also used by the review-input
+ * snapshot dumper.
  */
 export function toReviewCluster(
   storage: StorageService,
@@ -252,12 +248,6 @@ export function toReviewCluster(
   const sample = members.slice(-CLUSTERING_CONFIG.MAX_SAMPLE_MEMBERS)
   const spanMs =
     members.length > 0 ? members[members.length - 1].startedAt - members[0].startedAt : 0
-  const replaceWith = new Set<string>()
-  for (const s of [...members].reverse()) {
-    const mechanism = parseReplaceWith(s.description)
-    if (mechanism) replaceWith.add(mechanism)
-    if (replaceWith.size >= MAX_REPLACE_WITH_TAILS) break
-  }
   return {
     id: cluster.id,
     new: isNew,
@@ -267,7 +257,6 @@ export function toReviewCluster(
       span_days: Math.floor(spanMs / DAY_MS) + 1,
       median_active_min: median(members.map((m) => m.interactionMin)),
     },
-    replace_with: [...replaceWith],
     members: sample.map((s) => ({
       sighting_id: s.id,
       title: s.title,
@@ -280,7 +269,6 @@ export function toReviewCluster(
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
-const MAX_REPLACE_WITH_TAILS = 5
 
 function median(values: number[]): number {
   if (values.length === 0) return 0

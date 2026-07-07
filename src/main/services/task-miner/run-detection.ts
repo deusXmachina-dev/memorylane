@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 import { generateText, stepCountIs } from 'ai'
+import { SIGHTING_RETENTION_DAYS } from '../../../shared/constants'
 import type { StorageService } from '../../storage'
 import type { Sighting } from '../../storage/sighting-repository'
 import type { EmbeddingService } from '../../processor/embedding'
@@ -20,7 +21,6 @@ import { buildScanSystemPrompt, buildGroundingSystemPrompt } from './prompts'
 
 const GROUNDING_MAX_STEPS = 8
 const MIN_RUN_ACTIVITIES = 2
-const SIGHTING_MAX_AGE_DAYS = 90
 // A malformed scan response — no parseable JSON, or candidates that all fail
 // validation / cite unknown ids — silently loses the whole day, so retry it.
 // A response that parses to `[]` is a legitimate empty day, not a failure.
@@ -33,7 +33,6 @@ function emptyResult(
 ): MiningRunResult {
   return {
     runId,
-    sightingsFound: 0,
     candidatesFromScan,
     candidatesKept: 0,
     candidatesRejected: 0,
@@ -68,9 +67,9 @@ export async function runDetection(
   progress(`Starting run ${runId} (model=${cfg.model}, lookback=${cfg.lookbackDays}d)`)
 
   // 0. Prune very old sightings (DB hygiene)
-  const prunedSightings = storage.sightings.pruneOlderThan(SIGHTING_MAX_AGE_DAYS, now)
+  const prunedSightings = storage.sightings.pruneOlderThan(SIGHTING_RETENTION_DAYS, now)
   if (prunedSightings)
-    progress(`Pruned ${prunedSightings} sightings older than ${SIGHTING_MAX_AGE_DAYS}d`)
+    progress(`Pruned ${prunedSightings} sightings older than ${SIGHTING_RETENTION_DAYS}d`)
 
   // 1. Query activities for the target day
   const { start, end, label } = getDayBoundaries(cfg.lookbackDays)
@@ -210,7 +209,6 @@ export async function runDetection(
   )
 
   let candidatesKept = 0
-  let sightingsWritten = 0
   let candidatesRejected = 0
 
   for (const candidate of candidates) {
@@ -318,7 +316,6 @@ export async function runDetection(
       } satisfies Sighting)
 
       candidatesKept++
-      sightingsWritten += 1
       progress(`[Phase 2] Kept: ${title} (${resolved.length} activities)`)
     } catch (error) {
       candidatesRejected++
@@ -331,12 +328,11 @@ export async function runDetection(
   storage.miningRuns.record(now)
 
   progress(
-    `Run complete: ${candidates.length} candidates → ${sightingsWritten} sightings (${candidatesKept} kept, ${candidatesRejected} rejected)`,
+    `Run complete: ${candidates.length} candidates → ${candidatesKept} sightings (${candidatesRejected} rejected)`,
   )
 
   return {
     runId,
-    sightingsFound: sightingsWritten,
     candidatesFromScan: rawCandidates.length,
     candidatesKept,
     candidatesRejected,

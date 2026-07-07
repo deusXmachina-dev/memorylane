@@ -38,20 +38,8 @@ export interface Candidate {
   activity_ids: string[]
 }
 
-/** Outcome of grounding a candidate against the real activities. */
-export interface GroundedTask {
-  verdict: 'keep' | 'reject'
-  title: string
-  subject?: string
-  description: string
-  apps: string[]
-  activity_ids: string[]
-  reason?: string
-}
-
 export interface MiningRunResult {
   runId: string
-  sightingsFound: number
   candidatesFromScan: number
   candidatesKept: number
   candidatesRejected: number

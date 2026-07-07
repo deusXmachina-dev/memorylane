@@ -254,7 +254,6 @@ async function main() {
     console.log(
       `Candidates:       ${result.candidatesFromScan} scanned → ${result.candidatesKept} kept, ${result.candidatesRejected} rejected`,
     )
-    console.log(`Sightings mined:  ${result.sightingsFound}`)
     console.log(
       `Tokens (scan):    ${result.tokenUsage.scan.input} in / ${result.tokenUsage.scan.output} out`,
     )

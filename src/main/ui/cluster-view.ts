@@ -1,11 +1,12 @@
 /**
  * Read-side helpers for the cluster (Patterns) view: turning member sightings
- * into the derived fields the UI needs — a recurrence histogram and a display
- * title fallback when a cluster hasn't been LLM-labeled yet.
+ * into the derived fields the UI needs — a recurrence histogram, duration
+ * stats, and a display title fallback when a cluster hasn't been LLM-labeled
+ * yet.
  */
 
 import { CLUSTER_VIEW_CONFIG } from '../../shared/constants'
-import type { RecurrenceBucket, RecurrenceUnit } from '../../shared/types'
+import type { ClusterInfo, ClusterKind, RecurrenceBucket, RecurrenceUnit } from '../../shared/types'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const WEEK_MS = 7 * DAY_MS
@@ -78,6 +79,64 @@ export function computeRecurrence(
     buckets.push({ start: bucketStart(i, unit), count: counts.get(i) ?? 0 })
   }
   return { unit, buckets }
+}
+
+/** The per-member fields cluster stats are derived from (a subset of Sighting). */
+export interface ClusterMember {
+  startedAt: number
+  endedAt: number
+  interactionMin: number
+  title: string
+  apps: string[]
+}
+
+/**
+ * Assemble the UI-facing ClusterInfo from a cluster row and its member
+ * sightings — the single derivation used by both the list and detail IPC
+ * handlers.
+ */
+export function buildClusterInfo(
+  cluster: {
+    id: string
+    label: string
+    description: string
+    kind: ClusterKind
+    mechanism: string
+  },
+  members: ClusterMember[],
+  observedDays: number,
+  now: number,
+): ClusterInfo {
+  const startedAts = members.map((m) => m.startedAt)
+  const spansMin = members.map((m) => Math.max(0, m.endedAt - m.startedAt) / 60_000)
+  const activeMins = members.map((m) => Math.max(0, m.interactionMin))
+  const apps = new Set<string>()
+  for (const m of members) for (const app of m.apps) apps.add(app)
+  const avgSpanMin = mean(spansMin)
+  const avgActiveMin = mean(activeMins)
+  const recurrence = computeRecurrence(startedAts, now)
+  return {
+    id: cluster.id,
+    title: resolveTitle(
+      cluster.label,
+      members.map((m) => m.title),
+    ),
+    description: cluster.description,
+    apps: [...apps],
+    timesSeen: members.length,
+    timesPerWeek: timesPerWeek(members.length, observedDays),
+    observedDays,
+    avgActiveMin,
+    avgSpanMin,
+    avgIdleMin: Math.max(0, avgSpanMin - avgActiveMin),
+    totalActiveMin: activeMins.reduce((sum, v) => sum + v, 0),
+    kind: cluster.kind,
+    mechanism: cluster.mechanism,
+    firstSeenAt: members.length > 0 ? Math.min(...startedAts) : null,
+    lastSeenAt: members.length > 0 ? Math.max(...members.map((m) => m.endedAt)) : null,
+    recurrence: recurrence.buckets,
+    recurrenceUnit: recurrence.unit,
+  }
 }
 
 /**

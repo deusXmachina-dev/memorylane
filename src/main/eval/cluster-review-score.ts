@@ -8,7 +8,7 @@
  * the number that must be ~0 before `kind` may gate or roll up anything.
  */
 
-import type { ClusterKind, MechanismKind } from '../../shared/types'
+import type { ClusterKind } from '../../shared/types'
 import type { ReviewInput, ReviewOutput } from '../services/task-miner/clustering/types'
 import { sanitizeVerdict } from '../services/task-miner/clustering/apply-review'
 
@@ -18,16 +18,8 @@ export interface ClusterReviewFixture {
   /** Exactly what production sends to the review call. */
   input: ReviewInput
   expected: {
-    /** Expected kind (and optionally mechanism kind) per reviewed cluster id. */
-    verdicts: Record<string, { kind: Exclude<ClusterKind, ''>; mechanismKind?: MechanismKind }>
-    /** Pairs that should end up in one merge (must also be input candidates). */
-    shouldMerge?: [string, string][]
-    /** Pairs that must NOT be merged. */
-    mustNotMerge?: [string, string][]
-    /** Cluster ids that should be split into two or more groups. */
-    shouldSplit?: string[]
-    /** Cluster ids that must NOT be split. */
-    mustNotSplit?: string[]
+    /** Expected kind per reviewed cluster id. */
+    verdicts: Record<string, { kind: Exclude<ClusterKind, ''> }>
   }
 }
 
@@ -44,22 +36,7 @@ export interface ClusterReviewScore {
   /** Predicted '' (off-enum, omitted, or procedure-without-mechanism). */
   unclassified: number
   perKind: Record<string, { total: number; correct: number; asProcedure: number }>
-  mergeCorrect: number
-  mergeExpected: number
-  mergeForbidden: number
-  splitCorrect: number
-  splitExpected: number
-  splitForbidden: number
   tokenUsage: { input: number; output: number }
-}
-
-/** Ids grouped per output merge, for pair membership checks. */
-function mergeGroups(output: ReviewOutput): Set<string>[] {
-  return (output.merges ?? []).map((m) => new Set(m.merge ?? []))
-}
-
-function inSameGroup(groups: Set<string>[], a: string, b: string): boolean {
-  return groups.some((g) => g.has(a) && g.has(b))
 }
 
 export function scoreClusterReview(args: {
@@ -85,12 +62,6 @@ export function scoreClusterReview(args: {
     missedProcedure: 0,
     unclassified: 0,
     perKind: {},
-    mergeCorrect: 0,
-    mergeExpected: (expected.shouldMerge ?? []).length,
-    mergeForbidden: 0,
-    splitCorrect: 0,
-    splitExpected: (expected.shouldSplit ?? []).length,
-    splitForbidden: 0,
     tokenUsage,
   }
 
@@ -99,9 +70,7 @@ export function scoreClusterReview(args: {
     const raw = verdictById.get(clusterId)
     // A split instead of a verdict, or no verdict at all, counts as unclassified.
     const predicted =
-      raw && !splitIds.has(clusterId)
-        ? sanitizeVerdict(raw)
-        : { kind: '' as const, mechanismKind: '' as const, mechanism: '' }
+      raw && !splitIds.has(clusterId) ? sanitizeVerdict(raw) : { kind: '' as const, mechanism: '' }
 
     const bucket = (score.perKind[exp.kind] ??= { total: 0, correct: 0, asProcedure: 0 })
     bucket.total++
@@ -116,20 +85,6 @@ export function scoreClusterReview(args: {
     } else if (exp.kind === 'procedure') {
       score.missedProcedure++
     }
-  }
-
-  const groups = mergeGroups(output)
-  for (const [a, b] of expected.shouldMerge ?? []) {
-    if (inSameGroup(groups, a, b)) score.mergeCorrect++
-  }
-  for (const [a, b] of expected.mustNotMerge ?? []) {
-    if (inSameGroup(groups, a, b)) score.mergeForbidden++
-  }
-  for (const id of expected.shouldSplit ?? []) {
-    if (splitIds.has(id)) score.splitCorrect++
-  }
-  for (const id of expected.mustNotSplit ?? []) {
-    if (splitIds.has(id)) score.splitForbidden++
   }
 
   return score

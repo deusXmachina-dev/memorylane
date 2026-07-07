@@ -135,7 +135,6 @@ describe('runClustering', () => {
               label: 'Do the recurring thing',
               description: 'Typically opens TestApp and does the thing.',
               kind: 'procedure',
-              mechanism_kind: 'script',
               mechanism: 'A nightly cron script that does the thing.',
             })),
           },
@@ -153,7 +152,6 @@ describe('runClustering', () => {
       span_days: 1,
       median_active_min: 5,
     })
-    expect(seenInput!.clusters[0].replace_with).toEqual(['a cron script'])
     expect(summary.labeled).toBe(1)
     expect(summary.tokenUsage).toEqual({ input: 100, output: 50 })
 
@@ -162,7 +160,6 @@ describe('runClustering', () => {
     expect(labeled.labelModel).toBe('test-model')
     expect(labeled.labeledSize).toBe(2)
     expect(labeled.kind).toBe('procedure')
-    expect(labeled.mechanismKind).toBe('script')
     expect(labeled.mechanism).toBe('A nightly cron script that does the thing.')
   })
 

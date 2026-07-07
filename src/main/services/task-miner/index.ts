@@ -235,7 +235,7 @@ export class TaskMiner {
         model: this.model,
       })
       log.info(
-        `[TaskMiner] Run complete: ${result.sightingsFound} sightings ` +
+        `[TaskMiner] Run complete: ${result.candidatesKept} sightings ` +
           `(${result.candidatesRejected} rejected), ` +
           `tokens: ${result.tokenUsage.total.input}in/${result.tokenUsage.total.output}out`,
       )

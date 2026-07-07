@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3'
-import type { ClusterKind, MechanismKind } from '../../shared/types'
+import type { ClusterKind } from '../../shared/types'
 import type { Sighting } from './sighting-repository'
 import { vectorToBlob, blobToVector } from './utils'
 
@@ -21,7 +21,6 @@ export interface Cluster {
   centroid: number[] | null
   /** LLM classification; '' = not yet judged (drains through review over runs). */
   kind: ClusterKind
-  mechanismKind: MechanismKind
   /** Consolidated "Replace with" recommendation for 'procedure' clusters. */
   mechanism: string
   labelModel: string
@@ -33,7 +32,6 @@ export interface Cluster {
 
 export interface ClusterVerdict {
   kind: ClusterKind
-  mechanismKind: MechanismKind
   mechanism: string
 }
 
@@ -104,9 +102,9 @@ export class ClusterRepository {
   create(cluster: Cluster): void {
     this.db
       .prepare(
-        `INSERT INTO clusters (id, label, description, centroid, kind, mechanism_kind, mechanism,
+        `INSERT INTO clusters (id, label, description, centroid, kind, mechanism,
                                label_model, labeled_size, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         cluster.id,
@@ -114,7 +112,6 @@ export class ClusterRepository {
         cluster.description,
         cluster.centroid ? vectorToBlob(cluster.centroid) : null,
         cluster.kind,
-        cluster.mechanismKind,
         cluster.mechanism,
         cluster.labelModel,
         cluster.labeledSize,
@@ -202,8 +199,8 @@ export class ClusterRepository {
 
   /**
    * Lightweight per-member rows across all clusters in one query — used to
-   * derive recurrence buckets, duration stats, and title fallbacks without
-   * an N+1.
+   * derive recurrence buckets, duration stats, apps, and title fallbacks
+   * without an N+1.
    */
   getMemberDigest(): {
     clusterId: string
@@ -211,11 +208,13 @@ export class ClusterRepository {
     endedAt: number
     interactionMin: number
     title: string
+    apps: string[]
   }[] {
-    return this.db
+    const rows = this.db
       .prepare(
         `SELECT cs.cluster_id AS clusterId, s.started_at AS startedAt,
-                s.ended_at AS endedAt, s.interaction_min AS interactionMin, s.title AS title
+                s.ended_at AS endedAt, s.interaction_min AS interactionMin,
+                s.title AS title, s.apps AS apps
          FROM cluster_sightings cs
          JOIN sightings s ON s.id = cs.sighting_id
          ORDER BY s.started_at ASC`,
@@ -226,7 +225,9 @@ export class ClusterRepository {
       endedAt: number
       interactionMin: number
       title: string
+      apps: string
     }[]
+    return rows.map((r) => ({ ...r, apps: JSON.parse(r.apps || '[]') as string[] }))
   }
 
   addMembership(clusterId: string, sightingId: string, addedAt: number): void {
@@ -273,10 +274,10 @@ export class ClusterRepository {
     this.db
       .prepare(
         `UPDATE clusters
-         SET kind = ?, mechanism_kind = ?, mechanism = ?, updated_at = ?
+         SET kind = ?, mechanism = ?, updated_at = ?
          WHERE id = ?`,
       )
-      .run(verdict.kind, verdict.mechanismKind, verdict.mechanism, updatedAt, clusterId)
+      .run(verdict.kind, verdict.mechanism, updatedAt, clusterId)
   }
 
   /** Delete a cluster and its memberships (member sightings are untouched). */
@@ -347,7 +348,6 @@ export class ClusterRepository {
       description: row.description as string,
       centroid: row.centroid ? blobToVector(row.centroid as Buffer) : null,
       kind: row.kind as ClusterKind,
-      mechanismKind: row.mechanism_kind as MechanismKind,
       mechanism: row.mechanism as string,
       labelModel: row.label_model as string,
       labeledSize: row.labeled_size as number,

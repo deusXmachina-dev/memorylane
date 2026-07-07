@@ -11,7 +11,6 @@ export const migration: Migration = {
   name: '0016_add_cluster_verdict',
   up(db: Database.Database): void {
     db.exec(`ALTER TABLE clusters ADD COLUMN kind TEXT NOT NULL DEFAULT ''`)
-    db.exec(`ALTER TABLE clusters ADD COLUMN mechanism_kind TEXT NOT NULL DEFAULT ''`)
     db.exec(`ALTER TABLE clusters ADD COLUMN mechanism TEXT NOT NULL DEFAULT ''`)
   },
 }
