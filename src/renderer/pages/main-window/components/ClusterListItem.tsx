@@ -12,6 +12,13 @@ function formatAvg(min: number): string {
   return `avg ${Math.max(1, Math.round(min))}m`
 }
 
+export function formatFrequency(perWeek: number): string {
+  if (perWeek <= 0) return ''
+  if (perWeek >= 0.95) return `~${Math.round(perWeek)}×/wk`
+  const perMonth = perWeek * (30.44 / 7)
+  return perMonth >= 0.95 ? `~${Math.round(perMonth)}×/mo` : '<1×/mo'
+}
+
 function formatRelative(timestamp: number | null): string {
   if (timestamp === null) return 'never'
   const diff = Date.now() - timestamp
@@ -49,7 +56,13 @@ export function ClusterListItem({
           values={cluster.recurrence.map((b) => b.count)}
           className="text-muted-foreground/60 shrink-0"
         />
-        <span className="tabular-nums">{formatAvg(cluster.avgActiveMin)}</span>
+        {formatFrequency(cluster.timesPerWeek) && (
+          <>
+            <span className="tabular-nums">{formatFrequency(cluster.timesPerWeek)}</span>
+            <span aria-hidden>·</span>
+          </>
+        )}
+        <span className="tabular-nums">{formatAvg(cluster.avgSpanMin)}</span>
         <span aria-hidden>·</span>
         <span>{formatRelative(cluster.lastSeenAt)}</span>
       </div>

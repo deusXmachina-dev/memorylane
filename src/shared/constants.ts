@@ -130,6 +130,10 @@ export const PATTERN_DETECTION_CONFIG = {
 export const CLUSTER_VIEW_CONFIG = {
   MIN_TIMES_SEEN: 2,
   SINGLETON_MIN_TOTAL_ACTIVE_MIN: 20,
+  // Window for cluster stats (frequency denominator). Must match
+  // SIGHTING_MAX_AGE_DAYS in task-miner/run-detection.ts so the timesSeen
+  // numerator covers the same period.
+  STATS_WINDOW_DAYS: 90,
 }
 
 // One-time seed of the sightings/clusters tables from existing history, run once

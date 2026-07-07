@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeEpisodeWindow, splitIntoEpisodes, EPISODE_GAP_MS } from './helpers'
+import { computeEpisodeWindow } from './helpers'
 
 describe('computeEpisodeWindow', () => {
   it('derives the window from min start / max end and sums interaction time', () => {
@@ -28,52 +28,55 @@ describe('computeEpisodeWindow', () => {
   it('returns zeros for no activities', () => {
     expect(computeEpisodeWindow([])).toEqual({ startedAt: 0, endedAt: 0, interactionMin: 0 })
   })
-})
 
-describe('splitIntoEpisodes', () => {
-  const MIN = 60_000
-  const act = (startMin: number, durMin = 1) => ({
-    id: `${startMin}`,
-    startTimestamp: startMin * MIN,
-    endTimestamp: (startMin + durMin) * MIN,
-  })
-
-  it('keeps a contiguous run as a single episode', () => {
-    const eps = splitIntoEpisodes([act(0), act(1), act(2)])
-    expect(eps).toHaveLength(1)
-    expect(eps[0].map((a) => a.id)).toEqual(['0', '1', '2'])
-  })
-
-  it('splits scattered occurrences on the idle gap — one episode each', () => {
-    // Same action at 0, then ~3h later, then ~2h after that.
-    const eps = splitIntoEpisodes([act(0), act(180), act(300)])
-    expect(eps).toHaveLength(3)
-    expect(eps.map((e) => e.length)).toEqual([1, 1, 1])
-  })
-
-  it('groups within-sitting activities but breaks across the gap threshold', () => {
-    const eps = splitIntoEpisodes([act(0), act(2), act(60), act(61)])
-    expect(eps.map((e) => e.map((a) => a.id))).toEqual([
-      ['0', '2'],
-      ['60', '61'],
+  it('does not double-count overlapping activities', () => {
+    // A 0–10 min, B 5–15 min: union is 15 min, not 20.
+    const w = computeEpisodeWindow([
+      { startTimestamp: 0, endTimestamp: 600_000 },
+      { startTimestamp: 300_000, endTimestamp: 900_000 },
     ])
+    expect(w.interactionMin).toBe(15)
+    expect(w.endedAt).toBe(900_000)
   })
 
-  it('sorts before splitting so id order in the candidate does not matter', () => {
-    const eps = splitIntoEpisodes([act(300), act(1), act(0), act(180)])
-    expect(eps.map((e) => e[0].id)).toEqual(['0', '180', '300'])
-    expect(eps[0].map((a) => a.id)).toEqual(['0', '1'])
-  })
-
-  it('does not split when the gap is exactly at the threshold', () => {
-    const eps = splitIntoEpisodes([
-      { id: 'a', startTimestamp: 0, endTimestamp: 0 },
-      { id: 'b', startTimestamp: EPISODE_GAP_MS, endTimestamp: EPISODE_GAP_MS },
+  it('does not double-count a nested activity', () => {
+    // A 0–30 min contains B 5–6 min: union is 30 min.
+    const w = computeEpisodeWindow([
+      { startTimestamp: 0, endTimestamp: 1_800_000 },
+      { startTimestamp: 300_000, endTimestamp: 360_000 },
     ])
-    expect(eps).toHaveLength(1)
+    expect(w.interactionMin).toBe(30)
+    expect(w.endedAt).toBe(1_800_000)
   })
 
-  it('returns no episodes for no activities', () => {
-    expect(splitIntoEpisodes([])).toEqual([])
+  it('keeps interaction time within the wall-clock span', () => {
+    const fixtures = [
+      [
+        { startTimestamp: 0, endTimestamp: 600_000 },
+        { startTimestamp: 100_000, endTimestamp: 500_000 },
+        { startTimestamp: 550_000, endTimestamp: 700_000 },
+      ],
+      [
+        { startTimestamp: 0, endTimestamp: 60_000 },
+        { startTimestamp: 30_000, endTimestamp: 90_000 },
+        { startTimestamp: 200_000, endTimestamp: 260_000 },
+      ],
+    ]
+    for (const activities of fixtures) {
+      const w = computeEpisodeWindow(activities)
+      const spanMin = (w.endedAt - w.startedAt) / 60_000
+      expect(w.interactionMin).toBeLessThanOrEqual(spanMin + 0.05)
+    }
+  })
+
+  it('keeps a long continuous run whole — span spans the whole run', () => {
+    // A 2-hour run with an internal break stays one window (no time-based split).
+    const w = computeEpisodeWindow([
+      { startTimestamp: 0, endTimestamp: 1_800_000 }, // 0–30 min
+      { startTimestamp: 3_600_000, endTimestamp: 7_200_000 }, // 60–120 min
+    ])
+    expect(w.startedAt).toBe(0)
+    expect(w.endedAt).toBe(7_200_000)
+    expect(w.interactionMin).toBe(90) // 30 + 60 active, idle gap excluded
   })
 })

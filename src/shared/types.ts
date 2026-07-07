@@ -298,7 +298,11 @@ export interface ClusterInfo {
   description: string
   apps: string[]
   timesSeen: number
-  /** Mean per-run active time (sum of cited-activity durations), in minutes. */
+  /** Estimated runs per week: timesSeen ÷ observedDays × 7; 0 when nothing observed. */
+  timesPerWeek: number
+  /** Distinct local days with captured activity in the stats window (frequency denominator). */
+  observedDays: number
+  /** Mean per-run active time (union of cited-activity intervals), in minutes. */
   avgActiveMin: number
   /** Mean per-run wall-clock span (first activity start → last end), in minutes. */
   avgSpanMin: number
@@ -324,7 +328,7 @@ export interface ClusterSightingInfo {
   /** Wall-clock span: first activity start → last activity end. */
   startedAt: number
   endedAt: number
-  /** Active time (sum of cited-activity durations), in minutes. */
+  /** Active time (union of cited-activity intervals), in minutes. */
   activeMin: number
   /** Underlying activity ids — handle for the "Copy prompt for Claude" flow. */
   activityIds: string[]

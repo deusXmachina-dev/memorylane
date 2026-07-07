@@ -17,7 +17,7 @@ import {
 import path from 'node:path'
 import { syncAutoStartSetting } from '@main/system/auto-start'
 import { DEFAULT_EDITION, type AppEditionConfig } from '../../shared/edition'
-import { PURGE_CONFIRMATION_PHRASE } from '../../shared/constants'
+import { CLUSTER_VIEW_CONFIG, PURGE_CONFIRMATION_PHRASE } from '../../shared/constants'
 import log from '@main/utils/logger'
 import { updateTrayMenu } from './tray'
 import { getUpdateInfo, quitAndInstall } from '@main/system/updater'
@@ -34,7 +34,13 @@ import { integrations } from '../integrations'
 import { listInstalledApps } from '../apps/installed-apps'
 import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
 import { VENDORS } from '../../shared/types'
-import { computeRecurrence, isBelowNoiseFloor, mean, resolveTitle } from './cluster-view'
+import {
+  computeRecurrence,
+  isBelowNoiseFloor,
+  mean,
+  resolveTitle,
+  timesPerWeek,
+} from './cluster-view'
 import { VENDOR_PRESETS, getVendorDefaults } from '../../shared/vendor-defaults'
 import { applyVendorSwitch } from './vendor-switch'
 import { applyModelSettings } from './model-settings'
@@ -778,6 +784,8 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       entry.titles.push(row.title)
     }
     const now = Date.now()
+    const windowStart = now - CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS * 24 * 60 * 60 * 1000
+    const observedDays = deps.storage.activities.countDistinctActiveDays(windowStart, now)
     const infos = clusters.map((c) => {
       const members = byCluster.get(c.id) ?? {
         startedAts: [],
@@ -794,6 +802,8 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         description: c.description,
         apps: c.apps,
         timesSeen: c.timesSeen,
+        timesPerWeek: timesPerWeek(c.timesSeen, observedDays),
+        observedDays,
         avgActiveMin,
         avgSpanMin,
         avgIdleMin: Math.max(0, avgSpanMin - avgActiveMin),
@@ -824,7 +834,10 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       const activeMins = members.map((m) => Math.max(0, m.interactionMin))
       const avgSpanMin = mean(spansMin)
       const avgActiveMin = mean(activeMins)
-      const recurrence = computeRecurrence(startedAts, Date.now())
+      const now = Date.now()
+      const recurrence = computeRecurrence(startedAts, now)
+      const windowStart = now - CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS * 24 * 60 * 60 * 1000
+      const observedDays = deps.storage.activities.countDistinctActiveDays(windowStart, now)
 
       const info: ClusterInfo = {
         id: cluster.id,
@@ -835,6 +848,8 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         description: cluster.description,
         apps: [...appsSet],
         timesSeen: members.length,
+        timesPerWeek: timesPerWeek(members.length, observedDays),
+        observedDays,
         avgActiveMin,
         avgSpanMin,
         avgIdleMin: Math.max(0, avgSpanMin - avgActiveMin),

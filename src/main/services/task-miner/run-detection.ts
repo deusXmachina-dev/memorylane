@@ -14,12 +14,12 @@ import {
   extractJsonObject,
 } from '../pattern-detector/helpers'
 import { buildVerificationTools } from '../pattern-detector/tools'
-import { computeEpisodeWindow, splitIntoEpisodes } from './helpers'
+import { computeEpisodeWindow } from './helpers'
 import { normalizeScanCandidates } from './candidate-normalizer'
 import { buildScanSystemPrompt, buildGroundingSystemPrompt } from './prompts'
 
 const GROUNDING_MAX_STEPS = 8
-const MIN_EPISODE_ACTIVITIES = 2
+const MIN_RUN_ACTIVITIES = 2
 const SIGHTING_MAX_AGE_DAYS = 90
 // A malformed scan response — no parseable JSON, or candidates that all fail
 // validation / cite unknown ids — silently loses the whole day, so retry it.
@@ -293,39 +293,33 @@ export async function runDetection(
       const description = (parsed.description as string) || candidate.description
       const apps = (parsed.apps as string[]) || candidate.apps
 
-      // One sighting = one occurrence. A candidate may bundle a recurring action's
-      // occurrences scattered across the day; split them on idle gaps so each
-      // contiguous sitting becomes its own sighting with an honest window.
-      // Single-activity occurrences are noise, not task runs — dropped.
-      const episodes = splitIntoEpisodes(resolved).filter((e) => e.length >= MIN_EPISODE_ACTIVITIES)
-      if (episodes.length === 0) {
+      // One candidate = one run on one object = one sighting. The scan separates
+      // instances by the object worked on, not by the clock, so a run is never
+      // re-split here: a long continuous run stays whole (even across breaks) and
+      // back-to-back runs on distinct objects stay distinct. A run with fewer than
+      // MIN_RUN_ACTIVITIES substantive activities is noise, not a task run.
+      if (resolved.length < MIN_RUN_ACTIVITIES) {
         candidatesRejected++
-        progress(
-          `[Phase 2] Rejected "${title}": no occurrence with ${MIN_EPISODE_ACTIVITIES}+ activities`,
-        )
+        progress(`[Phase 2] Rejected "${title}": fewer than ${MIN_RUN_ACTIVITIES} activities`)
         continue
       }
-      for (const episode of episodes) {
-        const { startedAt, endedAt, interactionMin } = computeEpisodeWindow(episode)
-        storage.sightings.add({
-          id: uuidv4(),
-          title,
-          description,
-          apps,
-          activityIds: episode.map((a) => a.id),
-          startedAt,
-          endedAt,
-          interactionMin,
-          runId,
-          detectedAt: now,
-        } satisfies Sighting)
-      }
+      const { startedAt, endedAt, interactionMin } = computeEpisodeWindow(resolved)
+      storage.sightings.add({
+        id: uuidv4(),
+        title,
+        description,
+        apps,
+        activityIds: resolved.map((a) => a.id),
+        startedAt,
+        endedAt,
+        interactionMin,
+        runId,
+        detectedAt: now,
+      } satisfies Sighting)
 
       candidatesKept++
-      sightingsWritten += episodes.length
-      progress(
-        `[Phase 2] Kept: ${title} (${resolved.length} activities → ${episodes.length} occurrence${episodes.length === 1 ? '' : 's'})`,
-      )
+      sightingsWritten += 1
+      progress(`[Phase 2] Kept: ${title} (${resolved.length} activities)`)
     } catch (error) {
       candidatesRejected++
       progress(

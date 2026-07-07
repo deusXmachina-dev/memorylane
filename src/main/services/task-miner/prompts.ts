@@ -16,7 +16,7 @@ export function buildScanSystemPrompt(dateLabel: string, userContext?: string): 
 
   return `You are an operations consultant reviewing my computer activity from ${dateLabel}. I pay you to recommend eliminations I would actually build: repeatable, meaningful work that a script, an integration, an alert, or an internal-platform feature could take over. A finding exists only if you can name that mechanism — no mechanism, no finding.
 ${userContextSection}
-Below is the complete list of activities for the day. Each finding is ONE instance of eliminable work — a single run of a task — cited by the activity ids involved.
+Below is the complete list of activities for the day. Each finding is ONE instance of eliminable work — a single run of a task on a single object — cited by the activity ids involved. The object defines the instance, not the clock: one report drafted over two hours (with breaks) is ONE finding; ten invoices processed back-to-back are TEN findings.
 
 ## What qualifies
 
@@ -32,7 +32,7 @@ A run of a repeatable multi-step procedure that CHANGES something — creates, p
 
 ## Rules
 
-- One finding per task INSTANCE — one run. If I set up three customer folders today, that is three findings, one per customer, each citing only that customer's activities — even if the runs were back-to-back. Never merge separate instances into one finding to show repetition; how often the task recurs is found later by matching runs across days, not asserted here.
+- One finding per OBJECT worked on — name it in \`subject\`. Duration never bounds an instance: a single object worked continuously (one report, even across a lunch break) is ONE finding no matter how long; the same procedure repeated on distinct objects (invoice #4471, then #4472, then #4473 — even seconds apart) is a SEPARATE finding per object, each with its own \`subject\` and citing only that object's activities. Never collapse repetitions into one finding to show volume, and never split one object's continuous run into several. How often the task recurs is found later by matching runs across days, not asserted here.
 - Leave unrelated interruptions (a mid-run Slack ping) out of a run's activity_ids.
 - Cite only real activity ids from the list below; findings with no ids are discarded. Do NOT estimate durations — they are computed from the activities.
 - Every description ENDS with exactly one sentence naming the mechanism: "Replace with: <the concrete script, integration, alert, or platform feature>." If you cannot write that sentence concretely, the finding does not exist.
@@ -43,6 +43,7 @@ A run of a repeatable multi-step procedure that CHANGES something — creates, p
 [
   {
     "title": "Short name for the procedure (what it does, not when)",
+    "subject": "The specific object this run acted on (e.g. Invoice #4471, Customer: Acme onboarding, Q3 board report)",
     "description": "What this run did, step by step, ending with: Replace with: <the concrete script, integration, alert, or platform feature>.",
     "apps": ["App1", "App2"],
     "activity_ids": ["ids of the activities in this run"]
@@ -61,9 +62,9 @@ export function buildGroundingSystemPrompt(candidate: Candidate): string {
   const appList = formatList(candidate.apps, 'Unknown')
   const activityIdList = formatList(candidate.activity_ids, 'None provided')
 
-  return `You are verifying whether a candidate piece of toil is real and grounded in actual activity. You are NOT matching it against anything — just confirming and tightening this one finding.
+  return `You are verifying ONE candidate run of a repeatable task, found by a scan of my day. Confirm it is real, grounded in the evidence on screen, and correctly scoped to this single run.
 
-Toil = dumb, repetitive, mechanical work a script, webhook, or agent could do — whatever the profession: recurring micro-actions (re-checking a dashboard, inbox, or status page; polling a view; eyeballing files), manual procedures run the same way each time (the same report, invoice batch, or template-driven setup), data shuttling between apps, routine upkeep. A recurring 30-second glance IS toil — do not reject it for being small or "just checking". What is NOT toil: creative or judgment work (writing or editing substantive content, meaningful review, analysis, design) and ambient life (reading, chatting, browsing).
+A valid finding is a single run of a repeatable multi-step procedure that CHANGES something — creates, processes, moves, configures, fixes — with 2+ substantive activities and a nameable elimination mechanism (a concrete script, integration, alert, or platform feature). What does NOT qualify: checking and watching (inbox, chat, feeds, dashboards, status pages); re-checks of work in progress that day; dev-loop mechanics (server restarts, git housekeeping); one-off or single-click actions; creative or judgment work (writing, coding, review, analysis, design).
 
 ## Candidate (from a superficial scan)
 - Title: ${candidate.title}
@@ -76,29 +77,31 @@ Toil = dumb, repetitive, mechanical work a script, webhook, or agent could do �
 Use your tools to investigate:
 
 1. **Read the OCR text** (\`get_activity_ocr\`) for the candidate's activity IDs (up to 5 at a time) to see what was actually on screen.
-2. **Browse the timeline** (\`browse_timeline\`) around the activities to see surrounding context and find any activities that belong to this same task but were missed.
+2. **Browse the timeline** (\`browse_timeline\`) around the activities to see surrounding context and find any activities that belong to this same run but were missed.
 3. **Search** (\`search_similar_activities\`) if you need to locate related activities.
 
-Then finalize the finding's **activity_ids**: the exact set of activities that make up this toil. For a recurring micro-action, that means EVERY occurrence across the day — INCLUDE occurrences the scan missed. EXCLUDE unrelated interruptions that happened in between. Do NOT estimate duration — it is computed from the activities you list.
+Then finalize the finding's **activity_ids** — this finding is ONE run on ONE object (\`${candidate.subject || candidate.title}\`). Do NOT add other occurrences of the same task on other objects from elsewhere in the day; each run is verified separately. You MAY add activities the scan missed that belong to THIS object's run, and you MUST drop unrelated interruptions (a mid-run Slack ping). A long continuous run on one object stays one finding even across breaks. Do NOT estimate duration — it is computed from the activities you list.
 
 ### Keep
-If this is genuine toil (a real task instance or a real recurring micro-action):
+If this is a real, grounded run:
 \`\`\`json
 {
   "verdict": "keep",
   "title": "Refined title",
-  "description": "What I did, step by step — informed by the OCR and timeline",
+  "subject": "The specific object this run acted on",
+  "description": "What this run did, step by step — informed by the OCR and timeline — ENDING with exactly one sentence: Replace with: <the concrete script, integration, alert, or platform feature>.",
   "apps": ["App1", "App2"],
   "activity_ids": ["the exact, finalized set of supporting activity IDs"]
 }
 \`\`\`
+If you cannot write the "Replace with:" sentence concretely, reject.
 
 ### Reject
-Reject ONLY if the activities show creative/judgment work, ambient browsing, or the cited activities don't support the claim. When unsure, keep — a missed real toil is worse than a borderline keep:
+Reject if the evidence shows checking/watching, re-checks of that day's work in progress, dev-loop mechanics, a one-off action, creative or judgment work; if the cited activities don't support the claim; or if fewer than 2 substantive activities remain after cleanup. Keep only what you could defend to the client from the evidence on screen:
 \`\`\`json
 {
   "verdict": "reject",
-  "reason": "Why this isn't real toil"
+  "reason": "Why this isn't an eliminable run"
 }
 \`\`\``
 }

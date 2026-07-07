@@ -30,6 +30,12 @@ export function mean(values: number[]): number {
   return values.reduce((sum, v) => sum + v, 0) / values.length
 }
 
+/** Runs per week: timesSeen over the observed-day count, scaled to 7 days. */
+export function timesPerWeek(timesSeen: number, observedDays: number): number {
+  if (observedDays <= 0) return 0
+  return (timesSeen / observedDays) * 7
+}
+
 /**
  * Noise floor for the Patterns list: a cluster seen once is hidden unless its
  * total active time already clears the floor. Genuine micro-toil graduates on

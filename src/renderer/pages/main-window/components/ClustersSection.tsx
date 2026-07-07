@@ -46,7 +46,7 @@ export function ClustersSection({
         copy.sort((a, b) => (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0))
         break
       case 'longest':
-        copy.sort((a, b) => b.avgActiveMin - a.avgActiveMin)
+        copy.sort((a, b) => b.avgSpanMin - a.avgSpanMin)
         break
       case 'seen':
       default:

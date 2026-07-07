@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { computeRecurrence, isBelowNoiseFloor, mean, resolveTitle } from './cluster-view'
+import {
+  computeRecurrence,
+  isBelowNoiseFloor,
+  mean,
+  resolveTitle,
+  timesPerWeek,
+} from './cluster-view'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const NOW = Date.UTC(2026, 6, 6, 12, 0, 0) // 2026-07-06, mid-day UTC
@@ -72,6 +78,17 @@ describe('mean', () => {
 
   it('averages values', () => {
     expect(mean([4, 8])).toBe(6)
+  })
+})
+
+describe('timesPerWeek', () => {
+  it('scales runs over observed days to a week', () => {
+    expect(timesPerWeek(5, 7)).toBe(5)
+    expect(timesPerWeek(10, 14)).toBe(5)
+  })
+
+  it('returns 0 when nothing was observed', () => {
+    expect(timesPerWeek(3, 0)).toBe(0)
   })
 })
 

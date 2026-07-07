@@ -131,19 +131,29 @@ export class TaskMiner {
   }
 
   /**
-   * One-time backfill: mine the last `days` calendar days into sightings, then
-   * run a single clustering pass. Idempotent — days that already have sightings
-   * are skipped, so a prior daily run or an interrupted backfill is safe to
-   * re-run. Clustering is deferred to one final pass (~`days` scan calls + 1
-   * review call, not one per day); that pass is order-independent, so scan order
-   * doesn't affect cluster ids. Holds the `running` guard so a scheduled run
-   * can't overlap.
+   * One-time backfill: mine `days` calendar days into sightings, then run a
+   * single clustering pass. `offsetDays` shifts the window back — 0 means the
+   * window ends yesterday; 20 means it ends 21 days ago. `concurrency` scans
+   * that many days at once (safe: day scans are independent scan-only LLM
+   * calls; each day's sightings are written by its own run). Idempotent — days
+   * that already have sightings are skipped, so a prior daily run or an
+   * interrupted backfill is safe to re-run. Clustering is deferred to one
+   * final pass (~`days` scan calls + 1 review call, not one per day); that
+   * pass is order-independent, so scan order doesn't affect cluster ids.
+   * Holds the `running` guard so a scheduled run can't overlap.
    */
   async backfill(
     provider: InferenceProvider,
-    opts: { days?: number; onProgress?: ProgressCallback } = {},
+    opts: {
+      days?: number
+      offsetDays?: number
+      concurrency?: number
+      onProgress?: ProgressCallback
+    } = {},
   ): Promise<BackfillSummary> {
     const days = opts.days ?? TASK_BACKFILL.DAYS
+    const offsetDays = opts.offsetDays ?? 0
+    const concurrency = Math.max(1, opts.concurrency ?? 1)
 
     if (!provider.isConfigured()) {
       log.info('[TaskMiner] Backfill skipped: no inference provider configured')
@@ -165,12 +175,16 @@ export class TaskMiner {
       let daysSkipped = 0
       let daysFailed = 0
 
-      for (let d = days; d >= 1; d--) {
+      // Oldest day first, matching the sequential order at concurrency 1.
+      const dayQueue: number[] = []
+      for (let d = offsetDays + days; d >= offsetDays + 1; d--) dayQueue.push(d)
+
+      const mineDay = async (d: number): Promise<void> => {
         const { start, end, label } = getDayBoundaries(d)
         if (this.storage.sightings.hasInWindow(start, end)) {
           daysSkipped++
           progress(`Backfill: ${label} already mined, skipping`)
-          continue
+          return
         }
         try {
           // Defer clustering — one pass at the end is far cheaper than per-day.
@@ -187,6 +201,13 @@ export class TaskMiner {
           log.error(`[TaskMiner] Backfill day ${label} failed:`, formatApiError(error))
         }
       }
+
+      const workers = Array.from({ length: Math.min(concurrency, dayQueue.length) }, async () => {
+        for (let d = dayQueue.shift(); d !== undefined; d = dayQueue.shift()) {
+          await mineDay(d)
+        }
+      })
+      await Promise.all(workers)
 
       progress(
         `Backfill mined ${daysMined} day(s) (${daysSkipped} already present, ` +

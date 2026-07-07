@@ -5,6 +5,7 @@ import { Button } from '@components/ui/button'
 import { ScrollArea } from '@components/ui/scroll-area'
 import { ChevronDown, ChevronUp, Copy } from 'lucide-react'
 import type { ClusterDetailInfo, ClusterInfo, ClusterSightingInfo, MainWindowAPI } from '@types'
+import { formatFrequency } from './ClusterListItem'
 import { RecurrenceBars } from './RecurrenceBars'
 
 interface ClusterDetailPaneProps {
@@ -43,7 +44,9 @@ function buildCopyPrompt(cluster: ClusterInfo, sightings: ClusterSightingInfo[])
     ``,
     cluster.description ? `Context: ${cluster.description}` : null,
     `Apps involved: ${cluster.apps.join(', ') || 'unknown'}.`,
-    `I've done this ${cluster.timesSeen} time${cluster.timesSeen === 1 ? '' : 's'}.`,
+    cluster.timesPerWeek > 0
+      ? `I do this about ${formatFrequency(cluster.timesPerWeek)} (${cluster.timesSeen} runs over ${cluster.observedDays} active days); a run takes ~${Math.round(cluster.avgSpanMin)} min start-to-end (~${Math.round(cluster.avgActiveMin)} min hands-on).`
+      : `I've done this ${cluster.timesSeen} time${cluster.timesSeen === 1 ? '' : 's'}; a run takes ~${Math.round(cluster.avgSpanMin)} min start-to-end (~${Math.round(cluster.avgActiveMin)} min hands-on).`,
     ``,
     `## Step 1 — Research`,
     ``,
@@ -141,8 +144,14 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
         <div className="px-6 py-5 space-y-5">
           {/* Header */}
           <div>
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Cluster · Seen {cluster.timesSeen}× since {formatMonthDay(cluster.firstSeenAt)}
+            <div
+              className="text-[11px] uppercase tracking-wide text-muted-foreground"
+              title={`${cluster.timesSeen} runs across ${cluster.observedDays} active days`}
+            >
+              Cluster ·{' '}
+              {formatFrequency(cluster.timesPerWeek) &&
+                `${formatFrequency(cluster.timesPerWeek)} · `}
+              Seen {cluster.timesSeen}× since {formatMonthDay(cluster.firstSeenAt)}
             </div>
             <h2 className="mt-1 text-xl font-semibold leading-tight">{cluster.title}</h2>
             {cluster.description && (
@@ -169,8 +178,8 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
           <div className="border-y py-4">
             <div className="grid grid-cols-4 gap-3">
               <Stat value={String(cluster.timesSeen)} label="Times seen" />
-              <Stat value={formatInteraction(cluster.avgActiveMin)} label="Active / run" />
               <Stat value={formatInteraction(cluster.avgSpanMin)} label="Span / run" />
+              <Stat value={formatInteraction(cluster.avgActiveMin)} label="Active / run" />
               <Stat value={formatInteraction(cluster.totalActiveMin)} label="Total active (90d)" />
             </div>
             {cluster.avgIdleMin >= 2 && (
