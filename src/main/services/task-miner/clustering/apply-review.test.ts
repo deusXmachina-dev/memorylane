@@ -38,18 +38,23 @@ describe('validateAndApply', () => {
   const TEST_DB_PATH = path.join(os.tmpdir(), 'temp_apply_review_test.db')
   let storage: StorageService
 
-  const seedCluster = (clusterId: string, createdAt: number, sightingIds: string[]) => {
+  const seedCluster = (
+    clusterId: string,
+    createdAt: number,
+    sightingIds: string[],
+    signature: (id: string) => number[] = () => v(1),
+  ) => {
     storage.clusters.create(createCluster({ id: clusterId, createdAt }))
     for (const id of sightingIds) {
       storage.sightings.add(createSighting({ id }))
-      storage.clusters.upsertSignature(id, v(1), 100)
+      storage.clusters.upsertSignature(id, signature(id), 100)
       storage.clusters.addMembership(clusterId, id, 100)
     }
   }
 
   const guards = (overrides: Partial<ReviewGuards> = {}): ReviewGuards => ({
     reviewableIds: overrides.reviewableIds ?? new Set(),
-    newClusterIds: overrides.newClusterIds ?? new Set(),
+    splittableIds: overrides.splittableIds ?? new Set(),
     mergeCandidatePairs: overrides.mergeCandidatePairs ?? new Set(),
   })
 
@@ -125,7 +130,7 @@ describe('validateAndApply', () => {
     expect(storage.clusters.getById('b')).not.toBeNull()
   })
 
-  it('accepts a chained merge connected through candidate pairs', () => {
+  it('rejects a chained merge with a pair the LLM never judged', () => {
     seedCluster('a', 100, ['s1'])
     seedCluster('b', 200, ['s2'])
     seedCluster('c', 300, ['s3'])
@@ -135,7 +140,33 @@ describe('validateAndApply', () => {
       { merges: [{ merge: ['a', 'b', 'c'], label: 'Chain', description: '' }] },
       guards({
         reviewableIds: new Set(['a', 'b', 'c']),
+        // a~b and b~c were candidates, a~c never was — chaining is how
+        // unrelated clusters ratchet together.
         mergeCandidatePairs: new Set([mergePairKey('a', 'b'), mergePairKey('b', 'c')]),
+      }),
+      'test-model',
+      5000,
+    )
+
+    expect(result.merged).toBe(0)
+    expect(storage.clusters.getMemberCount('a')).toBe(1)
+  })
+
+  it('accepts a multi-merge when every pair is a candidate', () => {
+    seedCluster('a', 100, ['s1'])
+    seedCluster('b', 200, ['s2'])
+    seedCluster('c', 300, ['s3'])
+
+    const result = validateAndApply(
+      storage,
+      { merges: [{ merge: ['a', 'b', 'c'], label: 'Triple', description: '' }] },
+      guards({
+        reviewableIds: new Set(['a', 'b', 'c']),
+        mergeCandidatePairs: new Set([
+          mergePairKey('a', 'b'),
+          mergePairKey('b', 'c'),
+          mergePairKey('a', 'c'),
+        ]),
       }),
       'test-model',
       5000,
@@ -143,6 +174,66 @@ describe('validateAndApply', () => {
 
     expect(result.merged).toBe(2)
     expect(storage.clusters.getMemberCount('a')).toBe(3)
+  })
+
+  it('records declines for candidate pairs the LLM left unmerged', () => {
+    seedCluster('a', 100, ['s1'])
+    seedCluster('b', 200, ['s2'])
+    seedCluster('c', 300, ['s3'])
+
+    validateAndApply(
+      storage,
+      { merges: [{ merge: ['a', 'b'], label: 'Merged', description: '' }] },
+      guards({
+        reviewableIds: new Set(['a', 'b', 'c']),
+        mergeCandidatePairs: new Set([mergePairKey('a', 'b'), mergePairKey('a', 'c')]),
+      }),
+      'test-model',
+      5000,
+    )
+
+    const declined = storage.clusters.getActiveMergeDeclines(0)
+    expect(declined.has(mergePairKey('a', 'c'))).toBe(true)
+    expect(declined.has(mergePairKey('a', 'b'))).toBe(false)
+  })
+
+  it('does not record declines for pairs referencing a cluster deleted by a merge', () => {
+    seedCluster('a', 100, ['s1'])
+    seedCluster('b', 200, ['s2'])
+    seedCluster('c', 300, ['s3'])
+
+    // b merges into a and is deleted; the unmerged (b, c) pair must not leave
+    // a decline row pointing at the dead id.
+    validateAndApply(
+      storage,
+      { merges: [{ merge: ['a', 'b'], label: 'Merged', description: '' }] },
+      guards({
+        reviewableIds: new Set(['a', 'b', 'c']),
+        mergeCandidatePairs: new Set([mergePairKey('a', 'b'), mergePairKey('b', 'c')]),
+      }),
+      'test-model',
+      5000,
+    )
+
+    expect(storage.clusters.getActiveMergeDeclines(0).size).toBe(0)
+  })
+
+  it('declines nothing on a degenerate empty review response', () => {
+    seedCluster('a', 100, ['s1'])
+    seedCluster('b', 200, ['s2'])
+
+    validateAndApply(
+      storage,
+      {},
+      guards({
+        reviewableIds: new Set(['a', 'b']),
+        mergeCandidatePairs: new Set([mergePairKey('a', 'b')]),
+      }),
+      'test-model',
+      5000,
+    )
+
+    expect(storage.clusters.getActiveMergeDeclines(0).size).toBe(0)
   })
 
   it('ignores hallucinated cluster ids', () => {
@@ -163,7 +254,7 @@ describe('validateAndApply', () => {
     expect(result.labeled).toBe(0)
   })
 
-  it('splits a new cluster, sending unassigned members to the largest group', () => {
+  it('splits a cluster keeping the original id on the largest group', () => {
     seedCluster('fresh', 100, ['s1', 's2', 's3', 's4'])
 
     const result = validateAndApply(
@@ -179,30 +270,31 @@ describe('validateAndApply', () => {
           },
         ],
       },
-      guards({ reviewableIds: new Set(['fresh']), newClusterIds: new Set(['fresh']) }),
+      guards({ reviewableIds: new Set(['fresh']), splittableIds: new Set(['fresh']) }),
       'test-model',
       5000,
     )
 
     expect(result.split).toBe(1)
-    expect(storage.clusters.getById('fresh')).toBeNull()
 
     const clusters = storage.clusters.getAllWithStats()
     expect(clusters).toHaveLength(2)
-    const groupA = clusters.find((c) => c.label === 'Group A')!
-    const groupB = clusters.find((c) => c.label === 'Group B')!
-    // s4 was unassigned → goes to the largest group (A).
+    // The largest group (A, plus unassigned s4) keeps the stable id.
+    const survivor = storage.clusters.getById('fresh')!
+    expect(survivor.label).toBe('Group A')
+    expect(survivor.kind).toBe('')
     expect(
       storage.clusters
-        .getMembers(groupA.id)
+        .getMembers('fresh')
         .map((s) => s.id)
         .sort(),
     ).toEqual(['s1', 's2', 's4'])
+    const groupB = clusters.find((c) => c.label === 'Group B')!
     expect(storage.clusters.getMembers(groupB.id).map((s) => s.id)).toEqual(['s3'])
-    expect(groupA.centroid).not.toBeNull()
+    expect(groupB.centroid).not.toBeNull()
   })
 
-  it('refuses to split a pre-existing cluster', () => {
+  it('refuses to split a cluster that was not offered as splittable', () => {
     seedCluster('stable', 100, ['s1', 's2'])
 
     const result = validateAndApply(
@@ -218,7 +310,7 @@ describe('validateAndApply', () => {
           },
         ],
       },
-      guards({ reviewableIds: new Set(['stable']) }), // not in newClusterIds
+      guards({ reviewableIds: new Set(['stable']) }), // not in splittableIds
       'test-model',
       5000,
     )
@@ -226,6 +318,73 @@ describe('validateAndApply', () => {
     expect(result.split).toBe(0)
     expect(storage.clusters.getById('stable')).not.toBeNull()
     expect(storage.clusters.getMemberCount('stable')).toBe(2)
+  })
+
+  it('re-splits an incoherent cluster by geometry, largest group keeping the id', () => {
+    seedCluster('mess', 100, ['s1', 's2', 's3', 's4', 's5'], (id) =>
+      ['s1', 's2', 's3'].includes(id) ? v(1) : v(0, 1),
+    )
+    storage.clusters.updateLabel('mess', 'Umbrella label', 'Everything.', 'test-model', 5, 100)
+
+    const result = validateAndApply(
+      storage,
+      { clusters: [{ id: 'mess', incoherent: true }] },
+      guards({ reviewableIds: new Set(['mess']), splittableIds: new Set(['mess']) }),
+      'test-model',
+      5000,
+    )
+
+    expect(result.split).toBe(1)
+    // Groups come out unlabeled — the next review names them.
+    const survivor = storage.clusters.getById('mess')!
+    expect(survivor.label).toBe('')
+    expect(
+      storage.clusters
+        .getMembers('mess')
+        .map((s) => s.id)
+        .sort(),
+    ).toEqual(['s1', 's2', 's3'])
+    const offshoot = storage.clusters.getAll().find((c) => c.id !== 'mess')!
+    expect(
+      storage.clusters
+        .getMembers(offshoot.id)
+        .map((s) => s.id)
+        .sort(),
+    ).toEqual(['s4', 's5'])
+  })
+
+  it('ignores an incoherent verdict on a non-splittable cluster', () => {
+    seedCluster('sampled', 100, ['s1', 's2', 's3'], (id) => (id === 's3' ? v(0, 1) : v(1)))
+    storage.clusters.updateLabel('sampled', 'Healthy', '', 'test-model', 3, 100)
+
+    const result = validateAndApply(
+      storage,
+      { clusters: [{ id: 'sampled', incoherent: true }] },
+      guards({ reviewableIds: new Set(['sampled']) }), // not splittable
+      'test-model',
+      5000,
+    )
+
+    expect(result.split).toBe(0)
+    expect(storage.clusters.getMemberCount('sampled')).toBe(3)
+    expect(storage.clusters.getById('sampled')!.label).toBe('Healthy')
+  })
+
+  it('leaves an incoherent-flagged cluster alone when geometry finds one group', () => {
+    seedCluster('tight', 100, ['s1', 's2'])
+    storage.clusters.updateLabel('tight', 'Fine actually', '', 'test-model', 2, 100)
+
+    const result = validateAndApply(
+      storage,
+      { clusters: [{ id: 'tight', incoherent: true }] },
+      guards({ reviewableIds: new Set(['tight']), splittableIds: new Set(['tight']) }),
+      'test-model',
+      5000,
+    )
+
+    expect(result.split).toBe(0)
+    expect(storage.clusters.getById('tight')!.label).toBe('Fine actually')
+    expect(storage.clusters.getMemberCount('tight')).toBe(2)
   })
 
   it('applies labels with the member count as labeledSize', () => {

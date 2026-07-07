@@ -35,6 +35,12 @@ export interface ClusterVerdict {
   mechanism: string
 }
 
+/** Canonical key for an unordered cluster pair — the one format shared by
+ * merge-candidate guards and the decline store. */
+export function mergePairKey(a: string, b: string): string {
+  return a < b ? `${a}|${b}` : `${b}|${a}`
+}
+
 /** Cluster plus stats computed on read from member sightings (never stored). */
 export interface ClusterWithStats extends Cluster {
   timesSeen: number
@@ -283,7 +289,52 @@ export class ClusterRepository {
   /** Delete a cluster and its memberships (member sightings are untouched). */
   delete(clusterId: string): void {
     this.db.prepare(`DELETE FROM cluster_sightings WHERE cluster_id = ?`).run(clusterId)
+    this.db
+      .prepare(`DELETE FROM cluster_merge_declines WHERE cluster_a = ? OR cluster_b = ?`)
+      .run(clusterId, clusterId)
     this.db.prepare(`DELETE FROM clusters WHERE id = ?`).run(clusterId)
+  }
+
+  // -------------------------------------------------------------------------
+  // Merge declines
+  // -------------------------------------------------------------------------
+
+  /** Record that the review LLM saw this merge candidate pair and passed. */
+  recordMergeDecline(a: string, b: string, declinedAt: number): void {
+    const [first, second] = a < b ? [a, b] : [b, a]
+    this.db
+      .prepare(
+        `INSERT INTO cluster_merge_declines (cluster_a, cluster_b, declined_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(cluster_a, cluster_b) DO UPDATE SET declined_at = excluded.declined_at`,
+      )
+      .run(first, second, declinedAt)
+  }
+
+  /** mergePairKey()s of pairs declined at or after `since`. */
+  getActiveMergeDeclines(since: number): Set<string> {
+    const rows = this.db
+      .prepare(`SELECT cluster_a, cluster_b FROM cluster_merge_declines WHERE declined_at >= ?`)
+      .all(since) as { cluster_a: string; cluster_b: string }[]
+    return new Set(rows.map((r) => mergePairKey(r.cluster_a, r.cluster_b)))
+  }
+
+  /**
+   * Signatures with no cluster membership, keyed by sighting id. Normally the
+   * sightings signed this run; also heals sightings stranded by a crash
+   * between signing and grouping on an earlier run.
+   */
+  getUnattachedSignatures(): Map<string, number[]> {
+    const rows = this.db
+      .prepare(
+        `SELECT ss.sighting_id, ss.embedding FROM sighting_signatures ss
+         LEFT JOIN cluster_sightings cs ON cs.sighting_id = ss.sighting_id
+         WHERE cs.sighting_id IS NULL AND ss.embedding IS NOT NULL`,
+      )
+      .all() as { sighting_id: string; embedding: Buffer }[]
+    const result = new Map<string, number[]>()
+    for (const row of rows) result.set(row.sighting_id, blobToVector(row.embedding))
+    return result
   }
 
   // -------------------------------------------------------------------------
@@ -328,6 +379,14 @@ export class ClusterRepository {
       this.db.prepare(`DELETE FROM clusters WHERE id = ?`).run(row.id)
     }
     const deletedIds = new Set(emptyRows.map((r) => r.id))
+
+    this.db
+      .prepare(
+        `DELETE FROM cluster_merge_declines
+         WHERE cluster_a NOT IN (SELECT id FROM clusters)
+            OR cluster_b NOT IN (SELECT id FROM clusters)`,
+      )
+      .run()
 
     return {
       droppedMemberships,

@@ -3,13 +3,14 @@
  *
  * Sightings are carved in stone; everything here is a derived, rebuildable
  * view — but cluster ids are STABLE across runs, so "seen X times" grows week
- * over week. Deterministic-first: signatures, centroid attachment, union-find
- * grouping, and all stats are pure computation; the LLM only writes
- * labels/descriptions and adjudicates merge/split proposals over groups it is
- * shown. Existing clusters are never split — stable identity beats
- * retroactive perfection, and the tight attach threshold makes over-merging
- * an existing cluster rare. LLM failure degrades to unlabeled clusters that
- * are retried on the next run.
+ * over week. Deterministic-first: signatures, centroid attachment,
+ * average-linkage grouping, and all stats are pure computation; the LLM only
+ * writes labels/descriptions and adjudicates merge/split proposals over groups
+ * it is shown. Identity repair is bounded and deterministic: a split keeps the
+ * original id on the largest group, dissonant members are evicted after
+ * centroid refreshes, and a cluster that falls below the coherence floor is
+ * re-offered for splitting no matter when it was born. LLM failure degrades to
+ * unlabeled clusters that are retried on the next run.
  */
 
 import { v4 as uuidv4 } from 'uuid'
@@ -20,8 +21,13 @@ import log from '@main/utils/logger'
 import { formatApiError } from '../../pattern-detector/helpers'
 import type { ProgressCallback } from '../types'
 import { dot } from './vector-math'
-import { computeAndStoreSignatures, recomputeCentroid } from './signatures'
-import { attachToCentroids, clusterLeftovers } from './attach'
+import {
+  computeAndStoreSignatures,
+  memberSimilarities,
+  recomputeCentroid,
+  type EmbedText,
+} from './signatures'
+import { attachToCentroids, averageLinkageGroups, type SightingSignature } from './attach'
 import type { ClusteringRunSummary, ReviewCluster, ReviewInput } from './types'
 import { CLUSTERING_CONFIG, emptyClusteringSummary } from './types'
 import { runLlmReview, type ReviewCallResult } from './llm-review'
@@ -32,6 +38,8 @@ export { CLUSTERING_CONFIG } from './types'
 
 export interface ClusteringDeps {
   storage: StorageService
+  /** Embeds a sighting's title+description into the signature space. */
+  embed: EmbedText
   /** Absent → deterministic steps only (offline / tests). */
   provider?: InferenceProvider
   model: string
@@ -66,15 +74,22 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
   //    after the migration this is the whole retained backlog — bootstrap is
   //    the same code path.
   const unprocessed = storage.clusters.getUnprocessedSightings()
-  const { signatures, unclustered } = computeAndStoreSignatures(storage, unprocessed, now)
+  const { unclustered } = await computeAndStoreSignatures(storage, unprocessed, deps.embed, now)
   summary.newSignatures = unprocessed.length
   summary.unclustered = unclustered
-  if (unprocessed.length === 0 && pruned.touchedClusterIds.length === 0) {
+
+  // Work from the store, not this call's return value: signatures persisted
+  // by a run that crashed before grouping are picked up here instead of being
+  // orphaned forever (getUnprocessedSightings would never re-see them).
+  const signatures: SightingSignature[] = [...storage.clusters.getUnattachedSignatures()].map(
+    ([sightingId, vector]) => ({ sightingId, vector }),
+  )
+  if (signatures.length === 0 && pruned.touchedClusterIds.length === 0) {
     return summary
   }
   progress(
     `[Clustering] ${unprocessed.length} new sightings ` +
-      `(${signatures.length} with signatures, ${unclustered} without vectors)`,
+      `(${signatures.length} to cluster, ${unclustered} without signatures)`,
   )
 
   // 3. Attach to existing clusters by centroid similarity. Centroids are
@@ -95,42 +110,34 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
   }
   summary.attached = attached.length
 
-  // 4. First-cut grouping of what didn't attach anywhere: single-linkage
-  //    union-find at the same threshold. Every component — singletons
-  //    included — becomes a cluster, so recurrence can grow from 1.
+  // 4. First-cut grouping of what didn't attach anywhere. Every group —
+  //    singletons included — becomes a cluster, so recurrence can grow from 1.
   const newClusterIds = new Set<string>()
-  for (const group of clusterLeftovers(leftovers, CLUSTERING_CONFIG.SIMILARITY_THRESHOLD)) {
+  for (const group of averageLinkageGroups(leftovers, CLUSTERING_CONFIG.SIMILARITY_THRESHOLD)) {
     const clusterId = uuidv4()
-    storage.clusters.create({
-      id: clusterId,
-      label: '',
-      description: '',
-      centroid: null,
-      kind: '',
-      mechanism: '',
-      labelModel: '',
-      labeledSize: 0,
-      createdAt: now,
-      updatedAt: now,
-    })
+    createUnlabeledCluster(storage, clusterId, null, now)
     for (const sightingId of group) storage.clusters.addMembership(clusterId, sightingId, now)
     newClusterIds.add(clusterId)
     touched.add(clusterId)
   }
   summary.newClusters = newClusterIds.size
 
-  // 5. Refresh centroids of every touched cluster.
+  // 5. Refresh centroids of every touched cluster, then evict members that a
+  //    merge or pruning has left far from their own centroid — the repair
+  //    valve for "member for life" drift. Evictees become their own clusters.
   for (const clusterId of touched) recomputeCentroid(storage, clusterId, now)
-  if (attached.length || newClusterIds.size) {
+  summary.evicted = evictDissonantMembers(storage, touched, newClusterIds, now)
+  if (attached.length || newClusterIds.size || summary.evicted) {
     progress(
       `[Clustering] Attached ${attached.length} sightings to existing clusters, ` +
-        `created ${newClusterIds.size} new clusters`,
+        `created ${newClusterIds.size} new clusters, evicted ${summary.evicted} members`,
     )
   }
 
   // 6. LLM review: label new/grown clusters, adjudicate merges among
-  //    near-threshold centroid pairs, split clusters born this run.
-  const input = buildReviewInput(storage, touched, newClusterIds)
+  //    near-threshold centroid pairs, split clusters that are new or fell
+  //    below the coherence floor.
+  const input = buildReviewInput(storage, touched, newClusterIds, now)
   if (input.clusters.length === 0) return summary
   if (!provider) {
     progress('[Clustering] No inference provider — skipping LLM review')
@@ -149,7 +156,7 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
 
     const guards: ReviewGuards = {
       reviewableIds: new Set(input.clusters.map((c) => c.id)),
-      newClusterIds,
+      splittableIds: new Set(input.clusters.filter((c) => c.splittable).map((c) => c.id)),
       mergeCandidatePairs: new Set(input.mergeCandidates.map(([a, b]) => mergePairKey(a, b))),
     }
     const applied = validateAndApply(storage, review.output, guards, model, now, progress)
@@ -169,16 +176,88 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
 }
 
 /**
+ * Move members whose signature no longer clears EVICTION_THRESHOLD against
+ * their own cluster's centroid into fresh singleton clusters. Scans every
+ * cluster — drift comes from merges and pruning, which land after this step
+ * runs, so limiting to this run's touched set would miss them. Clusters born
+ * this run are skipped: average-linkage admits by group mean, so a marginal
+ * member is not drift — the LLM reviews the group as formed. The best-fitting
+ * member always stays, so a cluster is never emptied. Each eviction records a
+ * merge decline against the old cluster, or the next review would just
+ * re-propose gluing the evictee back on. Capped per run; anything left
+ * drifted is caught on a later run.
+ */
+function evictDissonantMembers(
+  storage: StorageService,
+  touched: Set<string>,
+  newClusterIds: ReadonlySet<string>,
+  now: number,
+): number {
+  let evicted = 0
+  for (const cluster of storage.clusters.getAll()) {
+    if (evicted >= CLUSTERING_CONFIG.MAX_EVICTIONS_PER_RUN) break
+    if (!cluster.centroid || newClusterIds.has(cluster.id)) continue
+    const sims = memberSimilarities(storage, cluster.id, cluster.centroid)
+    if (sims.length < 2) continue
+
+    const best = sims.reduce((a, b) => (b.sim > a.sim ? b : a))
+    const dissonant = sims.filter(
+      (s) => s.sightingId !== best.sightingId && s.sim < CLUSTERING_CONFIG.EVICTION_THRESHOLD,
+    )
+    if (dissonant.length === 0) continue
+
+    const signatures = storage.clusters.getSignaturesByClusterId(cluster.id)
+    for (const { sightingId } of dissonant) {
+      if (evicted >= CLUSTERING_CONFIG.MAX_EVICTIONS_PER_RUN) break
+      const newId = uuidv4()
+      createUnlabeledCluster(storage, newId, signatures.get(sightingId) ?? null, now)
+      storage.clusters.addMembership(newId, sightingId, now)
+      storage.clusters.recordMergeDecline(cluster.id, newId, now)
+      touched.add(newId)
+      evicted++
+    }
+    recomputeCentroid(storage, cluster.id, now)
+    touched.add(cluster.id)
+  }
+  return evicted
+}
+
+function createUnlabeledCluster(
+  storage: StorageService,
+  id: string,
+  centroid: number[] | null,
+  now: number,
+): void {
+  storage.clusters.create({
+    id,
+    label: '',
+    description: '',
+    centroid,
+    kind: '',
+    mechanism: '',
+    labelModel: '',
+    labeledSize: 0,
+    createdAt: now,
+    updatedAt: now,
+  })
+}
+
+/**
  * What the LLM gets to see: clusters needing a (re)label or a kind verdict,
- * plus every cluster involved in a merge candidate. Singleton clusters are
- * only shown when a merge involves them — they get no label of their own
- * (readers fall back to the member title). The label/classify set is capped
- * per run so a backlog drains gradually; merge candidates ride along uncapped.
+ * every cluster involved in a merge candidate, and the worst clusters below
+ * the coherence floor, offered as splittable — the standing exit path from an
+ * over-merged cluster (birth-run-only splitting let mega-clusters freeze).
+ * New multi-member clusters that made it into the set are splittable too.
+ * Singleton clusters are only shown when a merge involves them — they get no
+ * label of their own (readers fall back to the member title). The
+ * label/classify set is capped per run so a backlog drains gradually; merge
+ * candidates and coherence picks ride along uncapped.
  */
 function buildReviewInput(
   storage: StorageService,
   touched: Set<string>,
   newClusterIds: Set<string>,
+  now: number,
 ): ReviewInput {
   const all = storage.clusters.getAll()
   const byId = new Map(all.map((c) => [c.id, c]))
@@ -192,9 +271,36 @@ function buildReviewInput(
     return c.label === '' || c.kind === '' || count >= 2 * Math.max(1, c.labeledSize)
   }
 
+  const belowFloor: { id: string; coherence: number }[] = []
+  for (const c of all) {
+    if (!c.centroid || (memberCount.get(c.id) ?? 0) < 2 || newClusterIds.has(c.id)) continue
+    const sims = memberSimilarities(storage, c.id, c.centroid)
+    if (sims.length === 0) continue
+    const coherence = sims.reduce((sum, s) => sum + s.sim, 0) / sims.length
+    if (coherence < CLUSTERING_CONFIG.SPLIT_COHERENCE_FLOOR)
+      belowFloor.push({ id: c.id, coherence })
+  }
+  belowFloor.sort((a, b) => a.coherence - b.coherence)
+  // Only offer what geometry can actually act on: a below-floor cluster whose
+  // members re-group as one is unsplittable — offering it would burn a slot
+  // and an incoherent verdict on it would no-op, every run, forever.
+  const coherencePicks: string[] = []
+  for (const { id } of belowFloor) {
+    if (coherencePicks.length >= CLUSTERING_CONFIG.MAX_SPLITTABLE_PER_RUN) break
+    const signatures = storage.clusters.getSignaturesByClusterId(id)
+    const groups = averageLinkageGroups(
+      [...signatures].map(([sightingId, vector]) => ({ sightingId, vector })),
+      CLUSTERING_CONFIG.SIMILARITY_THRESHOLD,
+    )
+    if (groups.length >= 2) coherencePicks.push(id)
+  }
+
   // Merge candidates: touched clusters vs all others, centroid cosine in the
   // "probably the same process, let the LLM decide" band below the automatic
-  // attach threshold.
+  // attach threshold. Recently declined pairs sit out until the TTL expires.
+  const declined = storage.clusters.getActiveMergeDeclines(
+    now - CLUSTERING_CONFIG.MERGE_DECLINE_TTL_MS,
+  )
   const mergeCandidates: [string, string][] = []
   const inMerge = new Set<string>()
   const seenPairs = new Set<string>()
@@ -206,6 +312,7 @@ function buildReviewInput(
       const key = mergePairKey(id, b.id)
       if (seenPairs.has(key)) continue
       seenPairs.add(key)
+      if (declined.has(key)) continue
       if (dot(a.centroid, b.centroid) >= CLUSTERING_CONFIG.MERGE_CANDIDATE_THRESHOLD) {
         mergeCandidates.push([id, b.id])
         inMerge.add(id)
@@ -224,10 +331,14 @@ function buildReviewInput(
     )
     .slice(0, CLUSTERING_CONFIG.MAX_REVIEW_CLUSTERS_PER_RUN)
 
-  const reviewIds = new Set<string>([...capped.map((c) => c.id), ...inMerge])
+  const reviewIds = new Set<string>([...capped.map((c) => c.id), ...inMerge, ...coherencePicks])
+  const splittable = new Set<string>(coherencePicks)
+  for (const id of reviewIds) {
+    if (newClusterIds.has(id) && (memberCount.get(id) ?? 0) >= 2) splittable.add(id)
+  }
 
   const clusters: ReviewCluster[] = [...reviewIds].map((id) =>
-    toReviewCluster(storage, byId.get(id)!, newClusterIds.has(id)),
+    toReviewCluster(storage, byId.get(id)!, splittable.has(id)),
   )
 
   return { clusters, mergeCandidates }
@@ -235,22 +346,25 @@ function buildReviewInput(
 
 /**
  * Serialize one cluster the way the review LLM sees it — code-computed stats
- * over all members, most-recent member sample. Also used by the review-input
- * snapshot dumper.
+ * over all members; most-recent member sample, extended when the cluster may
+ * be split (still capped: an unbounded mega-cluster would blow the prompt).
+ * Also used by the review-input snapshot dumper.
  */
 export function toReviewCluster(
   storage: StorageService,
   cluster: Cluster,
-  isNew: boolean,
+  splittable: boolean,
 ): ReviewCluster {
   const members = storage.clusters.getMembers(cluster.id)
   // Members come back oldest-first; show the most recent sample.
-  const sample = members.slice(-CLUSTERING_CONFIG.MAX_SAMPLE_MEMBERS)
+  const sample = members.slice(
+    -(splittable ? CLUSTERING_CONFIG.MAX_SPLITTABLE_MEMBERS : CLUSTERING_CONFIG.MAX_SAMPLE_MEMBERS),
+  )
   const spanMs =
     members.length > 0 ? members[members.length - 1].startedAt - members[0].startedAt : 0
   return {
     id: cluster.id,
-    new: isNew,
+    splittable,
     label: cluster.label,
     stats: {
       times_seen: members.length,

@@ -1,5 +1,4 @@
 import { dot } from './vector-math'
-import { UnionFind } from './union-find'
 
 export interface SightingSignature {
   sightingId: string
@@ -50,20 +49,61 @@ export function attachToCentroids(
 }
 
 /**
- * First-cut grouping of the signatures that didn't attach anywhere: pairwise
- * cosine, edge at >= threshold, union-find connected components
- * (single-linkage). Singletons come out as one-member groups — they become
+ * Group signatures by greedy average-linkage agglomeration: repeatedly merge
+ * the two groups whose mean pairwise cosine is highest, until no pair clears
+ * the threshold. Unlike single-linkage, a group only forms when its members
+ * are similar ON AVERAGE — one borderline edge cannot chain unrelated topics
+ * into a mega-cluster. Singletons come out as one-member groups — they become
  * clusters too, so "seen X times" can grow from 1.
  */
-export function clusterLeftovers(
-  leftovers: readonly SightingSignature[],
+export function averageLinkageGroups(
+  items: readonly SightingSignature[],
   threshold: number,
 ): string[][] {
-  const uf = new UnionFind(leftovers.length)
-  for (let i = 0; i < leftovers.length; i++) {
-    for (let j = i + 1; j < leftovers.length; j++) {
-      if (dot(leftovers[i].vector, leftovers[j].vector) >= threshold) uf.union(i, j)
+  const n = items.length
+  // Similarity matrix, updated with the Lance-Williams rule on merge:
+  // sim(A∪B, C) = (|A|·sim(A,C) + |B|·sim(B,C)) / (|A|+|B|) — exactly the mean
+  // pairwise cosine between the merged group and C.
+  const sim = Array.from({ length: n }, () => new Float64Array(n))
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const d = dot(items[i].vector, items[j].vector)
+      sim[i][j] = d
+      sim[j][i] = d
     }
   }
-  return uf.components().map((members) => members.map((i) => leftovers[i].sightingId))
+
+  const size = new Array<number>(n).fill(1)
+  const members = Array.from({ length: n }, (_, i) => [i])
+  const active = new Set<number>(Array.from({ length: n }, (_, i) => i))
+
+  for (;;) {
+    let best = -Infinity
+    let bestA = -1
+    let bestB = -1
+    for (const a of active) {
+      for (const b of active) {
+        if (b <= a) continue
+        if (sim[a][b] > best) {
+          best = sim[a][b]
+          bestA = a
+          bestB = b
+        }
+      }
+    }
+    if (best < threshold) break
+
+    for (const c of active) {
+      if (c === bestA || c === bestB) continue
+      const merged =
+        (size[bestA] * sim[bestA][c] + size[bestB] * sim[bestB][c]) / (size[bestA] + size[bestB])
+      sim[bestA][c] = merged
+      sim[c][bestA] = merged
+    }
+    members[bestA].push(...members[bestB])
+    size[bestA] += size[bestB]
+    active.delete(bestB)
+  }
+
+  return [...active].map((a) => members[a].map((i) => items[i].sightingId))
 }

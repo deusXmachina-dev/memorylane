@@ -46,6 +46,8 @@ export class TaskMiner {
   private model: string = DEFAULT_MINER_CONFIG.model
   private enabled = true
   private readonly embeddingService = new EmbeddingService()
+  private readonly embedSignatureText = (text: string): Promise<number[]> =>
+    this.embeddingService.generateEmbedding(text)
 
   constructor(
     private readonly storage: StorageService,
@@ -108,6 +110,32 @@ export class TaskMiner {
       this.settleTimer = null
       void this.execute(provider)
     }, PATTERN_DETECTION_CONFIG.SETTLE_DELAY_MS)
+  }
+
+  /**
+   * Deterministic re-bootstrap after a derived-data wipe (migration 0018):
+   * regroups existing sightings at startup so the Patterns view isn't blank
+   * until the next scheduled mining run. Reviews with the LLM only when
+   * mining is enabled and a provider is configured — otherwise unlabeled
+   * clusters fall back to member titles.
+   */
+  async rebuildClustersIfEmpty(): Promise<void> {
+    if (this.running) return
+    if (this.storage.clusters.getAll().length > 0) return
+    if (this.storage.clusters.getUnprocessedSightings().length === 0) return
+    this.running = true
+    try {
+      await runClustering({
+        storage: this.storage,
+        embed: this.embedSignatureText,
+        provider: this.enabled && this.provider?.isConfigured() ? this.provider : undefined,
+        model: this.model,
+      })
+    } catch (error) {
+      log.error('[TaskMiner] Cluster rebuild failed:', formatApiError(error))
+    } finally {
+      this.running = false
+    }
   }
 
   /**
@@ -272,6 +300,7 @@ export class TaskMiner {
     try {
       return await runClustering({
         storage: this.storage,
+        embed: this.embedSignatureText,
         provider,
         model: cfg.model,
         onProgress,
