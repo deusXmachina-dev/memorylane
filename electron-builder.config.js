@@ -119,10 +119,8 @@ module.exports = {
   },
   nsis: {
     artifactName: '${productName}-Setup.${ext}',
-    oneClick: false,
-    perMachine: true,
-    allowElevation: true,
-    allowToChangeInstallationDirectory: true,
+    oneClick: true,
+    perMachine: false,
   },
   msi: {
     perMachine: true,
