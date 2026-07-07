@@ -3,7 +3,7 @@
  * CLI wrapper for the user context builder.
  *
  * Reads the active vendor from capture-settings.json (same as the GUI)
- * and routes through InferenceProvider. See `detect-patterns.ts` header
+ * and routes through InferenceProvider. See `mine-tasks.ts` header
  * for the credentials story.
  *
  * The user-context model is currently hardcoded in

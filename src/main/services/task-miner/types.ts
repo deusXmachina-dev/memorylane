@@ -31,24 +31,15 @@ export const DEFAULT_MINER_CONFIG: TaskMinerConfig = {
 /** A discrete task instance proposed by the broad scan. */
 export interface Candidate {
   title: string
+  /** The specific object this run acted on — defines the instance (one per object). */
+  subject: string
   description: string
   apps: string[]
   activity_ids: string[]
-}
-
-/** Outcome of grounding a candidate against the real activities. */
-export interface GroundedTask {
-  verdict: 'keep' | 'reject'
-  title: string
-  description: string
-  apps: string[]
-  activity_ids: string[]
-  reason?: string
 }
 
 export interface MiningRunResult {
   runId: string
-  sightingsFound: number
   candidatesFromScan: number
   candidatesKept: number
   candidatesRejected: number

@@ -25,6 +25,8 @@ const createCluster = (overrides: Partial<Cluster> & { id: string }): Cluster =>
   label: overrides.label ?? '',
   description: overrides.description ?? '',
   centroid: overrides.centroid ?? null,
+  kind: overrides.kind ?? '',
+  mechanism: overrides.mechanism ?? '',
   labelModel: overrides.labelModel ?? '',
   labeledSize: overrides.labeledSize ?? 0,
   createdAt: overrides.createdAt ?? 1000,
@@ -100,7 +102,7 @@ describe('ClusterRepository', () => {
 
     const c1 = stats[0]
     expect(c1.timesSeen).toBe(2)
-    expect(c1.avgInteractionMin).toBe(6)
+    expect(c1.avgActiveMin).toBe(6)
     expect(c1.firstSeenAt).toBe(1000)
     expect(c1.lastSeenAt).toBe(9000)
     expect(c1.apps.sort()).toEqual(['A', 'B'])
@@ -108,6 +110,10 @@ describe('ClusterRepository', () => {
     const empty = stats[1]
     expect(empty.timesSeen).toBe(0)
     expect(empty.apps).toEqual([])
+
+    const digest = storage.clusters.getMemberDigest()
+    expect(digest.map((d) => d.interactionMin)).toEqual([4, 8])
+    expect(digest.map((d) => d.clusterId)).toEqual(['c1', 'c1'])
   })
 
   it('moves memberships between clusters', () => {
@@ -124,9 +130,9 @@ describe('ClusterRepository', () => {
   })
 
   it('pruneOrphans drops rows for deleted sightings and empties clusters', () => {
-    storage.sightings.add(createSighting({ id: 'stays', detectedAt: Date.now() }))
-    storage.sightings.add(createSighting({ id: 'goes1', detectedAt: 0 }))
-    storage.sightings.add(createSighting({ id: 'goes2', detectedAt: 0 }))
+    storage.sightings.add(createSighting({ id: 'stays', startedAt: Date.now() }))
+    storage.sightings.add(createSighting({ id: 'goes1', startedAt: 0 }))
+    storage.sightings.add(createSighting({ id: 'goes2', startedAt: 0 }))
     storage.clusters.upsertSignature('stays', v(1), 100)
     storage.clusters.upsertSignature('goes1', v(0, 1), 100)
 

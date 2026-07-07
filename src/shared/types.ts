@@ -214,7 +214,6 @@ export interface MainWindowStats {
   dbSize: number
   dateRange: { oldest: number | null; newest: number | null }
   apiUsage: { requestCount: number; totalCost: number } | null
-  totalRepetitiveHoursPerWeek: number | null
 }
 
 export interface CaptureSettings {
@@ -282,45 +281,78 @@ export interface PermissionStatus {
   screenRecording: PermissionState
 }
 
-export interface PatternInfo {
+/**
+ * Cluster classification from the review LLM call. '' = not yet judged.
+ * Advisory display metadata only — never used to filter or roll up until the
+ * cluster-review eval's false-eliminable rate is green.
+ */
+export const CLUSTER_KINDS = ['procedure', 'monitoring', 'ambient', 'dev-loop', 'judgment'] as const
+export type ClusterKind = (typeof CLUSTER_KINDS)[number] | ''
+
+/** A recurring task cluster with stats derived from its member sightings. */
+export type RecurrenceUnit = 'day' | 'week'
+
+/** One bar of the recurrence histogram: bucket start (epoch ms) + sighting count. */
+export interface RecurrenceBucket {
+  start: number
+  count: number
+}
+
+export interface ClusterInfo {
   id: string
-  name: string
+  /** Resolved for display: cluster label, or the most common member title. */
+  title: string
   description: string
   apps: string[]
-  automationIdea: string
-  createdAt: number
-  rejectedAt: number | null
-  promptCopiedAt: number | null
-  approvedAt: number | null
-  completedAt: number | null
-  sightingCount: number
+  timesSeen: number
+  /** Estimated runs per week: timesSeen ÷ observedDays × 7; 0 when nothing observed. */
+  timesPerWeek: number
+  /** Distinct local days with captured activity in the stats window (frequency denominator). */
+  observedDays: number
+  /** Mean per-run active time (union of cited-activity intervals), in minutes. */
+  avgActiveMin: number
+  /** Mean per-run wall-clock span (first activity start → last end), in minutes. */
+  avgSpanMin: number
+  /** Mean per-run inactive time inside the span: max(0, span − active), in minutes. */
+  avgIdleMin: number
+  /** Active minutes summed across all kept sightings (sightings are pruned at 90 days). */
+  totalActiveMin: number
+  kind: ClusterKind
+  /** Consolidated "Replace with" recommendation; set only for 'procedure' clusters. */
+  mechanism: string
+  firstSeenAt: number | null
   lastSeenAt: number | null
-  lastConfidence: number | null
-  estimatedHoursPerWeek: number | null
+  /** Recurrence histogram, oldest→newest — drives the sparkline and bars. */
+  recurrence: RecurrenceBucket[]
+  /** Whether each recurrence bucket is a day or a week. */
+  recurrenceUnit: RecurrenceUnit
 }
 
-export interface PatternActivityRef {
+/** A single occurrence of a cluster (one mined sighting). */
+export interface ClusterSightingInfo {
   id: string
-  startTimestamp: number
-  endTimestamp: number
-  appName: string
-  windowTitle: string
-  tld: string | null
-  summary: string
+  title: string
+  description: string
+  apps: string[]
+  /** Wall-clock span: first activity start → last activity end. */
+  startedAt: number
+  endedAt: number
+  /** Active time (union of cited-activity intervals), in minutes. */
+  activeMin: number
+  /** Underlying activity ids — handle for the "Copy prompt for Claude" flow. */
+  activityIds: string[]
 }
 
-export interface PatternSightingInfo {
-  id: string
-  detectedAt: number
-  evidence: string
-  confidence: number
-  durationEstimateMin: number | null
-  activities: PatternActivityRef[]
+export interface ClusterDetailInfo {
+  /** Member sightings, newest-first. */
+  sightings: ClusterSightingInfo[]
 }
 
-export interface PatternDetailInfo {
-  pattern: PatternInfo
-  sightings: PatternSightingInfo[]
+/** getClusters payload: visible clusters plus how many the noise floor hid. */
+export interface ClustersView {
+  clusters: ClusterInfo[]
+  /** Clusters hidden as one-off noise (seen once, below the total-time floor). */
+  hiddenCount: number
 }
 
 /** The tenant's centrally-synced capture blacklist, surfaced read-only in the
@@ -366,14 +398,9 @@ export interface MainWindowAPI {
   getCaptureSettings: () => Promise<CaptureSettings>
   saveCaptureSettings: (settings: Partial<CaptureSettings>) => Promise<SaveResult>
   resetCaptureSettings: () => Promise<SaveResult>
-  // Patterns
-  getPatterns: () => Promise<PatternInfo[]>
-  getPatternDetail: (id: string) => Promise<PatternDetailInfo | null>
-  approvePattern: (id: string) => Promise<SaveResult>
-  rejectPattern: (id: string) => Promise<SaveResult>
-  completePattern: (id: string) => Promise<SaveResult>
-  uncompletePattern: (id: string) => Promise<SaveResult>
-  markPatternPromptCopied: (id: string) => Promise<SaveResult>
+  // Patterns (task clusters)
+  getClusters: () => Promise<ClustersView>
+  getClusterDetail: (id: string) => Promise<ClusterDetailInfo | null>
   // Theme
   getTheme: () => Promise<'dark' | 'light'>
   onThemeChanged: (callback: (theme: 'dark' | 'light') => void) => void

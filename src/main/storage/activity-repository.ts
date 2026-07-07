@@ -210,6 +210,23 @@ export class ActivityRepository {
     return rows.map((row) => this.rowToDetail(row))
   }
 
+  /**
+   * Distinct local calendar days with any captured activity in
+   * [windowStart, windowEnd]. Local-day bucketing matches getDayBoundaries()
+   * (local midnight); an activity counts for the day it started. Used as the
+   * frequency denominator so laptop-off and pre-install days don't dilute.
+   */
+  countDistinctActiveDays(windowStart: number, windowEnd: number): number {
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(DISTINCT date(start_timestamp / 1000, 'unixepoch', 'localtime')) AS days
+       FROM activities
+       WHERE start_timestamp >= ? AND start_timestamp <= ?`,
+      )
+      .get(windowStart, windowEnd) as { days: number }
+    return row.days
+  }
+
   count(): number {
     return this.getRowCount()
   }

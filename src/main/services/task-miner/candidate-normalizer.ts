@@ -6,6 +6,12 @@ const scanCandidateSchema = z.object({
     (value) => (typeof value === 'string' ? value.trim() : ''),
     z.string().min(1),
   ),
+  // The object the run acted on. A forcing function for one-instance-per-object
+  // separation, but tolerated when the model omits it — activity_ids is the hard
+  // anchor, not this.
+  subject: z
+    .preprocess((value) => (typeof value === 'string' ? value.trim() : ''), z.string())
+    .default(''),
   description: z.preprocess(
     (value) => (typeof value === 'string' ? value.trim() : ''),
     z.string().min(1),

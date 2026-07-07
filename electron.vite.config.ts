@@ -16,6 +16,7 @@ export default defineConfig({
         '@main': resolve(__dirname, 'src/main'),
         '@': resolve(__dirname, 'src'),
         '@constants': resolve(__dirname, 'src/shared/constants'),
+        '@types': resolve(__dirname, 'src/shared/types'),
       },
     },
     define: {

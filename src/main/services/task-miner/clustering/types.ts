@@ -10,6 +10,12 @@ export const CLUSTERING_CONFIG = {
   MERGE_CANDIDATE_THRESHOLD: 0.65,
   /** Most-recent member sightings shown to the LLM per cluster. */
   MAX_SAMPLE_MEMBERS: 15,
+  /**
+   * Cap on clusters sent for (re)label/classify per run, so a backlog (e.g.
+   * every pre-0016 cluster needing a kind) drains over several runs instead of
+   * flooding one review call. Merge-candidate clusters ride along uncapped.
+   */
+  MAX_REVIEW_CLUSTERS_PER_RUN: 20,
   LLM_MAX_ATTEMPTS: 2,
 } as const
 
@@ -58,6 +64,13 @@ export interface ReviewCluster {
   /** Created this run — the only clusters the LLM may split. */
   new: boolean
   label: string
+  /** Code-computed over ALL members (not just the sample shown). */
+  stats: {
+    times_seen: number
+    /** Calendar days from first to last sighting, inclusive. */
+    span_days: number
+    median_active_min: number
+  }
   members: ReviewSighting[]
 }
 
@@ -76,6 +89,8 @@ export interface ReviewClusterVerdict {
   id: string
   label?: string
   description?: string
+  kind?: string
+  mechanism?: string
   split?: ReviewSplitGroup[]
 }
 

@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 import { generateText, stepCountIs } from 'ai'
+import { SIGHTING_RETENTION_DAYS } from '../../../shared/constants'
 import type { StorageService } from '../../storage'
 import type { Sighting } from '../../storage/sighting-repository'
 import type { EmbeddingService } from '../../processor/embedding'
@@ -19,7 +20,7 @@ import { normalizeScanCandidates } from './candidate-normalizer'
 import { buildScanSystemPrompt, buildGroundingSystemPrompt } from './prompts'
 
 const GROUNDING_MAX_STEPS = 8
-const SIGHTING_MAX_AGE_DAYS = 90
+const MIN_RUN_ACTIVITIES = 2
 // A malformed scan response — no parseable JSON, or candidates that all fail
 // validation / cite unknown ids — silently loses the whole day, so retry it.
 // A response that parses to `[]` is a legitimate empty day, not a failure.
@@ -32,7 +33,6 @@ function emptyResult(
 ): MiningRunResult {
   return {
     runId,
-    sightingsFound: 0,
     candidatesFromScan,
     candidatesKept: 0,
     candidatesRejected: 0,
@@ -67,9 +67,9 @@ export async function runDetection(
   progress(`Starting run ${runId} (model=${cfg.model}, lookback=${cfg.lookbackDays}d)`)
 
   // 0. Prune very old sightings (DB hygiene)
-  const prunedSightings = storage.sightings.pruneOlderThan(SIGHTING_MAX_AGE_DAYS, now)
+  const prunedSightings = storage.sightings.pruneOlderThan(SIGHTING_RETENTION_DAYS, now)
   if (prunedSightings)
-    progress(`Pruned ${prunedSightings} sightings older than ${SIGHTING_MAX_AGE_DAYS}d`)
+    progress(`Pruned ${prunedSightings} sightings older than ${SIGHTING_RETENTION_DAYS}d`)
 
   // 1. Query activities for the target day
   const { start, end, label } = getDayBoundaries(cfg.lookbackDays)
@@ -290,8 +290,18 @@ export async function runDetection(
       const title = (parsed.title as string) || candidate.title
       const description = (parsed.description as string) || candidate.description
       const apps = (parsed.apps as string[]) || candidate.apps
-      const { startedAt, endedAt, interactionMin } = computeEpisodeWindow(resolved)
 
+      // One candidate = one run on one object = one sighting. The scan separates
+      // instances by the object worked on, not by the clock, so a run is never
+      // re-split here: a long continuous run stays whole (even across breaks) and
+      // back-to-back runs on distinct objects stay distinct. A run with fewer than
+      // MIN_RUN_ACTIVITIES substantive activities is noise, not a task run.
+      if (resolved.length < MIN_RUN_ACTIVITIES) {
+        candidatesRejected++
+        progress(`[Phase 2] Rejected "${title}": fewer than ${MIN_RUN_ACTIVITIES} activities`)
+        continue
+      }
+      const { startedAt, endedAt, interactionMin } = computeEpisodeWindow(resolved)
       storage.sightings.add({
         id: uuidv4(),
         title,
@@ -306,9 +316,7 @@ export async function runDetection(
       } satisfies Sighting)
 
       candidatesKept++
-      progress(
-        `[Phase 2] Kept: ${title} (${interactionMin} min across ${resolved.length} activities)`,
-      )
+      progress(`[Phase 2] Kept: ${title} (${resolved.length} activities)`)
     } catch (error) {
       candidatesRejected++
       progress(
@@ -325,7 +333,6 @@ export async function runDetection(
 
   return {
     runId,
-    sightingsFound: candidatesKept,
     candidatesFromScan: rawCandidates.length,
     candidatesKept,
     candidatesRejected,

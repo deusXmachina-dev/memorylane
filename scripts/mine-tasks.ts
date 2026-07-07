@@ -23,6 +23,14 @@
  *   npm run mine-tasks -- --two-phase          (re-enable Phase 2 grounding calls;
  *                                               scan-only/one-shot is the default)
  *   npm run mine-tasks -- --no-clustering      (skip the post-mining clustering pass)
+ *   npm run mine-tasks -- --backfill 10        (mine the last 10 days, skipping days
+ *                                               that already have sightings, then run
+ *                                               one clustering pass)
+ *   npm run mine-tasks -- --backfill 10 --backfill-offset 20
+ *                                              (shift the window back: mine days
+ *                                               30..21 ago instead of 10..1 ago)
+ *   npm run mine-tasks -- --backfill 20 --parallel 5
+ *                                              (scan up to 5 days concurrently)
  */
 
 import { config as loadEnv } from 'dotenv'
@@ -33,6 +41,7 @@ import { StorageService } from '../src/main/storage/index'
 import { applyMigrations } from '../src/main/storage/migrator'
 import { getDefaultDbPath } from '../src/main/utils/paths'
 import { TaskMiner, DEFAULT_MINER_CONFIG } from '../src/main/services/task-miner'
+import type { ClusteringRunSummary } from '../src/main/services/task-miner'
 import { PATTERN_DETECTION_CONFIG } from '../src/shared/constants'
 import { loadCliInferenceProvider } from './cli-inference-provider'
 
@@ -49,6 +58,9 @@ interface CliArgs {
   days: number
   scanOnly: boolean
   clustering: boolean
+  backfillDays: number | null
+  backfillOffset: number
+  parallel: number
 }
 
 function parseArgs(): CliArgs {
@@ -61,6 +73,9 @@ function parseArgs(): CliArgs {
   let days = PATTERN_DETECTION_CONFIG.LOOKBACK_DAYS
   let scanOnly = DEFAULT_MINER_CONFIG.scanOnly
   let clustering = DEFAULT_MINER_CONFIG.clustering
+  let backfillDays: number | null = null
+  let backfillOffset = 0
+  let parallel = 1
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--db-path' && args[i + 1]) {
@@ -82,6 +97,27 @@ function parseArgs(): CliArgs {
       days = parseInt(args[i + 1], 10)
       if (isNaN(days) || days < 0) {
         console.error(`Invalid --days: ${args[i + 1]} (use a non-negative integer)`)
+        process.exit(1)
+      }
+      i++
+    } else if (args[i] === '--backfill' && args[i + 1]) {
+      backfillDays = parseInt(args[i + 1], 10)
+      if (isNaN(backfillDays) || backfillDays < 1) {
+        console.error(`Invalid --backfill: ${args[i + 1]} (use a positive integer)`)
+        process.exit(1)
+      }
+      i++
+    } else if (args[i] === '--backfill-offset' && args[i + 1]) {
+      backfillOffset = parseInt(args[i + 1], 10)
+      if (isNaN(backfillOffset) || backfillOffset < 0) {
+        console.error(`Invalid --backfill-offset: ${args[i + 1]} (use a non-negative integer)`)
+        process.exit(1)
+      }
+      i++
+    } else if (args[i] === '--parallel' && args[i + 1]) {
+      parallel = parseInt(args[i + 1], 10)
+      if (isNaN(parallel) || parallel < 1) {
+        console.error(`Invalid --parallel: ${args[i + 1]} (use a positive integer)`)
         process.exit(1)
       }
       i++
@@ -108,7 +144,19 @@ function parseArgs(): CliArgs {
     }
   }
 
-  return { dbPath, modelOverride, apiKey, userDataPath, vendorOverride, days, scanOnly, clustering }
+  return {
+    dbPath,
+    modelOverride,
+    apiKey,
+    userDataPath,
+    vendorOverride,
+    days,
+    scanOnly,
+    clustering,
+    backfillDays,
+    backfillOffset,
+    parallel,
+  }
 }
 
 async function main() {
@@ -121,6 +169,9 @@ async function main() {
     days,
     scanOnly,
     clustering,
+    backfillDays,
+    backfillOffset,
+    parallel,
   } = parseArgs()
 
   if (!fs.existsSync(dbPath)) {
@@ -139,7 +190,15 @@ async function main() {
   console.log(`Database: ${dbPath}`)
   console.log(`Vendor:   ${handle.vendor}${handle.baseURL ? ` (${handle.baseURL})` : ''}`)
   console.log(`Model:    ${model}`)
-  console.log(`Date:     ${dateLabel} (${days} days ago)`)
+  if (backfillDays !== null) {
+    console.log(
+      backfillOffset > 0
+        ? `Backfill: ${backfillDays} days (${backfillOffset + backfillDays}..${backfillOffset + 1} days ago)`
+        : `Backfill: last ${backfillDays} days`,
+    )
+  } else {
+    console.log(`Date:     ${dateLabel} (${days} days ago)`)
+  }
   console.log('')
 
   const storageService = new StorageService(dbPath)
@@ -158,6 +217,25 @@ async function main() {
 
   try {
     const miner = new TaskMiner(storageService)
+
+    if (backfillDays !== null) {
+      miner.updateModel(model)
+      const summary = await miner.backfill(handle.provider, {
+        days: backfillDays,
+        offsetDays: backfillOffset,
+        concurrency: parallel,
+        onProgress: (msg) => console.log(`  ${msg}`),
+      })
+      console.log('\n=== BACKFILL ===')
+      if (summary.skipped) console.log(`Did not run: ${summary.skipped}`)
+      console.log(`Days mined:       ${summary.daysMined}`)
+      console.log(`Days skipped:     ${summary.daysSkipped} (already had sightings)`)
+      console.log(`Days failed:      ${summary.daysFailed}`)
+      console.log(`Sightings in DB:  ${storageService.sightings.count()}`)
+      if (summary.clustering) printClustering(summary.clustering, storageService)
+      return
+    }
+
     const result = await miner.run(
       handle.provider,
       {
@@ -176,7 +254,6 @@ async function main() {
     console.log(
       `Candidates:       ${result.candidatesFromScan} scanned → ${result.candidatesKept} kept, ${result.candidatesRejected} rejected`,
     )
-    console.log(`Sightings mined:  ${result.sightingsFound}`)
     console.log(
       `Tokens (scan):    ${result.tokenUsage.scan.input} in / ${result.tokenUsage.scan.output} out`,
     )
@@ -204,36 +281,35 @@ async function main() {
       }
     }
 
-    if (result.clustering) {
-      const c = result.clustering
-      console.log('\n=== Clustering ===')
-      console.log(`New signatures:   ${c.newSignatures} (${c.unclustered} without usable vectors)`)
-      console.log(`Attached:         ${c.attached} to existing clusters`)
-      console.log(`New clusters:     ${c.newClusters}`)
-      console.log(`Review:           ${c.labeled} labeled, ${c.merged} merged, ${c.split} split`)
-      console.log(`Tokens (review):  ${c.tokenUsage.input} in / ${c.tokenUsage.output} out`)
-      if (c.llmError) console.log(`Review error:     ${c.llmError}`)
-
-      const clusters = storageService.clusters.getAllWithStats()
-      if (clusters.length > 0) {
-        console.log(`\n=== Clusters (${clusters.length}) ===`)
-        for (const cl of clusters) {
-          // Unlabeled clusters fall back to the most common member title.
-          const label = cl.label || mostCommonTitle(storageService.clusters.getMembers(cl.id))
-          console.log(`\n  ${label}${cl.label ? '' : ' [unlabeled]'}`)
-          if (cl.description) console.log(`    ${cl.description}`)
-          console.log(
-            `    Seen ${cl.timesSeen}x | avg ${cl.avgInteractionMin.toFixed(1)} min interaction` +
-              (cl.lastSeenAt
-                ? ` | last ${new Date(cl.lastSeenAt).toISOString().slice(0, 10)}`
-                : ''),
-          )
-          if (cl.apps.length > 0) console.log(`    Apps: ${cl.apps.join(', ')}`)
-        }
-      }
-    }
+    if (result.clustering) printClustering(result.clustering, storageService)
   } finally {
     storageService.close()
+  }
+}
+
+function printClustering(c: ClusteringRunSummary, storageService: StorageService): void {
+  console.log('\n=== Clustering ===')
+  console.log(`New signatures:   ${c.newSignatures} (${c.unclustered} without usable vectors)`)
+  console.log(`Attached:         ${c.attached} to existing clusters`)
+  console.log(`New clusters:     ${c.newClusters}`)
+  console.log(`Review:           ${c.labeled} labeled, ${c.merged} merged, ${c.split} split`)
+  console.log(`Tokens (review):  ${c.tokenUsage.input} in / ${c.tokenUsage.output} out`)
+  if (c.llmError) console.log(`Review error:     ${c.llmError}`)
+
+  const clusters = storageService.clusters.getAllWithStats()
+  if (clusters.length > 0) {
+    console.log(`\n=== Clusters (${clusters.length}) ===`)
+    for (const cl of clusters) {
+      // Unlabeled clusters fall back to the most common member title.
+      const label = cl.label || mostCommonTitle(storageService.clusters.getMembers(cl.id))
+      console.log(`\n  ${label}${cl.label ? '' : ' [unlabeled]'}`)
+      if (cl.description) console.log(`    ${cl.description}`)
+      console.log(
+        `    Seen ${cl.timesSeen}x | avg ${cl.avgActiveMin.toFixed(1)} min active` +
+          (cl.lastSeenAt ? ` | last ${new Date(cl.lastSeenAt).toISOString().slice(0, 10)}` : ''),
+      )
+      if (cl.apps.length > 0) console.log(`    Apps: ${cl.apps.join(', ')}`)
+    }
   }
 }
 

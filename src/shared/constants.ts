@@ -110,7 +110,7 @@ export const SCREEN_CAPTURER_CONFIG = {
 
 // User Context Builder Configuration
 export const USER_CONTEXT_CONFIG = {
-  MODEL: 'google/gemini-2.5-flash',
+  MODEL: 'minimax/minimax-m3',
   LOOKBACK_DAYS: 7, // Analyze past week of activities
   MIN_ACTIVITIES: 50, // Minimum total activities in DB before first run
   SETTLE_DELAY_MS: 30 * 1000, // 30s after unlock — runs before pattern detection (60s)
@@ -118,10 +118,25 @@ export const USER_CONTEXT_CONFIG = {
 
 // Pattern Detection Configuration
 export const PATTERN_DETECTION_CONFIG = {
-  MODEL: 'google/gemini-2.5-flash',
+  MODEL: 'minimax/minimax-m3',
   LOOKBACK_DAYS: 1, // Days back from today to analyze (1 = yesterday)
   MIN_ACTIVITIES: 200, // Minimum total activities in DB before first run
   SETTLE_DELAY_MS: 60 * 1000, // 1 min after unlock before running
+}
+
+// Sightings older than this are pruned on every mining run; cluster stats use
+// the same window so the timesSeen numerator and observedDays denominator
+// cover the same period.
+export const SIGHTING_RETENTION_DAYS = 90
+
+// Noise floor for the Patterns view: clusters seen once are hidden unless they
+// already cost meaningful time. Presentation-only — clustering, storage, and
+// sync are untouched, so a hidden singleton still attaches tomorrow's sighting.
+export const CLUSTER_VIEW_CONFIG = {
+  MIN_TIMES_SEEN: 2,
+  SINGLETON_MIN_TOTAL_ACTIVE_MIN: 20,
+  /** Window for cluster stats (frequency denominator). */
+  STATS_WINDOW_DAYS: SIGHTING_RETENTION_DAYS,
 }
 
 // One-time seed of the sightings/clusters tables from existing history, run once
@@ -129,8 +144,8 @@ export const PATTERN_DETECTION_CONFIG = {
 // backfill (in {userData}/task-backfill.json); a bump re-runs it to fill missing
 // days and recluster — it does not re-mine days that already have sightings.
 export const TASK_BACKFILL = {
-  VERSION: 1,
-  DAYS: 30, // Calendar days back to mine (day-by-day, oldest → newest)
+  VERSION: 2,
+  DAYS: 60, // Calendar days back to mine (day-by-day, oldest → newest)
 }
 
 // User-initiated timed capture pause (auto-resumes when the timer elapses).

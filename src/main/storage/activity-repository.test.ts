@@ -42,6 +42,26 @@ describe('ActivityRepository', () => {
     expect(retrieved[0].ocrText).toBe('function hello()')
   })
 
+  describe('countDistinctActiveDays', () => {
+    const localNoon = (y: number, m: number, d: number): number => new Date(y, m, d, 12).getTime()
+
+    it('counts each local day once and respects the window', () => {
+      const day1a = localNoon(2026, 5, 1)
+      const day1b = day1a + 60 * 60 * 1000 // same day, one hour later
+      const day2 = localNoon(2026, 5, 3)
+      const outside = localNoon(2026, 5, 10)
+      for (const [i, ts] of [day1a, day1b, day2, outside].entries()) {
+        storage.activities.add(
+          createStoredActivity({ id: `days-${i}`, startTimestamp: ts, endTimestamp: ts + 1000 }),
+        )
+      }
+
+      expect(storage.activities.countDistinctActiveDays(day1a - 1000, day2 + 1000)).toBe(2)
+      expect(storage.activities.countDistinctActiveDays(day1a - 1000, outside + 1000)).toBe(3)
+      expect(storage.activities.countDistinctActiveDays(0, day1a - 1000)).toBe(0)
+    })
+  })
+
   describe('searchFTS', () => {
     it('should return matching results ranked by relevance', () => {
       storage.activities.add(

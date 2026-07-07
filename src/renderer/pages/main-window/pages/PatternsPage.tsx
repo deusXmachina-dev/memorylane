@@ -1,33 +1,32 @@
 import * as React from 'react'
-import type { MainWindowAPI, PatternInfo } from '@types'
+import type { ClustersView, MainWindowAPI } from '@types'
 import { PageLayout } from '../components/shell/PageLayout'
-import { PatternsSection } from '../components/PatternsSection'
+import { ClustersSection } from '../components/ClustersSection'
 
 interface PatternsPageProps {
   api: MainWindowAPI
-  patterns: PatternInfo[] | null
-  onPatternsChange: () => void
+  clusters: ClustersView | null
 }
 
-export function PatternsPage({
-  api,
-  patterns,
-  onPatternsChange,
-}: PatternsPageProps): React.JSX.Element {
+export function PatternsPage({ api, clusters }: PatternsPageProps): React.JSX.Element {
   return (
     <PageLayout
       title="Patterns"
       fillHeight
       subtitle={
         <p className="text-xs text-muted-foreground">
-          Repetitive workflows MemoryLane has spotted. Ranked by likely impact.
+          Recurring tasks MemoryLane has spotted. Ranked by how often they recur.
         </p>
       }
     >
-      {patterns === null ? (
+      {clusters === null ? (
         <div className="text-sm text-muted-foreground">Loading…</div>
       ) : (
-        <PatternsSection api={api} patterns={patterns} onPatternsChange={onPatternsChange} />
+        <ClustersSection
+          api={api}
+          clusters={clusters.clusters}
+          hiddenCount={clusters.hiddenCount}
+        />
       )}
     </PageLayout>
   )

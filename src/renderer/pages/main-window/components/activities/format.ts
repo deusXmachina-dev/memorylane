@@ -33,3 +33,26 @@ export function formatDuration(ms: number): string {
 export function formatShortDate(ms: number): string {
   return new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
 }
+
+export function formatMinutes(min: number): string {
+  if (min >= 60) return `${(min / 60).toFixed(1)}h`
+  return `${Math.max(1, Math.round(min))}m`
+}
+
+export function formatFrequency(perWeek: number): string {
+  if (perWeek <= 0) return ''
+  if (perWeek >= 0.95) return `~${Math.round(perWeek)}×/wk`
+  const perMonth = perWeek * (30.44 / 7)
+  return perMonth >= 0.95 ? `~${Math.round(perMonth)}×/mo` : '<1×/mo'
+}
+
+export function formatRelative(timestamp: number | null): string {
+  if (timestamp === null) return 'never'
+  const diff = Date.now() - timestamp
+  const minutes = Math.floor(diff / 60_000)
+  if (minutes < 60) return `${Math.max(0, minutes)} min ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}

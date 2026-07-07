@@ -8,9 +8,10 @@ interface TimeBounded {
  * its constituent activities — never from an LLM estimate.
  *
  * - `startedAt` / `endedAt`: min start / max end across the activities.
- * - `interactionMin`: Σ of each activity's own duration (actual interaction
- *   time, excludes idle gaps between activities). Wall-clock span is just
- *   `endedAt - startedAt` and is derived on read, not stored.
+ * - `interactionMin`: union of the activities' [start, end] intervals (actual
+ *   interaction time, excludes idle gaps between activities). Overlapping or
+ *   nested activities are not double-counted, so active time never exceeds the
+ *   wall-clock span. Span is just `endedAt - startedAt`, derived on read.
  */
 export function computeEpisodeWindow(activities: TimeBounded[]): {
   startedAt: number
@@ -20,17 +21,29 @@ export function computeEpisodeWindow(activities: TimeBounded[]): {
   if (activities.length === 0) {
     return { startedAt: 0, endedAt: 0, interactionMin: 0 }
   }
-  let startedAt = Infinity
-  let endedAt = -Infinity
-  let interactionMs = 0
-  for (const a of activities) {
-    if (a.startTimestamp < startedAt) startedAt = a.startTimestamp
-    if (a.endTimestamp > endedAt) endedAt = a.endTimestamp
-    interactionMs += Math.max(0, a.endTimestamp - a.startTimestamp)
+  const intervals = activities
+    .map((a) => ({ start: a.startTimestamp, end: Math.max(a.startTimestamp, a.endTimestamp) }))
+    .sort((a, b) => a.start - b.start)
+  const startedAt = intervals[0].start
+  let endedAt = intervals[0].end
+  let unionMs = 0
+  let curEnd = intervals[0].end
+  let curStart = intervals[0].start
+  for (let i = 1; i < intervals.length; i++) {
+    const { start, end } = intervals[i]
+    if (start <= curEnd) {
+      curEnd = Math.max(curEnd, end)
+    } else {
+      unionMs += curEnd - curStart
+      curStart = start
+      curEnd = end
+    }
+    if (end > endedAt) endedAt = end
   }
+  unionMs += curEnd - curStart
   return {
     startedAt,
     endedAt,
-    interactionMin: Math.round((interactionMs / 60000) * 10) / 10,
+    interactionMin: Math.round((unionMs / 60000) * 10) / 10,
   }
 }

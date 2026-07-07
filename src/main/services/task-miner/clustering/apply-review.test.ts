@@ -6,7 +6,7 @@ import { applyMigrations } from '@main/storage/migrator'
 import { deleteDbFiles, v } from '@main/storage/test-utils'
 import type { Cluster } from '@main/storage/cluster-repository'
 import type { Sighting } from '@main/storage/sighting-repository'
-import { validateAndApply, mergePairKey, type ReviewGuards } from './apply-review'
+import { validateAndApply, mergePairKey, sanitizeVerdict, type ReviewGuards } from './apply-review'
 
 const createSighting = (overrides: Partial<Sighting> & { id: string }): Sighting => ({
   id: overrides.id,
@@ -26,6 +26,8 @@ const createCluster = (overrides: Partial<Cluster> & { id: string }): Cluster =>
   label: overrides.label ?? '',
   description: overrides.description ?? '',
   centroid: overrides.centroid ?? null,
+  kind: overrides.kind ?? '',
+  mechanism: overrides.mechanism ?? '',
   labelModel: overrides.labelModel ?? '',
   labeledSize: overrides.labeledSize ?? 0,
   createdAt: overrides.createdAt ?? 1000,
@@ -83,6 +85,27 @@ describe('validateAndApply', () => {
     expect(survivor.label).toBe('Merged process')
     expect(survivor.labeledSize).toBe(2)
     expect(storage.clusters.getMemberCount('older')).toBe(2)
+  })
+
+  it('clears the survivor verdict on merge so the merged cluster is re-classified', () => {
+    seedCluster('older', 100, ['s1'])
+    seedCluster('newer', 200, ['s2'])
+    storage.clusters.updateVerdict('older', { kind: 'procedure', mechanism: 'A script.' }, 200)
+
+    validateAndApply(
+      storage,
+      { merges: [{ merge: ['newer', 'older'], label: 'Merged process', description: '' }] },
+      guards({
+        reviewableIds: new Set(['older', 'newer']),
+        mergeCandidatePairs: new Set([mergePairKey('older', 'newer')]),
+      }),
+      'test-model',
+      5000,
+    )
+
+    const survivor = storage.clusters.getById('older')!
+    expect(survivor.kind).toBe('')
+    expect(survivor.mechanism).toBe('')
   })
 
   it('rejects merges that were not proposed as candidates', () => {
@@ -221,5 +244,103 @@ describe('validateAndApply', () => {
     expect(cluster.label).toBe('Weekly invoicing')
     expect(cluster.labeledSize).toBe(3)
     expect(cluster.labelModel).toBe('test-model')
+  })
+
+  it('persists a sanitized verdict alongside the label', () => {
+    seedCluster('c1', 100, ['s1', 's2'])
+
+    validateAndApply(
+      storage,
+      {
+        clusters: [
+          {
+            id: 'c1',
+            label: 'Weekly invoicing',
+            description: '',
+            kind: 'procedure',
+            mechanism: 'Sync the form tool to the invoicing tool.',
+          },
+        ],
+      },
+      guards({ reviewableIds: new Set(['c1']) }),
+      'test-model',
+      5000,
+    )
+
+    const cluster = storage.clusters.getById('c1')!
+    expect(cluster.kind).toBe('procedure')
+    expect(cluster.mechanism).toBe('Sync the form tool to the invoicing tool.')
+  })
+
+  it('does not wipe an existing verdict when a relabel omits the kind', () => {
+    seedCluster('c1', 100, ['s1', 's2'])
+    storage.clusters.updateVerdict('c1', { kind: 'procedure', mechanism: 'A script.' }, 200)
+
+    validateAndApply(
+      storage,
+      { clusters: [{ id: 'c1', label: 'Renamed', description: '' }] },
+      guards({ reviewableIds: new Set(['c1']) }),
+      'test-model',
+      5000,
+    )
+
+    const cluster = storage.clusters.getById('c1')!
+    expect(cluster.label).toBe('Renamed')
+    expect(cluster.kind).toBe('procedure')
+    expect(cluster.mechanism).toBe('A script.')
+  })
+
+  it('does not wipe an existing verdict when a relabel kind fails sanitization', () => {
+    seedCluster('c1', 100, ['s1', 's2'])
+    storage.clusters.updateVerdict('c1', { kind: 'procedure', mechanism: 'A script.' }, 200)
+
+    validateAndApply(
+      storage,
+      { clusters: [{ id: 'c1', label: 'Renamed', description: '', kind: 'Procedure' }] },
+      guards({ reviewableIds: new Set(['c1']) }),
+      'test-model',
+      5000,
+    )
+
+    const cluster = storage.clusters.getById('c1')!
+    expect(cluster.kind).toBe('procedure')
+    expect(cluster.mechanism).toBe('A script.')
+  })
+})
+
+describe('sanitizeVerdict', () => {
+  it('accepts a concrete procedure verdict', () => {
+    expect(
+      sanitizeVerdict({
+        id: 'x',
+        kind: 'procedure',
+        mechanism: 'A script.',
+      }),
+    ).toEqual({ kind: 'procedure', mechanism: 'A script.' })
+  })
+
+  it('rejects a procedure without a concrete mechanism', () => {
+    expect(sanitizeVerdict({ id: 'x', kind: 'procedure' })).toEqual({
+      kind: '',
+      mechanism: '',
+    })
+    expect(sanitizeVerdict({ id: 'x', kind: 'procedure', mechanism: '  ' })).toEqual({
+      kind: '',
+      mechanism: '',
+    })
+  })
+
+  it('coerces off-enum values to the retry sentinel', () => {
+    expect(sanitizeVerdict({ id: 'x', kind: 'busywork' })).toEqual({
+      kind: '',
+      mechanism: '',
+    })
+  })
+
+  it('strips mechanisms from non-procedure kinds', () => {
+    expect(sanitizeVerdict({ id: 'x', kind: 'monitoring', mechanism: 'A.' })).toEqual({
+      kind: 'monitoring',
+      mechanism: '',
+    })
   })
 })
