@@ -144,8 +144,8 @@ export const CLUSTER_VIEW_CONFIG = {
 // backfill (in {userData}/task-backfill.json); a bump re-runs it to fill missing
 // days and recluster — it does not re-mine days that already have sightings.
 export const TASK_BACKFILL = {
-  VERSION: 1,
-  DAYS: 30, // Calendar days back to mine (day-by-day, oldest → newest)
+  VERSION: 2,
+  DAYS: 60, // Calendar days back to mine (day-by-day, oldest → newest)
 }
 
 // User-initiated timed capture pause (auto-resumes when the timer elapses).
