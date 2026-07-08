@@ -41,6 +41,7 @@ import { StorageService } from '../src/main/storage/index'
 import { applyMigrations } from '../src/main/storage/migrator'
 import { getDefaultDbPath } from '../src/main/utils/paths'
 import { TaskMiner, DEFAULT_MINER_CONFIG } from '../src/main/services/task-miner'
+import { EmbeddingService } from '../src/main/processor/embedding'
 import type { ClusteringRunSummary } from '../src/main/services/task-miner'
 import { PATTERN_DETECTION_CONFIG } from '../src/shared/constants'
 import { loadCliInferenceProvider } from './cli-inference-provider'
@@ -216,7 +217,8 @@ async function main() {
   }
 
   try {
-    const miner = new TaskMiner(storageService)
+    // In-process embedder: enode scripts have no utilityProcess to host it.
+    const miner = new TaskMiner(storageService, undefined, new EmbeddingService())
 
     if (backfillDays !== null) {
       miner.updateModel(model)

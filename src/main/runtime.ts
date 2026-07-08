@@ -9,7 +9,6 @@ import type { AppEdition } from '../shared/edition'
 import { StorageService } from './storage'
 import { applyMigrations } from './storage/migrator'
 import { applyPendingDatabaseImport } from './ui/database-import'
-import { EmbeddingService } from './processor/embedding'
 import { activityOcrService } from './processor/ocr'
 import { UsageTracker } from './services/usage-tracker'
 import { SummaryModeTracker } from './services/summary-mode-tracker'
@@ -150,9 +149,12 @@ export async function createMainRuntime(params: {
       `userData=${userDataPath} db=${dbPath} screenshots=${outputDir} activityCount=${activityCount}`,
   )
 
-  const embedder = new EmbeddingService()
+  // Hosts the embedding model (live activity pipeline + task-miner
+  // clustering) and the linkage math in a utilityProcess, off the main
+  // thread. Initialized here so a broken model cache still aborts startup.
+  const mlWorker = new MlWorkerClient()
   try {
-    await embedder.init()
+    await mlWorker.init()
   } catch (error) {
     log.error(
       '[Runtime] Failed to initialize embedding model; aborting runtime startup so activity persistence does not silently fail.',
@@ -161,15 +163,11 @@ export async function createMainRuntime(params: {
     throw error
   }
 
-  // Spawns lazily on first use (task-miner clustering); hosts the embedding
-  // model and linkage math off the main thread.
-  const mlWorker = new MlWorkerClient()
-
   const transformer = new DefaultActivityTransformer(
     new FfmpegVideoStitcher(),
     activityOcrService,
     semanticService,
-    embedder,
+    mlWorker,
     {
       outputDir,
       getPipelinePreference: () => semanticService.getPipelinePreference(),

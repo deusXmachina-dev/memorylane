@@ -27,7 +27,6 @@ import type { StorageService } from '../../storage'
 import type { InferenceProvider } from '../../llm'
 import { PATTERN_DETECTION_CONFIG, TASK_BACKFILL } from '../../../shared/constants'
 import log from '@main/utils/logger'
-import { EmbeddingService } from '../../processor/embedding'
 import { isSameDay, formatApiError, getDayBoundaries } from '../pattern-detector/helpers'
 import type {
   TaskMinerConfig,
@@ -52,11 +51,14 @@ export class TaskMiner {
   private model: string = DEFAULT_MINER_CONFIG.model
   private enabled = true
 
+  // The app injects the MlWorkerClient; enode scripts pass an in-process
+  // EmbeddingService (no utilityProcess there). Not defaulted — a default
+  // `new EmbeddingService()` would drag transformers.js back into the
+  // main-process bundle this class is part of.
   constructor(
     private readonly storage: StorageService,
-    private readonly provider?: InferenceProvider,
-    // Default suits enode scripts/tests; the app injects the MlWorkerClient.
-    private readonly embedder: MinerEmbedder = new EmbeddingService(),
+    private readonly provider: InferenceProvider | undefined,
+    private readonly embedder: MinerEmbedder,
   ) {}
 
   setEnabled(enabled: boolean): void {
