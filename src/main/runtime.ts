@@ -38,10 +38,12 @@ import { PRESENCE_MONITOR_CONFIG } from '../shared/constants'
 import { EvalRecorder } from './eval/eval-recorder'
 import { EvalFixtureStore } from './eval/eval-fixture-store'
 import { TaskFixtureStore } from './eval/task-fixture-store'
+import { MlWorkerClient } from './services/ml-worker-client'
 
 export interface MainRuntime {
   capture: RuntimeCapture
   storage: StorageService
+  mlWorker: MlWorkerClient
   usageTracker: UsageTracker
   vendorCredentials: VendorCredentialsManager
   inferenceProvider: InferenceProvider
@@ -159,6 +161,10 @@ export async function createMainRuntime(params: {
     throw error
   }
 
+  // Spawns lazily on first use (task-miner clustering); hosts the embedding
+  // model and linkage math off the main thread.
+  const mlWorker = new MlWorkerClient()
+
   const transformer = new DefaultActivityTransformer(
     new FfmpegVideoStitcher(),
     activityOcrService,
@@ -242,6 +248,7 @@ export async function createMainRuntime(params: {
   return {
     capture,
     storage,
+    mlWorker,
     usageTracker,
     vendorCredentials,
     inferenceProvider,
@@ -324,6 +331,12 @@ export async function createMainRuntime(params: {
           semanticService.dispose()
         } catch (error) {
           log.warn('[Runtime] Failed to dispose semantic service:', error)
+        }
+
+        try {
+          mlWorker.dispose()
+        } catch (error) {
+          log.warn('[Runtime] Failed to dispose ml-worker:', error)
         }
 
         try {

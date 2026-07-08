@@ -3,7 +3,7 @@ import { generateText, stepCountIs } from 'ai'
 import { SIGHTING_RETENTION_DAYS } from '../../../shared/constants'
 import type { StorageService } from '../../storage'
 import type { Sighting } from '../../storage/sighting-repository'
-import type { EmbeddingService } from '../../processor/embedding'
+import type { ActivityEmbeddingService } from '@main/activity/activity-transformer-types'
 import type { InferenceProvider } from '../../llm'
 import log from '@main/utils/logger'
 import type { TaskMinerConfig, MiningRunResult, ProgressCallback, Candidate } from './types'
@@ -47,7 +47,7 @@ function emptyResult(
 export async function runDetection(
   provider: InferenceProvider,
   storage: StorageService,
-  embeddingService: EmbeddingService,
+  embeddingService: ActivityEmbeddingService,
   config: Partial<TaskMinerConfig> = {},
   onProgress?: ProgressCallback,
 ): Promise<MiningRunResult> {

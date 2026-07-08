@@ -309,7 +309,7 @@ app.on('ready', async () => {
   userContextBuilder.updateModel(captureSettingsManager.get().patternDetectionModel)
   // The TaskMiner (mining + clustering) is the scheduled analyzer. It uses the
   // patternDetection* capture settings for its enable state and model.
-  taskMiner = new TaskMiner(runtime.storage, runtime.inferenceProvider)
+  taskMiner = new TaskMiner(runtime.storage, runtime.inferenceProvider, runtime.mlWorker)
   taskMiner.setEnabled(captureSettingsManager.get().patternDetectionEnabled)
   taskMiner.updateModel(captureSettingsManager.get().patternDetectionModel)
   const scheduledMiner = taskMiner

@@ -27,4 +27,24 @@ describe('EmbeddingService', () => {
     // Should be zero vector
     expect(vector.every((v) => v === 0)).toBe(true)
   })
+
+  it(
+    'embedBatch matches single embeddings and zero-fills blank texts',
+    { timeout: 30000 },
+    async () => {
+      const service = new EmbeddingService()
+      const [first, blank, second] = await service.embedBatch([
+        'This is a test sentence for embedding.',
+        '   ',
+        'A different sentence about something else entirely.',
+      ])
+
+      expect(first.length).toBe(384)
+      expect(second.length).toBe(384)
+      expect(blank.every((v) => v === 0)).toBe(true)
+
+      const single = await service.generateEmbedding('This is a test sentence for embedding.')
+      first.forEach((v, i) => expect(v).toBeCloseTo(single[i], 3))
+    },
+  )
 })

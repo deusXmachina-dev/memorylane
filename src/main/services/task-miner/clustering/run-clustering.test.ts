@@ -36,13 +36,14 @@ const fakeEmbed = async (text: string): Promise<number[]> => {
   }
   return new Array<number>(384).fill(0)
 }
+const fakeEmbedder = { embedBatch: (texts: string[]) => Promise.all(texts.map(fakeEmbed)) }
 
 describe('runClustering', () => {
   const TEST_DB_PATH = path.join(os.tmpdir(), 'temp_run_clustering_test.db')
   let storage: StorageService
 
   const cluster = (overrides: Partial<ClusteringDeps> = {}) =>
-    runClustering({ storage, embed: fakeEmbed, model: 'test-model', ...overrides })
+    runClustering({ storage, embedder: fakeEmbedder, model: 'test-model', ...overrides })
 
   beforeEach(() => {
     deleteDbFiles(TEST_DB_PATH)

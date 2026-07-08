@@ -25,7 +25,7 @@ import {
   computeAndStoreSignatures,
   memberSimilarities,
   recomputeCentroid,
-  type EmbedText,
+  type SignatureEmbedder,
 } from './signatures'
 import { attachToCentroids, averageLinkageGroups, type SightingSignature } from './attach'
 import type { ClusteringRunSummary, ReviewCluster, ReviewInput } from './types'
@@ -38,8 +38,17 @@ export { CLUSTERING_CONFIG } from './types'
 
 export interface ClusteringDeps {
   storage: StorageService
-  /** Embeds a sighting's title+description into the signature space. */
-  embed: EmbedText
+  /** Embeds sightings' title+description into the signature space. */
+  embedder: SignatureEmbedder
+  /**
+   * Off-main-thread average-linkage over raw vectors (the ml-worker). Only
+   * the first-cut grouping uses it — that pass sees the whole backlog on
+   * bootstrap. Absent → in-process (tests, CLI scripts under enode).
+   */
+  clusterVectors?: (
+    vectors: readonly (readonly number[])[],
+    threshold: number,
+  ) => Promise<number[][]>
   /** Absent → deterministic steps only (offline / tests). */
   provider?: InferenceProvider
   model: string
@@ -74,7 +83,7 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
   //    after the migration this is the whole retained backlog — bootstrap is
   //    the same code path.
   const unprocessed = storage.clusters.getUnprocessedSightings()
-  const { unclustered } = await computeAndStoreSignatures(storage, unprocessed, deps.embed, now)
+  const { unclustered } = await computeAndStoreSignatures(storage, unprocessed, deps.embedder, now)
   summary.newSignatures = unprocessed.length
   summary.unclustered = unclustered
 
@@ -112,8 +121,16 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
 
   // 4. First-cut grouping of what didn't attach anywhere. Every group —
   //    singletons included — becomes a cluster, so recurrence can grow from 1.
+  const groups = deps.clusterVectors
+    ? (
+        await deps.clusterVectors(
+          leftovers.map((l) => l.vector),
+          CLUSTERING_CONFIG.SIMILARITY_THRESHOLD,
+        )
+      ).map((group) => group.map((i) => leftovers[i].sightingId))
+    : averageLinkageGroups(leftovers, CLUSTERING_CONFIG.SIMILARITY_THRESHOLD)
   const newClusterIds = new Set<string>()
-  for (const group of averageLinkageGroups(leftovers, CLUSTERING_CONFIG.SIMILARITY_THRESHOLD)) {
+  for (const group of groups) {
     const clusterId = uuidv4()
     createUnlabeledCluster(storage, clusterId, null, now)
     for (const sightingId of group) storage.clusters.addMembership(clusterId, sightingId, now)

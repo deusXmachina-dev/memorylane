@@ -61,9 +61,21 @@ export function averageLinkageGroups(
   items: readonly SightingSignature[],
   threshold: number,
 ): string[][] {
-  if (items.length <= 1) return items.map((i) => [i.sightingId])
+  return averageLinkageGroupIndices(
+    items.map((i) => i.vector),
+    threshold,
+  ).map((indices) => indices.map((i) => items[i].sightingId))
+}
+
+/** Index-level variant of averageLinkageGroups — also runs inside the
+ * ml-worker, where only raw vectors cross the process boundary. */
+export function averageLinkageGroupIndices(
+  vectors: readonly (readonly number[])[],
+  threshold: number,
+): number[][] {
+  if (vectors.length <= 1) return vectors.map((_, i) => [i])
   const tree = agnes(
-    items.map((i) => i.vector as number[]),
+    vectors.map((v) => v as number[]),
     { method: 'average', distanceFunction: (a, b) => 1 - cosineSimilarity(a, b) },
   )
   // cut() keeps subtrees whose height (cosine distance) is <= the cutoff, so
@@ -74,5 +86,4 @@ export function averageLinkageGroups(
     .cut(1 - threshold)
     .map((group) => group.indices().sort((a, b) => a - b))
     .sort((a, b) => a[0] - b[0])
-    .map((indices) => indices.map((i) => items[i].sightingId))
 }

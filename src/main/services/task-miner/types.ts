@@ -28,6 +28,18 @@ export const DEFAULT_MINER_CONFIG: TaskMinerConfig = {
 // Types
 // ---------------------------------------------------------------------------
 
+/**
+ * Embedding + linkage surface TaskMiner needs. The in-process
+ * EmbeddingService satisfies it (no clusterVectors → linkage runs
+ * in-process); the app passes the MlWorkerClient, which has all three so the
+ * heavy work stays off the main thread.
+ */
+export interface MinerEmbedder {
+  embed(text: string): Promise<number[]>
+  embedBatch(texts: string[]): Promise<number[][]>
+  clusterVectors?(vectors: readonly (readonly number[])[], threshold: number): Promise<number[][]>
+}
+
 /** A discrete task instance proposed by the broad scan. */
 export interface Candidate {
   title: string

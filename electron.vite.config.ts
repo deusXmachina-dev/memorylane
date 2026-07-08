@@ -30,6 +30,7 @@ export default defineConfig({
           index: resolve(__dirname, 'src/main/index.ts'),
           'mcp-entry': resolve(__dirname, 'src/main/mcp-entry.ts'),
           'upload-prep-worker': resolve(__dirname, 'src/main/services/upload-prep-worker.ts'),
+          'ml-worker': resolve(__dirname, 'src/main/services/ml-worker.ts'),
         },
         external: [
           'uiohook-napi',

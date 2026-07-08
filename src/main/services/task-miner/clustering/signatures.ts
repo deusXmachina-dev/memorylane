@@ -3,7 +3,14 @@ import type { Sighting } from '@main/storage/sighting-repository'
 import { cosineSimilarity, meanPool, normalize } from './vector-math'
 import type { SightingSignature } from './attach'
 
-export type EmbedText = (text: string) => Promise<number[]>
+export interface SignatureEmbedder {
+  embedBatch(texts: string[]): Promise<number[][]>
+}
+
+/** Sightings per embedBatch call: one worker round-trip covers many forward
+ * passes, while a crash mid-backlog loses at most one chunk (persisted rows
+ * are picked up by the next run). */
+const EMBED_CHUNK_SIZE = 32
 
 /**
  * Compute and persist a signature for each sighting: the unit-normalized
@@ -19,21 +26,26 @@ export type EmbedText = (text: string) => Promise<number[]>
 export async function computeAndStoreSignatures(
   storage: StorageService,
   sightings: readonly Sighting[],
-  embed: EmbedText,
+  embedder: SignatureEmbedder,
   now: number,
 ): Promise<{ signatures: SightingSignature[]; unclustered: number }> {
   const signatures: SightingSignature[] = []
   let unclustered = 0
 
-  for (const sighting of sightings) {
-    const text = `${sighting.title}. ${sighting.description}`.trim()
-    const vector = normalize(await embed(text))
-    storage.clusters.upsertSignature(sighting.id, vector, now)
-    if (vector) {
-      signatures.push({ sightingId: sighting.id, vector })
-    } else {
-      unclustered++
-    }
+  for (let start = 0; start < sightings.length; start += EMBED_CHUNK_SIZE) {
+    const chunk = sightings.slice(start, start + EMBED_CHUNK_SIZE)
+    const vectors = await embedder.embedBatch(
+      chunk.map((s) => `${s.title}. ${s.description}`.trim()),
+    )
+    chunk.forEach((sighting, i) => {
+      const vector = normalize(vectors[i])
+      storage.clusters.upsertSignature(sighting.id, vector, now)
+      if (vector) {
+        signatures.push({ sightingId: sighting.id, vector })
+      } else {
+        unclustered++
+      }
+    })
   }
 
   return { signatures, unclustered }
