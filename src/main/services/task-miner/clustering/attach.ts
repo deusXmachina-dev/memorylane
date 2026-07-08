@@ -1,4 +1,5 @@
-import { dot } from './vector-math'
+import { agnes } from 'ml-hclust'
+import { cosineSimilarity } from './vector-math'
 
 export interface SightingSignature {
   sightingId: string
@@ -32,7 +33,7 @@ export function attachToCentroids(
     let bestClusterId: string | null = null
     let bestSim = -Infinity
     for (const { clusterId, centroid } of centroids) {
-      const sim = dot(sig.vector, centroid)
+      const sim = cosineSimilarity(sig.vector, centroid)
       if (sim > bestSim) {
         bestSim = sim
         bestClusterId = clusterId
@@ -49,61 +50,29 @@ export function attachToCentroids(
 }
 
 /**
- * Group signatures by greedy average-linkage agglomeration: repeatedly merge
- * the two groups whose mean pairwise cosine is highest, until no pair clears
- * the threshold. Unlike single-linkage, a group only forms when its members
- * are similar ON AVERAGE — one borderline edge cannot chain unrelated topics
- * into a mega-cluster. Singletons come out as one-member groups — they become
+ * Group signatures by average-linkage agglomerative clustering (AGNES), cut
+ * where the mean pairwise cosine within a group would drop below the
+ * threshold. Unlike single-linkage, a group only forms when its members are
+ * similar ON AVERAGE — one borderline edge cannot chain unrelated topics into
+ * a mega-cluster. Singletons come out as one-member groups — they become
  * clusters too, so "seen X times" can grow from 1.
  */
 export function averageLinkageGroups(
   items: readonly SightingSignature[],
   threshold: number,
 ): string[][] {
-  const n = items.length
-  // Similarity matrix, updated with the Lance-Williams rule on merge:
-  // sim(A∪B, C) = (|A|·sim(A,C) + |B|·sim(B,C)) / (|A|+|B|) — exactly the mean
-  // pairwise cosine between the merged group and C.
-  const sim = Array.from({ length: n }, () => new Float64Array(n))
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      const d = dot(items[i].vector, items[j].vector)
-      sim[i][j] = d
-      sim[j][i] = d
-    }
-  }
-
-  const size = new Array<number>(n).fill(1)
-  const members = Array.from({ length: n }, (_, i) => [i])
-  const active = new Set<number>(Array.from({ length: n }, (_, i) => i))
-
-  for (;;) {
-    let best = -Infinity
-    let bestA = -1
-    let bestB = -1
-    for (const a of active) {
-      for (const b of active) {
-        if (b <= a) continue
-        if (sim[a][b] > best) {
-          best = sim[a][b]
-          bestA = a
-          bestB = b
-        }
-      }
-    }
-    if (best < threshold) break
-
-    for (const c of active) {
-      if (c === bestA || c === bestB) continue
-      const merged =
-        (size[bestA] * sim[bestA][c] + size[bestB] * sim[bestB][c]) / (size[bestA] + size[bestB])
-      sim[bestA][c] = merged
-      sim[c][bestA] = merged
-    }
-    members[bestA].push(...members[bestB])
-    size[bestA] += size[bestB]
-    active.delete(bestB)
-  }
-
-  return [...active].map((a) => members[a].map((i) => items[i].sightingId))
+  if (items.length <= 1) return items.map((i) => [i.sightingId])
+  const tree = agnes(
+    items.map((i) => i.vector as number[]),
+    { method: 'average', distanceFunction: (a, b) => 1 - cosineSimilarity(a, b) },
+  )
+  // cut() keeps subtrees whose height (cosine distance) is <= the cutoff, so
+  // similarity >= threshold merges — same inclusive rule as before. Groups
+  // come back in dendrogram order; re-sort by input position so the result is
+  // deterministic for the same input regardless of tree shape.
+  return tree
+    .cut(1 - threshold)
+    .map((group) => group.indices().sort((a, b) => a - b))
+    .sort((a, b) => a[0] - b[0])
+    .map((indices) => indices.map((i) => items[i].sightingId))
 }
