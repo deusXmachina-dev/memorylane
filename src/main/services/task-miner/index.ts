@@ -113,7 +113,7 @@ export class TaskMiner {
   }
 
   /**
-   * Deterministic re-bootstrap after a derived-data wipe (migration 0018):
+   * Deterministic re-bootstrap after a derived-data wipe (CLUSTER_SCHEMA_VERSION bump):
    * regroups existing sightings at startup so the Patterns view isn't blank
    * until the next scheduled mining run. Reviews with the LLM only when
    * mining is enabled and a provider is configured — otherwise unlabeled

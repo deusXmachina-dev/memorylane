@@ -46,7 +46,7 @@ export function sanitizeVerdict(raw: ReviewClusterVerdict): ClusterVerdict {
  * identity rule, regardless of order in the LLM output), then splits and
  * incoherence verdicts, then labels for everything untouched by a merge/split.
  * Candidate pairs the LLM saw and left unmerged are recorded as declines
- * (see migration 0017).
+ * (see cluster_merge_declines in cluster-schema.ts).
  */
 export function validateAndApply(
   storage: StorageService,

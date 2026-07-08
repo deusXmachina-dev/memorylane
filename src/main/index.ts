@@ -408,8 +408,8 @@ app.on('ready', async () => {
   // most once per user, TaskMiner world only). Must run before capture resume —
   // see runTaskBackfillIfNeeded for the ordering.
   if (taskMiner) {
-    // After a derived-data wipe (migration 0018) the backfill is already
-    // stamped, so rebuild clusters from existing sightings right away.
+    // After a derived-data wipe (CLUSTER_SCHEMA_VERSION bump) the backfill is
+    // already stamped, so rebuild clusters from existing sightings right away.
     void runTaskBackfillIfNeeded({
       taskMiner,
       provider: runtime.inferenceProvider,

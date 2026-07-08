@@ -35,8 +35,9 @@ export const CLUSTERING_CONFIG = {
   MAX_SAMPLE_MEMBERS: 15,
   /**
    * Cap on clusters sent for (re)label/classify per run, so a backlog (e.g.
-   * every pre-0016 cluster needing a kind) drains over several runs instead of
-   * flooding one review call. Merge-candidate clusters ride along uncapped.
+   * every cluster needing a kind after a rebuild) drains over several runs
+   * instead of flooding one review call. Merge-candidate clusters ride along
+   * uncapped.
    */
   MAX_REVIEW_CLUSTERS_PER_RUN: 20,
   LLM_MAX_ATTEMPTS: 2,
