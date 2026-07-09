@@ -4,6 +4,7 @@ import * as os from 'os'
 import * as path from 'path'
 import log from '@main/utils/logger'
 import { getBundledModelPath, getModelCacheDir } from '@main/utils/paths'
+import { isWorkerLogEvent, logWorkerEvent, type WorkerLogEvent } from '@main/utils/worker-log'
 import type { ActivityEmbeddingService } from '@main/activity/activity-transformer-types'
 import {
   packVectors,
@@ -48,6 +49,7 @@ export class MlWorkerClient implements ActivityEmbeddingService {
   private nextId = 1
   private readonly pending = new Map<number, PendingRequest>()
   private spawnTimes: number[] = []
+  private disposed = false
 
   /** Spawns the worker and loads the model. Awaited at startup so a broken
    * model cache aborts like the old in-process init did. */
@@ -85,6 +87,7 @@ export class MlWorkerClient implements ActivityEmbeddingService {
   }
 
   dispose(): void {
+    this.disposed = true
     this.failPending(new Error('ml-worker disposed'))
     this.child?.kill()
     this.child = null
@@ -109,8 +112,14 @@ export class MlWorkerClient implements ActivityEmbeddingService {
     const child = utilityProcess.fork(workerScriptPath(), [], { serviceName: 'ml-worker' })
     this.child = child
 
-    child.on('message', (message: MlWorkerResponse) => this.settle(message))
+    child.on('message', (message: MlWorkerResponse | WorkerLogEvent) => {
+      if (isWorkerLogEvent(message)) return logWorkerEvent('MlWorker', message)
+      this.settle(message)
+    })
     child.on('exit', (code) => {
+      // Logged even with nothing in flight, or a crash-respawn cycle between
+      // requests would leave no trace. Quiet on app shutdown.
+      if (!this.disposed) log.warn(`[MlWorker] Worker exited (code ${code})`)
       if (this.child === child) {
         this.child = null
         this.ready = null

@@ -1,5 +1,6 @@
 import { EmbeddingService, configureModelEnv } from '@main/processor/embedding'
 import { averageLinkageGroupIndices } from '@main/services/task-miner/clustering/attach'
+import { forwardLogsToParent, type WorkerLogEvent } from '@main/utils/worker-log'
 import {
   packVectors,
   unpackVectors,
@@ -54,10 +55,11 @@ export async function handleMlWorkerRequest(
 // utilityProcess; guarding it keeps the module import-safe for unit tests.
 interface ParentPortLike {
   on(event: 'message', listener: (e: { data: MlWorkerRequest }) => void): void
-  postMessage(message: MlWorkerResponse): void
+  postMessage(message: MlWorkerResponse | WorkerLogEvent): void
 }
 const parentPort = (process as unknown as { parentPort?: ParentPortLike }).parentPort
 if (parentPort) {
+  forwardLogsToParent(parentPort)
   parentPort.on('message', ({ data }) => {
     void handleMlWorkerRequest(data).then((response) => parentPort.postMessage(response))
   })

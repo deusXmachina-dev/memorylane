@@ -1,5 +1,6 @@
 import * as fs from 'fs'
 import * as zlib from 'zlib'
+import { forwardLogsToParent, type WorkerLogEvent } from '@main/utils/worker-log'
 import { stripDatabaseForUpload, type StripOptions } from './strip-database-for-upload'
 
 export interface UploadPrepRequest {
@@ -25,10 +26,11 @@ export function prepareUploadSync(tempPath: string, stripOptions: StripOptions):
 // for unit tests that exercise `prepareUploadSync` directly.
 interface ParentPortLike {
   on(event: 'message', listener: (e: { data: UploadPrepRequest }) => void): void
-  postMessage(message: UploadPrepResponse, transfer?: ArrayBuffer[]): void
+  postMessage(message: UploadPrepResponse | WorkerLogEvent, transfer?: ArrayBuffer[]): void
 }
 const parentPort = (process as unknown as { parentPort?: ParentPortLike }).parentPort
 if (parentPort) {
+  forwardLogsToParent(parentPort)
   parentPort.on('message', ({ data }) => {
     try {
       const buf = prepareUploadSync(data.tempPath, data.stripOptions)
