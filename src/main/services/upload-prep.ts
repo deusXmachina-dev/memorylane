@@ -1,5 +1,6 @@
 import { app, utilityProcess } from 'electron'
 import * as path from 'path'
+import { isWorkerLogEvent, logWorkerEvent, type WorkerLogEvent } from '@main/utils/worker-log'
 import type { StripOptions } from './strip-database-for-upload'
 import type { UploadPrepRequest, UploadPrepResponse } from './upload-prep-worker'
 
@@ -41,7 +42,8 @@ export function prepareUploadInWorker(
     }, WORKER_TIMEOUT_MS)
     timer.unref?.()
 
-    child.on('message', (msg: UploadPrepResponse) => {
+    child.on('message', (msg: UploadPrepResponse | WorkerLogEvent) => {
+      if (isWorkerLogEvent(msg)) return logWorkerEvent('UploadPrep', msg)
       if (msg.ok) settle(() => resolve(Buffer.from(msg.gzip)))
       else settle(() => reject(new Error(msg.error)))
     })

@@ -17,9 +17,11 @@ export function meanPool(vectors: readonly (readonly number[])[]): number[] | nu
   return mean
 }
 
-/** Unit-normalize. Returns null for the zero vector (no direction). */
+/** Unit-normalize. Returns null for the zero vector (no direction) and for
+ * non-finite input (a NaN component from a glitched embedder would otherwise
+ * persist and poison every cosine it ever meets). */
 export function normalize(vector: readonly number[]): number[] | null {
   const magnitude = Math.sqrt(dot(vector, vector))
-  if (magnitude === 0) return null
+  if (magnitude === 0 || !Number.isFinite(magnitude)) return null
   return vector.map((v) => v / magnitude)
 }

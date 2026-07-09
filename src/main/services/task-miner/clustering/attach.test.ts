@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { attachToCentroids, clusterLeftovers } from './attach'
+import { attachToCentroids, averageLinkageGroups } from './attach'
 import { normalize } from './vector-math'
 
 // Unit vector at `angle` radians from the x-axis; dot(u(0), u(a)) = cos(a).
@@ -40,26 +40,42 @@ describe('attachToCentroids', () => {
   })
 })
 
-describe('clusterLeftovers', () => {
-  it('groups by transitive similarity and keeps dissimilar ones apart', () => {
-    // a-b similar, b-c similar, but a-c below threshold → still one group.
+describe('averageLinkageGroups', () => {
+  it('does not chain: a borderline bridge cannot join dissimilar endpoints', () => {
+    // a~b and b~c both clear the threshold but a and c are far apart —
+    // single-linkage would chain all three into one group.
     const step = Math.acos(0.8)
-    const groups = clusterLeftovers(
+    const groups = averageLinkageGroups(
       [
         { sightingId: 'a', vector: u(0) },
         { sightingId: 'b', vector: u(step) },
-        { sightingId: 'c', vector: u(2 * step) },
+        { sightingId: 'c', vector: u(2 * step) }, // cos(a,c) = 2·0.8² − 1 = 0.28
         { sightingId: 'lone', vector: [0, -1] },
       ],
       0.75,
     )
+    // a-b merge at 0.8; then mean({a,b}, c) = (0.8 + 0.28)/2 = 0.54 < 0.75.
     const sorted = groups.map((g) => [...g].sort())
-    expect(sorted).toContainEqual(['a', 'b', 'c'])
+    expect(sorted).toContainEqual(['a', 'b'])
+    expect(sorted).toContainEqual(['c'])
     expect(sorted).toContainEqual(['lone'])
   })
 
+  it('groups members that are similar on average', () => {
+    const step = Math.acos(0.95)
+    const groups = averageLinkageGroups(
+      [
+        { sightingId: 'a', vector: u(0) },
+        { sightingId: 'b', vector: u(step) },
+        { sightingId: 'c', vector: u(2 * step) }, // cos(a,c) ≈ 0.805
+      ],
+      0.75,
+    )
+    expect(groups.map((g) => [...g].sort())).toContainEqual(['a', 'b', 'c'])
+  })
+
   it('returns singletons as one-member groups', () => {
-    const groups = clusterLeftovers(
+    const groups = averageLinkageGroups(
       [
         { sightingId: 'a', vector: [1, 0] },
         { sightingId: 'b', vector: [0, 1] },
@@ -70,14 +86,14 @@ describe('clusterLeftovers', () => {
   })
 
   it('handles empty input', () => {
-    expect(clusterLeftovers([], 0.75)).toEqual([])
+    expect(averageLinkageGroups([], 0.75)).toEqual([])
   })
 
   it('normalize() output composes with the threshold as cosine', () => {
     const a = normalize([2, 0])!
     const b = normalize([3, 3])! // 45° apart → cos ≈ 0.707 < 0.75
     expect(
-      clusterLeftovers(
+      averageLinkageGroups(
         [
           { sightingId: 'a', vector: a },
           { sightingId: 'b', vector: b },
@@ -85,5 +101,25 @@ describe('clusterLeftovers', () => {
         0.75,
       ),
     ).toHaveLength(2)
+  })
+
+  it('a non-finite vector sits out as a singleton without corrupting real groups', () => {
+    // Every index must come back in exactly one group — a NaN similarity must
+    // never merge, duplicate a group, or drop a member.
+    const step = Math.acos(0.95)
+    const groups = averageLinkageGroups(
+      [
+        { sightingId: 'a', vector: u(0) },
+        { sightingId: 'poisoned', vector: [NaN, NaN] },
+        { sightingId: 'b', vector: u(step) },
+        { sightingId: 'zero', vector: [0, 0] },
+      ],
+      0.75,
+    )
+    const sorted = groups.map((g) => [...g].sort())
+    expect(sorted).toContainEqual(['a', 'b'])
+    expect(sorted).toContainEqual(['poisoned'])
+    expect(sorted).toContainEqual(['zero'])
+    expect(groups.flat().sort()).toEqual(['a', 'b', 'poisoned', 'zero'])
   })
 })

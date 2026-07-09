@@ -1,11 +1,11 @@
 import { tool } from 'ai'
 import { z } from 'zod'
 import type { StorageService } from '../../storage'
-import type { EmbeddingService } from '../../processor/embedding'
+import type { ActivityEmbeddingService } from '@main/activity/activity-transformer-types'
 
 export function buildVerificationTools(
   storage: StorageService,
-  embeddingService: EmbeddingService,
+  embeddingService: ActivityEmbeddingService,
   dayStart: number,
   dayEnd: number,
   progress: (msg: string) => void,
@@ -45,7 +45,7 @@ export function buildVerificationTools(
       }),
       execute: async (params) => {
         progress(`  [tool] search_similar_activities: "${params.query}"`)
-        const embedding = await embeddingService.generateEmbedding(params.query)
+        const embedding = await embeddingService.embed(params.query)
         const allResults = storage.activities.searchVectors(embedding, (params.limit ?? 10) * 3)
         // Filter to detection day time range
         const results = allResults

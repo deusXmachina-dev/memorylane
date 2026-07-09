@@ -27,9 +27,14 @@ import type { StorageService } from '../../storage'
 import type { InferenceProvider } from '../../llm'
 import { PATTERN_DETECTION_CONFIG, TASK_BACKFILL } from '../../../shared/constants'
 import log from '@main/utils/logger'
-import { EmbeddingService } from '../../processor/embedding'
 import { isSameDay, formatApiError, getDayBoundaries } from '../pattern-detector/helpers'
-import type { TaskMinerConfig, MiningRunResult, ProgressCallback, BackfillSummary } from './types'
+import type {
+  TaskMinerConfig,
+  MiningRunResult,
+  ProgressCallback,
+  BackfillSummary,
+  MinerEmbedder,
+} from './types'
 import { DEFAULT_MINER_CONFIG } from './types'
 import { runDetection } from './run-detection'
 import { runClustering } from './clustering'
@@ -45,11 +50,15 @@ export class TaskMiner {
   private backfillPending = false
   private model: string = DEFAULT_MINER_CONFIG.model
   private enabled = true
-  private readonly embeddingService = new EmbeddingService()
 
+  // The app injects the MlWorkerClient; enode scripts pass an in-process
+  // EmbeddingService (no utilityProcess there). Not defaulted — a default
+  // `new EmbeddingService()` would drag transformers.js back into the
+  // main-process bundle this class is part of.
   constructor(
     private readonly storage: StorageService,
-    private readonly provider?: InferenceProvider,
+    private readonly provider: InferenceProvider | undefined,
+    private readonly embedder: MinerEmbedder,
   ) {}
 
   setEnabled(enabled: boolean): void {
@@ -111,6 +120,40 @@ export class TaskMiner {
   }
 
   /**
+   * Deterministic re-bootstrap after a derived-data wipe (CLUSTER_SCHEMA_VERSION bump):
+   * regroups existing sightings at startup so the Patterns view isn't blank
+   * until the next scheduled mining run. Reviews with the LLM only when
+   * mining is enabled and a provider is configured — otherwise unlabeled
+   * clusters fall back to member titles.
+   */
+  async rebuildClustersIfEmpty(): Promise<void> {
+    if (this.running) return
+    if (this.storage.clusters.getAll().length > 0) return
+    // Unattached signatures count as pending work too: a crash between
+    // signing and grouping leaves every sighting "processed" while zero
+    // clusters exist, and getUnprocessedSightings can't see that state.
+    if (
+      this.storage.clusters.getUnprocessedSightings().length === 0 &&
+      this.storage.clusters.getUnattachedSignatures().size === 0
+    )
+      return
+    this.running = true
+    try {
+      await runClustering({
+        storage: this.storage,
+        embedder: this.embedder,
+        clusterVectors: this.embedder.clusterVectors?.bind(this.embedder),
+        provider: this.enabled && this.provider?.isConfigured() ? this.provider : undefined,
+        model: this.model,
+      })
+    } catch (error) {
+      log.error('[TaskMiner] Cluster rebuild failed:', formatApiError(error))
+    } finally {
+      this.running = false
+    }
+  }
+
+  /**
    * Run mining immediately. Used by the CLI.
    */
   async run(
@@ -119,13 +162,7 @@ export class TaskMiner {
     onProgress?: ProgressCallback,
   ): Promise<MiningRunResult> {
     const cfg = { ...DEFAULT_MINER_CONFIG, model: this.model, ...config }
-    const result = await runDetection(
-      provider,
-      this.storage,
-      this.embeddingService,
-      cfg,
-      onProgress,
-    )
+    const result = await runDetection(provider, this.storage, this.embedder, cfg, onProgress)
     result.clustering = await this.cluster(provider, cfg, onProgress)
     return result
   }
@@ -191,7 +228,7 @@ export class TaskMiner {
           await runDetection(
             provider,
             this.storage,
-            this.embeddingService,
+            this.embedder,
             { model: this.model, scanOnly: true, lookbackDays: d, clustering: false },
             opts.onProgress,
           )
@@ -231,7 +268,7 @@ export class TaskMiner {
     }
     this.running = true
     try {
-      const result = await runDetection(provider, this.storage, this.embeddingService, {
+      const result = await runDetection(provider, this.storage, this.embedder, {
         model: this.model,
       })
       log.info(
@@ -272,6 +309,8 @@ export class TaskMiner {
     try {
       return await runClustering({
         storage: this.storage,
+        embedder: this.embedder,
+        clusterVectors: this.embedder.clusterVectors?.bind(this.embedder),
         provider,
         model: cfg.model,
         onProgress,

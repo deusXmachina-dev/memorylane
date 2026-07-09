@@ -13,9 +13,9 @@ import { migration as migration0011 } from './0011_activities_summary_model_colu
 import { migration as migration0012 } from './0012_add_tasks_tables'
 import { migration as migration0013 } from './0013_add_upload_runs'
 import { migration as migration0014 } from './0014_drop_activities_vector'
-import { migration as migration0015 } from './0015_add_cluster_tables'
-import { migration as migration0016 } from './0016_add_cluster_verdict'
 
+// Cluster tables are module-owned derived state (see ../cluster-schema.ts),
+// created after migrations run — never add cluster migrations here.
 export const migrations: Migration[] = [
   migration0001,
   migration0002,
@@ -31,6 +31,4 @@ export const migrations: Migration[] = [
   migration0012,
   migration0013,
   migration0014,
-  migration0015,
-  migration0016,
 ]

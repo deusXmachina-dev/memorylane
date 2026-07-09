@@ -309,7 +309,7 @@ app.on('ready', async () => {
   userContextBuilder.updateModel(captureSettingsManager.get().patternDetectionModel)
   // The TaskMiner (mining + clustering) is the scheduled analyzer. It uses the
   // patternDetection* capture settings for its enable state and model.
-  taskMiner = new TaskMiner(runtime.storage, runtime.inferenceProvider)
+  taskMiner = new TaskMiner(runtime.storage, runtime.inferenceProvider, runtime.mlWorker)
   taskMiner.setEnabled(captureSettingsManager.get().patternDetectionEnabled)
   taskMiner.updateModel(captureSettingsManager.get().patternDetectionModel)
   const scheduledMiner = taskMiner
@@ -408,11 +408,13 @@ app.on('ready', async () => {
   // most once per user, TaskMiner world only). Must run before capture resume —
   // see runTaskBackfillIfNeeded for the ordering.
   if (taskMiner) {
+    // After a derived-data wipe (CLUSTER_SCHEMA_VERSION bump) the backfill is
+    // already stamped, so rebuild clusters from existing sightings right away.
     void runTaskBackfillIfNeeded({
       taskMiner,
       provider: runtime.inferenceProvider,
       marker: createBackfillMarker(app.getPath('userData')),
-    })
+    }).then(() => scheduledMiner.rebuildClustersIfEmpty())
   }
 
   captureCoordinator.resumeCaptureIfDesired('startup')
