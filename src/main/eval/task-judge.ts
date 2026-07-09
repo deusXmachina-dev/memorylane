@@ -39,7 +39,7 @@ export async function judgeSighting(params: {
     `- Apps: ${golden.apps.join(', ')}`,
     '',
     '## Mined task',
-    `- Title: ${detected.title}`,
+    `- Title: ${detected.title}${detected.subject ? ` — ${detected.subject}` : ''}`,
     `- Description: ${detected.description}`,
     `- Apps: ${detected.apps.join(', ')}`,
     '',

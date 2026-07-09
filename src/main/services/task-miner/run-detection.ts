@@ -235,6 +235,7 @@ export async function runDetection(
         const candidateInput = `Investigate this candidate task:\n\n\`\`\`json\n${JSON.stringify(
           {
             title: candidate.title,
+            subject: candidate.subject,
             description: candidate.description,
             apps: candidate.apps,
             activities: enrichedActivities,
