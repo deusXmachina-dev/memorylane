@@ -55,6 +55,10 @@ export function validateAndApply(
   model: string,
   now: number,
   progress?: ProgressCallback,
+  /** Re-split groups per incoherent cluster, precomputed off-thread by the
+   * caller (the transaction below can't await the ml-worker). Absent →
+   * in-process linkage. */
+  resplitGroups?: ReadonlyMap<string, string[][]>,
 ): { merged: number; split: number; labeled: number } {
   let merged = 0
   let split = 0
@@ -181,7 +185,17 @@ export function validateAndApply(
           progress?.(`[Clustering] Dropped incoherent verdict on non-splittable ${verdict.id}`)
           continue
         }
-        if (resplitByGeometry(storage, verdict.id, model, now, progress)) split++
+        if (
+          resplitByGeometry(
+            storage,
+            verdict.id,
+            resplitGroups?.get(verdict.id),
+            model,
+            now,
+            progress,
+          )
+        )
+          split++
         consumed.add(verdict.id)
         continue
       }
@@ -278,18 +292,20 @@ function applySplit(
 function resplitByGeometry(
   storage: StorageService,
   clusterId: string,
+  precomputed: string[][] | undefined,
   model: string,
   now: number,
   progress?: ProgressCallback,
 ): boolean {
-  const members = storage.clusters.getMembers(clusterId)
-  const signatures = storage.clusters.getSignaturesByClusterId(clusterId)
-  const items = members
-    .filter((m) => signatures.has(m.id))
-    .map((m) => ({ sightingId: m.id, vector: signatures.get(m.id)! }))
-  const groups = averageLinkageGroups(items, CLUSTERING_CONFIG.SIMILARITY_THRESHOLD).sort(
-    (a, b) => b.length - a.length,
-  )
+  const groups =
+    precomputed ??
+    averageLinkageGroups(
+      [...storage.clusters.getSignaturesByClusterId(clusterId)].map(([sightingId, vector]) => ({
+        sightingId,
+        vector,
+      })),
+      CLUSTERING_CONFIG.SIMILARITY_THRESHOLD,
+    ).sort((a, b) => b.length - a.length)
   if (groups.length < 2) {
     progress?.(`[Clustering] Incoherent verdict on ${clusterId} but geometry finds one group`)
     return false

@@ -7,6 +7,7 @@ import { deleteDbFiles, v } from '@main/storage/test-utils'
 import type { Sighting } from '@main/storage/sighting-repository'
 import type { InferenceProvider } from '@main/llm'
 import { runClustering, type ClusteringDeps } from './index'
+import { averageLinkageGroupIndices } from './attach'
 import { normalize } from './vector-math'
 import type { ReviewInput } from './types'
 
@@ -340,5 +341,64 @@ describe('runClustering', () => {
         .map((s) => s.id)
         .sort(),
     ).toEqual(['s3', 's4'])
+  })
+
+  it('routes splittable probes and the incoherent re-split through clusterVectors', async () => {
+    // Same geometry as the low-coherence test above, with the ml-worker path
+    // injected: all linkage must go through clusterVectors, and the re-split
+    // groups precomputed from it must produce the same partition.
+    const other = normalize(v(0.4, Math.sqrt(1 - 0.16)))!
+    for (const [id, title] of [
+      ['s1', 'alpha one'],
+      ['s2', 'alpha two'],
+      ['s3', 'other one'],
+      ['s4', 'other two'],
+    ] as const) {
+      storage.sightings.add(createSighting({ id, title }))
+    }
+    storage.clusters.create({
+      id: 'mixed',
+      label: 'Umbrella',
+      description: '',
+      centroid: normalize(v(1).map((x, i) => x + other[i]))!,
+      kind: '',
+      mechanism: '',
+      labelModel: 'test-model',
+      labeledSize: 4,
+      createdAt: 100,
+      updatedAt: 100,
+    })
+    storage.clusters.upsertSignature('s1', v(1), 100)
+    storage.clusters.upsertSignature('s2', v(1), 100)
+    storage.clusters.upsertSignature('s3', other, 100)
+    storage.clusters.upsertSignature('s4', other, 100)
+    for (const id of ['s1', 's2', 's3', 's4']) storage.clusters.addMembership('mixed', id, 100)
+
+    storage.sightings.add(createSighting({ id: 's-new', title: 'gamma fresh' }))
+
+    const linkageCalls: number[] = []
+    const summary = await cluster({
+      provider: {} as InferenceProvider,
+      now: 10_000,
+      clusterVectors: async (vectors, threshold) => {
+        linkageCalls.push(vectors.length)
+        return averageLinkageGroupIndices(vectors, threshold)
+      },
+      review: async () => ({
+        output: { clusters: [{ id: 'mixed', incoherent: true }] },
+        tokenUsage: { input: 0, output: 0 },
+      }),
+    })
+
+    // First-cut grouping (1 leftover), the splittable probe (4 members), and
+    // the re-split precompute (4 members) all rode the injected linkage.
+    expect(linkageCalls).toEqual([1, 4, 4])
+    expect(summary.split).toBe(1)
+    expect(
+      storage.clusters
+        .getMembers('mixed')
+        .map((s) => s.id)
+        .sort(),
+    ).toEqual(['s1', 's2'])
   })
 })

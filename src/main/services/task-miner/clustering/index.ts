@@ -23,6 +23,7 @@ import type { ProgressCallback } from '../types'
 import { dot } from './vector-math'
 import {
   computeAndStoreSignatures,
+  groupMemberSignatures,
   memberSimilarities,
   recomputeCentroid,
   type SignatureEmbedder,
@@ -41,9 +42,10 @@ export interface ClusteringDeps {
   /** Embeds sightings' title+description into the signature space. */
   embedder: SignatureEmbedder
   /**
-   * Off-main-thread average-linkage over raw vectors (the ml-worker). Only
-   * the first-cut grouping uses it — that pass sees the whole backlog on
-   * bootstrap. Absent → in-process (tests, CLI scripts under enode).
+   * Off-main-thread average-linkage over raw vectors (the ml-worker), used by
+   * the first-cut grouping (the whole backlog on bootstrap), split-eligibility
+   * probes, and incoherent re-splits. Absent → in-process (tests, CLI scripts
+   * under enode).
    */
   clusterVectors?: (
     vectors: readonly (readonly number[])[],
@@ -154,7 +156,7 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
   // 6. LLM review: label new/grown clusters, adjudicate merges among
   //    near-threshold centroid pairs, split clusters that are new or fell
   //    below the coherence floor.
-  const input = buildReviewInput(storage, touched, newClusterIds, now)
+  const input = await buildReviewInput(storage, touched, newClusterIds, now, deps.clusterVectors)
   if (input.clusters.length === 0) return summary
   if (!provider) {
     progress('[Clustering] No inference provider — skipping LLM review')
@@ -176,7 +178,33 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
       splittableIds: new Set(input.clusters.filter((c) => c.splittable).map((c) => c.id)),
       mergeCandidatePairs: new Set(input.mergeCandidates.map(([a, b]) => mergePairKey(a, b))),
     }
-    const applied = validateAndApply(storage, review.output, guards, model, now, progress)
+    // Re-split linkage precomputed here so it can ride the ml-worker —
+    // validateAndApply's transaction can't await. Nothing mutates membership
+    // between this and the apply, so the groups stay valid.
+    const resplitGroups = new Map<string, string[][]>()
+    if (deps.clusterVectors) {
+      for (const verdict of review.output.clusters ?? []) {
+        if (!verdict.incoherent || !guards.splittableIds.has(verdict.id)) continue
+        resplitGroups.set(
+          verdict.id,
+          await groupMemberSignatures(
+            storage,
+            verdict.id,
+            CLUSTERING_CONFIG.SIMILARITY_THRESHOLD,
+            deps.clusterVectors,
+          ),
+        )
+      }
+    }
+    const applied = validateAndApply(
+      storage,
+      review.output,
+      guards,
+      model,
+      now,
+      progress,
+      resplitGroups,
+    )
     summary.merged = applied.merged
     summary.split = applied.split
     summary.labeled = applied.labeled
@@ -214,6 +242,9 @@ function evictDissonantMembers(
   for (const cluster of storage.clusters.getAll()) {
     if (evicted >= CLUSTERING_CONFIG.MAX_EVICTIONS_PER_RUN) break
     if (!cluster.centroid || newClusterIds.has(cluster.id)) continue
+    // Count first: most clusters are singletons, and fetching their signature
+    // blobs every run just to skip them adds up.
+    if (storage.clusters.getMemberCount(cluster.id) < 2) continue
     const sims = memberSimilarities(storage, cluster.id, cluster.centroid)
     if (sims.length < 2) continue
 
@@ -270,12 +301,13 @@ function createUnlabeledCluster(
  * label/classify set is capped per run so a backlog drains gradually; merge
  * candidates and coherence picks ride along uncapped.
  */
-function buildReviewInput(
+async function buildReviewInput(
   storage: StorageService,
   touched: Set<string>,
   newClusterIds: Set<string>,
   now: number,
-): ReviewInput {
+  clusterVectors?: ClusteringDeps['clusterVectors'],
+): Promise<ReviewInput> {
   const all = storage.clusters.getAll()
   const byId = new Map(all.map((c) => [c.id, c]))
   const memberCount = new Map(all.map((c) => [c.id, storage.clusters.getMemberCount(c.id)]))
@@ -304,10 +336,11 @@ function buildReviewInput(
   const coherencePicks: string[] = []
   for (const { id } of belowFloor) {
     if (coherencePicks.length >= CLUSTERING_CONFIG.MAX_SPLITTABLE_PER_RUN) break
-    const signatures = storage.clusters.getSignaturesByClusterId(id)
-    const groups = averageLinkageGroups(
-      [...signatures].map(([sightingId, vector]) => ({ sightingId, vector })),
+    const groups = await groupMemberSignatures(
+      storage,
+      id,
       CLUSTERING_CONFIG.SIMILARITY_THRESHOLD,
+      clusterVectors,
     )
     if (groups.length >= 2) coherencePicks.push(id)
   }

@@ -95,6 +95,8 @@ export class MlWorkerClient implements ActivityEmbeddingService {
   }
 
   private ensureReady(): Promise<void> {
+    // A request racing app shutdown must not respawn the worker dispose() just killed.
+    if (this.disposed) return Promise.reject(new Error('ml-worker disposed'))
     if (!this.ready) {
       this.ready = this.spawnAndInit().catch((error) => {
         this.ready = null

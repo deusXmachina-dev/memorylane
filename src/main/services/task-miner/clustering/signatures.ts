@@ -1,7 +1,7 @@
 import type { StorageService } from '@main/storage'
 import type { Sighting } from '@main/storage/sighting-repository'
 import { dot, meanPool, normalize } from './vector-math'
-import type { SightingSignature } from './attach'
+import { averageLinkageGroups, type SightingSignature } from './attach'
 
 export interface SignatureEmbedder {
   embedBatch(texts: string[]): Promise<number[][]>
@@ -34,8 +34,10 @@ export async function computeAndStoreSignatures(
 
   for (let start = 0; start < sightings.length; start += EMBED_CHUNK_SIZE) {
     const chunk = sightings.slice(start, start + EMBED_CHUNK_SIZE)
+    // Skip empty fields so a sighting with no text embeds a blank string
+    // (→ zero vector → NULL signature), not a lone ".".
     const vectors = await embedder.embedBatch(
-      chunk.map((s) => `${s.title}. ${s.description}`.trim()),
+      chunk.map((s) => [s.title, s.description].filter((t) => t.trim()).join('. ')),
     )
     chunk.forEach((sighting, i) => {
       const vector = normalize(vectors[i])
@@ -57,6 +59,35 @@ export function recomputeCentroid(storage: StorageService, clusterId: string, no
   const signatures = storage.clusters.getSignaturesByClusterId(clusterId)
   const centroid = normalize(meanPool([...signatures.values()]) ?? [])
   storage.clusters.updateCentroid(clusterId, centroid, now)
+}
+
+/**
+ * Average-linkage groups over a cluster's member signatures, largest first —
+ * the shared basis for split-eligibility probes and incoherent re-splits.
+ * `clusterVectors` (the ml-worker) keeps the O(m²) linkage off the main
+ * thread; absent → in-process (tests, CLI scripts under enode).
+ */
+export async function groupMemberSignatures(
+  storage: StorageService,
+  clusterId: string,
+  threshold: number,
+  clusterVectors?: (
+    vectors: readonly (readonly number[])[],
+    threshold: number,
+  ) => Promise<number[][]>,
+): Promise<string[][]> {
+  const items = [...storage.clusters.getSignaturesByClusterId(clusterId)].map(
+    ([sightingId, vector]) => ({ sightingId, vector }),
+  )
+  const groups = clusterVectors
+    ? (
+        await clusterVectors(
+          items.map((i) => i.vector),
+          threshold,
+        )
+      ).map((group) => group.map((i) => items[i].sightingId))
+    : averageLinkageGroups(items, threshold)
+  return groups.sort((a, b) => b.length - a.length)
 }
 
 /** Each member's cosine to the cluster centroid — the shared basis for
