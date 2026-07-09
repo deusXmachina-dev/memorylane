@@ -44,4 +44,9 @@ describe('normalize', () => {
     expect(normalize([0, 0, 0])).toBeNull()
     expect(normalize([])).toBeNull()
   })
+
+  it('returns null for non-finite input', () => {
+    expect(normalize([NaN, 1])).toBeNull()
+    expect(normalize([Infinity, 0])).toBeNull()
+  })
 })

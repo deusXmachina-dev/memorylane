@@ -102,4 +102,24 @@ describe('averageLinkageGroups', () => {
       ),
     ).toHaveLength(2)
   })
+
+  it('a non-finite vector sits out as a singleton without corrupting real groups', () => {
+    // NaN distances corrupt agnes (duplicated groups, dropped members) —
+    // every index must come back in exactly one group.
+    const step = Math.acos(0.95)
+    const groups = averageLinkageGroups(
+      [
+        { sightingId: 'a', vector: u(0) },
+        { sightingId: 'poisoned', vector: [NaN, NaN] },
+        { sightingId: 'b', vector: u(step) },
+        { sightingId: 'zero', vector: [0, 0] },
+      ],
+      0.75,
+    )
+    const sorted = groups.map((g) => [...g].sort())
+    expect(sorted).toContainEqual(['a', 'b'])
+    expect(sorted).toContainEqual(['poisoned'])
+    expect(sorted).toContainEqual(['zero'])
+    expect(groups.flat().sort()).toEqual(['a', 'b', 'poisoned', 'zero'])
+  })
 })

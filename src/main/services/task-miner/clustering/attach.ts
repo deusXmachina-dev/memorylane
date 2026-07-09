@@ -73,17 +73,37 @@ export function averageLinkageGroupIndices(
   vectors: readonly (readonly number[])[],
   threshold: number,
 ): number[][] {
-  if (vectors.length <= 1) return vectors.map((_, i) => [i])
-  const tree = agnes(
-    vectors.map((v) => v as number[]),
-    { method: 'average', distanceFunction: (a, b) => 1 - cosineSimilarity(a, b) },
+  // A NaN distance corrupts agnes's merge loop (duplicated subtrees, dropped
+  // leaves). Non-finite AND all-zero vectors both cosine to NaN — e.g. bad
+  // blobs persisted before normalize() rejected them — so they sit out as
+  // singletons, like the old greedy code produced. Every input index must
+  // come back in exactly one group: resplitByGeometry reassigns cluster
+  // membership from this result.
+  const finite: number[] = []
+  const poisoned: number[] = []
+  vectors.forEach((v, i) =>
+    (v.every(Number.isFinite) && v.some((x) => x !== 0) ? finite : poisoned).push(i),
   )
-  // cut() keeps subtrees whose height (cosine distance) is <= the cutoff, so
-  // similarity >= threshold merges — same inclusive rule as before. Groups
-  // come back in dendrogram order; re-sort by input position so the result is
-  // deterministic for the same input regardless of tree shape.
-  return tree
-    .cut(1 - threshold)
-    .map((group) => group.indices().sort((a, b) => a - b))
-    .sort((a, b) => a[0] - b[0])
+
+  let groups: number[][] = []
+  if (finite.length === 1) {
+    groups = [[finite[0]]]
+  } else if (finite.length > 1) {
+    const tree = agnes(
+      finite.map((i) => vectors[i] as number[]),
+      { method: 'average', distanceFunction: (a, b) => 1 - cosineSimilarity(a, b) },
+    )
+    // cut() keeps subtrees whose height (cosine distance) is <= the cutoff, so
+    // similarity >= threshold merges — same inclusive rule as before. Groups
+    // come back in dendrogram order; re-sort by input position so the result
+    // is deterministic for the same input regardless of tree shape.
+    groups = tree.cut(1 - threshold).map((group) =>
+      group
+        .indices()
+        .map((k) => finite[k])
+        .sort((a, b) => a - b),
+    )
+  }
+
+  return [...groups, ...poisoned.map((i) => [i])].sort((a, b) => a[0] - b[0])
 }

@@ -18,14 +18,19 @@ function workerScriptPath(): string {
   return path.join(app.getAppPath(), 'out', 'main', 'ml-worker.js')
 }
 
-// First run may download the ~100 MB model, so init gets a generous bound.
-const INIT_TIMEOUT_MS = 5 * 60 * 1000
+// First run may download the ~100 MB model (transformers.js restarts partial
+// downloads from zero), so init gets a very generous bound — slow connections
+// must not abort app startup.
+const INIT_TIMEOUT_MS = 15 * 60 * 1000
 const EMBED_TIMEOUT_MS = 60 * 1000
 const CLUSTER_TIMEOUT_MS = 2 * 60 * 1000
 const RESPAWN_WINDOW_MS = 60 * 1000
 const MAX_SPAWNS_PER_WINDOW = 3
 
 interface PendingRequest {
+  /** The child the request was posted to — a stale child's exit must not
+   * fail requests already riding on its replacement. */
+  child: UtilityProcess
   resolve(result: MlWorkerResult): void
   reject(error: Error): void
   timer: ReturnType<typeof setTimeout>
@@ -96,12 +101,9 @@ export class MlWorkerClient implements ActivityEmbeddingService {
   }
 
   private async spawnAndInit(): Promise<void> {
-    const now = Date.now()
-    this.spawnTimes = this.spawnTimes.filter((t) => now - t < RESPAWN_WINDOW_MS)
-    if (this.spawnTimes.length >= MAX_SPAWNS_PER_WINDOW) {
-      throw new Error('ml-worker respawning too fast; retry later')
-    }
-    this.spawnTimes.push(now)
+    await this.waitForSpawnSlot()
+    // A previous child may be killed-but-not-yet-exited; never leave one alive.
+    this.child?.kill()
 
     const child = utilityProcess.fork(workerScriptPath(), [], { serviceName: 'ml-worker' })
     this.child = child
@@ -112,30 +114,59 @@ export class MlWorkerClient implements ActivityEmbeddingService {
         this.child = null
         this.ready = null
       }
-      this.failPending(new Error(`ml-worker exited (code ${code})`))
+      this.failPendingFor(child, new Error(`ml-worker exited (code ${code})`))
     })
 
-    await new Promise<void>((resolve, reject) => {
-      let settled = false
-      child.once('spawn', () => {
-        if (settled) return
-        settled = true
-        resolve()
+    try {
+      await new Promise<void>((resolve, reject) => {
+        let settled = false
+        child.once('spawn', () => {
+          if (settled) return
+          settled = true
+          resolve()
+        })
+        child.once('exit', (code) => {
+          if (settled) return
+          settled = true
+          reject(new Error(`ml-worker exited before spawn (code ${code})`))
+        })
       })
-      child.once('exit', (code) => {
-        if (settled) return
-        settled = true
-        reject(new Error(`ml-worker exited before spawn (code ${code})`))
-      })
-    })
 
-    // The worker has no `app`; hand it paths this process resolved.
-    const result = await this.request(
-      { type: 'init', bundledModelPath: getBundledModelPath(), cacheDir: getModelCacheDir() },
-      INIT_TIMEOUT_MS,
-    )
-    if (result.type !== 'ready') throw new Error('ml-worker: bad init response')
-    log.info('[MlWorker] Worker ready (embedding model loaded)')
+      // The worker has no `app`; hand it paths this process resolved.
+      const result = await this.request(
+        { type: 'init', bundledModelPath: getBundledModelPath(), cacheDir: getModelCacheDir() },
+        INIT_TIMEOUT_MS,
+      )
+      if (result.type !== 'ready') throw new Error('ml-worker: bad init response')
+      log.info('[MlWorker] Worker ready (embedding model loaded)')
+    } catch (error) {
+      // The worker survives its own init failure (it just keeps listening),
+      // so kill it here or the next spawn would orphan it alive.
+      if (this.child === child) {
+        this.child = null
+        this.ready = null
+      }
+      child.kill()
+      throw error
+    }
+  }
+
+  /**
+   * Paces respawns instead of failing fast: the live activity pipeline only
+   * retries an embed for ~300ms before dead-lettering the activity, so a
+   * worker crash loop must degrade to slow retries, not data loss.
+   */
+  private async waitForSpawnSlot(): Promise<void> {
+    let now = Date.now()
+    this.spawnTimes = this.spawnTimes.filter((t) => now - t < RESPAWN_WINDOW_MS)
+    if (this.spawnTimes.length >= MAX_SPAWNS_PER_WINDOW) {
+      const waitMs = this.spawnTimes[0] + RESPAWN_WINDOW_MS - now
+      log.warn(`[MlWorker] Respawning too fast; delaying next spawn by ${waitMs}ms`)
+      await new Promise((resolve) => setTimeout(resolve, waitMs))
+      now = Date.now()
+      this.spawnTimes = this.spawnTimes.filter((t) => now - t < RESPAWN_WINDOW_MS)
+    }
+    this.spawnTimes.push(now)
   }
 
   private request(body: MlWorkerRequestBody, timeoutMs: number): Promise<MlWorkerResult> {
@@ -150,7 +181,7 @@ export class MlWorkerClient implements ActivityEmbeddingService {
         child.kill()
       }, timeoutMs)
       timer.unref?.()
-      this.pending.set(id, { resolve, reject, timer })
+      this.pending.set(id, { child, resolve, reject, timer })
       const request: MlWorkerRequest = { id, ...body }
       child.postMessage(request)
     })
@@ -171,5 +202,14 @@ export class MlWorkerClient implements ActivityEmbeddingService {
       entry.reject(error)
     }
     this.pending.clear()
+  }
+
+  private failPendingFor(child: UtilityProcess, error: Error): void {
+    for (const [id, entry] of this.pending) {
+      if (entry.child !== child) continue
+      this.pending.delete(id)
+      clearTimeout(entry.timer)
+      entry.reject(error)
+    }
   }
 }

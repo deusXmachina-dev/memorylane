@@ -129,7 +129,14 @@ export class TaskMiner {
   async rebuildClustersIfEmpty(): Promise<void> {
     if (this.running) return
     if (this.storage.clusters.getAll().length > 0) return
-    if (this.storage.clusters.getUnprocessedSightings().length === 0) return
+    // Unattached signatures count as pending work too: a crash between
+    // signing and grouping leaves every sighting "processed" while zero
+    // clusters exist, and getUnprocessedSightings can't see that state.
+    if (
+      this.storage.clusters.getUnprocessedSightings().length === 0 &&
+      this.storage.clusters.getUnattachedSignatures().size === 0
+    )
+      return
     this.running = true
     try {
       await runClustering({
