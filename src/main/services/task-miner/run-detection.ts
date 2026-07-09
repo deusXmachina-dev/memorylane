@@ -90,7 +90,7 @@ export async function runDetection(
     : undefined
 
   // Canonical titles of established procedures, fed back so recurring work
-  // reuses its name cross-day (DEU-192). Empty on fresh/eval DBs — section omitted.
+  // reuses its name cross-day. Empty on fresh/eval DBs — section omitted.
   const knownProcedures = getKnownProcedureTitles(storage)
 
   // =========================================================================

@@ -2,9 +2,9 @@ import type { StorageService } from '../../storage'
 
 /**
  * Canonical titles of established recurring procedures, fed back into the scan
- * as vocabulary so a procedure gets the same title on every day it recurs
- * (DEU-192). Vocabulary-only: it reuses the title *string*, never a cluster id
- * or a "prefer matching" instruction — identity stays with the deterministic
+ * as vocabulary so a procedure gets the same title on every day it recurs.
+ * Vocabulary-only: it reuses the title *string*, never a cluster id or a
+ * "prefer matching" instruction — identity stays with the deterministic
  * clustering + LLM review.
  *
  * A title qualifies only when its cluster has actually recurred
