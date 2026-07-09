@@ -1,16 +1,14 @@
-# MemoryLane v1.4.0-alpha.5
+# MemoryLane v1.4.0-alpha.6
 
-Alpha preview of v1.4.0. The Patterns view is now backed by task-miner clusters.
+Alpha preview of v1.4.0. This build rebuilds the Patterns clustering for quality.
 
 ## What's Changed
 
-- **Patterns view rebuilt on task mining**: recurring tasks are now mined into persistent clusters and shown with honest stats — times seen, ×/week frequency, span vs hands-on time per run, and a recurrence histogram (#210).
-- **Task classification**: each cluster gets a kind verdict (procedure, monitoring, ambient, dev-loop, judgment); procedures show a concrete "Replace with" elimination mechanism.
-- **Copy prompt for Claude**: one click copies a research-and-automate prompt for a cluster, ready to paste into Claude Cowork.
-- **One-off noise gate**: tasks seen once are hidden from the list unless they already cost meaningful time.
-- **60-day backfill**: first launch after upgrading mines the last 60 days of history into sightings (previously 30); already-mined days are skipped.
-- Cluster stats are windowed to the last 90 days and recurrence bars follow your local timezone.
-- Default mining model is now minimax-m3.
+- **No more umbrella patterns**: clusters now group by what each task means (title + description), with average-linkage grouping that can't chain unrelated topics into one mega-cluster (#214).
+- **Clusters can heal**: over-merged clusters are split, drifted members are moved out, and a declined merge stays declined instead of being re-asked every run.
+- **Automatic rebuild**: existing clusters are wiped and re-mined from your sighting history on first launch after updating — the Patterns view repopulates on its own.
+- **Smoother during mining**: the embedding model and clustering math run in a background worker capped to half the CPU cores, so the app and your machine stay responsive.
+- Background worker errors now reach the log file in packaged builds.
 
 ## Known Issues & Limitations
 
@@ -29,4 +27,4 @@ Alpha preview of v1.4.0. The Patterns view is now backed by task-miner clusters.
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.4.0-alpha.4...v1.4.0-alpha.5
+https://github.com/deusXmachina-dev/memorylane/compare/v1.4.0-alpha.5...v1.4.0-alpha.6
