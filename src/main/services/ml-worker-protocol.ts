@@ -5,7 +5,7 @@
  */
 
 export type MlWorkerRequestBody =
-  | { type: 'init'; bundledModelPath: string | null; cacheDir: string }
+  | { type: 'init'; bundledModelPath: string | null; cacheDir: string; maxThreads: number | null }
   | { type: 'embedBatch'; texts: string[] }
   | { type: 'clusterVectors'; vectors: ArrayBuffer; dims: number; threshold: number }
 

@@ -26,6 +26,7 @@ export async function handleMlWorkerRequest(
         configureModelEnv({
           bundledModelPath: request.bundledModelPath,
           cacheDir: request.cacheDir,
+          maxThreads: request.maxThreads,
         })
         await service.init()
         return { id: request.id, ok: true, result: { type: 'ready' } }

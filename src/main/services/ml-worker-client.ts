@@ -1,5 +1,6 @@
 import { app, utilityProcess } from 'electron'
 import type { UtilityProcess } from 'electron'
+import * as os from 'os'
 import * as path from 'path'
 import log from '@main/utils/logger'
 import { getBundledModelPath, getModelCacheDir } from '@main/utils/paths'
@@ -132,9 +133,16 @@ export class MlWorkerClient implements ActivityEmbeddingService {
         })
       })
 
-      // The worker has no `app`; hand it paths this process resolved.
+      // The worker has no `app`; hand it paths this process resolved. Half the
+      // cores for inference keeps the rest of the machine responsive during a
+      // backlog rebuild — the UI matters more than embedding throughput.
       const result = await this.request(
-        { type: 'init', bundledModelPath: getBundledModelPath(), cacheDir: getModelCacheDir() },
+        {
+          type: 'init',
+          bundledModelPath: getBundledModelPath(),
+          cacheDir: getModelCacheDir(),
+          maxThreads: Math.max(1, Math.floor(os.availableParallelism() / 2)),
+        },
         INIT_TIMEOUT_MS,
       )
       if (result.type !== 'ready') throw new Error('ml-worker: bad init response')

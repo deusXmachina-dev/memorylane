@@ -8,20 +8,26 @@ const MODEL_NAME = 'Xenova/all-MiniLM-L6-v2'
 const MODEL_DIM = 384
 
 let resolvedBundledPath: string | null = null
+let maxInferenceThreads: number | null = null
 let envConfigured = false
 
 /**
  * Point transformers.js at the model files. Without options this resolves
  * paths for the current process; the ml-worker passes paths resolved by the
  * main process instead (a utilityProcess has no `app`). First call wins.
+ * `maxThreads` caps onnx's intra-op pool — uncapped it takes every core,
+ * which makes the whole machine jank during a backlog rebuild on weak
+ * hardware. Batch scripts (enode) leave it unset for full speed.
  */
 export function configureModelEnv(opts?: {
   bundledModelPath: string | null
   cacheDir: string
+  maxThreads?: number | null
 }): void {
   if (envConfigured) return
   envConfigured = true
   resolvedBundledPath = opts ? opts.bundledModelPath : getBundledModelPath()
+  maxInferenceThreads = opts?.maxThreads ?? null
   if (resolvedBundledPath) {
     env.localModelPath = resolvedBundledPath
     env.allowRemoteModels = false
@@ -49,7 +55,12 @@ export class EmbeddingService implements ActivityEmbeddingService {
     }
     log.debug(`Loading embedding model: ${MODEL_NAME}`)
     try {
-      this.pipe = await pipeline('feature-extraction', MODEL_NAME, { dtype: 'fp32' })
+      this.pipe = await pipeline('feature-extraction', MODEL_NAME, {
+        dtype: 'fp32',
+        ...(maxInferenceThreads !== null && {
+          session_options: { intraOpNumThreads: maxInferenceThreads, interOpNumThreads: 1 },
+        }),
+      })
       log.debug('Embedding model loaded.')
     } catch (error) {
       const modelRoot = resolvedBundledPath ?? env.cacheDir ?? '(unknown cache dir)'
