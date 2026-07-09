@@ -272,7 +272,7 @@ async function main() {
       console.log(`\n=== Sightings this run (${mined.length}) ===`)
       for (const s of mined) {
         const spanMin = Math.round((s.endedAt - s.startedAt) / 60000)
-        console.log(`\n  ${s.title}`)
+        console.log(`\n  ${s.title}${s.subject ? ` — ${s.subject}` : ''}`)
         console.log(`    Apps: ${s.apps.join(', ')}`)
         console.log(
           `    ${s.interactionMin} min interaction / ${spanMin} min span | ${s.activityIds.length} activities`,

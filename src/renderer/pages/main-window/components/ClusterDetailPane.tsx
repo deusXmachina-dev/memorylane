@@ -49,7 +49,10 @@ function buildCopyPrompt(cluster: ClusterInfo, sightings: ClusterSightingInfo[])
     `2. Call browse_timeline around those timestamps (±15 minutes) to see the full workflow — what triggers this task and what follows.`,
     ``,
     `Recent occurrences:`,
-    ...recent.map((s) => `- ${formatSightingTime(s.startedAt)} — ${s.title}`),
+    ...recent.map(
+      (s) =>
+        `- ${formatSightingTime(s.startedAt)} — ${s.title}${s.subject ? ` — ${s.subject}` : ''}`,
+    ),
     ``,
     `## Step 2 — Ask me questions`,
     ``,
@@ -238,7 +241,12 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
                       {i + 1}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium leading-snug">{s.title}</div>
+                      <div className="text-sm font-medium leading-snug">
+                        {s.title}
+                        {s.subject && (
+                          <span className="font-normal text-muted-foreground"> — {s.subject}</span>
+                        )}
+                      </div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
                         {s.apps.map((app) => (
                           <Badge key={app} variant="outline" className="text-[10px] font-normal">

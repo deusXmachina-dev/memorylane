@@ -332,6 +332,8 @@ export interface ClusterInfo {
 export interface ClusterSightingInfo {
   id: string
   title: string
+  /** The object this run acted on; empty when the scan named none. */
+  subject: string
   description: string
   apps: string[]
   /** Wall-clock span: first activity start → last activity end. */

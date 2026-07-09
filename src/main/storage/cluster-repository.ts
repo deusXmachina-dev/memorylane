@@ -419,6 +419,7 @@ export class ClusterRepository {
     return {
       id: row.id as string,
       title: row.title as string,
+      subject: (row.subject as string) ?? '',
       description: row.description as string,
       apps: JSON.parse((row.apps as string) || '[]') as string[],
       activityIds: JSON.parse((row.activity_ids as string) || '[]') as string[],

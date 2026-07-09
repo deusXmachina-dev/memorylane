@@ -13,6 +13,8 @@ import type Database from 'better-sqlite3'
 export interface Sighting {
   id: string
   title: string
+  /** The instance-specific object this run acted on. Empty when the scan named none. */
+  subject: string
   description: string
   apps: string[]
   activityIds: string[]
@@ -31,12 +33,13 @@ export class SightingRepository {
     this.db
       .prepare(
         `INSERT INTO sightings
-           (id, title, description, apps, activity_ids, started_at, ended_at, interaction_min, run_id, detected_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, title, subject, description, apps, activity_ids, started_at, ended_at, interaction_min, run_id, detected_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         sighting.id,
         sighting.title,
+        sighting.subject,
         sighting.description,
         JSON.stringify(sighting.apps),
         JSON.stringify(sighting.activityIds),
@@ -83,10 +86,10 @@ export class SightingRepository {
     const rows = this.db
       .prepare(
         `SELECT * FROM sightings
-         WHERE title LIKE ? OR description LIKE ? OR apps LIKE ?
+         WHERE title LIKE ? OR subject LIKE ? OR description LIKE ? OR apps LIKE ?
          ORDER BY started_at DESC`,
       )
-      .all(like, like, like) as Record<string, unknown>[]
+      .all(like, like, like, like) as Record<string, unknown>[]
     return rows.map((r) => this.rowToSighting(r))
   }
 
@@ -125,6 +128,7 @@ export class SightingRepository {
     return {
       id: row.id as string,
       title: row.title as string,
+      subject: (row.subject as string) ?? '',
       description: row.description as string,
       apps: JSON.parse((row.apps as string) || '[]') as string[],
       activityIds: JSON.parse((row.activity_ids as string) || '[]') as string[],

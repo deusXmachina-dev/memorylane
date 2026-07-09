@@ -80,6 +80,7 @@ export function emptyClusteringSummary(): ClusteringRunSummary {
 export interface ReviewSighting {
   sighting_id: string
   title: string
+  subject: string
   description: string
   apps: string[]
   interaction_min: number

@@ -18,6 +18,7 @@ import { buildVerificationTools } from '../pattern-detector/tools'
 import { computeEpisodeWindow } from './helpers'
 import { normalizeScanCandidates } from './candidate-normalizer'
 import { buildScanSystemPrompt, buildGroundingSystemPrompt } from './prompts'
+import { getKnownProcedureTitles } from './known-procedures'
 
 const GROUNDING_MAX_STEPS = 8
 const MIN_RUN_ACTIVITIES = 2
@@ -88,6 +89,10 @@ export async function runDetection(
     ? `${userCtx.shortSummary}\n\n${userCtx.detailedSummary}`
     : undefined
 
+  // Canonical titles of established procedures, fed back so recurring work
+  // reuses its name cross-day (DEU-192). Empty on fresh/eval DBs — section omitted.
+  const knownProcedures = getKnownProcedureTitles(storage)
+
   // =========================================================================
   // Phase 1: Scan — discover discrete task instances
   // =========================================================================
@@ -101,7 +106,7 @@ export async function runDetection(
     realIdOf.set(shortId, activities[i].id)
     return { ...row, id: shortId }
   })
-  const scanPrompt = buildScanSystemPrompt(label, userContextStr)
+  const scanPrompt = buildScanSystemPrompt(label, userContextStr, knownProcedures)
   const scanUserMessage = `Here are all ${activities.length} activities from ${label}:\n\n\`\`\`json\n${JSON.stringify(serialized, null, 2)}\n\`\`\``
 
   // Parses one scan response through validation and short-id mapping, dropping
@@ -288,6 +293,7 @@ export async function runDetection(
       }
 
       const title = (parsed.title as string) || candidate.title
+      const subject = ((parsed.subject as string) || candidate.subject || '').trim()
       const description = (parsed.description as string) || candidate.description
       const apps = (parsed.apps as string[]) || candidate.apps
 
@@ -305,6 +311,7 @@ export async function runDetection(
       storage.sightings.add({
         id: uuidv4(),
         title,
+        subject,
         description,
         apps,
         activityIds: resolved.map((a) => a.id),

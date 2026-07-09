@@ -786,6 +786,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         .map((m) => ({
           id: m.id,
           title: m.title,
+          subject: m.subject,
           description: m.description,
           apps: m.apps,
           startedAt: m.startedAt,

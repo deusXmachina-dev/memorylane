@@ -22,6 +22,7 @@ export const migration: Migration = {
       CREATE TABLE sightings (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
+        subject TEXT NOT NULL DEFAULT '',
         description TEXT NOT NULL DEFAULT '',
         apps TEXT NOT NULL DEFAULT '[]',
         activity_ids TEXT NOT NULL DEFAULT '[]',

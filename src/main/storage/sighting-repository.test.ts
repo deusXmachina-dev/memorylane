@@ -9,6 +9,7 @@ import type { Sighting } from './sighting-repository'
 const createSighting = (overrides: Partial<Sighting> & { id: string }): Sighting => ({
   id: overrides.id,
   title: overrides.title ?? 'Test sighting',
+  subject: overrides.subject ?? '',
   description: overrides.description ?? 'Did the thing',
   apps: overrides.apps ?? ['TestApp'],
   activityIds: overrides.activityIds ?? ['act-1'],
@@ -55,6 +56,36 @@ describe('SightingRepository', () => {
       expect(storage.sightings.hasInWindow(start - 1000, start - 1)).toBe(false)
       // A window starting just after the latest sighting matches nothing.
       expect(storage.sightings.hasInWindow(end + 1, end + 1000)).toBe(false)
+    })
+  })
+
+  describe('subject', () => {
+    it('round-trips subject through add/getById', () => {
+      storage.sightings.add(
+        createSighting({
+          id: 's1',
+          title: 'Provision test tenant',
+          subject: 'Acme staging tenant',
+        }),
+      )
+      expect(storage.sightings.getById('s1')?.subject).toBe('Acme staging tenant')
+    })
+
+    it('defaults subject to empty string', () => {
+      storage.sightings.add(createSighting({ id: 's1' }))
+      expect(storage.sightings.getById('s1')?.subject).toBe('')
+    })
+
+    it('search() matches on subject', () => {
+      storage.sightings.add(
+        createSighting({
+          id: 's1',
+          title: 'Provision test tenant',
+          subject: 'Acme staging tenant',
+        }),
+      )
+      const hits = storage.sightings.search('Acme')
+      expect(hits.map((s) => s.id)).toContain('s1')
     })
   })
 })

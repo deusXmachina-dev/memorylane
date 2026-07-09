@@ -14,6 +14,7 @@ import type { ReviewInput } from './types'
 const createSighting = (overrides: Partial<Sighting> & { id: string }): Sighting => ({
   id: overrides.id,
   title: overrides.title ?? 'Test sighting',
+  subject: overrides.subject ?? '',
   description: overrides.description ?? 'Did the thing',
   apps: overrides.apps ?? ['TestApp'],
   activityIds: overrides.activityIds ?? [],

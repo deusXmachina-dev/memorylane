@@ -424,6 +424,7 @@ export function toReviewCluster(
     members: sample.map((s) => ({
       sighting_id: s.id,
       title: s.title,
+      subject: s.subject,
       description: s.description,
       apps: s.apps,
       interaction_min: s.interactionMin,

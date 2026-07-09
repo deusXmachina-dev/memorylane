@@ -11,6 +11,7 @@ import { validateAndApply, mergePairKey, sanitizeVerdict, type ReviewGuards } fr
 const createSighting = (overrides: Partial<Sighting> & { id: string }): Sighting => ({
   id: overrides.id,
   title: overrides.title ?? 'Test sighting',
+  subject: overrides.subject ?? '',
   description: overrides.description ?? '',
   apps: overrides.apps ?? [],
   activityIds: overrides.activityIds ?? [],
