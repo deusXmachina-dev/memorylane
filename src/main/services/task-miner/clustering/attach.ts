@@ -92,36 +92,61 @@ export function averageLinkageGroupIndices(
   const size = new Array<number>(n).fill(1)
   const members = Array.from({ length: n }, (_, i) => [i])
   const active = new Set<number>(Array.from({ length: n }, (_, i) => i))
+  const finished: number[] = []
 
-  for (;;) {
+  // Nearest-neighbor chain (Murtagh): follow best partners until two groups
+  // are mutually nearest, merge those, keep the chain prefix — average
+  // linkage is reducible, so the prefix stays a valid chain and the final
+  // partition equals global-best-first agglomeration, in O(n²) not O(n³).
+  // Link similarities are non-decreasing along the chain, so when the tip's
+  // best partner is below the threshold the whole chain can never merge
+  // again and retires. Preferring the predecessor on ties makes revisiting
+  // a chain element impossible (a cycle would need sim(a,c) > sim(a,c)).
+  const chain: number[] = []
+  while (active.size > 1) {
+    if (chain.length === 0) chain.push(active.values().next().value as number)
+    const tip = chain[chain.length - 1]
+    const prev = chain.length > 1 ? chain[chain.length - 2] : -1
+
     let best = -Infinity
-    let bestA = -1
-    let bestB = -1
-    for (const a of active) {
-      for (const b of active) {
-        if (b <= a) continue
-        if (sim[a][b] > best) {
-          best = sim[a][b]
-          bestA = a
-          bestB = b
-        }
+    let next = -1
+    for (const b of active) {
+      if (b !== tip && sim[tip][b] > best) {
+        best = sim[tip][b]
+        next = b
       }
     }
-    if (best < threshold) break
-
-    for (const c of active) {
-      if (c === bestA || c === bestB) continue
-      const merged =
-        (size[bestA] * sim[bestA][c] + size[bestB] * sim[bestB][c]) / (size[bestA] + size[bestB])
-      sim[bestA][c] = merged
-      sim[c][bestA] = merged
+    if (best < threshold) {
+      // NaN similarities never beat -Infinity, so degenerate vectors land here.
+      for (const idx of chain) {
+        active.delete(idx)
+        finished.push(idx)
+      }
+      chain.length = 0
+      continue
     }
-    members[bestA].push(...members[bestB])
-    size[bestA] += size[bestB]
-    active.delete(bestB)
+    if (prev !== -1 && sim[tip][prev] >= best) next = prev
+    if (next !== prev) {
+      chain.push(next)
+      continue
+    }
+
+    // tip and prev are mutually nearest: merge into the smaller index so a
+    // group's root is always its minimum member.
+    const [root, gone] = tip < prev ? [tip, prev] : [prev, tip]
+    for (const c of active) {
+      if (c === root || c === gone) continue
+      const merged =
+        (size[root] * sim[root][c] + size[gone] * sim[gone][c]) / (size[root] + size[gone])
+      sim[root][c] = merged
+      sim[c][root] = merged
+    }
+    members[root].push(...members[gone])
+    size[root] += size[gone]
+    active.delete(gone)
+    chain.length -= 2
   }
 
-  // Roots survive merges as the smaller index, so iterating `active` in
-  // insertion order yields groups sorted by their minimum member.
-  return [...active].map((a) => members[a].sort((x, y) => x - y))
+  const roots = [...active, ...finished].sort((a, b) => a - b)
+  return roots.map((r) => members[r].sort((x, y) => x - y))
 }
