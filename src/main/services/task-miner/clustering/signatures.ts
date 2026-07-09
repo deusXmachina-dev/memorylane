@@ -1,6 +1,6 @@
 import type { StorageService } from '@main/storage'
 import type { Sighting } from '@main/storage/sighting-repository'
-import { cosineSimilarity, meanPool, normalize } from './vector-math'
+import { dot, meanPool, normalize } from './vector-math'
 import type { SightingSignature } from './attach'
 
 export interface SignatureEmbedder {
@@ -67,8 +67,5 @@ export function memberSimilarities(
   centroid: readonly number[],
 ): { sightingId: string; sim: number }[] {
   const signatures = storage.clusters.getSignaturesByClusterId(clusterId)
-  return [...signatures].map(([sightingId, vector]) => ({
-    sightingId,
-    sim: cosineSimilarity(vector, centroid),
-  }))
+  return [...signatures].map(([sightingId, vector]) => ({ sightingId, sim: dot(vector, centroid) }))
 }

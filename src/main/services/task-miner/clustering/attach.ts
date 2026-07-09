@@ -1,5 +1,4 @@
-import { agnes } from 'ml-hclust'
-import { cosineSimilarity } from './vector-math'
+import { dot } from './vector-math'
 
 export interface SightingSignature {
   sightingId: string
@@ -33,7 +32,7 @@ export function attachToCentroids(
     let bestClusterId: string | null = null
     let bestSim = -Infinity
     for (const { clusterId, centroid } of centroids) {
-      const sim = cosineSimilarity(sig.vector, centroid)
+      const sim = dot(sig.vector, centroid)
       if (sim > bestSim) {
         bestSim = sim
         bestClusterId = clusterId
@@ -50,12 +49,14 @@ export function attachToCentroids(
 }
 
 /**
- * Group signatures by average-linkage agglomerative clustering (AGNES), cut
- * where the mean pairwise cosine within a group would drop below the
- * threshold. Unlike single-linkage, a group only forms when its members are
- * similar ON AVERAGE — one borderline edge cannot chain unrelated topics into
- * a mega-cluster. Singletons come out as one-member groups — they become
- * clusters too, so "seen X times" can grow from 1.
+ * Group signatures by greedy average-linkage agglomeration: repeatedly merge
+ * the two groups whose mean pairwise cosine is highest, until no pair clears
+ * the threshold. Unlike single-linkage, a group only forms when its members
+ * are similar ON AVERAGE — one borderline edge cannot chain unrelated topics
+ * into a mega-cluster. Singletons come out as one-member groups — they become
+ * clusters too, so "seen X times" can grow from 1. Degenerate vectors (NaN or
+ * all-zero) yield similarities that never win a merge, so they fall out as
+ * singletons.
  */
 export function averageLinkageGroups(
   items: readonly SightingSignature[],
@@ -68,42 +69,59 @@ export function averageLinkageGroups(
 }
 
 /** Index-level variant of averageLinkageGroups — also runs inside the
- * ml-worker, where only raw vectors cross the process boundary. */
+ * ml-worker, where only raw vectors cross the process boundary. Every input
+ * index comes back in exactly one group (resplitByGeometry reassigns cluster
+ * membership from this result); groups and members are in input order. */
 export function averageLinkageGroupIndices(
   vectors: readonly (readonly number[])[],
   threshold: number,
 ): number[][] {
-  // A NaN distance corrupts agnes's merge loop (duplicated subtrees, dropped
-  // leaves). Non-finite AND all-zero vectors both cosine to NaN — e.g. bad
-  // blobs persisted before normalize() rejected them — so they sit out as
-  // singletons, like the old greedy code produced. Every input index must
-  // come back in exactly one group: resplitByGeometry reassigns cluster
-  // membership from this result.
-  const finite: number[] = []
-  const poisoned: number[] = []
-  vectors.forEach((v, i) =>
-    (v.every(Number.isFinite) && v.some((x) => x !== 0) ? finite : poisoned).push(i),
-  )
-
-  let groups: number[][] = []
-  if (finite.length === 1) {
-    groups = [[finite[0]]]
-  } else if (finite.length > 1) {
-    const tree = agnes(
-      finite.map((i) => vectors[i] as number[]),
-      { method: 'average', distanceFunction: (a, b) => 1 - cosineSimilarity(a, b) },
-    )
-    // cut() keeps subtrees whose height (cosine distance) is <= the cutoff, so
-    // similarity >= threshold merges — same inclusive rule as before. Groups
-    // come back in dendrogram order; re-sort by input position so the result
-    // is deterministic for the same input regardless of tree shape.
-    groups = tree.cut(1 - threshold).map((group) =>
-      group
-        .indices()
-        .map((k) => finite[k])
-        .sort((a, b) => a - b),
-    )
+  const n = vectors.length
+  // Similarity matrix, updated with the Lance-Williams rule on merge:
+  // sim(A∪B, C) = (|A|·sim(A,C) + |B|·sim(B,C)) / (|A|+|B|) — exactly the mean
+  // pairwise cosine between the merged group and C.
+  const sim = Array.from({ length: n }, () => new Float64Array(n))
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const d = dot(vectors[i], vectors[j])
+      sim[i][j] = d
+      sim[j][i] = d
+    }
   }
 
-  return [...groups, ...poisoned.map((i) => [i])].sort((a, b) => a[0] - b[0])
+  const size = new Array<number>(n).fill(1)
+  const members = Array.from({ length: n }, (_, i) => [i])
+  const active = new Set<number>(Array.from({ length: n }, (_, i) => i))
+
+  for (;;) {
+    let best = -Infinity
+    let bestA = -1
+    let bestB = -1
+    for (const a of active) {
+      for (const b of active) {
+        if (b <= a) continue
+        if (sim[a][b] > best) {
+          best = sim[a][b]
+          bestA = a
+          bestB = b
+        }
+      }
+    }
+    if (best < threshold) break
+
+    for (const c of active) {
+      if (c === bestA || c === bestB) continue
+      const merged =
+        (size[bestA] * sim[bestA][c] + size[bestB] * sim[bestB][c]) / (size[bestA] + size[bestB])
+      sim[bestA][c] = merged
+      sim[c][bestA] = merged
+    }
+    members[bestA].push(...members[bestB])
+    size[bestA] += size[bestB]
+    active.delete(bestB)
+  }
+
+  // Roots survive merges as the smaller index, so iterating `active` in
+  // insertion order yields groups sorted by their minimum member.
+  return [...active].map((a) => members[a].sort((x, y) => x - y))
 }

@@ -20,7 +20,7 @@ import type { InferenceProvider } from '@main/llm'
 import log from '@main/utils/logger'
 import { formatApiError } from '../../pattern-detector/helpers'
 import type { ProgressCallback } from '../types'
-import { cosineSimilarity } from './vector-math'
+import { dot } from './vector-math'
 import {
   computeAndStoreSignatures,
   memberSimilarities,
@@ -330,7 +330,7 @@ function buildReviewInput(
       if (seenPairs.has(key)) continue
       seenPairs.add(key)
       if (declined.has(key)) continue
-      if (cosineSimilarity(a.centroid, b.centroid) >= CLUSTERING_CONFIG.MERGE_CANDIDATE_THRESHOLD) {
+      if (dot(a.centroid, b.centroid) >= CLUSTERING_CONFIG.MERGE_CANDIDATE_THRESHOLD) {
         mergeCandidates.push([id, b.id])
         inMerge.add(id)
         inMerge.add(b.id)

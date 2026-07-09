@@ -104,8 +104,8 @@ describe('averageLinkageGroups', () => {
   })
 
   it('a non-finite vector sits out as a singleton without corrupting real groups', () => {
-    // NaN distances corrupt agnes (duplicated groups, dropped members) —
-    // every index must come back in exactly one group.
+    // Every index must come back in exactly one group — a NaN similarity must
+    // never merge, duplicate a group, or drop a member.
     const step = Math.acos(0.95)
     const groups = averageLinkageGroups(
       [
