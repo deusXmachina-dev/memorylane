@@ -162,6 +162,11 @@ The `enode.sh` wrapper sets `ELECTRON_RUN_AS_NODE=1` and executes the command th
   - `@types` maps to `src/shared/types`
   - Use these aliases instead of deep relative paths. `src/main` modules import siblings via `@main/<dir>/...` so files stay movable between subdirectories.
 
+## Database Migrations
+
+- Migrations (`src/main/storage/migrations/`) are immutable once shipped. Never edit an existing migration to change the schema — add a new one. The only exceptions: a migration you created in the current PR that has not been applied yet, or when the user explicitly tells you to edit it.
+- To change the schema, add a new migration file and register it in `migrations/index.ts`.
+
 ## UI Guidelines
 
 - Prefer React UI components (modals, toasts, inline messages) over browser-native dialogs (`alert()`, `confirm()`, `prompt()`).

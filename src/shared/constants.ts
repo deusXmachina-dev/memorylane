@@ -139,13 +139,15 @@ export const CLUSTER_VIEW_CONFIG = {
   STATS_WINDOW_DAYS: SIGHTING_RETENTION_DAYS,
 }
 
-// One-time seed of the sightings/clusters tables from existing history, run once
-// per user on the first launch after upgrading. VERSION marks the completed
-// backfill (in {userData}/task-backfill.json); a bump re-runs it to fill missing
-// days and recluster — it does not re-mine days that already have sightings.
+// One-time seed of the sightings/clusters tables from existing history, run
+// once per DB (gated on whether it has ever been mined — see
+// runTaskBackfillIfNeeded). A manual re-mine goes through the dev "wipe &
+// re-mine" action, not a version bump.
 export const TASK_BACKFILL = {
-  VERSION: 2,
   DAYS: 60, // Calendar days back to mine (day-by-day, oldest → newest)
+  // Re-cluster at this many-day barrier during backfill so earlier days' labels
+  // become known-procedure vocabulary for later days (canonical titles cross-day).
+  CLUSTER_EVERY_DAYS: 5,
 }
 
 // User-initiated timed capture pause (auto-resumes when the timer elapses).

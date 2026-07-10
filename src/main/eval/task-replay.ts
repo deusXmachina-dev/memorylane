@@ -115,6 +115,7 @@ function collectDetected(storage: StorageService, runId: string): DetectedSighti
   return storage.sightings.getByRunId(runId).map((s) => ({
     id: s.id,
     title: s.title,
+    subject: s.subject,
     description: s.description,
     apps: s.apps,
     activityIds: s.activityIds,

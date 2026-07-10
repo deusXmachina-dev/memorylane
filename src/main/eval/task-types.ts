@@ -89,6 +89,8 @@ export interface TaskFixture {
 export interface DetectedSighting {
   id: string
   title: string
+  /** The instance-specific object this run acted on; empty when the scan named none. */
+  subject: string
   description: string
   apps: string[]
   activityIds: string[]

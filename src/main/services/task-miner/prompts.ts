@@ -11,8 +11,20 @@ function formatList(values: readonly string[] | undefined, emptyFallback: string
 // Phase 1: Scan prompt — discover discrete task instances
 // ---------------------------------------------------------------------------
 
-export function buildScanSystemPrompt(dateLabel: string, userContext?: string): string {
+export function buildScanSystemPrompt(
+  dateLabel: string,
+  userContext?: string,
+  knownProcedures?: readonly string[],
+): string {
   const userContextSection = userContext ? `\n## My context\n\n${userContext}\n` : ''
+  const knownProceduresSection =
+    knownProcedures && knownProcedures.length > 0
+      ? `\n## Known procedures\n\nTitles of recurring procedures already established on previous days:\n${knownProcedures
+          .map((t) => `- ${t}`)
+          .join(
+            '\n',
+          )}\n\nThese are names, not evidence: nothing qualifies as a finding because it appears here, and the rules above decide what qualifies exactly as if this list were empty. When a qualifying run IS another instance of one of these procedures, reuse the known title EXACTLY as written and put what distinguishes this run in \`subject\`. When it is a different procedure — even a similar-sounding one — coin a fresh canonical title; never stretch a known title to cover different work.\n`
+      : ''
 
   return `You are an operations consultant reviewing my computer activity from ${dateLabel}. I pay you to recommend eliminations I would actually build: repeatable, meaningful work that a script, an integration, an alert, or an internal-platform feature could take over. A finding exists only if you can name that mechanism — no mechanism, no finding.
 ${userContextSection}
@@ -36,14 +48,15 @@ A run of a repeatable multi-step procedure that CHANGES something — creates, p
 - Leave unrelated interruptions (a mid-run Slack ping) out of a run's activity_ids.
 - Cite only real activity ids from the list below; findings with no ids are discarded. Do NOT estimate durations — they are computed from the activities.
 - Every description ENDS with exactly one sentence naming the mechanism: "Replace with: <the concrete script, integration, alert, or platform feature>." If you cannot write that sentence concretely, the finding does not exist.
-
+- Titles name the procedure, subjects name the object: title "Process invoice", subject "Customer ABC" — never title "Process invoice for Customer ABC". The title is worded so every run of the procedure gets it identically; the specific object goes in \`subject\`. Two runs of the same procedure on different objects share one title and differ only in subject. \`subject\` is optional — leave it empty when the run acted on no single nameable object.
+${knownProceduresSection}
 ## Output
 
 \`\`\`json
 [
   {
-    "title": "Short name for the procedure (what it does, not when)",
-    "subject": "The specific object this run acted on (e.g. Invoice #4471, Customer: Acme onboarding, Q3 board report)",
+    "title": "Canonical name of the procedure — what it does, never when, and never to which object (that goes in subject). Word it so every future run of this same procedure would get this exact title.",
+    "subject": "Optional. The specific object this run acted on (e.g. Invoice #4471, Customer: Acme onboarding, Q3 board report); empty string if the run acted on no single nameable object",
     "description": "What this run did, step by step, ending with: Replace with: <the concrete script, integration, alert, or platform feature>.",
     "apps": ["App1", "App2"],
     "activity_ids": ["ids of the activities in this run"]
@@ -88,6 +101,7 @@ If this is a real, grounded run:
 {
   "verdict": "keep",
   "title": "Refined title",
+  "subject": "The specific object this run acted on — corrected from the evidence if the scan got it wrong",
   "description": "What this run did, step by step — informed by the OCR and timeline — ENDING with exactly one sentence: Replace with: <the concrete script, integration, alert, or platform feature>.",
   "apps": ["App1", "App2"],
   "activity_ids": ["the exact, finalized set of supporting activity IDs"]

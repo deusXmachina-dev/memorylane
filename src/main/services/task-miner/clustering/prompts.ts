@@ -11,11 +11,11 @@ export function buildClusterReviewSystemPrompt(): string {
 Judge by what the work MEANS, not which apps were used. Different apps can serve one process; one app can host many unrelated processes.
 
 You will receive a JSON object with:
-- "clusters": clusters needing review. Each has an id, a "splittable" flag (true = may be split; shown with an extended member sample), an existing "label" (may be empty), "stats" computed from ALL members (times_seen, span_days from first to last sighting, median_active_min), and member sightings (title, description, apps, interaction minutes, date).
+- "clusters": clusters needing review. Each has an id, a "splittable" flag (true = may be split; shown with an extended member sample), an existing "label" (may be empty), "stats" computed from ALL members (times_seen, span_days from first to last sighting, median_active_min), and member sightings (title, subject — the specific object that run acted on, description, apps, interaction minutes, date). Members sharing a title but differing in subject are the same process run on different objects — direct evidence for adopting that shared title as the label.
 - "merge_candidates": pairs of cluster ids that MAY be the same process. These are the only merges you are allowed to propose.
 
 Your tasks:
-1. LABEL every cluster listed in "clusters" that you do not merge, split, or mark incoherent: give it a "label" (short imperative noun phrase naming the process, e.g. "Process weekly invoice batch") and a "description" (1-2 sentences describing what the process typically looks like, step by step where visible).
+1. LABEL every cluster listed in "clusters" that you do not merge, split, or mark incoherent: give it a "label" (short imperative noun phrase naming the process, e.g. "Process weekly invoice batch") and a "description" (1-2 sentences describing what the process typically looks like, step by step where visible). When the member sightings already share one exact title, adopt that title verbatim as the label instead of paraphrasing it — established names are load-bearing. Labels may repeat across clusters that act on different subjects; do not contort a label to force uniqueness.
 2. CLASSIFY every cluster you label — "kind" is one of:
    - "procedure": a repeatable multi-step process that changes something and could be taken over by a concrete mechanism.
    - "monitoring": checking or watching — inboxes, dashboards, statuses, feeds. Never eliminable, however often it recurs.

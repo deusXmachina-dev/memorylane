@@ -31,7 +31,10 @@ export function DeveloperSection({ api }: { api: MainWindowAPI }): React.JSX.Ele
           <RecorderSection api={api} />
         </TabsPanel>
         <TabsPanel value="tasks" className="pt-2">
-          <TaskGoldenSection api={api} />
+          <div className="space-y-6">
+            <TaskMaintenanceSection api={api} />
+            <TaskGoldenSection api={api} />
+          </div>
         </TabsPanel>
       </Tabs>
 
@@ -41,6 +44,79 @@ export function DeveloperSection({ api }: { api: MainWindowAPI }): React.JSX.Ele
         </Button>
       </div>
     </div>
+  )
+}
+
+/**
+ * Wipe all mined sightings + clusters and re-mine the recent window from
+ * scratch. Activities (the source data) are untouched — this only rebuilds
+ * derived task data, e.g. after a prompt change.
+ */
+function TaskMaintenanceSection({ api }: { api: MainWindowAPI }): React.JSX.Element {
+  const [confirming, setConfirming] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const wipeAndRemine = useCallback(async () => {
+    setConfirming(false)
+    setBusy(true)
+    toast.loading('Wiping tasks and re-mining…', { id: 'wipe-remine' })
+    const result = await api.wipeAndRemineTasks()
+    setBusy(false)
+    if (!result.success) {
+      toast.error(result.error ?? 'Wipe & re-mine failed', { id: 'wipe-remine' })
+      return
+    }
+    const s = result.summary
+    if (s?.skipped) {
+      toast.error(
+        s.skipped === 'no-provider'
+          ? 'Tasks wiped, but re-mine skipped: no inference provider configured'
+          : 'Skipped: a mining run is already in progress. Nothing was wiped — try again shortly.',
+        { id: 'wipe-remine' },
+      )
+      return
+    }
+    toast.success(
+      `Re-mined ${s?.daysMined ?? 0} day(s)` + (s?.daysFailed ? ` (${s.daysFailed} failed)` : ''),
+      { id: 'wipe-remine' },
+    )
+  }, [api])
+
+  return (
+    <SettingsSection
+      title="Wipe & re-mine tasks"
+      description="Deletes every mined sighting and cluster, then re-mines the recent window from scratch with the current prompt. Activities (the source data) are untouched."
+    >
+      <div className="flex items-center gap-2 py-3">
+        {confirming ? (
+          <>
+            <span className="text-sm text-muted-foreground">
+              Delete all sightings + clusters and re-mine?
+            </span>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => void wipeAndRemine()}
+              disabled={busy}
+            >
+              Confirm
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setConfirming(false)} disabled={busy}>
+              Cancel
+            </Button>
+          </>
+        ) : (
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setConfirming(true)}
+            disabled={busy}
+          >
+            <TrashIcon /> Wipe all tasks &amp; re-mine
+          </Button>
+        )}
+      </div>
+    </SettingsSection>
   )
 }
 

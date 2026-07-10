@@ -332,6 +332,8 @@ export interface ClusterInfo {
 export interface ClusterSightingInfo {
   id: string
   title: string
+  /** The object this run acted on; empty when the scan named none. */
+  subject: string
   description: string
   apps: string[]
   /** Wall-clock span: first activity start → last activity end. */
@@ -360,6 +362,19 @@ export interface ClustersView {
 export interface ManagedExclusions {
   apps: string[]
   urlPatterns: string[]
+}
+
+/** Result of the dev-only wipe-and-re-mine action. */
+export interface WipeAndRemineResult {
+  success: boolean
+  error?: string
+  summary?: {
+    daysMined: number
+    daysSkipped: number
+    daysFailed: number
+    /** Set when the re-mine did not run (no provider configured, or busy). */
+    skipped?: 'no-provider' | 'busy'
+  }
 }
 
 export interface MainWindowAPI {
@@ -401,6 +416,8 @@ export interface MainWindowAPI {
   // Patterns (task clusters)
   getClusters: () => Promise<ClustersView>
   getClusterDetail: (id: string) => Promise<ClusterDetailInfo | null>
+  // Dev-only: wipe all mined sightings/clusters and re-mine from scratch
+  wipeAndRemineTasks: () => Promise<WipeAndRemineResult>
   // Theme
   getTheme: () => Promise<'dark' | 'light'>
   onThemeChanged: (callback: (theme: 'dark' | 'light') => void) => void

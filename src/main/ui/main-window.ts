@@ -69,6 +69,7 @@ import type {
 } from '../../shared/types'
 import type { CaptureSettingsManager } from '../settings/capture-settings-manager'
 import type { StorageService } from '../storage'
+import type { BackfillSummary } from '../services/task-miner/types'
 import type { UsageTracker } from '../services/usage-tracker'
 
 interface SemanticService {
@@ -135,6 +136,8 @@ interface MainWindowDependencies {
     triggerUpload: () => Promise<{ success: boolean; error?: string }>
   }
   purgeAll: () => Promise<void>
+  /** Dev-only: wipe all mined sightings/clusters and re-mine from scratch. */
+  wipeAndRemineTasks?: () => Promise<BackfillSummary>
   observation: {
     start: (durationMs: number) => ObservationState
     stop: (reason: 'user' | 'timer') => ObservationState
@@ -786,6 +789,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         .map((m) => ({
           id: m.id,
           title: m.title,
+          subject: m.subject,
           description: m.description,
           apps: m.apps,
           startedAt: m.startedAt,
@@ -910,6 +914,23 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       }
     },
   )
+
+  ipcMain.handle('main-window:wipeAndRemineTasks', async () => {
+    if (!deps) {
+      return { success: false as const, error: 'Dependencies not initialized' }
+    }
+    if (!deps.wipeAndRemineTasks) {
+      return { success: false as const, error: 'Not available' }
+    }
+    try {
+      const summary = await deps.wipeAndRemineTasks()
+      return { success: true as const, summary }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to wipe and re-mine tasks'
+      log.error('[MainWindow] Wipe & re-mine failed:', error)
+      return { success: false as const, error: message }
+    }
+  })
 
   // Observation (build exclusion list from live activity)
   ipcMain.handle('main-window:startObservation', (_event, durationMs: number) => {

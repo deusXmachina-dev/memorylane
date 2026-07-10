@@ -81,6 +81,11 @@ export class TaskMiner {
     this.backfillPending = pending
   }
 
+  /** True while a run is executing or its settle timer is armed. */
+  isBusy(): boolean {
+    return this.running || this.settleTimer !== null
+  }
+
   /**
    * Try to schedule a mining run. Call this on screen unlock / wake.
    */
@@ -168,15 +173,15 @@ export class TaskMiner {
   }
 
   /**
-   * One-time backfill: mine `days` calendar days into sightings, then run a
-   * single clustering pass. `offsetDays` shifts the window back — 0 means the
-   * window ends yesterday; 20 means it ends 21 days ago. `concurrency` scans
-   * that many days at once (safe: day scans are independent scan-only LLM
-   * calls; each day's sightings are written by its own run). Idempotent — days
-   * that already have sightings are skipped, so a prior daily run or an
-   * interrupted backfill is safe to re-run. Clustering is deferred to one
-   * final pass (~`days` scan calls + 1 review call, not one per day); that
-   * pass is order-independent, so scan order doesn't affect cluster ids.
+   * One-time backfill: mine `days` calendar days into sightings, oldest first,
+   * clustering at a `CLUSTER_EVERY_DAYS` barrier so each chunk's labels become
+   * known-procedure vocabulary for the next chunk (canonical titles cross-day).
+   * `offsetDays` shifts the window back — 0 means the window ends yesterday; 20
+   * means it ends 21 days ago. `concurrency` scans that many days at once within
+   * a chunk (safe: day scans are independent scan-only LLM calls; each day's
+   * sightings are written by its own run). Idempotent — days that already have
+   * sightings are skipped, so a prior daily run or an interrupted backfill is
+   * safe to re-run; a chunk that mines nothing new skips its clustering pass.
    * Holds the `running` guard so a scheduled run can't overlap.
    */
   async backfill(
@@ -212,9 +217,10 @@ export class TaskMiner {
       let daysSkipped = 0
       let daysFailed = 0
 
-      // Oldest day first, matching the sequential order at concurrency 1.
-      const dayQueue: number[] = []
-      for (let d = offsetDays + days; d >= offsetDays + 1; d--) dayQueue.push(d)
+      // Oldest day first: earlier days cluster first, so their labels feed the
+      // known-procedure vocabulary the later, more-recent days scan against.
+      const allDays: number[] = []
+      for (let d = offsetDays + days; d >= offsetDays + 1; d--) allDays.push(d)
 
       const mineDay = async (d: number): Promise<void> => {
         const { start, end, label } = getDayBoundaries(d)
@@ -239,21 +245,38 @@ export class TaskMiner {
         }
       }
 
-      const workers = Array.from({ length: Math.min(concurrency, dayQueue.length) }, async () => {
-        for (let d = dayQueue.shift(); d !== undefined; d = dayQueue.shift()) {
-          await mineDay(d)
+      // Mine in oldest-first chunks, clustering at each chunk barrier so the
+      // labels earned so far become known-procedure vocabulary for the next
+      // chunk's scans. Concurrency still applies within a chunk; the barrier
+      // keeps clustering off the wire while day scans are in flight.
+      const chunkSize = Math.max(1, TASK_BACKFILL.CLUSTER_EVERY_DAYS)
+      let clustering: ClusteringRunSummary | undefined
+      for (let i = 0; i < allDays.length; i += chunkSize) {
+        const queue = allDays.slice(i, i + chunkSize)
+        const minedBefore = daysMined
+        const workers = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+          for (let d = queue.shift(); d !== undefined; d = queue.shift()) {
+            await mineDay(d)
+          }
+        })
+        await Promise.all(workers)
+
+        // Skip the barrier pass when the chunk mined nothing new (idempotent
+        // re-run), but always cluster once on the final chunk so a fully-skipped
+        // resume still refreshes clusters.
+        const isLastChunk = i + chunkSize >= allDays.length
+        if (daysMined > minedBefore || isLastChunk) {
+          progress(`Backfill: ${daysMined} day(s) mined so far; clustering`)
+          clustering = await this.cluster(
+            provider,
+            { ...DEFAULT_MINER_CONFIG, model: this.model, clustering: true },
+            opts.onProgress,
+          )
         }
-      })
-      await Promise.all(workers)
+      }
 
       progress(
-        `Backfill mined ${daysMined} day(s) (${daysSkipped} already present, ` +
-          `${daysFailed} failed); running final clustering pass`,
-      )
-      const clustering = await this.cluster(
-        provider,
-        { ...DEFAULT_MINER_CONFIG, model: this.model, clustering: true },
-        opts.onProgress,
+        `Backfill mined ${daysMined} day(s) (${daysSkipped} already present, ${daysFailed} failed)`,
       )
       return { daysMined, daysSkipped, daysFailed, clustering }
     } finally {
