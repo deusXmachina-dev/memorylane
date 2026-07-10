@@ -16,4 +16,9 @@ export class MiningRunRepository {
     }
     return row.latest ?? null
   }
+
+  /** Clear the once-per-day gate so the next run isn't skipped as "already ran today". */
+  reset(): void {
+    this.db.prepare('DELETE FROM mining_runs').run()
+  }
 }

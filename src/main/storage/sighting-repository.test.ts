@@ -3,7 +3,7 @@ import * as os from 'os'
 import * as path from 'path'
 import { StorageService } from './index'
 import { applyMigrations } from './migrator'
-import { deleteDbFiles } from './test-utils'
+import { deleteDbFiles, v } from './test-utils'
 import type { Sighting } from './sighting-repository'
 
 const createSighting = (overrides: Partial<Sighting> & { id: string }): Sighting => ({
@@ -86,6 +86,45 @@ describe('SightingRepository', () => {
       )
       const hits = storage.sightings.search('Acme')
       expect(hits.map((s) => s.id)).toContain('s1')
+    })
+  })
+
+  describe('wipeTasks', () => {
+    it('clears sightings, clusters, and the mining cursor; activities are untouched', () => {
+      storage.activities.add({
+        id: 'act-1',
+        appName: 'TestApp',
+        windowTitle: 'w',
+        tld: null,
+        startTimestamp: 1000,
+        endTimestamp: 2000,
+        summary: 's',
+        summaryModel: '',
+        ocrText: '',
+        vector: v(0.1),
+      })
+      storage.sightings.add(createSighting({ id: 's1' }))
+      storage.clusters.create({
+        id: 'c1',
+        label: 'Some process',
+        description: '',
+        centroid: null,
+        kind: '',
+        mechanism: '',
+        labelModel: '',
+        labeledSize: 0,
+        createdAt: 1000,
+        updatedAt: 1000,
+      })
+      storage.clusters.addMembership('c1', 's1', 100)
+      storage.miningRuns.record(1000)
+
+      storage.wipeTasks()
+
+      expect(storage.sightings.getById('s1')).toBeNull()
+      expect(storage.clusters.getAll()).toHaveLength(0)
+      expect(storage.miningRuns.getLastRunTimestamp()).toBeNull()
+      expect(storage.activities.count()).toBe(1)
     })
   })
 })

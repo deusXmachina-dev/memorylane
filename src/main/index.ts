@@ -30,7 +30,6 @@ import { listInstalledApps } from './apps/installed-apps'
 import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
 import { TaskMiner } from './services/task-miner'
 import { runTaskBackfillIfNeeded } from './services/task-miner/backfill-bootstrap'
-import { createBackfillMarker } from './services/task-miner/backfill-marker'
 import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
 import { DatabaseUploadSync } from './services/database-upload-sync'
@@ -395,6 +394,13 @@ app.on('ready', async () => {
     databaseUploadSync: databaseUploadSync ?? undefined,
     logUploadSync: logUploadSync ?? undefined,
     purgeAll: () => runtime?.purgeAll() ?? Promise.reject(new Error('Runtime not initialized')),
+    wipeAndRemineTasks: async () => {
+      if (!runtime || !taskMiner) throw new Error('Runtime not initialized')
+      // wipeTasks() also clears mining_runs, so if this in-session re-mine is
+      // skipped or fails, the next launch sees an unmined DB and re-seeds.
+      runtime.storage.wipeTasks()
+      return taskMiner.backfill(runtime.inferenceProvider)
+    },
     observation,
     evalRecorder: runtime.evalRecorder,
     evalFixtureStore: runtime.evalFixtureStore,
@@ -404,16 +410,16 @@ app.on('ready', async () => {
   runtime.accessProvider.startPeriodicRefresh()
 
   // One-time, background: seed the new sightings/clusters tables from existing
-  // history so the task view isn't empty after upgrading. Marker-gated (runs at
-  // most once per user, TaskMiner world only). Must run before capture resume —
-  // see runTaskBackfillIfNeeded for the ordering.
+  // history so the task view isn't empty after upgrading. Gated on whether the
+  // DB has ever been mined (mining_runs) — runs once per DB. Must run before
+  // capture resume — see runTaskBackfillIfNeeded for the ordering.
   if (taskMiner) {
-    // After a derived-data wipe (CLUSTER_SCHEMA_VERSION bump) the backfill is
-    // already stamped, so rebuild clusters from existing sightings right away.
+    // After a derived-data wipe (CLUSTER_SCHEMA_VERSION bump) the DB is still
+    // mined, so the backfill is skipped and clusters rebuild from sightings.
     void runTaskBackfillIfNeeded({
       taskMiner,
       provider: runtime.inferenceProvider,
-      marker: createBackfillMarker(app.getPath('userData')),
+      storage: runtime.storage,
     }).then(() => scheduledMiner.rebuildClustersIfEmpty())
   }
 

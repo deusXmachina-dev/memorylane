@@ -364,6 +364,19 @@ export interface ManagedExclusions {
   urlPatterns: string[]
 }
 
+/** Result of the dev-only wipe-and-re-mine action. */
+export interface WipeAndRemineResult {
+  success: boolean
+  error?: string
+  summary?: {
+    daysMined: number
+    daysSkipped: number
+    daysFailed: number
+    /** Set when the re-mine did not run (no provider configured, or busy). */
+    skipped?: 'no-provider' | 'busy'
+  }
+}
+
 export interface MainWindowAPI {
   getEditionConfig: () => Promise<AppEditionConfig>
   getAccessState: () => Promise<AccessState>
@@ -403,6 +416,8 @@ export interface MainWindowAPI {
   // Patterns (task clusters)
   getClusters: () => Promise<ClustersView>
   getClusterDetail: (id: string) => Promise<ClusterDetailInfo | null>
+  // Dev-only: wipe all mined sightings/clusters and re-mine from scratch
+  wipeAndRemineTasks: () => Promise<WipeAndRemineResult>
   // Theme
   getTheme: () => Promise<'dark' | 'light'>
   onThemeChanged: (callback: (theme: 'dark' | 'light') => void) => void

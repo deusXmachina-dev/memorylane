@@ -124,6 +124,11 @@ export class SightingRepository {
     return this.db.prepare('DELETE FROM sightings WHERE started_at < ?').run(cutoff).changes
   }
 
+  /** Delete every sighting. Backs the dev "wipe & re-mine" action. */
+  deleteAll(): number {
+    return this.db.prepare('DELETE FROM sightings').run().changes
+  }
+
   private rowToSighting(row: Record<string, unknown>): Sighting {
     return {
       id: row.id as string,

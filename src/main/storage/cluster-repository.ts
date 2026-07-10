@@ -286,6 +286,20 @@ export class ClusterRepository {
       .run(verdict.kind, verdict.mechanism, updatedAt, clusterId)
   }
 
+  /**
+   * Clear all derived cluster state — clusters, memberships, signatures, and
+   * the merge-decline ledger. Sightings are untouched; re-mining rebuilds
+   * these. Backs the dev "wipe & re-mine" action.
+   */
+  deleteAll(): void {
+    this.db.exec(`
+      DELETE FROM cluster_sightings;
+      DELETE FROM cluster_merge_declines;
+      DELETE FROM clusters;
+      DELETE FROM sighting_signatures;
+    `)
+  }
+
   /** Delete a cluster and its memberships (member sightings are untouched). */
   delete(clusterId: string): void {
     this.db.prepare(`DELETE FROM cluster_sightings WHERE cluster_id = ?`).run(clusterId)

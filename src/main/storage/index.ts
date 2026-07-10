@@ -172,6 +172,23 @@ export class StorageService {
    * Table discovery is dynamic so that any future migration which adds
    * a user-data table is purged automatically.
    */
+  /**
+   * Delete all mined task data — sightings, the derived cluster tables, and the
+   * daily mining cursor — in one transaction, leaving activities (the source)
+   * intact. Re-mining reconstructs everything. Backs the dev "wipe & re-mine".
+   */
+  public wipeTasks(): void {
+    if (!this.db) {
+      throw new Error('Database is closed')
+    }
+    this.db.transaction(() => {
+      this.sightings.deleteAll()
+      this.clusters.deleteAll()
+      this.miningRuns.reset()
+    })()
+    log.info('Storage: wiped all task sightings, clusters, and mining cursor')
+  }
+
   public purge(): void {
     if (!this.db) {
       throw new Error('Database is closed')

@@ -94,6 +94,7 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   syncLogsToRemote: () => ipcRenderer.invoke('main-window:syncLogsToRemote'),
   purgeDatabase: (confirmation: string) =>
     ipcRenderer.invoke('main-window:purgeDatabase', confirmation),
+  wipeAndRemineTasks: () => ipcRenderer.invoke('main-window:wipeAndRemineTasks'),
   // Shell
   openExternal: (url: string) => ipcRenderer.invoke('main-window:openExternal', url),
   // Observation (build exclusion list from live activity)
