@@ -396,8 +396,16 @@ app.on('ready', async () => {
     purgeAll: () => runtime?.purgeAll() ?? Promise.reject(new Error('Runtime not initialized')),
     wipeAndRemineTasks: async () => {
       if (!runtime || !taskMiner) throw new Error('Runtime not initialized')
-      // wipeTasks() also clears mining_runs, so if this in-session re-mine is
-      // skipped or fails, the next launch sees an unmined DB and re-seeds.
+      // Don't wipe while a run is in flight: it would finish after the wipe,
+      // re-record mining_runs, and strand the DB with partial data (the next
+      // launch would then skip the re-seed). Bail without touching data. The
+      // busy check and backfill's own guard-claim run with no await between
+      // them, so no scheduled run can slip in and start after the wipe.
+      if (taskMiner.isBusy()) {
+        return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'busy' as const }
+      }
+      // On success wipeTasks() also clears mining_runs, so if this in-session
+      // re-mine later fails, the next launch sees an unmined DB and re-seeds.
       runtime.storage.wipeTasks()
       return taskMiner.backfill(runtime.inferenceProvider)
     },

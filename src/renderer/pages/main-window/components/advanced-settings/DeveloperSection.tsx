@@ -71,7 +71,7 @@ function TaskMaintenanceSection({ api }: { api: MainWindowAPI }): React.JSX.Elem
       toast.error(
         s.skipped === 'no-provider'
           ? 'Tasks wiped, but re-mine skipped: no inference provider configured'
-          : 'Tasks wiped, but re-mine skipped: a mining run is already in progress',
+          : 'Skipped: a mining run is already in progress. Nothing was wiped — try again shortly.',
         { id: 'wipe-remine' },
       )
       return

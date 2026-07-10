@@ -81,6 +81,11 @@ export class TaskMiner {
     this.backfillPending = pending
   }
 
+  /** True while a run is executing or its settle timer is armed. */
+  isBusy(): boolean {
+    return this.running || this.settleTimer !== null
+  }
+
   /**
    * Try to schedule a mining run. Call this on screen unlock / wake.
    */
