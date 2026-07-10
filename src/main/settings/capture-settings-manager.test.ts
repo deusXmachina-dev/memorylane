@@ -4,6 +4,7 @@ import * as path from 'path'
 import * as os from 'os'
 import type { InstalledApp } from '../../shared/types'
 import { CaptureSettingsManager } from './capture-settings-manager'
+import { MODEL_DEFAULTS_VERSION, getVendorDefaults } from '../../shared/vendor-defaults'
 import {
   VISUAL_DETECTOR_CONFIG,
   INTERACTION_MONITOR_CONFIG,
@@ -339,6 +340,87 @@ describe('CaptureSettingsManager', () => {
       expect(map.openrouter).toBeDefined()
       expect(map.openrouter?.semanticSnapshotModel).toBe('mistralai/mistral-small-3.2-24b-instruct')
       expect(map.openrouter?.semanticPipelineMode).toBe('image')
+    })
+
+    it('overrides stale model picks when stored defaults version is older', () => {
+      // A seat pinned to a since-retired preview id, from before the version bump.
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          activeVendor: 'openrouter',
+          semanticVideoModel: 'google/gemini-3.1-flash-lite-preview',
+          modelDefaultsVersion: MODEL_DEFAULTS_VERSION - 1,
+        }),
+      )
+      const manager = new CaptureSettingsManager(configPath)
+      const settings = manager.get()
+      const expected = getVendorDefaults('openrouter').semanticVideoModel
+      expect(settings.semanticVideoModel).toBe(expected)
+      expect(settings.modelsByVendor.openrouter?.semanticVideoModel).toBe(expected)
+      expect(settings.modelDefaultsVersion).toBe(MODEL_DEFAULTS_VERSION)
+    })
+
+    it('keeps custom picks when stored defaults version is current', () => {
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          activeVendor: 'openrouter',
+          semanticVideoModel: 'google/gemini-2.5-flash',
+          modelDefaultsVersion: MODEL_DEFAULTS_VERSION,
+        }),
+      )
+      const manager = new CaptureSettingsManager(configPath)
+      expect(manager.get().semanticVideoModel).toBe('google/gemini-2.5-flash')
+    })
+
+    it('does not override local model picks for vendors without presets', () => {
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          activeVendor: 'openai-compatible',
+          semanticSnapshotModel: 'my-local-model',
+          patternDetectionModel: 'my-local-model',
+          semanticPipelineMode: 'image',
+          // No modelDefaultsVersion → triggers the override pass.
+        }),
+      )
+      const manager = new CaptureSettingsManager(configPath)
+      const settings = manager.get()
+      expect(settings.semanticSnapshotModel).toBe('my-local-model')
+      expect(settings.patternDetectionModel).toBe('my-local-model')
+      expect(settings.modelDefaultsVersion).toBe(MODEL_DEFAULTS_VERSION)
+    })
+
+    it('resets all curated slots on a version bump, not just the changed one', () => {
+      // The override is authoritative across every slot: a still-valid but
+      // non-default task-miner pick is reset to the vendor default too.
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          activeVendor: 'openrouter',
+          patternDetectionModel: 'xiaomi/mimo-v2.5',
+          modelDefaultsVersion: MODEL_DEFAULTS_VERSION - 1,
+        }),
+      )
+      const manager = new CaptureSettingsManager(configPath)
+      const expected = getVendorDefaults('openrouter').patternDetectionModel
+      expect(manager.get().patternDetectionModel).toBe(expected)
+    })
+
+    it('persists the version bump so the override runs only once', () => {
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          activeVendor: 'openrouter',
+          semanticVideoModel: 'google/gemini-3.1-flash-lite-preview',
+          modelDefaultsVersion: MODEL_DEFAULTS_VERSION - 1,
+        }),
+      )
+      new CaptureSettingsManager(configPath)
+      // The stamp is written back to disk, so a second load sees the current
+      // version and skips the override — no repeated clobber on every launch.
+      const stored = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+      expect(stored.modelDefaultsVersion).toBe(MODEL_DEFAULTS_VERSION)
     })
 
     it('switching vendors does not lose other vendor selections', () => {

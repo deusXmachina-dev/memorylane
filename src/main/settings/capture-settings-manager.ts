@@ -11,7 +11,7 @@ import type {
 } from '../../shared/types'
 import { VENDORS } from '../../shared/types'
 import type { AppEdition } from '../../shared/edition'
-import { getVendorDefaults } from '../../shared/vendor-defaults'
+import { MODEL_DEFAULTS_VERSION, getVendorDefaults } from '../../shared/vendor-defaults'
 import {
   isBundleIdToken,
   migrateExcludedAppTokens,
@@ -155,6 +155,7 @@ const DEFAULTS: CaptureSettings = {
   excludedUrlPatterns: [],
   urlMatchSchemaVersion: URL_MATCH_SCHEMA_VERSION,
   appMatchSchemaVersion: APP_MATCH_SCHEMA_VERSION,
+  modelDefaultsVersion: MODEL_DEFAULTS_VERSION,
   activeVendor: 'openrouter',
   semanticVideoModel: OPENROUTER_DEFAULTS.semanticVideoModel,
   semanticSnapshotModel: OPENROUTER_DEFAULTS.semanticSnapshotModel,
@@ -204,6 +205,24 @@ function normalizeVendorSelection(value: unknown): VendorModelSelection | undefi
   }
 }
 
+/**
+ * Reset a vendor's remembered model slots to the current vendor defaults. Slots
+ * whose vendor has no curated default (empty preset list, e.g. openai-compatible
+ * local models) keep the user's local pick. Pipeline mode is preserved.
+ */
+function overrideWithVendorDefaults(
+  selection: VendorModelSelection,
+  vendor: Vendor,
+): VendorModelSelection {
+  const d = getVendorDefaults(vendor)
+  return {
+    semanticVideoModel: d.semanticVideoModel || selection.semanticVideoModel,
+    semanticSnapshotModel: d.semanticSnapshotModel || selection.semanticSnapshotModel,
+    patternDetectionModel: d.patternDetectionModel || selection.patternDetectionModel,
+    semanticPipelineMode: selection.semanticPipelineMode,
+  }
+}
+
 function normalizeModelsByVendor(value: unknown): Partial<Record<Vendor, VendorModelSelection>> {
   const out: Partial<Record<Vendor, VendorModelSelection>> = {}
   if (!value || typeof value !== 'object') return out
@@ -224,6 +243,7 @@ export class CaptureSettingsManager {
   private configPath: string
   private settings: CaptureSettings
   private defaults: CaptureSettings
+  private modelDefaultsUpgraded = false
 
   constructor(options: CaptureSettingsManagerOptions | string = {}) {
     const opts: CaptureSettingsManagerOptions =
@@ -240,6 +260,11 @@ export class CaptureSettingsManager {
       uploadDetailLevel: defaultUploadDetailLevel(opts.edition ?? 'customer'),
     }
     this.settings = this.load()
+    // Persist the version stamp once so the override runs a single time, not on
+    // every launch (mirrors migrateAppTokens stamping its schema version).
+    if (this.modelDefaultsUpgraded) {
+      this.save({})
+    }
   }
 
   private load(): CaptureSettings {
@@ -282,6 +307,30 @@ export class CaptureSettingsManager {
             semanticPipelineMode,
           }
         }
+        // Version bump: overwrite every remembered vendor's picks with the
+        // current defaults and re-derive the active vendor's flat fields. See
+        // MODEL_DEFAULTS_VERSION for why this is authoritative.
+        let finalVideoModel = semanticVideoModel
+        let finalSnapshotModel = semanticSnapshotModel
+        let finalPatternModel = patternDetectionModel
+        let finalModelsByVendor = modelsByVendor
+        if ((data.modelDefaultsVersion ?? 0) < MODEL_DEFAULTS_VERSION) {
+          finalModelsByVendor = { ...modelsByVendor }
+          for (const vendor of VENDORS) {
+            const entry = finalModelsByVendor[vendor]
+            if (entry) finalModelsByVendor[vendor] = overrideWithVendorDefaults(entry, vendor)
+          }
+          const active = finalModelsByVendor[activeVendor]
+          if (active) {
+            finalVideoModel = active.semanticVideoModel
+            finalSnapshotModel = active.semanticSnapshotModel
+            finalPatternModel = active.patternDetectionModel
+          }
+          this.modelDefaultsUpgraded = true
+          log.info(
+            `[CaptureSettings] Model defaults v${data.modelDefaultsVersion ?? 0} → v${MODEL_DEFAULTS_VERSION}: overriding stored model picks with vendor defaults`,
+          )
+        }
         // Migrate pre-v1 URL patterns (substring era): wrap patterns without a
         // `*` in `*…*` so they keep contains behavior as a wildcard. Only `*` is a
         // wildcard now, so a pre-v1 `?` (the old single-char wildcard) must also be
@@ -310,12 +359,13 @@ export class CaptureSettingsManager {
             data.captureHotkeyAccelerator ?? data.pauseHotkeyAccelerator,
           ),
           databaseExportDirectory: normalizeDatabaseExportDirectory(data.databaseExportDirectory),
+          modelDefaultsVersion: MODEL_DEFAULTS_VERSION,
           activeVendor,
-          semanticVideoModel,
-          semanticSnapshotModel,
-          patternDetectionModel,
+          semanticVideoModel: finalVideoModel,
+          semanticSnapshotModel: finalSnapshotModel,
+          patternDetectionModel: finalPatternModel,
           semanticPipelineMode,
-          modelsByVendor,
+          modelsByVendor: finalModelsByVendor,
         }
       }
     } catch (error) {
