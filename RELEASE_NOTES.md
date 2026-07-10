@@ -1,18 +1,16 @@
-# MemoryLane v1.4.0-alpha.6
+# MemoryLane v1.4.0-alpha.7
 
-Alpha preview of v1.4.0. This build rebuilds the Patterns clustering for quality.
+Alpha preview of v1.4.0. This build ships the new task miner as opt-in and sharpens task naming.
 
 ## What's Changed
 
-- **No more umbrella patterns**: clusters now group by what each task means (title + description), with average-linkage grouping that can't chain unrelated topics into one mega-cluster (#214).
-- **Clusters can heal**: over-merged clusters are split, drifted members are moved out, and a declined merge stays declined instead of being re-asked every run.
-- **Automatic rebuild**: existing clusters are wiped and re-mined from your sighting history on first launch after updating — the Patterns view repopulates on its own.
-- **Smoother during mining**: the embedding model and clustering math run in a background worker capped to half the CPU cores, so the app and your machine stay responsive.
-- Background worker errors now reach the log file in packaged builds.
+- **Legacy pattern detector by default**: the new task miner + clusters view is now behind a Developer toggle (default off), so a shipped release shows the familiar pattern detector. Enable "New task miner" in Developer → Tasks and restart to opt in (#217).
+- **Sharper task names**: clusters use canonical titles, a dedicated subject field, and a known-procedures vocabulary so recurring tasks read consistently (#215).
+- **Video model defaults GA**: promoted GA video model defaults, applied once as a versioned override of earlier local picks (#216).
 
 ## Known Issues & Limitations
 
-- MCP pattern tools (`list_patterns`, `get_pattern_details`) still read the legacy pattern data and won't reflect the new clusters yet.
+- MCP pattern tools (`list_patterns`, `get_pattern_details`) read the legacy pattern data and won't reflect the new clusters when the miner is opted into.
 - Existing per-machine Windows installs (v1.4.0-alpha.3 and earlier) are not removed automatically: uninstall MemoryLane from Program Files once (requires admin), then run the new setup.
 - Vertex managed-mode bearer tokens aren't refreshed in-flight — long-running operations that outlive the token TTL may see 401s until the next refresh cycle (DEU-84).
 - Windows OCR still depends on native OCR component availability.
@@ -27,4 +25,4 @@ Alpha preview of v1.4.0. This build rebuilds the Patterns clustering for quality
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.4.0-alpha.5...v1.4.0-alpha.6
+https://github.com/deusXmachina-dev/memorylane/compare/v1.4.0-alpha.6...v1.4.0-alpha.7
