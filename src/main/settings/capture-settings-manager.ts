@@ -161,6 +161,7 @@ const DEFAULTS: CaptureSettings = {
   patternDetectionModel: OPENROUTER_DEFAULTS.patternDetectionModel,
   modelsByVendor: {},
   patternDetectionEnabled: true,
+  newTaskMinerEnabled: false,
   uploadDetailLevel: 'off',
 }
 
