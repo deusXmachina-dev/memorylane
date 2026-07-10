@@ -802,6 +802,111 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     },
   )
 
+  // Patterns (legacy PatternDetector view) — used when newTaskMinerEnabled is off.
+  handle('main-window:getPatterns', () => {
+    if (!deps) return []
+    return deps.storage.patterns.getAllPatterns()
+  })
+
+  handle('main-window:getPatternDetail', (_event: IpcMainInvokeEvent, id: string) => {
+    if (!deps) return null
+    const detail = deps.storage.patterns.getPatternDetail(id)
+    if (!detail) return null
+
+    const allActivityIds = Array.from(new Set(detail.sightings.flatMap((s) => s.activityIds)))
+    const activities = deps.storage.activities.getByIds(allActivityIds)
+    const activityById = new Map(
+      activities.map((a) => [
+        a.id,
+        {
+          id: a.id,
+          startTimestamp: a.startTimestamp,
+          endTimestamp: a.endTimestamp,
+          appName: a.appName,
+          windowTitle: a.windowTitle,
+          tld: a.tld,
+          summary: a.summary,
+        },
+      ]),
+    )
+
+    return {
+      pattern: detail.pattern,
+      sightings: detail.sightings.map((s) => ({
+        id: s.id,
+        detectedAt: s.detectedAt,
+        evidence: s.evidence,
+        confidence: s.confidence,
+        durationEstimateMin: s.durationEstimateMin,
+        activities: s.activityIds
+          .map((aid) => activityById.get(aid))
+          .filter((a): a is NonNullable<typeof a> => a !== undefined),
+      })),
+    }
+  })
+
+  ipcMain.handle('main-window:approvePattern', (_event: IpcMainInvokeEvent, id: string) => {
+    if (!deps) return { success: false, error: 'Dependencies not initialized' }
+    try {
+      deps.storage.patterns.approvePattern(id)
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      log.warn(`[MainWindow] Failed to approve pattern ${id}:`, error)
+      return { success: false, error: message }
+    }
+  })
+
+  ipcMain.handle('main-window:rejectPattern', (_event: IpcMainInvokeEvent, id: string) => {
+    if (!deps) return { success: false, error: 'Dependencies not initialized' }
+    try {
+      deps.storage.patterns.rejectPattern(id)
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      log.warn(`[MainWindow] Failed to reject pattern ${id}:`, error)
+      return { success: false, error: message }
+    }
+  })
+
+  ipcMain.handle('main-window:completePattern', (_event: IpcMainInvokeEvent, id: string) => {
+    if (!deps) return { success: false, error: 'Dependencies not initialized' }
+    try {
+      deps.storage.patterns.completePattern(id)
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      log.warn(`[MainWindow] Failed to complete pattern ${id}:`, error)
+      return { success: false, error: message }
+    }
+  })
+
+  ipcMain.handle('main-window:uncompletePattern', (_event: IpcMainInvokeEvent, id: string) => {
+    if (!deps) return { success: false, error: 'Dependencies not initialized' }
+    try {
+      deps.storage.patterns.uncompletePattern(id)
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      log.warn(`[MainWindow] Failed to uncomplete pattern ${id}:`, error)
+      return { success: false, error: message }
+    }
+  })
+
+  ipcMain.handle(
+    'main-window:markPatternPromptCopied',
+    (_event: IpcMainInvokeEvent, id: string) => {
+      if (!deps) return { success: false, error: 'Dependencies not initialized' }
+      try {
+        deps.storage.patterns.markPromptCopied(id)
+        return { success: true }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        return { success: false, error: message }
+      }
+    },
+  )
+
   // Activities
   ipcMain.handle(
     'main-window:listRecentActivities',

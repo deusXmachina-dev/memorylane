@@ -12,11 +12,13 @@ import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Textarea } from '@components/ui/textarea'
 import { Card, CardContent } from '@components/ui/card'
+import { Switch } from '@components/ui/switch'
 import { Tabs, TabsList, TabsTab, TabsPanel } from '@components/ui/tabs'
 import type { MainWindowAPI } from '@types'
 import type { EvalFixtureLoad, EvalFixtureSummary } from '@/shared/eval-review'
 import { setDevMode } from '@/renderer/lib/dev-mode'
 import { SettingsSection } from './SettingsSection'
+import { SettingsRow } from './SettingsRow'
 import { TaskGoldenSection } from './TaskGoldenSection'
 
 export function DeveloperSection({ api }: { api: MainWindowAPI }): React.JSX.Element {
@@ -32,6 +34,7 @@ export function DeveloperSection({ api }: { api: MainWindowAPI }): React.JSX.Ele
         </TabsPanel>
         <TabsPanel value="tasks" className="pt-2">
           <div className="space-y-6">
+            <TaskMinerModeSection api={api} />
             <TaskMaintenanceSection api={api} />
             <TaskGoldenSection api={api} />
           </div>
@@ -44,6 +47,52 @@ export function DeveloperSection({ api }: { api: MainWindowAPI }): React.JSX.Ele
         </Button>
       </div>
     </div>
+  )
+}
+
+/**
+ * Experimental switch between the new TaskMiner (sighting clustering) and the
+ * legacy PatternDetector. Read once at startup by both the main-process analyzer
+ * and the Patterns view, so flipping it only takes effect after a restart.
+ */
+function TaskMinerModeSection({ api }: { api: MainWindowAPI }): React.JSX.Element {
+  const [enabled, setEnabled] = useState<boolean | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    void api.getCaptureSettings().then((s) => setEnabled(s.newTaskMinerEnabled))
+  }, [api])
+
+  const onToggle = useCallback(
+    async (next: boolean) => {
+      setBusy(true)
+      const result = await api.saveCaptureSettings({ newTaskMinerEnabled: next })
+      setBusy(false)
+      if (!result.success) {
+        toast.error(result.error ?? 'Failed to save setting')
+        return
+      }
+      setEnabled(next)
+      toast.success(`New task miner ${next ? 'enabled' : 'disabled'} — restart the app to apply`)
+    },
+    [api],
+  )
+
+  return (
+    <SettingsSection title="Task analyzer">
+      <SettingsRow
+        label="New task miner (experimental)"
+        description="On: sighting clustering + clusters view. Off (default): legacy pattern detector. Takes effect after an app restart."
+        control={
+          <Switch
+            checked={enabled ?? false}
+            disabled={enabled === null || busy}
+            onCheckedChange={(v) => void onToggle(v)}
+            aria-label="New task miner"
+          />
+        }
+      />
+    </SettingsSection>
   )
 }
 

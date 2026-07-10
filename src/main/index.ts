@@ -29,6 +29,7 @@ import { DeviceIdentity } from './settings/device-identity'
 import { listInstalledApps } from './apps/installed-apps'
 import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
 import { TaskMiner } from './services/task-miner'
+import { PatternDetector } from './services/pattern-detector'
 import { runTaskBackfillIfNeeded } from './services/task-miner/backfill-bootstrap'
 import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
@@ -123,6 +124,7 @@ app.on('window-all-closed', () => {
 let runtime: MainRuntime | null = null
 let userContextBuilder: UserContextBuilder | null = null
 let taskMiner: TaskMiner | null = null
+let patternDetector: PatternDetector | null = null
 let rawDatabaseExportSync: RawDatabaseExportSync | null = null
 let databaseUploadSync: DatabaseUploadSync | null = null
 let logUploadSync: LogUploadSync | null = null
@@ -306,12 +308,22 @@ app.on('ready', async () => {
 
   userContextBuilder = new UserContextBuilder(runtime.storage, runtime.inferenceProvider)
   userContextBuilder.updateModel(captureSettingsManager.get().patternDetectionModel)
-  // The TaskMiner (mining + clustering) is the scheduled analyzer. It uses the
-  // patternDetection* capture settings for its enable state and model.
-  taskMiner = new TaskMiner(runtime.storage, runtime.inferenceProvider, runtime.mlWorker)
-  taskMiner.setEnabled(captureSettingsManager.get().patternDetectionEnabled)
-  taskMiner.updateModel(captureSettingsManager.get().patternDetectionModel)
-  const scheduledMiner = taskMiner
+  // The scheduled analyzer. The newTaskMinerEnabled developer toggle (default
+  // off) picks the new TaskMiner (mining + clustering) over the legacy
+  // PatternDetector. Read once here — flipping the toggle takes effect on the
+  // next launch. Both use the patternDetection* capture settings for enable
+  // state and model.
+  const settings = captureSettingsManager.get()
+  if (settings.newTaskMinerEnabled) {
+    taskMiner = new TaskMiner(runtime.storage, runtime.inferenceProvider, runtime.mlWorker)
+    taskMiner.setEnabled(settings.patternDetectionEnabled)
+    taskMiner.updateModel(settings.patternDetectionModel)
+  } else {
+    patternDetector = new PatternDetector(runtime.storage, runtime.inferenceProvider)
+    patternDetector.setEnabled(settings.patternDetectionEnabled)
+    patternDetector.updateModel(settings.patternDetectionModel)
+  }
+  const scheduledMiner = taskMiner ?? patternDetector
   const captureCoordinator = createCaptureCoordinator({
     capture: runtime.capture,
     captureStateManager,
@@ -395,7 +407,10 @@ app.on('ready', async () => {
     logUploadSync: logUploadSync ?? undefined,
     purgeAll: () => runtime?.purgeAll() ?? Promise.reject(new Error('Runtime not initialized')),
     wipeAndRemineTasks: async () => {
-      if (!runtime || !taskMiner) throw new Error('Runtime not initialized')
+      if (!runtime) throw new Error('Runtime not initialized')
+      // Task mining is a new-miner-only maintenance action; there's nothing to
+      // wipe or re-mine when the legacy PatternDetector is active.
+      if (!taskMiner) throw new Error('Task mining is disabled (enable it in Developer settings)')
       // Don't wipe while a run is in flight: it would finish after the wipe,
       // re-record mining_runs, and strand the DB with partial data (the next
       // launch would then skip the re-seed). Bail without touching data. The
@@ -422,13 +437,14 @@ app.on('ready', async () => {
   // DB has ever been mined (mining_runs) — runs once per DB. Must run before
   // capture resume — see runTaskBackfillIfNeeded for the ordering.
   if (taskMiner) {
+    const miner = taskMiner
     // After a derived-data wipe (CLUSTER_SCHEMA_VERSION bump) the DB is still
     // mined, so the backfill is skipped and clusters rebuild from sightings.
     void runTaskBackfillIfNeeded({
-      taskMiner,
+      taskMiner: miner,
       provider: runtime.inferenceProvider,
       storage: runtime.storage,
-    }).then(() => scheduledMiner.rebuildClustersIfEmpty())
+    }).then(() => miner.rebuildClustersIfEmpty())
   }
 
   captureCoordinator.resumeCaptureIfDesired('startup')
