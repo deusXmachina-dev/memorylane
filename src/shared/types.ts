@@ -234,6 +234,7 @@ export interface CaptureSettings {
   excludedUrlPatterns: string[]
   urlMatchSchemaVersion?: number
   appMatchSchemaVersion?: number
+  modelDefaultsVersion?: number
   activeVendor: Vendor
   semanticVideoModel: string
   semanticSnapshotModel: string

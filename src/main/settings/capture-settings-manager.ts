@@ -11,7 +11,7 @@ import type {
 } from '../../shared/types'
 import { VENDORS } from '../../shared/types'
 import type { AppEdition } from '../../shared/edition'
-import { getVendorDefaults } from '../../shared/vendor-defaults'
+import { MODEL_DEFAULTS_VERSION, getVendorDefaults } from '../../shared/vendor-defaults'
 import {
   isBundleIdToken,
   migrateExcludedAppTokens,
@@ -155,6 +155,7 @@ const DEFAULTS: CaptureSettings = {
   excludedUrlPatterns: [],
   urlMatchSchemaVersion: URL_MATCH_SCHEMA_VERSION,
   appMatchSchemaVersion: APP_MATCH_SCHEMA_VERSION,
+  modelDefaultsVersion: MODEL_DEFAULTS_VERSION,
   activeVendor: 'openrouter',
   semanticVideoModel: OPENROUTER_DEFAULTS.semanticVideoModel,
   semanticSnapshotModel: OPENROUTER_DEFAULTS.semanticSnapshotModel,
@@ -201,6 +202,25 @@ function normalizeVendorSelection(value: unknown): VendorModelSelection | undefi
     patternDetectionModel:
       typeof v.patternDetectionModel === 'string' ? v.patternDetectionModel : '',
     semanticPipelineMode: mode,
+  }
+}
+
+/**
+ * Reset a vendor's remembered model slots to the current vendor defaults. Slots
+ * whose vendor has no curated default (empty preset list, e.g. openai-compatible
+ * local models) are left untouched — there is nothing authoritative to override
+ * them with, so the user's local pick stands. Pipeline mode is preserved.
+ */
+function overrideWithVendorDefaults(
+  selection: VendorModelSelection,
+  vendor: Vendor,
+): VendorModelSelection {
+  const d = getVendorDefaults(vendor)
+  return {
+    semanticVideoModel: d.semanticVideoModel || selection.semanticVideoModel,
+    semanticSnapshotModel: d.semanticSnapshotModel || selection.semanticSnapshotModel,
+    patternDetectionModel: d.patternDetectionModel || selection.patternDetectionModel,
+    semanticPipelineMode: selection.semanticPipelineMode,
   }
 }
 
@@ -282,6 +302,31 @@ export class CaptureSettingsManager {
             semanticPipelineMode,
           }
         }
+        // Curated model defaults changed (version bump): overwrite the stored
+        // model picks with the current vendor defaults for every remembered
+        // vendor, and re-derive the active vendor's flat fields from them. This
+        // is authoritative — it evicts stale/retired ids the user may be pinned
+        // to. Vendors without presets keep their local pick (see helper).
+        let finalVideoModel = semanticVideoModel
+        let finalSnapshotModel = semanticSnapshotModel
+        let finalPatternModel = patternDetectionModel
+        let finalModelsByVendor = modelsByVendor
+        if ((data.modelDefaultsVersion ?? 0) < MODEL_DEFAULTS_VERSION) {
+          finalModelsByVendor = { ...modelsByVendor }
+          for (const vendor of VENDORS) {
+            const entry = finalModelsByVendor[vendor]
+            if (entry) finalModelsByVendor[vendor] = overrideWithVendorDefaults(entry, vendor)
+          }
+          const active = finalModelsByVendor[activeVendor]
+          if (active) {
+            finalVideoModel = active.semanticVideoModel
+            finalSnapshotModel = active.semanticSnapshotModel
+            finalPatternModel = active.patternDetectionModel
+          }
+          log.info(
+            `[CaptureSettings] Model defaults v${data.modelDefaultsVersion ?? 0} → v${MODEL_DEFAULTS_VERSION}: overriding stored model picks with vendor defaults`,
+          )
+        }
         // Migrate pre-v1 URL patterns (substring era): wrap patterns without a
         // `*` in `*…*` so they keep contains behavior as a wildcard. Only `*` is a
         // wildcard now, so a pre-v1 `?` (the old single-char wildcard) must also be
@@ -310,12 +355,13 @@ export class CaptureSettingsManager {
             data.captureHotkeyAccelerator ?? data.pauseHotkeyAccelerator,
           ),
           databaseExportDirectory: normalizeDatabaseExportDirectory(data.databaseExportDirectory),
+          modelDefaultsVersion: MODEL_DEFAULTS_VERSION,
           activeVendor,
-          semanticVideoModel,
-          semanticSnapshotModel,
-          patternDetectionModel,
+          semanticVideoModel: finalVideoModel,
+          semanticSnapshotModel: finalSnapshotModel,
+          patternDetectionModel: finalPatternModel,
           semanticPipelineMode,
-          modelsByVendor,
+          modelsByVendor: finalModelsByVendor,
         }
       }
     } catch (error) {

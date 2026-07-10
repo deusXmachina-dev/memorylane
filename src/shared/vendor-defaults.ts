@@ -5,6 +5,16 @@ export interface ModelPreset {
   label: string
 }
 
+/**
+ * Bump whenever the preset lists below change in a way that should be pushed to
+ * existing installs. On load, a stored `modelDefaultsVersion` older than this
+ * causes the manager to overwrite the user's remembered model picks with the
+ * current vendor defaults (see CaptureSettingsManager.load). Curated defaults
+ * are treated as authoritative — an upgrade replaces stale/retired ids (e.g.
+ * `-preview` snapshots that later 404) rather than stranding a seat on them.
+ */
+export const MODEL_DEFAULTS_VERSION = 2
+
 interface VendorPresets {
   /** Presets for each model slot. The first entry is the vendor's default. */
   semanticVideo: ModelPreset[]
@@ -29,10 +39,15 @@ interface VendorModelDefaults {
  */
 export const VENDOR_PRESETS: Record<Vendor, VendorPresets> = {
   openrouter: {
+    // GA ids only — preview ids resolve on Google AI Studio but 404 on
+    // Vertex-pinned (ZDR) keys, and are the class that gets retired. All four
+    // verified available under the ZDR OpenRouter key (2026-07-10), ordered by
+    // cost-efficiency: gemini-3.1-flash-lite (~60 tok/frame, $0.25/M) heads it;
+    // gemini-2.5-flash is the quality-max floor.
     semanticVideo: [
-      { id: 'google/gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite' },
+      { id: 'google/gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite' },
       { id: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash' },
-      { id: 'google/gemini-2.5-flash-lite-preview-09-2025', label: 'Gemini 2.5 Flash Lite' },
+      { id: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
       { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
     ],
     semanticSnapshot: [
