@@ -1,17 +1,19 @@
-# MemoryLane v1.4.0-alpha.7
+# MemoryLane v1.4.0
 
-Alpha preview of v1.4.0. This build ships the new task miner as opt-in and sharpens task naming.
+Stable release. The Patterns experience is unchanged by default; a new task miner is available as an opt-in developer preview.
 
 ## What's Changed
 
-- **Legacy pattern detector by default**: the new task miner + clusters view is now behind a Developer toggle (default off), so a shipped release shows the familiar pattern detector. Enable "New task miner" in Developer → Tasks and restart to opt in (#217).
-- **Sharper task names**: clusters use canonical titles, a dedicated subject field, and a known-procedures vocabulary so recurring tasks read consistently (#215).
-- **Video model defaults GA**: promoted GA video model defaults, applied once as a versioned override of earlier local picks (#216).
+- **New task miner (opt-in)**: an experimental sighting-clustering analyzer with a clusters view. It's **off by default** — the familiar pattern detector remains the default experience. Enable "New task miner" in Developer → Tasks and restart to try it (#217).
+- **Video model defaults GA**: promoted GA video model defaults, applied once as a versioned override of earlier local picks (#207, #216).
+- **Windows install**: one-click per-user installer (no admin needed), and the x64 VC++ runtime is now bundled so on-device inference loads on clean machines.
+- **Steadier LLM connectivity**: provider health is checked reactively instead of probing on window focus (DEU-176).
+- App version is now reported to the backend for support and diagnostics (#206).
 
 ## Known Issues & Limitations
 
 - MCP pattern tools (`list_patterns`, `get_pattern_details`) read the legacy pattern data and won't reflect the new clusters when the miner is opted into.
-- Existing per-machine Windows installs (v1.4.0-alpha.3 and earlier) are not removed automatically: uninstall MemoryLane from Program Files once (requires admin), then run the new setup.
+- Existing per-machine Windows installs (v1.3.x and earlier) are not removed automatically: uninstall MemoryLane from Program Files once (requires admin), then run the new setup.
 - Vertex managed-mode bearer tokens aren't refreshed in-flight — long-running operations that outlive the token TTL may see 401s until the next refresh cycle (DEU-84).
 - Windows OCR still depends on native OCR component availability.
 - Intel macOS is not yet officially supported.
@@ -25,4 +27,4 @@ Alpha preview of v1.4.0. This build ships the new task miner as opt-in and sharp
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.4.0-alpha.6...v1.4.0-alpha.7
+https://github.com/deusXmachina-dev/memorylane/compare/v1.3.1...v1.4.0
