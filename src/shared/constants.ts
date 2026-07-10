@@ -146,6 +146,9 @@ export const CLUSTER_VIEW_CONFIG = {
 export const TASK_BACKFILL = {
   VERSION: 2,
   DAYS: 60, // Calendar days back to mine (day-by-day, oldest → newest)
+  // Re-cluster at this many-day barrier during backfill so earlier days' labels
+  // become known-procedure vocabulary for later days (canonical titles cross-day).
+  CLUSTER_EVERY_DAYS: 5,
 }
 
 // User-initiated timed capture pause (auto-resumes when the timer elapses).
