@@ -44,32 +44,44 @@ turn after the review step (stage 6). This overrides speed.
 
 ## 1. Inputs (1 or many users)
 
-Source: one or more `process-analysis*.json` ledgers in the working dir (+
-optional `.md` for wording). Each ledger is **one observed person** (the analysis
-is single-user by construction). Any producer of the same shape works.
+Source: one or more `process-analysis*.md` files in the working dir. Each file
+embeds the full ledger as a single fenced ```json code block (the **last**
+fenced json block in the file, so a json snippet quoted earlier in the
+narrative can't be grabbed by mistake); extract that block to get the ledger
+object, and use the narrative text above it for wording. Each ledger is **one
+observed person** (the analysis is single-user by construction). Any producer
+of the same shape works. **Never print a ledger's source filename or any
+per-person file label anywhere in the deck or appendix** (a filename like
+`process-analysis-jane.md` is itself an identifier); refer to ledgers by role
+only.
 
-- **Detect the cohort:** glob `process-analysis*.json` (and any paths the user
-  gives). 1 file → single-user report. 2+ → **consolidated** report (§7 stage 2).
-- Each ledger MUST carry `meta.role` (and ideally `department`) for grouping. If
-  a ledger lacks a role label, **ask** which role/department it belongs to;
-  never guess.
+- **Detect the cohort:** glob `process-analysis*.md` (and any paths the user
+  gives), then extract each file's embedded json block. 1 file → single-user
+  report. 2+ → **consolidated** report (§7 stage 2).
+- Each ledger MUST carry `meta.user_role` (and ideally `department`) for
+  grouping. If a ledger lacks a role label, **ask** which role/department it
+  belongs to; never guess.
 
 **Expected ledger shape** (top-level keys + the leaves the report binds; omit
 any element whose field is absent, per §2):
 
-- `meta`: role, location, window, active_days, measurement_scope, `cost_basis`
-  (rate, derivation, basis), shown_caveat; optional report_title, client.
-- `exec_rollup`: repetitive_hours_per_week, automatable_pct, hours_saved_per_year,
-  dollars_saved_per_year, fte_capacity, overall_confidence{grade,why}, shown_caveat.
+- `meta`: user_role, department, location, window, active_days,
+  measurement_scope, `cost_basis` (rate, derivation, basis); optional
+  report_title, client.
+- `exec_rollup`: total_repetitive_hours_per_week, automatable_pct,
+  capacity_unlocked_pct, hours_saved_per_year, dollars_saved_per_year_net,
+  fte_capacity_unlocked_this_person, overall_confidence{grade,why}, shown_caveat.
   Headline figures = `{low,base,high,basis}`.
 - `baseline`: total_active_hours, active_days, `app_time_share[]`{app,pct,hours},
   deep_work_share.
-- `processes[]`: name, category, role_department, frequency, time_per_instance,
+- `processes[]`: name, category, role_department, tier,
+  frequency{occurrences_clean,occurrences_possible,period}, time_per_instance_min,
   common_path{description,approx_coverage_pct}, `steps[]`{action,app,input,output,
-  time_min,pain,automatable,basis}, `automation`{verdict,work_nature,mechanism,
-  feasibility,tool,automatable_fraction,human_remainder,automation_cost},
+  time_min,pain,automatable,basis}, `automation`{verdict,future_state,route,
+  effort_tier,work_nature,mechanism,feasibility,tool,automatable_fraction_low,
+  automatable_fraction_high,human_remainder,automation_cost},
   `scores`{impact_hours,automatability,effort,priority_rank}, confidence{grade},
-  `savings`{annual_hours_saved,gross/net dollars,payback_months,dominant_uncertainty}.
+  `savings`{annual_hours_saved,gross_annual_dollars_saved,net_annual_dollars_saved,payback_months,dominant_uncertainty}.
 - `systems_landscape[]`, `reasoning_log[]`(+counts), `assumptions[]`,
   `what_would_sharpen[]`, `narrative_summary`, `review`{reproducibility_note}.
 
@@ -88,6 +100,11 @@ invented** (per the rule above): label them missing/estimated or omit:
 - **Client logo** (file path or URL). See §4 — **always nudge if not given**.
 - **Branding** (MemoryLane default / neutral) and **orientation** (landscape
   default / portrait).
+- **Report language + locale** (default English; ask if the ledger's
+  `meta.location`/market suggests Philippines, Malaysia, Czech Republic,
+  Slovakia, Germany, Austria, or Switzerland) and **currency** if not carried
+  in `cost_basis` (see §2's locale table for the separator convention + symbol
+  per market).
 
 ---
 
@@ -132,6 +149,37 @@ The ledger labels every exec number `seen` / `reasoned` / `estimated` with a
 **Number + money formatting (house style, from shipped reports; currency follows
 the ledger, A$ shown as the example).**
 
+**Locale first, before applying the house style below.** The comma-thousands /
+period-decimal pattern in the examples below (`~A$6,200`) is the **English-market**
+convention (Philippines, Malaysia, Australia, New Zealand business English). It is
+NOT universal:
+- **Philippines:** ₱ (PHP), English convention (comma thousands, period decimal).
+- **Malaysia:** RM (MYR), English convention.
+- **Australia:** A$ (AUD), English convention.
+- **New Zealand:** NZ$ (NZD), English convention.
+- **Czech Republic:** Kč (CZK), **reversed convention**: period/space thousands,
+  comma decimal (e.g. `~15.500 Kč` or `~15 500,00 Kč`, not `15,500.00`).
+- **Slovakia:** € (EUR), same reversed convention as Czech (`~4 200,00 €`).
+- **Germany / Austria:** € (EUR), reversed convention (`~4.200,00 €`).
+- **Switzerland:** CHF, reversed convention but apostrophe thousands-separator
+  is also common (`CHF 4'200.00`); confirm with the client which they use.
+Detect the target locale from the ledger's `meta.location`/`cost_basis.currency`
+and the client's market, then apply THAT locale's separator convention
+consistently across every page; never default to the English pattern for a
+non-English-convention market. Rounding grain, `~` usage, and the "New capacity
+unlocked" wording rules below apply the same regardless of locale, only the
+separator and symbol change.
+
+**Report language.** The house style and copy below is written in English. If
+the client requests the deck **in a local language** (Filipino/Tagalog, Bahasa
+Malaysia, Czech, Slovak, German), translate the narrative, page titles, KPI
+labels, and chip *display text* into that language, but never translate the
+underlying ledger enum **values** (`basis: seen|reasoned|estimated`,
+`verdict: kill|leave_as_is|redesign|automate`, etc.); those stay in English so
+the JSON keeps parsing/reconciling correctly, only their rendered label changes.
+Ask which language the deck should ship in during intake (§1) if the client's
+market suggests it is not English; default to English if unstated.
+
 - Capacity + time reads `1h/week (2%)` (no space inside `1h`, one space before the
   parenthesis). Shipped: `1h/week (2%)`, `3h/week (8%)`, `4h/week (5%)`, `~1 FTE (5%)`.
 - Per-process figures and the in-scope table carry `~` and full digits with a comma
@@ -142,9 +190,11 @@ the ledger, A$ shown as the example).**
   `~1 FTE`, `~15%` of a workday), never on exec/measured rows or the headline.
 - Freed capacity is always phrased "New capacity unlocked" (KPI tile label AND the
   per-function table column header, identical wording).
-- Each per-process tile shows three cells: [avg time per run, frequency] /
-  [Automatable %] / [Est. annual savings]. The metric cell is the Automatable %,
-  never hours/yr (a percentage is easier to picture).
+- Each per-process tile shows three cells: [avg time per run, frequency
+  ("17 clean (+30 possible)" when the ledger carries both counts, never
+  collapsed to one number)] / [Automatable %] / [Est. annual savings]. The
+  metric cell is the Automatable %, never hours/yr (a percentage is easier to
+  picture).
 
 **Data-confidence banner (read the thinness, say it).** Compute a tier from the
 ledger's coverage (total active hours, active days, #people, window) and show it
@@ -273,9 +323,11 @@ Cover first, appendix/conclusion last; reorder the middle for narrative.
 | **Conclusion**                        | `narrative_summary` + headline tallies                                                               | `.story` + `.statlist`      |
 
 Chips: basis `seen|reasoned|estimated`→`chip--seen|--reason|--est`; confidence
-`high|medium|low`→`chip--hi|--med|--lo`; verdict `automate|ai_assist|redesign|
-not_worth_it`→`chip--auto|--assist|--redesign|--no`; category→`chip--cat`;
-system status→`chip--status`.
+`high|medium|low`→`chip--hi|--med|--lo`; verdict `kill|leave_as_is|redesign|
+automate`→`chip--kill|--leave|--redesign|--auto` (matches the ledger's
+`automation.verdict` enum exactly, not a paraphrase); future_state
+`no_change|ai_augmented|human_in_the_loop|automated|eliminated`→its own chevron
+chip; category→`chip--cat`; system status→`chip--status`.
 
 **Per-process framing (the actionable core):** Symptom → Time → Solution.
 Solution must be concrete and customer-specific: trigger → their named tool →
@@ -339,7 +391,7 @@ per process for detail pages), then assemble; else do them in order.
    `exec_rollup`, `processes`, `baseline`. Thin/missing/unlabelled → ask (§1).
    Resolve report-meta + logo.
 2. **Consolidate (only if 2+ ledgers).** Group observed people by
-   `meta.role`/department. Within a role, cluster matching processes (same
+   `meta.user_role`/department. Within a role, cluster matching processes (same
    category + step shape + tools) into one consolidated process,
    **conservatively**: if two runs differ materially, keep them separate and note
    the divergence, **never average distinct work**. Merge each metric as a range
@@ -370,6 +422,22 @@ per process for detail pages), then assemble; else do them in order.
    `<section class="page` blocks against the planned page count, and scan for an
    accidentally duplicated money string (a regex like
    `A?\$[\d,]+\s+(<b>)?A?\$[\d,]+` catches a value printed twice).
+   **PII scan (mandatory, before the review gate):** regex-scan the rendered
+   `report.html` text for emails (`[\w.+-]+@[\w-]+\.\w`), phone-number patterns,
+   `@handles`, credential/token URL params (`(token|key|secret|sig|signature|
+   auth|session|sid|apikey|api_key|password)=...`, a JWT, an AWS/API key
+   pattern), card/bank numbers (Luhn-gated) and IBANs, and national IDs across
+   every market this ships to, not just US SSN (see the analyst skill's
+   Privacy scrub for the exact per-market regex: Philippines SSS/TIN/PhilHealth,
+   Malaysia NRIC, Czech/Slovak rodné číslo, Germany/Austria Steuer-ID or
+   Sozialversicherungsnummer, Switzerland AHV/AVS, Australia TFN/Medicare, New
+   Zealand IRD); also grep for the observed person's actual name if the user
+   supplied one anywhere, for any ledger source filename (per §1), and for
+   keyword triggers ("DOB", "Passport No", "SSN", "diagnosis", "MRN", "patient")
+   that flag content needing a generic paraphrase. Any hit → fix the source
+   binding (never hand-edit the HTML to hide it) and re-render before showing the
+   deck. A hit on a kept file/filter/URL-path/formula name is not a match;
+   don't strip those.
 6. **⛔ Review gate (HARD STOP).** Show the user the HTML deck: Cowork renders
    `report.html` live in-workspace; on this Mac, `open report.html` and/or show
    the stage-5 page PNGs inline. Then **stop and wait** for explicit approval.
@@ -417,8 +485,25 @@ Fallbacks, only if install is impossible (offline/locked sandbox), best-first:
 - **Basis everywhere** (§2); **n=1** footer; ranges on headlines.
 - **Self-contained** (§3): one HTML, CSS + images + charts embedded, no JS.
 - **Tight copy:** `components.html` is the ceiling for prose density; go under.
-- **Confidentiality:** carry the line; never reproduce secrets, credentials, or
-  personal-message content from evidence.
+- **Confidentiality:** carry the line; never reproduce secrets, credentials,
+  personal-message content, or any staff/customer name, email, or other
+  personal identifier from evidence; report only roles/departments. Same
+  severity tier, also never reproduce: card/bank/IBAN numbers, national
+  ID/SSN/passport numbers, dates of birth, home addresses, or health/medical
+  content (diagnosis, medication, MRN), describe the workflow generically
+  instead of quoting the value. This does NOT mean stripping operational
+  detail: **keep exact** file/sheet/tab names, ERP/CRM filter or saved-view
+  names, report/template names, folder paths, URL paths (minus any credential/
+  token query param, which is a secret, not operational detail), named
+  ranges/formulas, and customer **account/company** names: these are the
+  evidence a client needs to recognize "yes, that's the report we edit by
+  hand" and are required inputs to the process detail pages (§6).
+  Only rephrase a fragment that carries a **person's** name/email/handle, an
+  individual customer contact's name, or one of the PII/PHI values above; a
+  filename, filter, or URL path stays verbatim. Note that an n=1 report scoped
+  to one role is itself identifying to the client's leadership even with zero
+  names on the page; that's a scoping/consent question for the engagement, not
+  something the deck's wording alone fixes.
 - **No em dashes and no colons** in report body copy (use commas, parentheses;
   en dash – only for numeric ranges); page subtitles carry no trailing period
   (unless multi-sentence).
