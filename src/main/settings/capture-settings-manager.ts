@@ -208,8 +208,7 @@ function normalizeVendorSelection(value: unknown): VendorModelSelection | undefi
 /**
  * Reset a vendor's remembered model slots to the current vendor defaults. Slots
  * whose vendor has no curated default (empty preset list, e.g. openai-compatible
- * local models) are left untouched — there is nothing authoritative to override
- * them with, so the user's local pick stands. Pipeline mode is preserved.
+ * local models) keep the user's local pick. Pipeline mode is preserved.
  */
 function overrideWithVendorDefaults(
   selection: VendorModelSelection,
@@ -244,6 +243,7 @@ export class CaptureSettingsManager {
   private configPath: string
   private settings: CaptureSettings
   private defaults: CaptureSettings
+  private modelDefaultsUpgraded = false
 
   constructor(options: CaptureSettingsManagerOptions | string = {}) {
     const opts: CaptureSettingsManagerOptions =
@@ -260,6 +260,11 @@ export class CaptureSettingsManager {
       uploadDetailLevel: defaultUploadDetailLevel(opts.edition ?? 'customer'),
     }
     this.settings = this.load()
+    // Persist the version stamp once so the override runs a single time, not on
+    // every launch (mirrors migrateAppTokens stamping its schema version).
+    if (this.modelDefaultsUpgraded) {
+      this.save({})
+    }
   }
 
   private load(): CaptureSettings {
@@ -302,11 +307,9 @@ export class CaptureSettingsManager {
             semanticPipelineMode,
           }
         }
-        // Curated model defaults changed (version bump): overwrite the stored
-        // model picks with the current vendor defaults for every remembered
-        // vendor, and re-derive the active vendor's flat fields from them. This
-        // is authoritative — it evicts stale/retired ids the user may be pinned
-        // to. Vendors without presets keep their local pick (see helper).
+        // Version bump: overwrite every remembered vendor's picks with the
+        // current defaults and re-derive the active vendor's flat fields. See
+        // MODEL_DEFAULTS_VERSION for why this is authoritative.
         let finalVideoModel = semanticVideoModel
         let finalSnapshotModel = semanticSnapshotModel
         let finalPatternModel = patternDetectionModel
@@ -323,6 +326,7 @@ export class CaptureSettingsManager {
             finalSnapshotModel = active.semanticSnapshotModel
             finalPatternModel = active.patternDetectionModel
           }
+          this.modelDefaultsUpgraded = true
           log.info(
             `[CaptureSettings] Model defaults v${data.modelDefaultsVersion ?? 0} → v${MODEL_DEFAULTS_VERSION}: overriding stored model picks with vendor defaults`,
           )

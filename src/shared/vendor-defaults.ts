@@ -10,8 +10,8 @@ export interface ModelPreset {
  * existing installs. On load, a stored `modelDefaultsVersion` older than this
  * causes the manager to overwrite the user's remembered model picks with the
  * current vendor defaults (see CaptureSettingsManager.load). Curated defaults
- * are treated as authoritative — an upgrade replaces stale/retired ids (e.g.
- * `-preview` snapshots that later 404) rather than stranding a seat on them.
+ * are authoritative — an upgrade replaces stale/retired ids rather than
+ * stranding a seat on them.
  */
 export const MODEL_DEFAULTS_VERSION = 2
 

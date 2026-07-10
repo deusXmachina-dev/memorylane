@@ -391,6 +391,38 @@ describe('CaptureSettingsManager', () => {
       expect(settings.modelDefaultsVersion).toBe(MODEL_DEFAULTS_VERSION)
     })
 
+    it('resets all curated slots on a version bump, not just the changed one', () => {
+      // The override is authoritative across every slot: a still-valid but
+      // non-default task-miner pick is reset to the vendor default too.
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          activeVendor: 'openrouter',
+          patternDetectionModel: 'xiaomi/mimo-v2.5',
+          modelDefaultsVersion: MODEL_DEFAULTS_VERSION - 1,
+        }),
+      )
+      const manager = new CaptureSettingsManager(configPath)
+      const expected = getVendorDefaults('openrouter').patternDetectionModel
+      expect(manager.get().patternDetectionModel).toBe(expected)
+    })
+
+    it('persists the version bump so the override runs only once', () => {
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          activeVendor: 'openrouter',
+          semanticVideoModel: 'google/gemini-3.1-flash-lite-preview',
+          modelDefaultsVersion: MODEL_DEFAULTS_VERSION - 1,
+        }),
+      )
+      new CaptureSettingsManager(configPath)
+      // The stamp is written back to disk, so a second load sees the current
+      // version and skips the override — no repeated clobber on every launch.
+      const stored = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+      expect(stored.modelDefaultsVersion).toBe(MODEL_DEFAULTS_VERSION)
+    })
+
     it('switching vendors does not lose other vendor selections', () => {
       const manager = new CaptureSettingsManager(configPath)
       // Customize OpenRouter.
