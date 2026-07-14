@@ -15,39 +15,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 MemoryLane is a system tray Electron application that captures screenshots at regular intervals. Built with TypeScript using electron-vite for development and electron-builder for packaging. The application runs as a tray-only app (no main window) and captures screenshots based on user interaction and visual changes.
 
-## Development Commands
-
-```bash
-# Start development mode (with hot reload)
-npm run dev
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
-
-# Package the application (unpacked)
-npm run package
-
-# Create distributable packages
-npm run make
-
-# Platform-specific builds
-npm run make:mac
-npm run make:win
-
-# Lint TypeScript files
-npm run lint
-
-# Format code with Prettier
-npm run format
-
-# Check formatting without writing (CI-friendly)
-npm run format:check
-
-# Run tests
-npm run test
 ## E2E Tests
 
 - Standalone E2E runners live in `e2e-tests/`.
@@ -55,34 +22,9 @@ npm run test
 
 ## Architecture
 
-### Application Structure
-
-This is a tray-only application (no main window). The source follows electron-vite's directory convention:
-
-```
-
-src/
-├── main/ # Main process
-│ ├── index.ts # Entry point, tray management
-│ ├── recorder/ # Screenshot capture module
-│ ├── processor/ # OCR, embeddings, storage
-│ └── mcp/ # MCP server integration
-├── preload/ # Preload scripts
-│ └── index.ts
-├── renderer/ # Renderer process (minimal for tray app)
-│ ├── index.html
-│ ├── index.ts
-│ └── index.css
-└── shared/ # Shared types and constants
-├── types.ts
-└── constants.ts
-
-````
-
 ### Native Sidecars (`native/`)
 
 `native/` contains first-party native sidecar binaries (different from native Node.js addons in `node_modules`). Example is app-watcher module for windows.
-
 
 ### Main Components
 
@@ -151,10 +93,6 @@ The `enode.sh` wrapper sets `ELECTRON_RUN_AS_NODE=1` and executes the command th
 
 ### TypeScript Configuration
 
-- Target: ESNext
-- Module: ESNext with bundler resolution
-- Isolated modules enabled for Vite compatibility
-- Source maps enabled for debugging
 - Path aliases (configured in both Vite and TypeScript):
   - `@/` maps to `src/`
   - `@main/` maps to `src/main/`
@@ -176,36 +114,6 @@ The `enode.sh` wrapper sets `ELECTRON_RUN_AS_NODE=1` and executes the command th
 The `findings/` directory contains benchmark results, prompt experiments, and other research artifacts. When working on prompts or LLM-related features, check this folder first and reuse or update existing results rather than starting from scratch.
 
 ## Key Patterns
-
-### Screen Capture API
-
-The recorder module provides a clean interface for screenshot functionality:
-
-```typescript
-// Start/stop automatic capture
-startCapture(): void  // Begins event-driven capture
-stopCapture(): void   // Stops capture
-
-// Manual capture
-captureNow(): Promise<Screenshot>  // Captures immediately
-
-// Subscribe to captures
-onScreenshot(callback: OnScreenshotCallback): void  // Register callback for new screenshots
-
-// Utility
-getScreenshotsDir(): string  // Get screenshots directory path
-isCapturingNow(): boolean    // Check if currently capturing
-````
-
-### Screenshot Data Structure
-
-Each captured screenshot provides:
-
-- `id`: UUID for the screenshot
-- `filepath`: Absolute path to the PNG file
-- `timestamp`: Unix timestamp in milliseconds
-- `display`: Display metadata (id, width, height)
-- `trigger`: Capture reason (manual, baseline_change, etc.)
 
 ### Tray App Behavior
 
