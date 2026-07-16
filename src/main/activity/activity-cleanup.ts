@@ -6,10 +6,10 @@ import type { Activity } from './activity-types'
 
 function deleteFileIfPresent(filepath: string, label: 'frame' | 'video'): boolean {
   try {
-    fs.rmSync(filepath, { force: true })
+    fs.rmSync(filepath, { force: true, maxRetries: 5, retryDelay: 100 })
     return fs.existsSync(filepath) === false
   } catch {
-    log.warn(`[ActivityCleanup] Failed to delete ${label}: ${filepath}`)
+    log.debug(`[ActivityCleanup] Failed to delete ${label}: ${filepath}`)
     return false
   }
 }
