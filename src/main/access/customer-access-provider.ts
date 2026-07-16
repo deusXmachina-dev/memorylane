@@ -3,6 +3,7 @@ import { MANAGED_KEY_CONFIG } from '../../shared/constants'
 import type { ConsentOutcome, PendingConsent, SubscriptionPlan } from '../../shared/types'
 import { isSameRegistrableDomain } from '../../shared/url-utils'
 import log from '@main/utils/logger'
+import { toUserFacingError } from '@main/utils/network-error'
 import type { DeviceIdentity } from '../settings/device-identity'
 import { BaseAccessProvider } from './base-access-provider'
 import {
@@ -83,7 +84,13 @@ export class CustomerAccessProvider extends BaseAccessProvider {
 
   public async openSubscriptionPortal(): Promise<void> {
     const deviceId = this.resolveDeviceIdInteractive()
-    const signedUrl = await this.fetchSignedLink('/v2/subscription/portal-link', deviceId)
+    let signedUrl: string
+    try {
+      signedUrl = await this.fetchSignedLink('/v2/subscription/portal-link', deviceId)
+    } catch (error) {
+      log.warn('[CustomerAccess] Failed to mint portal link:', error)
+      throw toUserFacingError(error)
+    }
     await shell.openExternal(signedUrl)
     log.info('[CustomerAccess] Opened subscription portal in system browser')
   }
