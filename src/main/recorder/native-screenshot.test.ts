@@ -98,4 +98,38 @@ describe('ScreenshotDaemon', () => {
 
     await daemon.stop()
   })
+
+  it('survives a stdin write that fails after the daemon dies', async () => {
+    const childProcess = await import('child_process')
+    const { ScreenshotDaemon } = await import('./native-screenshot')
+
+    const child = createMockChildProcess(303)
+    vi.mocked(childProcess.spawn).mockReturnValue(
+      child as unknown as ReturnType<typeof childProcess.spawn>,
+    )
+
+    const daemon = new ScreenshotDaemon({
+      getExecutable: () => ({ command: '/tmp/screenshot', args: [] }),
+      buildSpawnArgs: () => [],
+      buildCommandPayload: (command) => command,
+    })
+
+    await daemon.start({
+      outputDir: '/tmp/memorylane-test',
+      onFrame: vi.fn(),
+    })
+
+    // A display change queues a write while the daemon is still alive...
+    daemon.send({ displayId: 2 })
+
+    // ...the daemon is then killed, and the queued write flushes into a dead pipe.
+    // An unhandled 'error' here is what took down the main process.
+    expect(() => child.stdin.emit('error', new Error('write EPIPE'))).not.toThrow()
+
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      '[ScreenshotDaemon] stdin write failed: write EPIPE',
+    )
+
+    await daemon.stop()
+  })
 })
