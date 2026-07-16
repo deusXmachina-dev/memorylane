@@ -151,7 +151,7 @@ describe('EnterpriseAccessProvider', () => {
 
     await provider.refreshAccessState()
 
-    expect(updates.at(-1)?.error).toMatch(/firewall or proxy/i)
+    expect(updates.at(-1)?.error).toMatch(/can't reach the server/i)
   })
 
   it('rejects malformed activation codes without making any network calls', async () => {

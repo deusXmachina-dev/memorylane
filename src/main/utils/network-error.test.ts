@@ -34,16 +34,17 @@ describe('networkErrorCode', () => {
 })
 
 describe('describeNetworkError', () => {
-  it.each(['ENOTFOUND', 'EAI_AGAIN'])('maps %s to the DNS message', (code) => {
-    expect(describeNetworkError(fetchFailed(code))).toMatch(/DNS or proxy settings/)
+  it.each([
+    'ENOTFOUND',
+    'EAI_AGAIN',
+    'ECONNREFUSED',
+    'ECONNRESET',
+    'EHOSTUNREACH',
+    'ENETUNREACH',
+    'UND_ERR_SOCKET',
+  ])('maps %s to the unreachable-server message', (code) => {
+    expect(describeNetworkError(fetchFailed(code))).toMatch(/can't reach the server/i)
   })
-
-  it.each(['ECONNREFUSED', 'ECONNRESET', 'EHOSTUNREACH', 'ENETUNREACH', 'UND_ERR_SOCKET'])(
-    'maps %s to the unreachable-server message',
-    (code) => {
-      expect(describeNetworkError(fetchFailed(code))).toMatch(/firewall or proxy/)
-    },
-  )
 
   it.each(['ETIMEDOUT', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT'])(
     'maps %s to the timeout message',
@@ -55,19 +56,19 @@ describe('describeNetworkError', () => {
   it.each(['DEPTH_ZERO_SELF_SIGNED_CERT', 'SELF_SIGNED_CERT_IN_CHAIN', 'CERT_HAS_EXPIRED'])(
     'maps %s to the TLS message',
     (code) => {
-      expect(describeNetworkError(fetchFailed(code))).toMatch(/secure connection failed/i)
+      expect(describeNetworkError(fetchFailed(code))).toMatch(/secure connection/i)
     },
   )
 
   it('keeps unknown codes visible in the generic message', () => {
     expect(describeNetworkError(fetchFailed('UND_ERR_WEIRD'))).toBe(
-      'Network error (UND_ERR_WEIRD). Check your connection and try again.',
+      'Connection problem (UND_ERR_WEIRD). Check your internet connection and try again.',
     )
   })
 
   it('maps a bare fetch failure without a code to the generic message', () => {
     expect(describeNetworkError(fetchFailed())).toBe(
-      'Network error. Check your connection and try again.',
+      'Connection problem. Check your internet connection and try again.',
     )
   })
 

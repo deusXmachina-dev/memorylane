@@ -1,5 +1,6 @@
-const DNS_CODES = new Set(['ENOTFOUND', 'EAI_AGAIN'])
 const CONNECT_CODES = new Set([
+  'ENOTFOUND',
+  'EAI_AGAIN',
   'ECONNREFUSED',
   'ECONNRESET',
   'EHOSTUNREACH',
@@ -46,26 +47,23 @@ export function networkErrorCode(error: unknown): string | undefined {
 export function describeNetworkError(error: unknown): string | null {
   const code = networkErrorCode(error)
   if (code !== undefined) {
-    if (DNS_CODES.has(code)) {
-      return "Can't reach the server. Check your internet connection and DNS or proxy settings."
-    }
     if (CONNECT_CODES.has(code)) {
-      return "Can't reach the server. Check your internet connection and any firewall or proxy."
+      return "Can't reach the server. Check your internet connection and try again."
     }
     if (TIMEOUT_CODES.has(code)) {
-      return 'Connection timed out. Check your network and try again.'
+      return 'The connection timed out. Check your internet connection and try again.'
     }
     if (isTlsCode(code)) {
-      return 'Secure connection failed. A firewall or proxy may be intercepting traffic.'
+      return "Couldn't set up a secure connection. If you're on a company network, ask your IT department."
     }
   }
   if (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
-    return 'Connection timed out. Check your network and try again.'
+    return 'The connection timed out. Check your internet connection and try again.'
   }
   if (error instanceof TypeError && error.message.toLowerCase().includes('fetch')) {
     return code !== undefined
-      ? `Network error (${code}). Check your connection and try again.`
-      : 'Network error. Check your connection and try again.'
+      ? `Connection problem (${code}). Check your internet connection and try again.`
+      : 'Connection problem. Check your internet connection and try again.'
   }
   return null
 }
