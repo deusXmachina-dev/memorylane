@@ -29,8 +29,8 @@ import { DeviceIdentity } from './settings/device-identity'
 import { listInstalledApps } from './apps/installed-apps'
 import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
 import { TaskMiner } from './services/task-miner'
+import type { MiningStatus } from '../shared/types'
 import { PatternDetector } from './services/pattern-detector'
-import { runTaskBackfillIfNeeded } from './services/task-miner/backfill-bootstrap'
 import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
 import { DatabaseUploadSync } from './services/database-upload-sync'
@@ -379,12 +379,36 @@ app.on('ready', async () => {
     log.info('[Updater] Skipping auto-updater for enterprise edition')
   }
 
-  const { sendObservationUpdate } = await import('./ui/main-window')
+  const { sendObservationUpdate, sendMiningProgress } = await import('./ui/main-window')
 
   observation = createObservationController({
     captureControl: runtime.capture,
     onUpdate: (state) => sendObservationUpdate(state),
   })
+
+  const buildMiningStatus = (): MiningStatus => {
+    const storageRef = runtime?.storage
+    if (!storageRef || !taskMiner) {
+      return {
+        state: 'idle',
+        currentDay: null,
+        pendingDays: 0,
+        completedDays: 0,
+        failedDays: 0,
+        totalDays: 0,
+      }
+    }
+    const counts = storageRef.miningDays.countByStatus()
+    return {
+      state: taskMiner.isBusy() ? 'mining' : 'idle',
+      currentDay: storageRef.miningDays.getRunningDay(),
+      pendingDays: counts.pending + counts.running,
+      completedDays: counts.completed,
+      failedDays: counts.failed,
+      totalDays: counts.pending + counts.running + counts.completed + counts.failed,
+    }
+  }
+  taskMiner?.setStatusListener(() => sendMiningProgress(buildMiningStatus()))
 
   initMainWindowIPC({
     editionConfig,
@@ -411,18 +435,24 @@ app.on('ready', async () => {
       // Task mining is a new-miner-only maintenance action; there's nothing to
       // wipe or re-mine when the legacy PatternDetector is active.
       if (!taskMiner) throw new Error('Task mining is disabled (enable it in Developer settings)')
-      // Don't wipe while a run is in flight: it would finish after the wipe,
-      // re-record mining_runs, and strand the DB with partial data (the next
-      // launch would then skip the re-seed). Bail without touching data. The
-      // busy check and backfill's own guard-claim run with no await between
-      // them, so no scheduled run can slip in and start after the wipe.
+      // Don't wipe while a sweep is in flight: it would keep committing days
+      // into the freshly wiped ledger. Bail without touching data; the busy
+      // check and the sweep's own guard-claim run with no await between them.
       if (taskMiner.isBusy()) {
         return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'busy' as const }
       }
-      // On success wipeTasks() also clears mining_runs, so if this in-session
-      // re-mine later fails, the next launch sees an unmined DB and re-seeds.
+      // wipeTasks() clears the mining_days ledger too, so sweepNow re-enqueues
+      // and re-mines the full window; if it fails midway, the remaining days
+      // stay pending and the next trigger resumes.
       runtime.storage.wipeTasks()
-      return taskMiner.backfill(runtime.inferenceProvider)
+      return taskMiner.sweepNow(runtime.inferenceProvider)
+    },
+    getMiningStatus: buildMiningStatus,
+    retryFailedMiningDays: () => {
+      if (!runtime || !taskMiner) return 0
+      const retried = runtime.storage.miningDays.retryFailed()
+      if (retried > 0) taskMiner.scheduleRun()
+      return retried
     },
     observation,
     evalRecorder: runtime.evalRecorder,
@@ -432,19 +462,13 @@ app.on('ready', async () => {
 
   runtime.accessProvider.startPeriodicRefresh()
 
-  // One-time, background: seed the new sightings/clusters tables from existing
-  // history so the task view isn't empty after upgrading. Gated on whether the
-  // DB has ever been mined (mining_runs) — runs once per DB. Must run before
-  // capture resume — see runTaskBackfillIfNeeded for the ordering.
+  // Recover interrupted mining days and kick the ledger sweep. A fresh DB
+  // enqueues its 60-day seed here; a mined DB just picks up any gap days.
   if (taskMiner) {
     const miner = taskMiner
     // After a derived-data wipe (CLUSTER_SCHEMA_VERSION bump) the DB is still
-    // mined, so the backfill is skipped and clusters rebuild from sightings.
-    void runTaskBackfillIfNeeded({
-      taskMiner: miner,
-      provider: runtime.inferenceProvider,
-      storage: runtime.storage,
-    }).then(() => miner.rebuildClustersIfEmpty())
+    // mined, so clusters rebuild from sightings before the sweep starts.
+    void miner.rebuildClustersIfEmpty().then(() => miner.startup())
   }
 
   captureCoordinator.resumeCaptureIfDesired('startup')

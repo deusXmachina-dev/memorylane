@@ -90,7 +90,7 @@ describe('SightingRepository', () => {
   })
 
   describe('wipeTasks', () => {
-    it('clears sightings, clusters, and the mining cursor; activities are untouched', () => {
+    it('clears sightings, clusters, and the mining ledger; activities are untouched', () => {
       storage.activities.add({
         id: 'act-1',
         appName: 'TestApp',
@@ -117,13 +117,13 @@ describe('SightingRepository', () => {
         updatedAt: 1000,
       })
       storage.clusters.addMembership('c1', 's1', 100)
-      storage.miningRuns.record(1000)
+      storage.miningDays.enqueueMissing(['2026-07-01'], 1000)
 
       storage.wipeTasks()
 
       expect(storage.sightings.getById('s1')).toBeNull()
       expect(storage.clusters.getAll()).toHaveLength(0)
-      expect(storage.miningRuns.getLastRunTimestamp()).toBeNull()
+      expect(storage.miningDays.getAll()).toHaveLength(0)
       expect(storage.activities.count()).toBe(1)
     })
   })

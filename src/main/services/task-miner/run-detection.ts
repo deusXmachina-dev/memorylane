@@ -6,7 +6,13 @@ import type { Sighting } from '../../storage/sighting-repository'
 import type { ActivityEmbeddingService } from '@main/activity/activity-transformer-types'
 import type { InferenceProvider } from '../../llm'
 import log from '@main/utils/logger'
-import type { TaskMinerConfig, MiningRunResult, ProgressCallback, Candidate } from './types'
+import type {
+  TaskMinerConfig,
+  MiningRunResult,
+  ProgressCallback,
+  Candidate,
+  DayMiningStats,
+} from './types'
 import { DEFAULT_MINER_CONFIG } from './types'
 import {
   getDayBoundaries,
@@ -67,6 +73,15 @@ export async function runDetection(
 
   progress(`Starting run ${runId} (model=${cfg.model}, lookback=${cfg.lookbackDays}d)`)
 
+  // The day's sightings and its ledger status commit in one transaction: a
+  // crash mid-run persists nothing, so a retry can never duplicate sightings.
+  const commitDay = (sightings: Sighting[], stats: DayMiningStats): void => {
+    storage.getDatabase().transaction(() => {
+      for (const s of sightings) storage.sightings.add(s)
+      cfg.onCommit?.(stats)
+    })()
+  }
+
   // 0. Prune very old sightings (DB hygiene)
   const prunedSightings = storage.sightings.pruneOlderThan(SIGHTING_RETENTION_DAYS, now)
   if (prunedSightings)
@@ -79,7 +94,14 @@ export async function runDetection(
 
   if (activities.length === 0) {
     progress('No activities for this day, skipping')
-    storage.miningRuns.record(now)
+    commitDay([], {
+      candidatesFromScan: 0,
+      candidatesKept: 0,
+      candidatesRejected: 0,
+      tokensIn: 0,
+      tokensOut: 0,
+      skippedReason: 'no-activities',
+    })
     return emptyResult(runId, 0, { scanIn: 0, scanOut: 0, verifyIn: 0, verifyOut: 0 })
   }
 
@@ -184,8 +206,20 @@ export async function runDetection(
   }
 
   if (candidates.length === 0) {
+    // A parsed `[]` is a legitimately empty day; anything else here means all
+    // scan attempts produced unusable output — fail the day so it's retried
+    // instead of being silently recorded as mined.
+    if (!scan || scan.raw.length > 0) {
+      throw new Error(`Scan produced no usable output after ${SCAN_MAX_ATTEMPTS} attempts`)
+    }
     progress('No grounded candidates, done')
-    storage.miningRuns.record(now)
+    commitDay([], {
+      candidatesFromScan: rawCandidates.length,
+      candidatesKept: 0,
+      candidatesRejected: 0,
+      tokensIn: scanInputTokens,
+      tokensOut: scanOutputTokens,
+    })
     return emptyResult(runId, rawCandidates.length, {
       scanIn: scanInputTokens,
       scanOut: scanOutputTokens,
@@ -215,6 +249,7 @@ export async function runDetection(
 
   let candidatesKept = 0
   let candidatesRejected = 0
+  const pendingSightings: Sighting[] = []
 
   for (const candidate of candidates) {
     try {
@@ -309,7 +344,7 @@ export async function runDetection(
         continue
       }
       const { startedAt, endedAt, interactionMin } = computeEpisodeWindow(resolved)
-      storage.sightings.add({
+      pendingSightings.push({
         id: uuidv4(),
         title,
         subject,
@@ -333,7 +368,13 @@ export async function runDetection(
     }
   }
 
-  storage.miningRuns.record(now)
+  commitDay(pendingSightings, {
+    candidatesFromScan: rawCandidates.length,
+    candidatesKept,
+    candidatesRejected,
+    tokensIn: scanInputTokens + verifyInputTokens,
+    tokensOut: scanOutputTokens + verifyOutputTokens,
+  })
 
   progress(
     `Run complete: ${candidates.length} candidates → ${candidatesKept} sightings (${candidatesRejected} rejected)`,

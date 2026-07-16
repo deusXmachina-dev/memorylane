@@ -118,6 +118,25 @@ async function main() {
       }
     }
 
+    // Task-mining ledger
+    const miningDays = storage.miningDays.getAll()
+    if (miningDays.length > 0) {
+      const counts = storage.miningDays.countByStatus()
+      console.log('')
+      console.log('Task mining:')
+      console.log(
+        `  Days:   ${counts.completed} completed, ${counts.pending} pending, ` +
+          `${counts.running} running, ${counts.failed} failed`,
+      )
+      const lastCompleted = [...miningDays].reverse().find((d) => d.status === 'completed')
+      if (lastCompleted) {
+        console.log(`  Last completed: ${lastCompleted.day}`)
+      }
+      for (const d of storage.miningDays.getFailed()) {
+        console.log(`  FAILED ${d.day} (${d.attempts} attempts): ${d.lastError ?? 'unknown error'}`)
+      }
+    }
+
     storage.close()
   } catch (error) {
     console.error('\nError:', error instanceof Error ? error.message : error)

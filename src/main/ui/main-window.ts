@@ -58,6 +58,7 @@ import type {
   LlmHealthStatus,
   MainWindowStatus,
   MainWindowStats,
+  MiningStatus,
   CaptureSettings,
   McpRegistrationStatus,
   ObservationState,
@@ -138,6 +139,10 @@ interface MainWindowDependencies {
   purgeAll: () => Promise<void>
   /** Dev-only: wipe all mined sightings/clusters and re-mine from scratch. */
   wipeAndRemineTasks?: () => Promise<BackfillSummary>
+  /** Task-mining ledger progress; absent when the new miner is disabled. */
+  getMiningStatus?: () => MiningStatus
+  /** Dev-only: reopen failed mining days and kick a sweep. Returns days reopened. */
+  retryFailedMiningDays?: () => number
   observation: {
     start: (durationMs: number) => ObservationState
     stop: (reason: 'user' | 'timer') => ObservationState
@@ -215,6 +220,15 @@ export function sendStatusToRenderer(): void {
 
   const status = buildStatus()
   mainWindow.webContents.send('main-window:statusChanged', status)
+}
+
+/**
+ * Broadcast task-mining ledger progress so the Patterns view can show the
+ * sweep (especially the first 60-day backfill) as it happens.
+ */
+export function sendMiningProgress(status: MiningStatus): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.webContents.send('main-window:miningProgressChanged', status)
 }
 
 /**
@@ -774,6 +788,23 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       .filter((c) => c.timesSeen > 0)
     const visible = infos.filter((c) => !isBelowNoiseFloor(c.timesSeen, c.totalActiveMin))
     return { clusters: visible, hiddenCount: infos.length - visible.length }
+  })
+
+  handle('main-window:getMiningStatus', (): MiningStatus => {
+    return (
+      deps?.getMiningStatus?.() ?? {
+        state: 'idle',
+        currentDay: null,
+        pendingDays: 0,
+        completedDays: 0,
+        failedDays: 0,
+        totalDays: 0,
+      }
+    )
+  })
+
+  handle('main-window:retryFailedMiningDays', (): { retried: number } => {
+    return { retried: deps?.retryFailedMiningDays?.() ?? 0 }
   })
 
   handle(

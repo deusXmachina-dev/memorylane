@@ -36,6 +36,7 @@ import type {
   MainWindowStats,
   McpRegistrationStatus,
   ClustersView,
+  MiningStatus,
   PatternInfo,
   PermissionState,
   PermissionStatus,
@@ -66,6 +67,7 @@ export function MainWindowApp(): React.JSX.Element {
   const [mcpStatus, setMcpStatus] = useState<McpRegistrationStatus | null>(null)
   const [clusters, setClusters] = useState<ClustersView | null>(null)
   const [patterns, setPatterns] = useState<PatternInfo[] | null>(null)
+  const [miningStatus, setMiningStatus] = useState<MiningStatus | null>(null)
   // Developer toggle read once at startup. Off (default) → legacy PatternDetector
   // + patterns view; on → new TaskMiner + clusters view. Takes effect on restart.
   const [newTaskMinerEnabled, setNewTaskMinerEnabled] = useState(false)
@@ -334,6 +336,16 @@ export function MainWindowApp(): React.JSX.Element {
     })
     return () => unsubscribe()
   }, [api, loadAll, loadStats, loadClusters, loadPatterns])
+
+  useEffect(() => {
+    void api.getMiningStatus().then(setMiningStatus)
+    const unsubscribe = api.onMiningProgressChanged((status) => {
+      setMiningStatus(status)
+      // Each finished day can add or grow clusters — keep the view fresh.
+      void loadClusters()
+    })
+    return () => unsubscribe()
+  }, [api, loadClusters])
 
   useEffect(() => {
     const unsubscribe = api.onSubscriptionUpdate(() => {
@@ -613,6 +625,7 @@ export function MainWindowApp(): React.JSX.Element {
             newTaskMinerEnabled={newTaskMinerEnabled}
             clusters={clusters}
             patterns={patterns}
+            miningStatus={miningStatus}
             onPatternsChange={() => void loadPatterns()}
           />
         )

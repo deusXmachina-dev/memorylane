@@ -12,6 +12,21 @@ export interface TaskMinerConfig {
   scanOnly: boolean
   /** Run the clustering pass over sightings after mining. */
   clustering: boolean
+  /**
+   * Called inside the transaction that persists the day's sightings, so ledger
+   * bookkeeping (mining_days markCompleted) commits atomically with them.
+   */
+  onCommit?: (stats: DayMiningStats) => void
+}
+
+/** Per-day outcome persisted to the mining_days ledger. */
+export interface DayMiningStats {
+  candidatesFromScan: number
+  candidatesKept: number
+  candidatesRejected: number
+  tokensIn: number
+  tokensOut: number
+  skippedReason?: string
 }
 
 // scanOnly picked by the task-mining eval sweep (see
