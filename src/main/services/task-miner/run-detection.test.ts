@@ -16,10 +16,11 @@ vi.mock('ai', () => ({
 
 const mockedGenerateText = vi.mocked(generateText)
 
+const languageModel: InferenceProvider['languageModel'] = () => 'model'
 const provider = {
   isConfigured: () => true,
-  languageModel: () => 'model',
-} as unknown as InferenceProvider
+  languageModel,
+} as InferenceProvider
 const embedder: MinerEmbedder = {
   embed: async () => [0.1, 0.2, 0.3],
   embedBatch: async (texts) => texts.map(() => [0.1, 0.2, 0.3]),
