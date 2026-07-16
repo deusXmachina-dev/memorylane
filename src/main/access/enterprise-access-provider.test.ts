@@ -284,6 +284,39 @@ describe('EnterpriseAccessProvider', () => {
     })
   })
 
+  it('fails the activation with a friendly message when the external-consent bind hits a transport failure', async () => {
+    const responses: Array<() => Response> = [
+      // GET /license/consent-document -> already_approved sentinel
+      () =>
+        ({
+          ok: true,
+          json: async () => ({ state: 'already_approved' }),
+        }) as unknown as Response,
+      // POST /license/activate -> network failure
+      () => {
+        throw new TypeError('fetch failed', {
+          cause: Object.assign(new Error('getaddrinfo ENOTFOUND backend.example'), {
+            code: 'ENOTFOUND',
+          }),
+        })
+      },
+    ]
+    globalThis.fetch = vi.fn(async () => (responses.shift() as () => Response)()) as typeof fetch
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const updates: Array<{ status: string | null; error: string | null }> = []
+    provider.setUpdateCallback((state) => {
+      updates.push({ status: state.enterpriseActivationStatus, error: state.error })
+    })
+
+    await expect(provider.activateEnterpriseLicense(ACTIVATION_CODE)).rejects.toThrow(
+      /can't reach the server/i,
+    )
+    // Not stuck in 'activating': the UI returns to the code-entry form.
+    expect(updates.at(-1)?.status).toBe('error')
+    expect(updates.at(-1)?.error).toMatch(/internet connection/i)
+  })
+
   it('treats 502 on external-consent bind as provisional success and starts polling', async () => {
     const responses = [
       // GET /license/consent-document -> already_approved sentinel

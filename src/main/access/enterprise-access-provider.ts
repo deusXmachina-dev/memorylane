@@ -379,11 +379,20 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       )
       throw new Error(message)
     }
-    const result = await this.postActivate(
-      { tenant_token: tenantToken, device_id: deviceId, email, outcome: 'accepted' },
-      tenantToken,
-      'Activation failed during external-consent bind',
-    )
+    let result: ActivateResult
+    try {
+      result = await this.postActivate(
+        { tenant_token: tenantToken, device_id: deviceId, email, outcome: 'accepted' },
+        tenantToken,
+        'Activation failed during external-consent bind',
+      )
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Activation failed.'
+      this.applyTransition(
+        transitionEnterpriseAccess(this.accessState, { type: 'activation_failed', error: message }),
+      )
+      throw new Error(message)
+    }
 
     if (result.status === 'error') {
       this.applyTransition(
