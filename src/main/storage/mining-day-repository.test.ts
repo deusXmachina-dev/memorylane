@@ -107,7 +107,7 @@ describe('MiningDayRepository', () => {
     expect(claim).toEqual({ day: '2026-07-01', attempts: 1 })
   })
 
-  it('counts by status and reports the running day and max day', () => {
+  it('counts by status and reports the running day', () => {
     storage.miningDays.enqueueMissing(['2026-07-01', '2026-07-02', '2026-07-03'])
     storage.miningDays.claimOldestPending()
     storage.miningDays.markCompleted('2026-07-03', {})
@@ -119,7 +119,6 @@ describe('MiningDayRepository', () => {
       failed: 0,
     })
     expect(storage.miningDays.getRunningDay()).toBe('2026-07-01')
-    expect(storage.miningDays.getMaxDay()).toBe('2026-07-03')
   })
 })
 
@@ -129,9 +128,6 @@ describe('migration 0016_add_mining_days', () => {
   let db: Database.Database
 
   const idx0016 = migrations.findIndex((m) => m.name === '0016_add_mining_days')
-
-  const localDay = (d: Date): string =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
   beforeEach(() => {
     deleteDbFiles(TEST_DB_PATH)
@@ -146,36 +142,15 @@ describe('migration 0016_add_mining_days', () => {
     deleteDbFiles(TEST_DB_PATH)
   })
 
-  it('seeds completed rows for window days before the last run and drops mining_runs', () => {
-    const daysAgo = (n: number): Date => {
-      const now = new Date()
-      return new Date(now.getFullYear(), now.getMonth(), now.getDate() - n)
-    }
-    // Last run 5 days ago → window days older than that are settled.
-    db.prepare('INSERT INTO mining_runs (ran_at) VALUES (?)').run(daysAgo(5).getTime())
+  it('creates an empty ledger and drops mining_runs', () => {
+    db.prepare('INSERT INTO mining_runs (ran_at) VALUES (?)').run(Date.now())
 
     migrations[idx0016].up(db)
 
-    const rows = db.prepare('SELECT day, status, stats FROM mining_days ORDER BY day').all() as {
-      day: string
-      status: string
-      stats: string
-    }[]
-    expect(rows).toHaveLength(55) // days 60..6 ago
-    expect(rows[0].day).toBe(localDay(daysAgo(60)))
-    expect(rows[rows.length - 1].day).toBe(localDay(daysAgo(6)))
-    expect(rows.every((r) => r.status === 'completed')).toBe(true)
-    expect(JSON.parse(rows[0].stats)).toEqual({ seeded: true })
-
+    expect(db.prepare('SELECT COUNT(*) AS n FROM mining_days').get()).toEqual({ n: 0 })
     const tables = db
       .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'mining_runs'`)
       .all()
     expect(tables).toHaveLength(0)
-  })
-
-  it('seeds nothing for a never-mined DB', () => {
-    migrations[idx0016].up(db)
-
-    expect(db.prepare('SELECT COUNT(*) AS n FROM mining_days').get()).toEqual({ n: 0 })
   })
 })

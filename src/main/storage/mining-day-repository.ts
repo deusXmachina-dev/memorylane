@@ -131,13 +131,6 @@ export class MiningDayRepository {
     )
   }
 
-  getMaxDay(): string | null {
-    const row = this.db.prepare('SELECT MAX(day) AS max FROM mining_days').get() as {
-      max: string | null
-    }
-    return row.max
-  }
-
   getRunningDay(): string | null {
     const row = this.db
       .prepare(`SELECT day FROM mining_days WHERE status = 'running' LIMIT 1`)

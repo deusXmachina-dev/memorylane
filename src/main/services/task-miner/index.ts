@@ -188,6 +188,8 @@ export class TaskMiner {
         const claim = this.storage.miningDays.claimOldestPending()
         if (!claim) break
         didWork = true
+        // Push the claim so the banner's currentDay is live while the day mines.
+        this.emitStatus()
         const back = this.daysAgo(claim.day)
         const { start, end } = getDayBoundaries(back)
 
@@ -244,8 +246,11 @@ export class TaskMiner {
       }
 
       // Final clustering pass — also after an all-skipped drain, so a ledger
-      // seeded from pre-ledger sightings still gets its clusters refreshed.
-      if (didWork && (minedSinceCluster > 0 || !clustering)) {
+      // enqueued over pre-ledger sightings still gets its clusters refreshed.
+      // Skipped when nothing settled (e.g. the first day failed): there is
+      // nothing new to cluster, and a provider outage shouldn't get one more
+      // doomed LLM call.
+      if (daysMined + daysSkipped > 0 && (minedSinceCluster > 0 || !clustering)) {
         clustering = await this.cluster(provider, {
           ...DEFAULT_MINER_CONFIG,
           model: this.model,
