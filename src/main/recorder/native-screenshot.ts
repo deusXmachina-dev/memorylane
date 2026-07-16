@@ -141,11 +141,11 @@ export class ScreenshotDaemon implements ScreenCaptureBackend {
       this.handleLine(line)
     })
 
-    /*     // Writes queue in the stdin buffer, so a command sent while the daemon was alive
+    // Writes queue in the stdin buffer, so a command sent while the daemon was alive
     // can still flush after the pipe dies. Unhandled, that EPIPE kills the main process.
     proc.stdin?.on('error', (err: Error) => {
       log.warn(`[ScreenshotDaemon] stdin write failed: ${err.message}`)
-    }) */
+    })
 
     proc.stderr?.on('data', (chunk) => {
       const msg = chunk.toString().trim()
