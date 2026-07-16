@@ -154,6 +154,42 @@ describe('EnterpriseAccessProvider', () => {
     expect(updates.at(-1)?.error).toMatch(/can't reach the server/i)
   })
 
+  it('keeps an activated device activated when a refresh hits a transport failure', async () => {
+    const responses: Array<() => Response> = [
+      // GET /license/status -> activated
+      () => ({ ok: true, json: async () => ({ activated: true }) }) as unknown as Response,
+      // GET /license/inference-config -> managed key
+      () =>
+        ({
+          ok: true,
+          json: async () => ({ provider: 'openrouter', apiKey: 'key-123' }),
+        }) as unknown as Response,
+      // next refresh: offline
+      () => {
+        throw new TypeError('fetch failed', {
+          cause: Object.assign(new Error('getaddrinfo ENOTFOUND backend.example'), {
+            code: 'ENOTFOUND',
+          }),
+        })
+      },
+    ]
+    globalThis.fetch = vi.fn(async () => (responses.shift() as () => Response)()) as typeof fetch
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const updates: Array<{ status: string | null; error: string | null }> = []
+    provider.setUpdateCallback((state) => {
+      updates.push({ status: state.enterpriseActivationStatus, error: state.error })
+    })
+
+    await provider.refreshAccessState()
+    expect(updates.at(-1)?.status).toBe('activated')
+
+    await provider.refreshAccessState()
+
+    expect(updates.at(-1)?.status).toBe('activated')
+    expect(updates.at(-1)?.error).toBeNull()
+  })
+
   it('rejects malformed activation codes without making any network calls', async () => {
     const fetchMock = vi.fn() as unknown as typeof fetch
     globalThis.fetch = fetchMock

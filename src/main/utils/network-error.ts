@@ -20,7 +20,9 @@ function isTlsCode(code: string): boolean {
     code.startsWith('ERR_TLS') ||
     code.startsWith('ERR_SSL') ||
     code.startsWith('CERT_') ||
-    code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ||
+    // OpenSSL verification failures: UNABLE_TO_GET_ISSUER_CERT_LOCALLY (common
+    // behind TLS-intercepting corporate proxies), UNABLE_TO_VERIFY_LEAF_SIGNATURE, …
+    code.startsWith('UNABLE_TO_') ||
     code.includes('SELF_SIGNED')
   )
 }
@@ -66,4 +68,16 @@ export function describeNetworkError(error: unknown): string | null {
       : 'Connection problem. Check your internet connection and try again.'
   }
   return null
+}
+
+/** A network transport failure rewritten with a user-facing message. */
+export class NetworkError extends Error {}
+
+/**
+ * NetworkError with a user-facing message when the error is a transport
+ * failure; the original error otherwise.
+ */
+export function toUserFacingError(error: unknown): unknown {
+  const friendly = describeNetworkError(error)
+  return friendly !== null ? new NetworkError(friendly) : error
 }

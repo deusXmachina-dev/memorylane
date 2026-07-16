@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { ENTERPRISE_BACKEND_CONFIG } from '../../shared/constants'
 import type { ConsentOutcome, PendingConsent } from '../../shared/types'
 import log from '@main/utils/logger'
-import { describeNetworkError } from '@main/utils/network-error'
+import { NetworkError, toUserFacingError } from '@main/utils/network-error'
 import type { DeviceIdentity } from '../settings/device-identity'
 import { parseActivationCode } from './activation-code'
 import { BaseAccessProvider, DEVICE_IDENTITY_RETRY_MESSAGE } from './base-access-provider'
@@ -124,8 +124,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       return await fetch(url.toString(), init)
     } catch (error) {
       log.warn('[EnterpriseAccess] Network request failed:', error)
-      const friendly = describeNetworkError(error)
-      throw friendly !== null ? new Error(friendly) : error
+      throw toUserFacingError(error)
     }
   }
 
@@ -169,6 +168,11 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       )
     } catch (error) {
       log.warn('[EnterpriseAccess] Refresh failed:', error)
+      // Being offline is not de-activation: keep an activated device's state
+      // and let the periodic refresh retry.
+      if (error instanceof NetworkError && this.accessState.isEnterpriseActivated) {
+        return
+      }
       this.applyTransition(
         transitionEnterpriseAccess(this.accessState, {
           type: 'activation_failed',

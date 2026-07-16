@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { describeNetworkError, networkErrorCode } from './network-error'
+import {
+  describeNetworkError,
+  networkErrorCode,
+  NetworkError,
+  toUserFacingError,
+} from './network-error'
 
 function fetchFailed(code?: string): TypeError {
   const cause =
@@ -53,12 +58,15 @@ describe('describeNetworkError', () => {
     },
   )
 
-  it.each(['DEPTH_ZERO_SELF_SIGNED_CERT', 'SELF_SIGNED_CERT_IN_CHAIN', 'CERT_HAS_EXPIRED'])(
-    'maps %s to the TLS message',
-    (code) => {
-      expect(describeNetworkError(fetchFailed(code))).toMatch(/secure connection/i)
-    },
-  )
+  it.each([
+    'DEPTH_ZERO_SELF_SIGNED_CERT',
+    'SELF_SIGNED_CERT_IN_CHAIN',
+    'CERT_HAS_EXPIRED',
+    'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+    'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+  ])('maps %s to the TLS message', (code) => {
+    expect(describeNetworkError(fetchFailed(code))).toMatch(/secure connection/i)
+  })
 
   it('keeps unknown codes visible in the generic message', () => {
     expect(describeNetworkError(fetchFailed('UND_ERR_WEIRD'))).toBe(
@@ -85,5 +93,18 @@ describe('describeNetworkError', () => {
       describeNetworkError(Object.assign(new Error('x'), { code: 'ERR_INVALID_ARG_TYPE' })),
     ).toBeNull()
     expect(describeNetworkError(undefined)).toBeNull()
+  })
+})
+
+describe('toUserFacingError', () => {
+  it('wraps transport failures in a NetworkError with the friendly message', () => {
+    const mapped = toUserFacingError(fetchFailed('ENOTFOUND'))
+    expect(mapped).toBeInstanceOf(NetworkError)
+    expect((mapped as Error).message).toMatch(/can't reach the server/i)
+  })
+
+  it('returns non-network errors unchanged', () => {
+    const original = new Error('Invalid activation code')
+    expect(toUserFacingError(original)).toBe(original)
   })
 })

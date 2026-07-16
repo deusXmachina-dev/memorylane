@@ -157,6 +157,20 @@ describe('CustomerAccessProvider', () => {
     expect(openedUrl).not.toContain('device_id=')
   })
 
+  it('maps transport failures from the portal link to a friendly message', async () => {
+    globalThis.fetch = vi.fn(async () => {
+      throw new TypeError('fetch failed', {
+        cause: Object.assign(new Error('getaddrinfo ENOTFOUND backend.example'), {
+          code: 'ENOTFOUND',
+        }),
+      })
+    }) as typeof fetch
+
+    const provider = new CustomerAccessProvider(deviceIdentity)
+    await expect(provider.openSubscriptionPortal()).rejects.toThrow(/can't reach the server/i)
+    expect(openExternalMock).not.toHaveBeenCalled()
+  })
+
   it('rejects checkout URLs outside the backend registrable domain', async () => {
     globalThis.fetch = makeFetchMock([
       jsonResponse({ url: 'https://attacker.example/phishing?token=x' }),
