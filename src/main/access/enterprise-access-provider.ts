@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { ENTERPRISE_BACKEND_CONFIG } from '../../shared/constants'
 import type { ConsentOutcome, PendingConsent } from '../../shared/types'
 import log from '@main/utils/logger'
+import { describeNetworkError } from '@main/utils/network-error'
 import type { DeviceIdentity } from '../settings/device-identity'
 import { parseActivationCode } from './activation-code'
 import { BaseAccessProvider, DEVICE_IDENTITY_RETRY_MESSAGE } from './base-access-provider'
@@ -117,6 +118,17 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     return new URL(path, this.resolveBackendBase())
   }
 
+  /** fetch() that rethrows transport failures with a user-facing message. */
+  private async fetchMapped(url: string | URL, init?: RequestInit): Promise<Response> {
+    try {
+      return await fetch(url.toString(), init)
+    } catch (error) {
+      log.warn('[EnterpriseAccess] Network request failed:', error)
+      const friendly = describeNetworkError(error)
+      throw friendly !== null ? new Error(friendly) : error
+    }
+  }
+
   public async refreshAccessState(): Promise<void> {
     if (this.accessState.enterpriseActivationStatus === 'awaiting_consent') {
       return
@@ -196,9 +208,21 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
 
     const descriptorUrl = this.enterpriseUrl('api/license/consent-document')
 
-    const descriptorResponse = await fetch(descriptorUrl.toString(), {
-      headers: bearer(parsed.tenantToken),
-    })
+    let descriptorResponse: Response
+    try {
+      descriptorResponse = await this.fetchMapped(descriptorUrl, {
+        headers: bearer(parsed.tenantToken),
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Activation failed.'
+      this.applyTransition(
+        transitionEnterpriseAccess(this.accessState, {
+          type: 'activation_failed',
+          error: message,
+        }),
+      )
+      throw new Error(message)
+    }
     if (!descriptorResponse.ok) {
       const errorMessage = await this.readErrorMessage(
         descriptorResponse,
@@ -386,7 +410,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     tenantToken: string,
     errorFallback: string,
   ): Promise<ActivateResult> {
-    const response = await fetch(this.enterpriseUrl('api/license/activate'), {
+    const response = await this.fetchMapped(this.enterpriseUrl('api/license/activate'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -445,7 +469,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     if (documentUrl.origin !== new URL(backendBase).origin) {
       throw new Error('Consent document URL is not on the configured backend origin')
     }
-    const response = await fetch(documentUrl.toString(), {
+    const response = await this.fetchMapped(documentUrl, {
       headers: bearer(tenantToken),
     })
     if (!response.ok) {
@@ -522,7 +546,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
   private async fetchEnterpriseStatus(deviceId: string): Promise<boolean> {
     const url = this.enterpriseUrl('api/license/status')
 
-    const response = await fetch(url.toString(), { headers: bearer(deviceId) })
+    const response = await this.fetchMapped(url, { headers: bearer(deviceId) })
     if (response.status === 401) {
       return false
     }
@@ -541,7 +565,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
   private async fetchInferenceConfig(deviceId: string): Promise<ManagedInferenceConfig | null> {
     const url = this.enterpriseUrl('api/license/inference-config')
 
-    const response = await fetch(url.toString(), { headers: bearer(deviceId) })
+    const response = await this.fetchMapped(url, { headers: bearer(deviceId) })
     if (response.status === 401) {
       return null
     }

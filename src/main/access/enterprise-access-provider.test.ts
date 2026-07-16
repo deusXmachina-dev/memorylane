@@ -92,6 +92,68 @@ describe('EnterpriseAccessProvider', () => {
     expect(consent?.contentType).toBe('application/pdf')
   })
 
+  it('maps transport failures during activation to a friendly message and fails the activation', async () => {
+    globalThis.fetch = vi.fn(async () => {
+      throw new TypeError('fetch failed', {
+        cause: Object.assign(new Error('getaddrinfo ENOTFOUND backend.example'), {
+          code: 'ENOTFOUND',
+        }),
+      })
+    }) as typeof fetch
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const updates: Array<{ status: string | null; error: string | null }> = []
+    provider.setUpdateCallback((state) => {
+      updates.push({ status: state.enterpriseActivationStatus, error: state.error })
+    })
+
+    await expect(provider.activateEnterpriseLicense(ACTIVATION_CODE)).rejects.toThrow(
+      /can't reach the server/i,
+    )
+    // Not stuck in 'activating': the UI returns to the code-entry form.
+    expect(updates.at(-1)?.status).toBe('error')
+    expect(updates.at(-1)?.error).toMatch(/internet connection/i)
+  })
+
+  it('keeps the backend error message when the activation code is rejected', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 403,
+      json: async () => ({ error: 'Invalid activation code' }),
+    })) as unknown as typeof fetch
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const updates: Array<{ status: string | null; error: string | null }> = []
+    provider.setUpdateCallback((state) => {
+      updates.push({ status: state.enterpriseActivationStatus, error: state.error })
+    })
+
+    await expect(provider.activateEnterpriseLicense(ACTIVATION_CODE)).rejects.toThrow(
+      'Invalid activation code',
+    )
+    expect(updates.at(-1)?.error).toBe('Invalid activation code')
+  })
+
+  it('maps transport failures during refresh to a friendly message', async () => {
+    globalThis.fetch = vi.fn(async () => {
+      throw new TypeError('fetch failed', {
+        cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:443'), {
+          code: 'ECONNREFUSED',
+        }),
+      })
+    }) as typeof fetch
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const updates: Array<{ status: string | null; error: string | null }> = []
+    provider.setUpdateCallback((state) => {
+      updates.push({ status: state.enterpriseActivationStatus, error: state.error })
+    })
+
+    await provider.refreshAccessState()
+
+    expect(updates.at(-1)?.error).toMatch(/firewall or proxy/i)
+  })
+
   it('rejects malformed activation codes without making any network calls', async () => {
     const fetchMock = vi.fn() as unknown as typeof fetch
     globalThis.fetch = fetchMock
