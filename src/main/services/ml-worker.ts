@@ -57,7 +57,7 @@ interface ParentPortLike {
   on(event: 'message', listener: (e: { data: MlWorkerRequest }) => void): void
   postMessage(message: MlWorkerResponse | WorkerLogEvent): void
 }
-const parentPort = (process as unknown as { parentPort?: ParentPortLike }).parentPort
+const parentPort = process.parentPort as ParentPortLike | undefined
 if (parentPort) {
   forwardLogsToParent(parentPort)
   parentPort.on('message', ({ data }) => {

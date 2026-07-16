@@ -5,7 +5,7 @@ import type { EmbeddingService } from '@main/processor/embedding'
 
 const fakeService = {
   embedBatch: async (texts: string[]) => texts.map(() => [1, 0, 0]),
-} as unknown as EmbeddingService
+} as EmbeddingService
 
 describe('packVectors / unpackVectors', () => {
   it('round-trips row vectors through one buffer', () => {
@@ -54,11 +54,10 @@ describe('handleMlWorkerRequest', () => {
   })
 
   it('maps a thrown error to ok:false', async () => {
-    const failing = {
-      embedBatch: async () => {
-        throw new Error('boom')
-      },
-    } as unknown as EmbeddingService
+    const failingEmbedBatch: EmbeddingService['embedBatch'] = async () => {
+      throw new Error('boom')
+    }
+    const failing = { embedBatch: failingEmbedBatch } as EmbeddingService
     const response = await handleMlWorkerRequest(
       { id: 3, type: 'embedBatch', texts: ['x'] },
       failing,

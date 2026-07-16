@@ -1,3 +1,7 @@
+interface Window {
+  mainWindowAPI?: import('@types').MainWindowAPI
+}
+
 declare module '*.png' {
   const src: string
   export default src

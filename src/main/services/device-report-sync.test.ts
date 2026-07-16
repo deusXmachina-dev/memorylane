@@ -11,11 +11,11 @@ const EXPECTED_PLATFORM =
   process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : null
 
 function okResponse(): Response {
-  return { ok: true, status: 200, json: async () => ({}) } as unknown as Response
+  return { ok: true, status: 200, json: async () => ({}) } as Response
 }
 
 function errorResponse(status: number): Response {
-  return { ok: false, status, json: async () => ({}) } as unknown as Response
+  return { ok: false, status, json: async () => ({}) } as Response
 }
 
 describe('DeviceReportSync', () => {
@@ -50,8 +50,8 @@ describe('DeviceReportSync', () => {
   })
 
   it('POSTs the version with the device bearer to api/device/report', async () => {
-    const fetchMock = vi.fn(async () => okResponse())
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    const fetchMock = vi.fn<typeof fetch>(async () => okResponse())
+    globalThis.fetch = fetchMock
 
     const { service, writeStored } = makeService()
     await service.sync()
@@ -68,8 +68,8 @@ describe('DeviceReportSync', () => {
   })
 
   it('does not POST when the stored version already matches (loaded on start)', async () => {
-    const fetchMock = vi.fn(async () => okResponse())
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    const fetchMock = vi.fn<typeof fetch>(async () => okResponse())
+    globalThis.fetch = fetchMock
 
     const { service } = makeService({ readStored: () => ({ version: '1.3.0' }) })
     service.start()
@@ -80,8 +80,8 @@ describe('DeviceReportSync', () => {
   })
 
   it('POSTs once, then stays quiet on subsequent syncs (report only on change)', async () => {
-    const fetchMock = vi.fn(async () => okResponse())
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    const fetchMock = vi.fn<typeof fetch>(async () => okResponse())
+    globalThis.fetch = fetchMock
 
     const { service } = makeService()
     await service.sync()
@@ -91,8 +91,8 @@ describe('DeviceReportSync', () => {
   })
 
   it('does not POST when the backend URL is empty', async () => {
-    const fetchMock = vi.fn(async () => okResponse())
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    const fetchMock = vi.fn<typeof fetch>(async () => okResponse())
+    globalThis.fetch = fetchMock
 
     const { service } = makeService({ getBackendUrl: () => '' })
     await service.sync()
@@ -101,8 +101,8 @@ describe('DeviceReportSync', () => {
   })
 
   it('skips while inactive, then reports once activated', async () => {
-    const fetchMock = vi.fn(async () => okResponse())
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    const fetchMock = vi.fn<typeof fetch>(async () => okResponse())
+    globalThis.fetch = fetchMock
 
     let activated = false
     const { service, writeStored } = makeService({ isActivated: () => activated })
@@ -118,8 +118,8 @@ describe('DeviceReportSync', () => {
 
   it('does not record the version on a non-200 and retries on the next sync', async () => {
     const responses: Response[] = [errorResponse(500), okResponse()]
-    const fetchMock = vi.fn(async () => responses.shift() as Response)
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    const fetchMock = vi.fn<typeof fetch>(async () => responses.shift() as Response)
+    globalThis.fetch = fetchMock
 
     const { service, writeStored } = makeService()
     await expect(service.sync()).resolves.toBeUndefined()
@@ -132,8 +132,8 @@ describe('DeviceReportSync', () => {
   })
 
   it('swallows a transient device-identity error and does not advance state', async () => {
-    const fetchMock = vi.fn(async () => okResponse())
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    const fetchMock = vi.fn<typeof fetch>(async () => okResponse())
+    globalThis.fetch = fetchMock
 
     const { service, writeStored } = makeService({
       getDeviceId: () => {

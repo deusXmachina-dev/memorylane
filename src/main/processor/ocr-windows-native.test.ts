@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ChildProcess } from 'child_process'
 import { EventEmitter } from 'events'
 import { extractTextWindowsNative, probeWindowsNativeOcrReadiness } from './ocr-windows-native'
 
@@ -10,7 +11,7 @@ vi.mock('child_process', () => ({
   spawn: vi.fn(),
 }))
 
-interface MockChildProcess extends EventEmitter {
+type MockChildProcess = ChildProcess & {
   readonly stdout: EventEmitter
   readonly stderr: EventEmitter
   readonly kill: ReturnType<typeof vi.fn>
@@ -41,9 +42,7 @@ describe('extractTextWindowsNative', () => {
 
     const mockChild = createMockChildProcess()
     vi.mocked(fs.existsSync).mockReturnValue(true)
-    vi.mocked(childProcess.spawn).mockReturnValue(
-      mockChild as unknown as ReturnType<typeof childProcess.spawn>,
-    )
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
 
     const promise = extractTextWindowsNative('C:\\tmp\\shot.png')
 
@@ -59,9 +58,7 @@ describe('extractTextWindowsNative', () => {
 
     const mockChild = createMockChildProcess()
     vi.mocked(fs.existsSync).mockReturnValue(true)
-    vi.mocked(childProcess.spawn).mockReturnValue(
-      mockChild as unknown as ReturnType<typeof childProcess.spawn>,
-    )
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
 
     const promise = extractTextWindowsNative('C:\\tmp\\shot.png')
 
@@ -77,9 +74,7 @@ describe('extractTextWindowsNative', () => {
 
     const mockChild = createMockChildProcess()
     vi.mocked(fs.existsSync).mockReturnValue(true)
-    vi.mocked(childProcess.spawn).mockReturnValue(
-      mockChild as unknown as ReturnType<typeof childProcess.spawn>,
-    )
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
 
     const promise = extractTextWindowsNative('C:\\tmp\\shot.png')
 
@@ -96,9 +91,7 @@ describe('extractTextWindowsNative', () => {
 
     const mockChild = createMockChildProcess()
     vi.mocked(fs.existsSync).mockReturnValue(true)
-    vi.mocked(childProcess.spawn).mockReturnValue(
-      mockChild as unknown as ReturnType<typeof childProcess.spawn>,
-    )
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
 
     const promise = extractTextWindowsNative('C:\\tmp\\shot.png')
 
@@ -115,9 +108,7 @@ describe('extractTextWindowsNative', () => {
 
     const mockChild = createMockChildProcess()
     vi.mocked(fs.existsSync).mockReturnValue(true)
-    vi.mocked(childProcess.spawn).mockReturnValue(
-      mockChild as unknown as ReturnType<typeof childProcess.spawn>,
-    )
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
 
     const promise = extractTextWindowsNative('C:\\tmp\\shot.png')
 
@@ -140,9 +131,7 @@ describe('extractTextWindowsNative', () => {
 
     const mockChild = createMockChildProcess()
     vi.mocked(fs.existsSync).mockReturnValue(true)
-    vi.mocked(childProcess.spawn).mockReturnValue(
-      mockChild as unknown as ReturnType<typeof childProcess.spawn>,
-    )
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
 
     const promise = extractTextWindowsNative('C:\\tmp\\shot.png')
 
@@ -166,9 +155,7 @@ describe('extractTextWindowsNative', () => {
 
     const mockChild = createMockChildProcess()
     vi.mocked(fs.existsSync).mockReturnValue(true)
-    vi.mocked(childProcess.spawn).mockReturnValue(
-      mockChild as unknown as ReturnType<typeof childProcess.spawn>,
-    )
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
 
     const promise = extractTextWindowsNative('C:\\tmp\\shot.png')
 
@@ -195,9 +182,7 @@ describe('extractTextWindowsNative', () => {
 
     const mockChild = createMockChildProcess()
     vi.mocked(fs.existsSync).mockReturnValue(true)
-    vi.mocked(childProcess.spawn).mockReturnValue(
-      mockChild as unknown as ReturnType<typeof childProcess.spawn>,
-    )
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
 
     const promise = extractTextWindowsNative('C:\\tmp\\shot.png')
     const expectation = expect(promise).rejects.toThrow('[OCR:windows:timeout]')
@@ -220,9 +205,7 @@ describe('probeWindowsNativeOcrReadiness', () => {
 
     const mockChild = createMockChildProcess()
     vi.mocked(fs.existsSync).mockReturnValue(true)
-    vi.mocked(childProcess.spawn).mockReturnValue(
-      mockChild as unknown as ReturnType<typeof childProcess.spawn>,
-    )
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
 
     const promise = probeWindowsNativeOcrReadiness()
 
@@ -255,9 +238,7 @@ describe('probeWindowsNativeOcrReadiness', () => {
 
     const mockChild = createMockChildProcess()
     vi.mocked(fs.existsSync).mockReturnValue(true)
-    vi.mocked(childProcess.spawn).mockReturnValue(
-      mockChild as unknown as ReturnType<typeof childProcess.spawn>,
-    )
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
 
     const promise = probeWindowsNativeOcrReadiness()
 

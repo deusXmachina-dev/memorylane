@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import type { Activity, ActivityFrame } from '@main/activity/activity-types'
 import { ActivitySemanticService, SemanticFileDebugDumper } from './activity-semantic-service'
 import { InferenceProviderImpl } from '@main/llm/index'
+import type { VendorCredentialsManager } from '@main/settings/vendor-credentials-manager'
 import { FfmpegVideoStitcher } from '@main/video/video-stitcher'
 import { VENDOR_PRESETS } from '@/shared/vendor-defaults'
 
@@ -133,10 +134,10 @@ describeIntegration('semantic service integration', () => {
       copyMediaAssets: true,
     })
     const apiKey = process.env.OPENROUTER_API_KEY ?? ''
+    const getCredentials: VendorCredentialsManager['getCredentials'] = () =>
+      apiKey ? { apiKey } : null
     const provider = new InferenceProviderImpl({
-      credentials: {
-        getCredentials: () => (apiKey ? { apiKey } : null),
-      } as unknown as import('@main/settings/vendor-credentials-manager').VendorCredentialsManager,
+      credentials: { getCredentials } as VendorCredentialsManager,
       getActiveVendor: () => 'openrouter',
     })
     const service = new ActivitySemanticService(provider, {

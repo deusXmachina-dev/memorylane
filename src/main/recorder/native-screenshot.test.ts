@@ -1,3 +1,4 @@
+import type { ChildProcess } from 'child_process'
 import { EventEmitter } from 'events'
 import { PassThrough } from 'stream'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -21,7 +22,7 @@ vi.mock('@main/utils/logger', () => ({
   default: mockLogger,
 }))
 
-interface MockChildProcess extends EventEmitter {
+type MockChildProcess = ChildProcess & {
   stdin: PassThrough
   stdout: PassThrough
   stderr: PassThrough
@@ -74,9 +75,7 @@ describe('ScreenshotDaemon', () => {
 
     const firstChild = createMockChildProcess(101)
     const secondChild = createMockChildProcess(202)
-    vi.mocked(childProcess.spawn)
-      .mockReturnValueOnce(firstChild as unknown as ReturnType<typeof childProcess.spawn>)
-      .mockReturnValueOnce(secondChild as unknown as ReturnType<typeof childProcess.spawn>)
+    vi.mocked(childProcess.spawn).mockReturnValueOnce(firstChild).mockReturnValueOnce(secondChild)
 
     const daemon = new ScreenshotDaemon({
       getExecutable: () => ({ command: '/tmp/screenshot', args: [] }),

@@ -4,13 +4,10 @@ import type { StorageService } from '@main/storage'
 import type { Sighting } from '@main/storage/sighting-repository'
 
 const upserted = new Map<string, number[] | null>()
-const storage = {
-  clusters: {
-    upsertSignature: (id: string, vector: number[] | null) => {
-      upserted.set(id, vector)
-    },
-  },
-} as unknown as StorageService
+const upsertSignature: StorageService['clusters']['upsertSignature'] = (id, vector) => {
+  upserted.set(id, vector)
+}
+const storage = { clusters: { upsertSignature } } as StorageService
 
 // Mimics EmbeddingService's blank contract: blank text → zero vector.
 const embedder = {

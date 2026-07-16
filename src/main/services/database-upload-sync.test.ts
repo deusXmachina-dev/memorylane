@@ -15,12 +15,15 @@ vi.mock('./upload-prep', () => ({
 }))
 
 function mockFetchResponse(status: number, body: object | string) {
-  return vi.fn(async () => ({
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => (typeof body === 'object' ? body : JSON.parse(body)),
-    text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
-  }))
+  return vi.fn<typeof fetch>(
+    async () =>
+      ({
+        ok: status >= 200 && status < 300,
+        status,
+        json: async () => (typeof body === 'object' ? body : JSON.parse(body)),
+        text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
+      }) as Response,
+  )
 }
 
 describe('DatabaseUploadSync', () => {
@@ -37,7 +40,7 @@ describe('DatabaseUploadSync', () => {
       upload_id: 'up_123',
       checksum_sha256: 'abc',
     })
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const backupToFile = vi.fn(async (dest: string) => {
       fs.writeFileSync(dest, 'dbcontent')
@@ -62,7 +65,7 @@ describe('DatabaseUploadSync', () => {
     expect(backupToFile).toHaveBeenCalledTimes(1)
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
-    const [url, init] = fetchMock.mock.calls[0]
+    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit]
     expect(url.toString()).toBe('http://localhost:8000/api/device/upload')
     expect(init.method).toBe('POST')
     expect(init.body).toBeInstanceOf(FormData)
@@ -76,7 +79,7 @@ describe('DatabaseUploadSync', () => {
       upload_id: 'up_123',
       checksum_sha256: 'abc',
     })
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const backupToFile = vi.fn(async (dest: string) => {
       fs.writeFileSync(dest, 'dbcontent')
@@ -97,7 +100,7 @@ describe('DatabaseUploadSync', () => {
     await vi.advanceTimersByTimeAsync?.(0).catch(() => undefined)
     await sync.stop()
 
-    const [, init] = fetchMock.mock.calls[0]
+    const [, init] = fetchMock.mock.calls[0] as [URL, RequestInit]
     const part = (init.body as FormData).get('file') as Blob
     expect(part).toBeInstanceOf(Blob)
 
@@ -111,7 +114,7 @@ describe('DatabaseUploadSync', () => {
 
   it('skips upload when not activated', async () => {
     const fetchMock = mockFetchResponse(201, { ok: true })
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const backupToFile = vi.fn(async (dest: string) => {
       fs.writeFileSync(dest, 'dbcontent')
@@ -137,7 +140,7 @@ describe('DatabaseUploadSync', () => {
 
   it('cleans up temp file on upload failure', async () => {
     const fetchMock = mockFetchResponse(500, 'server error')
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const tempFiles: string[] = []
     const backupToFile = vi.fn(async (dest: string) => {
@@ -166,7 +169,7 @@ describe('DatabaseUploadSync', () => {
 
   it('cleans up temp file on backup failure', async () => {
     const fetchMock = mockFetchResponse(201, { ok: true })
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const backupToFile = vi.fn(async () => {
       throw new Error('backup failed')
@@ -196,7 +199,7 @@ describe('DatabaseUploadSync', () => {
       upload_id: 'up_1',
       checksum_sha256: 'abc',
     })
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const backupToFile = vi.fn(async (dest: string) => {
       fs.writeFileSync(dest, 'dbcontent')
@@ -226,7 +229,7 @@ describe('DatabaseUploadSync', () => {
 
   it('skips automatic upload when sync is disabled', async () => {
     const fetchMock = mockFetchResponse(201, { ok: true })
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const backupToFile = vi.fn(async (dest: string) => {
       fs.writeFileSync(dest, 'dbcontent')
@@ -252,7 +255,7 @@ describe('DatabaseUploadSync', () => {
 
   it('triggerUpload returns error when sync is disabled', async () => {
     const fetchMock = mockFetchResponse(201, { ok: true })
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const backupToFile = vi.fn(async (dest: string) => {
       fs.writeFileSync(dest, 'dbcontent')
@@ -283,7 +286,7 @@ describe('DatabaseUploadSync', () => {
       upload_id: 'up_1',
       checksum_sha256: 'abc',
     })
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const backupToFile = vi.fn(async (dest: string) => {
       fs.writeFileSync(dest, 'dbcontent')
@@ -320,7 +323,7 @@ describe('DatabaseUploadSync', () => {
 
   it('skips startup upload when already uploaded earlier today', async () => {
     const fetchMock = mockFetchResponse(201, { ok: true })
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const backupToFile = vi.fn(async (dest: string) => {
       fs.writeFileSync(dest, 'dbcontent')
@@ -351,7 +354,7 @@ describe('DatabaseUploadSync', () => {
       upload_id: 'up_1',
       checksum_sha256: 'abc',
     })
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const backupToFile = vi.fn(async (dest: string) => {
       fs.writeFileSync(dest, 'dbcontent')
@@ -378,7 +381,7 @@ describe('DatabaseUploadSync', () => {
 
   it('records the timestamp only on a successful upload', async () => {
     const fetchMock = mockFetchResponse(500, 'server error')
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const backupToFile = vi.fn(async (dest: string) => {
       fs.writeFileSync(dest, 'dbcontent')
@@ -410,7 +413,7 @@ describe('DatabaseUploadSync', () => {
       upload_id: 'up_1',
       checksum_sha256: 'abc',
     })
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const backupToFile = vi.fn(async (dest: string) => {
       fs.writeFileSync(dest, 'dbcontent')
@@ -440,7 +443,7 @@ describe('DatabaseUploadSync', () => {
       upload_id: 'up_1',
       checksum_sha256: 'abc',
     })
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const backupToFile = vi.fn(async (dest: string) => {
       fs.writeFileSync(dest, 'dbcontent')
@@ -473,7 +476,7 @@ describe('DatabaseUploadSync', () => {
       upload_id: 'up_1',
       checksum_sha256: 'abc',
     })
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     let syncOn = true
     let resolveBackup!: () => void
@@ -523,7 +526,7 @@ describe('DatabaseUploadSync', () => {
       upload_id: 'up_1',
       checksum_sha256: 'abc',
     })
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const backupToFile = vi.fn(async (dest: string) => {
       fs.writeFileSync(dest, 'dbcontent')
@@ -568,7 +571,7 @@ describe('DatabaseUploadSync', () => {
       upload_id: 'up_1',
       checksum_sha256: 'abc',
     })
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     let resolveBackup!: () => void
     const backupGate = new Promise<void>((resolve) => {
