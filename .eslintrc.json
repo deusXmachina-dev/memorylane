@@ -15,10 +15,41 @@
   ],
   "parser": "@typescript-eslint/parser",
   "rules": {
-    // false-positives on better-sqlite3, whose typings export Database both as
-    // the default and as a named member
-    "import/no-named-as-default": "off"
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["**/test-utils"],
+            "message": "Test helpers are test-only; do not import them from production code."
+          }
+        ]
+      }
+    ]
   },
+  "overrides": [
+    {
+      // false-positives on better-sqlite3, whose typings export Database both
+      // as the default and as a named member (fires even on type-only imports)
+      "files": [
+        "src/main/storage/**/*.ts",
+        "src/main/services/strip-database-for-upload.ts",
+        "src/main/services/strip-database-for-upload.test.ts",
+        "src/main/services/upload-prep-worker.test.ts",
+        "src/main/ui/database-import.ts"
+      ],
+      "rules": { "import/no-named-as-default": "off" }
+    },
+    {
+      "files": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/test-utils.ts",
+        "src/main/eval/task-replay.ts"
+      ],
+      "rules": { "no-restricted-imports": "off" }
+    }
+  ],
   "ignorePatterns": ["*.config.ts", "build/", "dist/"], // because we use dynamic imports in paths.ts
   "settings": {
     "import/resolver": {
