@@ -36,7 +36,8 @@ if (parentPort) {
       const buf = prepareUploadSync(data.tempPath, data.stripOptions)
       // Copy out an exact-size ArrayBuffer and transfer it (zero-copy) so a
       // large compressed blob doesn't get structured-cloned across the boundary.
-      const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
+      const ab = new ArrayBuffer(buf.byteLength)
+      new Uint8Array(ab).set(buf)
       parentPort.postMessage({ ok: true, gzip: ab }, [ab])
     } catch (err) {
       parentPort.postMessage({

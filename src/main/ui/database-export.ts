@@ -1,4 +1,5 @@
-import { app, dialog, type BrowserWindow } from 'electron'
+import { app, type BrowserWindow } from 'electron'
+import { showSaveDialog } from '@main/ui/dialogs'
 import fs from 'node:fs'
 import * as fsPromises from 'node:fs/promises'
 import os from 'node:os'
@@ -29,7 +30,7 @@ export async function exportDatabaseZip({
       app.getPath('documents'),
       buildTimestampedZipName('memorylane-db-export'),
     )
-    const saveResult = await dialog.showSaveDialog(parentWindow ?? undefined, {
+    const saveResult = await showSaveDialog(parentWindow, {
       title: 'Export Database ZIP',
       defaultPath,
       buttonLabel: 'Export',

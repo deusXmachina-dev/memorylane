@@ -74,7 +74,8 @@ export function SettingsPage({
   const commitNumericSetting = useCallback(
     (key: NumericCaptureSetting, value: number): void => {
       setForm((prev) => (prev ? { ...prev, [key]: value } : prev))
-      save({ [key]: value } as Pick<CaptureSettings, NumericCaptureSetting>)
+      const patch: Partial<Pick<CaptureSettings, NumericCaptureSetting>> = { [key]: value }
+      save(patch)
     },
     [save],
   )

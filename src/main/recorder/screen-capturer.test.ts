@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ScreenCaptureBackend } from './native-screenshot'
+import type { Frame } from './screen-capturer'
 
 vi.mock('../../logger', () => ({
   default: {
@@ -32,7 +33,7 @@ describe('ScreenCapturer.setDisplayId', () => {
   })
 
   it('does not send command when displayId has not changed', () => {
-    const stream = new InMemoryStream()
+    const stream = new InMemoryStream<Frame>()
     const capturer = new ScreenCapturer({ outputDir: '/tmp/test', stream })
 
     capturer.setDisplayId(2)
@@ -45,7 +46,7 @@ describe('ScreenCapturer.setDisplayId', () => {
 
   it('sends command when displayId changes', () => {
     vi.mocked(mockBackend.send).mockClear()
-    const stream = new InMemoryStream()
+    const stream = new InMemoryStream<Frame>()
     const capturer = new ScreenCapturer({ outputDir: '/tmp/test', stream })
 
     capturer.setDisplayId(1)
@@ -60,7 +61,7 @@ describe('ScreenCapturer.setDisplayId', () => {
 
   it('treats undefined and null as equivalent (reset to main)', () => {
     vi.mocked(mockBackend.send).mockClear()
-    const stream = new InMemoryStream()
+    const stream = new InMemoryStream<Frame>()
     const capturer = new ScreenCapturer({ outputDir: '/tmp/test', stream })
 
     capturer.setDisplayId(undefined)
@@ -71,7 +72,7 @@ describe('ScreenCapturer.setDisplayId', () => {
   })
 
   it('sends command when switching back to a previous displayId', () => {
-    const stream = new InMemoryStream()
+    const stream = new InMemoryStream<Frame>()
     const capturer = new ScreenCapturer({ outputDir: '/tmp/test', stream })
 
     capturer.setDisplayId(1)
@@ -82,7 +83,7 @@ describe('ScreenCapturer.setDisplayId', () => {
   })
 
   it('replays the active display selection after start', async () => {
-    const stream = new InMemoryStream()
+    const stream = new InMemoryStream<Frame>()
     const capturer = new ScreenCapturer({ outputDir: '/tmp/test', stream })
 
     capturer.setDisplayId(4)
