@@ -12,6 +12,7 @@ export default defineConfig({
     options.alias = {
       '@main': path.resolve(__dirname, '../../src/main'),
       '@': path.resolve(__dirname, '../../src'),
+      '@types': path.resolve(__dirname, '../../src/shared/types'),
     }
   },
   external: ['better-sqlite3', 'sqlite-vec', '@huggingface/transformers', 'onnxruntime-node'],

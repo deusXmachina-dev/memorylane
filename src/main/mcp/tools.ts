@@ -14,7 +14,7 @@ import { getDefaultDbPath } from '@main/utils/paths'
 import type { AppEdition } from '../../shared/edition'
 import type { StorageService, Sighting } from '../storage'
 import type { EmbeddingService } from '../processor/embedding'
-import { buildClusterInfo, isBelowNoiseFloor, type ClusterMember } from '@main/ui/cluster-view'
+import { buildClusterInfo, computeClustersView, countObservedDays } from '@main/ui/cluster-view'
 import { CLUSTER_VIEW_CONFIG } from '@/shared/constants'
 import type { ClusterInfo } from '../../shared/types'
 import log from '@main/utils/logger'
@@ -193,7 +193,12 @@ export function registerTools(
         patternId: z
           .string()
           .describe('Pattern ID (from list_patterns or search_patterns results)'),
-        limit: z.number().optional().describe('Maximum runs to return, newest first (default: 20)'),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe('Maximum runs to return, newest first (default: 20)'),
       },
     },
     (params) => handleGetPatternDetails(getServices(), params),
@@ -585,8 +590,6 @@ async function handleBrowseTimeline(
 // Pattern tool handlers
 // ---------------------------------------------------------------------------
 
-const DAY_MS = 24 * 60 * 60 * 1000
-
 const MISSING_TABLES_TEXT =
   'Task-mining tables not found in this database. Launch the MemoryLane app once ' +
   '(it creates them on startup) and let task mining run, then retry.'
@@ -594,7 +597,7 @@ const MISSING_TABLES_TEXT =
 function isMissingClusterTables(error: unknown): boolean {
   return (
     error instanceof Error &&
-    /no such table: (clusters|cluster_sightings|sightings)/.test(error.message)
+    /no such table: (clusters|cluster_sightings|sightings|mining_days)/.test(error.message)
   )
 }
 
@@ -607,40 +610,6 @@ function patternToolError(action: string, error: unknown) {
     content: [{ type: 'text' as const, text }],
     isError: true,
   }
-}
-
-function countObservedDays(storage: StorageService, now: number): number {
-  const windowStart = now - CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS * DAY_MS
-  return storage.activities.countDistinctActiveDays(windowStart, now)
-}
-
-/** ClusterInfos for all visible clusters, most frequent first, plus noise-floor hidden count. */
-function computeClusterInfos(storage: StorageService): {
-  clusters: ClusterInfo[]
-  hiddenCount: number
-  observedDays: number
-} {
-  const now = Date.now()
-  const membersByCluster = new Map<string, ClusterMember[]>()
-  for (const { clusterId, ...member } of storage.clusters.getMemberDigest()) {
-    let list = membersByCluster.get(clusterId)
-    if (!list) {
-      list = []
-      membersByCluster.set(clusterId, list)
-    }
-    list.push(member)
-  }
-  const observedDays = countObservedDays(storage, now)
-  const infos = storage.clusters
-    .getAll()
-    .map((c) => buildClusterInfo(c, membersByCluster.get(c.id) ?? [], observedDays, now))
-    // Clusters with no in-window members are dead rows awaiting cleanup, not
-    // "hidden noise" — exclude them from the view and the hidden count.
-    .filter((c) => c.timesSeen > 0)
-  const visible = infos
-    .filter((c) => !isBelowNoiseFloor(c.timesSeen, c.totalActiveMin))
-    .sort((a, b) => b.timesSeen - a.timesSeen || (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0))
-  return { clusters: visible, hiddenCount: infos.length - visible.length, observedDays }
 }
 
 function formatClusterLine(c: ClusterInfo): string {
@@ -687,7 +656,7 @@ async function handleListPatterns(services: MCPServices | null) {
 
   try {
     const storage = services.storage
-    const { clusters, hiddenCount, observedDays } = computeClusterInfos(storage)
+    const { clusters, hiddenCount, observedDays } = computeClustersView(storage, Date.now())
 
     if (clusters.length === 0) {
       return {
@@ -733,7 +702,7 @@ async function handleSearchPatterns(services: MCPServices | null, { query }: { q
   }
 
   try {
-    const { clusters } = computeClusterInfos(services.storage)
+    const { clusters } = computeClustersView(services.storage, Date.now())
     const q = query.toLowerCase()
     const matches = clusters.filter((c) =>
       [c.title, c.description, c.mechanism, c.apps.join(' ')].some((field) =>

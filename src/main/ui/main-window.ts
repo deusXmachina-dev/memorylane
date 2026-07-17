@@ -10,7 +10,7 @@ import { showOpenDialog, showSaveDialog } from '@main/ui/dialogs'
 import path from 'node:path'
 import { syncAutoStartSetting } from '@main/system/auto-start'
 import { DEFAULT_EDITION, type AppEditionConfig } from '../../shared/edition'
-import { CLUSTER_VIEW_CONFIG, PURGE_CONFIRMATION_PHRASE } from '../../shared/constants'
+import { PURGE_CONFIRMATION_PHRASE } from '../../shared/constants'
 import log from '@main/utils/logger'
 import { updateTrayMenu } from './tray'
 import { getUpdateInfo, quitAndInstall } from '@main/system/updater'
@@ -27,7 +27,7 @@ import { integrations } from '../integrations'
 import { listInstalledApps } from '../apps/installed-apps'
 import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
 import { VENDORS } from '../../shared/types'
-import { buildClusterInfo, isBelowNoiseFloor, type ClusterMember } from './cluster-view'
+import { computeClustersView } from './cluster-view'
 import { VENDOR_PRESETS, getVendorDefaults } from '../../shared/vendor-defaults'
 import { applyVendorSwitch } from './vendor-switch'
 import { applyModelSettings } from './model-settings'
@@ -750,37 +750,11 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     return deps.accessProvider.getAccessState().customerSubscriptionStatus ?? 'idle'
   })
 
-  // Frequency denominator: distinct captured days in the same window sightings
-  // are retained for, so timesSeen and observedDays cover the same period.
-  const countObservedDays = (now: number): number => {
-    if (!deps) return 0
-    const windowStart = now - CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS * 24 * 60 * 60 * 1000
-    return deps.storage.activities.countDistinctActiveDays(windowStart, now)
-  }
-
   // Patterns (task clusters)
   handle('main-window:getClusters', (): ClustersView => {
     if (!deps) return { clusters: [], hiddenCount: 0 }
-    // One digest query for all members → stats, recurrence, title fallback (no N+1).
-    const membersByCluster = new Map<string, ClusterMember[]>()
-    for (const { clusterId, ...member } of deps.storage.clusters.getMemberDigest()) {
-      let list = membersByCluster.get(clusterId)
-      if (!list) {
-        list = []
-        membersByCluster.set(clusterId, list)
-      }
-      list.push(member)
-    }
-    const now = Date.now()
-    const observedDays = countObservedDays(now)
-    const infos = deps.storage.clusters
-      .getAll()
-      .map((c) => buildClusterInfo(c, membersByCluster.get(c.id) ?? [], observedDays, now))
-      // Clusters with no in-window members are dead rows awaiting cleanup, not
-      // "hidden noise" — exclude them from the view and the hidden count.
-      .filter((c) => c.timesSeen > 0)
-    const visible = infos.filter((c) => !isBelowNoiseFloor(c.timesSeen, c.totalActiveMin))
-    return { clusters: visible, hiddenCount: infos.length - visible.length }
+    const { clusters, hiddenCount } = computeClustersView(deps.storage, Date.now())
+    return { clusters, hiddenCount }
   })
 
   handle('main-window:getMiningStatus', (): MiningStatus => {
