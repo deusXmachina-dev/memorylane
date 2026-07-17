@@ -97,13 +97,13 @@ describe('EnterpriseAccessProvider', () => {
   })
 
   it('maps transport failures during activation to a friendly message and fails the activation', async () => {
-    globalThis.fetch = vi.fn(async () => {
+    globalThis.fetch = vi.fn<typeof fetch>(async () => {
       throw new TypeError('fetch failed', {
         cause: Object.assign(new Error('getaddrinfo ENOTFOUND backend.example'), {
           code: 'ENOTFOUND',
         }),
       })
-    }) as typeof fetch
+    })
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
@@ -120,11 +120,9 @@ describe('EnterpriseAccessProvider', () => {
   })
 
   it('keeps the backend error message when the activation code is rejected', async () => {
-    globalThis.fetch = vi.fn(async () => ({
-      ok: false,
-      status: 403,
-      json: async () => ({ error: 'Invalid activation code' }),
-    })) as unknown as typeof fetch
+    globalThis.fetch = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ error: 'Invalid activation code' }, false, 403),
+    )
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
@@ -139,13 +137,13 @@ describe('EnterpriseAccessProvider', () => {
   })
 
   it('maps transport failures during refresh to a friendly message', async () => {
-    globalThis.fetch = vi.fn(async () => {
+    globalThis.fetch = vi.fn<typeof fetch>(async () => {
       throw new TypeError('fetch failed', {
         cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:443'), {
           code: 'ECONNREFUSED',
         }),
       })
-    }) as typeof fetch
+    })
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
@@ -161,13 +159,9 @@ describe('EnterpriseAccessProvider', () => {
   it('keeps an activated device activated when a refresh hits a transport failure', async () => {
     const responses: Array<() => Response> = [
       // GET /license/status -> activated
-      () => ({ ok: true, json: async () => ({ activated: true }) }) as unknown as Response,
+      () => jsonResponse({ activated: true }),
       // GET /license/inference-config -> managed key
-      () =>
-        ({
-          ok: true,
-          json: async () => ({ provider: 'openrouter', apiKey: 'key-123' }),
-        }) as unknown as Response,
+      () => jsonResponse({ provider: 'openrouter', apiKey: 'key-123' }),
       // next refresh: offline
       () => {
         throw new TypeError('fetch failed', {
@@ -177,7 +171,7 @@ describe('EnterpriseAccessProvider', () => {
         })
       },
     ]
-    globalThis.fetch = vi.fn(async () => (responses.shift() as () => Response)()) as typeof fetch
+    globalThis.fetch = vi.fn<typeof fetch>(async () => (responses.shift() as () => Response)())
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
@@ -321,11 +315,7 @@ describe('EnterpriseAccessProvider', () => {
   it('fails the activation with a friendly message when the external-consent bind hits a transport failure', async () => {
     const responses: Array<() => Response> = [
       // GET /license/consent-document -> already_approved sentinel
-      () =>
-        ({
-          ok: true,
-          json: async () => ({ state: 'already_approved' }),
-        }) as unknown as Response,
+      () => jsonResponse({ state: 'already_approved' }),
       // POST /license/activate -> network failure
       () => {
         throw new TypeError('fetch failed', {
@@ -335,7 +325,7 @@ describe('EnterpriseAccessProvider', () => {
         })
       },
     ]
-    globalThis.fetch = vi.fn(async () => (responses.shift() as () => Response)()) as typeof fetch
+    globalThis.fetch = vi.fn<typeof fetch>(async () => (responses.shift() as () => Response)())
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []

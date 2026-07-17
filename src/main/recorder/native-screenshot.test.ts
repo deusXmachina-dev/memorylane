@@ -103,9 +103,7 @@ describe('ScreenshotDaemon', () => {
     const { ScreenshotDaemon } = await import('./native-screenshot')
 
     const child = createMockChildProcess(303)
-    vi.mocked(childProcess.spawn).mockReturnValue(
-      child as unknown as ReturnType<typeof childProcess.spawn>,
-    )
+    vi.mocked(childProcess.spawn).mockReturnValue(child)
 
     const daemon = new ScreenshotDaemon({
       getExecutable: () => ({ command: '/tmp/screenshot', args: [] }),
