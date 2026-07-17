@@ -141,7 +141,7 @@ describe('ActivityExtractor', () => {
   it('enforces maxConcurrent worker limit', async () => {
     let running = 0
     let maxRunning = 0
-    let releaseGate: (() => void) | null = null
+    let releaseGate!: () => void
     const gate = new Promise<void>((resolve) => {
       releaseGate = resolve
     })
@@ -171,14 +171,14 @@ describe('ActivityExtractor', () => {
     }
 
     await waitFor(() => maxRunning === 2, 'Expected worker concurrency to reach configured max')
-    releaseGate?.()
+    releaseGate()
 
     await waitFor(() => persistedCount === 5, 'Expected all activities to be persisted')
     expect(maxRunning).toBe(2)
   })
 
   it('acks only contiguous completed offsets when tasks finish out of order', async () => {
-    let releaseFirst: (() => void) | null = null
+    let releaseFirst!: () => void
     const firstGate = new Promise<void>((resolve) => {
       releaseFirst = resolve
     })
@@ -207,7 +207,7 @@ describe('ActivityExtractor', () => {
     await waitFor(() => persisted.includes('fast'), 'Expected fast activity to finish first')
     expect(await activityStream.getAck(consumerId)).toBeNull()
 
-    releaseFirst?.()
+    releaseFirst()
     await waitFor(
       async () => (await activityStream.getAck(consumerId)) === 1,
       'Expected ack to advance after gap closes',

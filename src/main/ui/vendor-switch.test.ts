@@ -49,6 +49,8 @@ function makeSettings(overrides: Partial<CaptureSettings> = {}): CaptureSettings
     excludedApps: [],
     excludedUrlPatterns: [],
     activeVendor: 'openrouter',
+    modelsByVendor: {},
+    newTaskMinerEnabled: true,
     semanticVideoModel: '',
     semanticSnapshotModel: '',
     patternDetectionModel: '',

@@ -1,4 +1,5 @@
-import { dialog, type BrowserWindow } from 'electron'
+import { type BrowserWindow } from 'electron'
+import { showMessageBox, showOpenDialog } from '@main/ui/dialogs'
 import Database from 'better-sqlite3'
 import fs from 'node:fs'
 import * as fsPromises from 'node:fs/promises'
@@ -122,7 +123,7 @@ export async function importDatabase({
   const stagingPath = `${pendingPath}.partial`
 
   try {
-    const openResult = await dialog.showOpenDialog(parentWindow ?? undefined, {
+    const openResult = await showOpenDialog(parentWindow, {
       title: 'Import Database',
       buttonLabel: 'Import',
       properties: ['openFile'],
@@ -134,7 +135,7 @@ export async function importDatabase({
     }
     const selectedPath = openResult.filePaths[0]
 
-    const confirm = await dialog.showMessageBox(parentWindow ?? undefined, {
+    const confirm = await showMessageBox(parentWindow, {
       type: 'warning',
       buttons: ['Cancel', 'Import and Replace'],
       defaultId: 0,

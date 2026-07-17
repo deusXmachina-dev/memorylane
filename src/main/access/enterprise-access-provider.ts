@@ -150,7 +150,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       const config = await this.fetchInferenceConfig(deviceId)
       if (config) {
         log.info(`[EnterpriseAccess] Received managed inference config (${config.provider})`)
-        this.scheduleTokenRefresh(deviceId, config)
+        this.scheduleTokenRefresh(config)
         this.applyTransition(
           transitionEnterpriseAccess(this.accessState, {
             type: 'activation_completed',
@@ -544,7 +544,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       }
 
       this.clearTimers()
-      this.scheduleTokenRefresh(deviceId, config)
+      this.scheduleTokenRefresh(config)
       this.applyTransition(
         transitionEnterpriseAccess(this.accessState, {
           type: 'activation_completed',
@@ -626,7 +626,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
     return { provider: 'openrouter', apiKey: data.apiKey }
   }
 
-  private scheduleTokenRefresh(deviceId: string, config: ManagedInferenceConfig): void {
+  private scheduleTokenRefresh(config: ManagedInferenceConfig): void {
     this.clearTokenRefresh()
     if (config.provider !== 'vertex' || config.expiresAt === undefined) {
       return

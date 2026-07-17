@@ -286,7 +286,7 @@ async function resolveWindowsShortcutTargets(
         },
         (err, out) => {
           if (err) reject(err)
-          else resolve(typeof out === 'string' ? out : out.toString('utf-8'))
+          else resolve(out)
         },
       )
     })

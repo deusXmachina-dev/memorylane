@@ -7,7 +7,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@main/*": ["./src/main/*"],
-      "@constants": ["./src/shared/constants"]
+      "@constants": ["./src/shared/constants"],
+      "@types": ["./src/shared/types"]
     }
   },
   "include": ["src/main/**/*", "src/preload/**/*", "src/shared/**/*", "electron.vite.config.ts"]

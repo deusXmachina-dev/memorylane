@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import * as fsPromises from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { open as openZip } from 'yauzl'
+import { open as openZip, type Entry } from 'yauzl'
 import { buildTimestampedZipName, createZipWithFiles, ensureZipExtension } from './zip'
 
 function listZipEntries(zipPath: string): Promise<string[]> {
@@ -26,7 +26,7 @@ function readZipEntry(zipPath: string, entryName: string): Promise<string> {
   return new Promise((resolve, reject) => {
     openZip(zipPath, { lazyEntries: true }, (err, zip) => {
       if (err || !zip) return reject(err ?? new Error('failed to open zip'))
-      zip.on('entry', (entry: { fileName: string }) => {
+      zip.on('entry', (entry: Entry) => {
         if (entry.fileName !== entryName) return zip.readEntry()
         zip.openReadStream(entry, (streamErr, stream) => {
           if (streamErr || !stream) return reject(streamErr ?? new Error('failed to read entry'))

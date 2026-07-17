@@ -5,15 +5,8 @@
  * Singleton window that hides on close instead of destroying.
  */
 
-import {
-  app,
-  BrowserWindow,
-  dialog,
-  ipcMain,
-  IpcMainInvokeEvent,
-  nativeTheme,
-  shell,
-} from 'electron'
+import { app, BrowserWindow, ipcMain, IpcMainInvokeEvent, nativeTheme, shell } from 'electron'
+import { showOpenDialog, showSaveDialog } from '@main/ui/dialogs'
 import path from 'node:path'
 import { syncAutoStartSetting } from '@main/system/auto-start'
 import { DEFAULT_EDITION, type AppEditionConfig } from '../../shared/edition'
@@ -971,7 +964,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     'main-window:chooseDatabaseExportDirectory',
     async (_event: IpcMainInvokeEvent, initialPath?: string) => {
       try {
-        const result = await dialog.showOpenDialog(getMainWindow() ?? undefined, {
+        const result = await showOpenDialog(getMainWindow(), {
           properties: ['openDirectory', 'createDirectory'],
           defaultPath:
             typeof initialPath === 'string' && /\S/.test(initialPath) ? initialPath : undefined,
@@ -1334,7 +1327,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     async (_event: IpcMainInvokeEvent, name: unknown) => {
       if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
       if (typeof name !== 'string') return { success: false as const, error: 'Invalid arguments' }
-      const result = await dialog.showSaveDialog(getMainWindow() ?? undefined, {
+      const result = await showSaveDialog(getMainWindow(), {
         title: 'Export Eval Fixture',
         defaultPath: path.join(app.getPath('desktop'), `${name}.zip`),
         buttonLabel: 'Export',
@@ -1497,7 +1490,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     async (_event: IpcMainInvokeEvent, name: unknown) => {
       if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
       if (typeof name !== 'string') return { success: false as const, error: 'Invalid arguments' }
-      const result = await dialog.showSaveDialog(getMainWindow() ?? undefined, {
+      const result = await showSaveDialog(getMainWindow(), {
         title: 'Export Task Golden',
         defaultPath: path.join(app.getPath('desktop'), `${name}.zip`),
         buttonLabel: 'Export',
