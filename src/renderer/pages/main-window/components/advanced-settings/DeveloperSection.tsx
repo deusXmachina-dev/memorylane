@@ -131,12 +131,29 @@ function TaskMaintenanceSection({ api }: { api: MainWindowAPI }): React.JSX.Elem
     )
   }, [api])
 
+  const retryFailedDays = useCallback(async () => {
+    const { retried } = await api.retryFailedMiningDays()
+    if (retried === 0) {
+      toast.info('No failed mining days to retry')
+      return
+    }
+    toast.success(`Reopened ${retried} failed day(s) — mining resumes shortly`)
+  }, [api])
+
   return (
     <SettingsSection
       title="Wipe & re-mine tasks"
       description="Deletes every mined sighting and cluster, then re-mines the recent window from scratch with the current prompt. Activities (the source data) are untouched."
     >
       <div className="flex items-center gap-2 py-3">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void retryFailedDays()}
+          disabled={busy}
+        >
+          Retry failed days
+        </Button>
         {confirming ? (
           <>
             <span className="text-sm text-muted-foreground">

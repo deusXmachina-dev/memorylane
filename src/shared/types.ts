@@ -415,6 +415,18 @@ export interface ManagedExclusions {
   urlPatterns: string[]
 }
 
+/** Task-mining ledger progress, pushed to the renderer while a sweep runs. */
+export interface MiningStatus {
+  state: 'idle' | 'mining'
+  /** Day currently being mined ('YYYY-MM-DD'); null between days. */
+  currentDay: string | null
+  pendingDays: number
+  completedDays: number
+  failedDays: number
+  /** All days the ledger knows about (completed + pending + running + failed). */
+  totalDays: number
+}
+
 /** Result of the dev-only wipe-and-re-mine action. */
 export interface WipeAndRemineResult {
   success: boolean
@@ -467,6 +479,11 @@ export interface MainWindowAPI {
   // Patterns (task clusters) — new TaskMiner view
   getClusters: () => Promise<ClustersView>
   getClusterDetail: (id: string) => Promise<ClusterDetailInfo | null>
+  // Task-mining progress (ledger sweep)
+  getMiningStatus: () => Promise<MiningStatus>
+  onMiningProgressChanged: (callback: (status: MiningStatus) => void) => () => void
+  // Dev-only: give failed mining days a fresh set of attempts
+  retryFailedMiningDays: () => Promise<{ retried: number }>
   // Patterns — legacy PatternDetector view (used when newTaskMinerEnabled is off)
   getPatterns: () => Promise<PatternInfo[]>
   getPatternDetail: (id: string) => Promise<PatternDetailInfo | null>

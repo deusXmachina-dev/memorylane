@@ -8,7 +8,7 @@ import { ActivityRepository } from './activity-repository'
 import { PatternRepository } from './pattern-repository'
 import { SightingRepository } from './sighting-repository'
 import { ClusterRepository } from './cluster-repository'
-import { MiningRunRepository } from './mining-run-repository'
+import { MiningDayRepository } from './mining-day-repository'
 import { UploadRunRepository } from './upload-run-repository'
 import { UserContextRepository } from './user-context-repository'
 
@@ -16,12 +16,13 @@ export { ActivityRepository } from './activity-repository'
 export { PatternRepository } from './pattern-repository'
 export { SightingRepository } from './sighting-repository'
 export { ClusterRepository } from './cluster-repository'
-export { MiningRunRepository } from './mining-run-repository'
+export { MiningDayRepository } from './mining-day-repository'
 export { UploadRunRepository } from './upload-run-repository'
 export { UserContextRepository } from './user-context-repository'
 export type { Pattern, PatternSighting, PatternWithStats } from './pattern-repository'
 export type { Sighting } from './sighting-repository'
 export type { Cluster, ClusterWithStats } from './cluster-repository'
+export type { MiningDay, MiningDayStatus } from './mining-day-repository'
 export type { UserContext } from './user-context-repository'
 export type { StoredActivity, ActivitySummary, ActivityDetail } from './types'
 
@@ -74,7 +75,7 @@ export class StorageService {
   readonly patterns: PatternRepository
   readonly sightings: SightingRepository
   readonly clusters: ClusterRepository
-  readonly miningRuns: MiningRunRepository
+  readonly miningDays: MiningDayRepository
   readonly uploadRuns: UploadRunRepository
   readonly userContext: UserContextRepository
 
@@ -103,7 +104,7 @@ export class StorageService {
       this.patterns = new PatternRepository(db)
       this.sightings = new SightingRepository(db)
       this.clusters = new ClusterRepository(db)
-      this.miningRuns = new MiningRunRepository(db)
+      this.miningDays = new MiningDayRepository(db)
       this.uploadRuns = new UploadRunRepository(db)
       this.userContext = new UserContextRepository(db)
       log.info('SQLite database initialized successfully')
@@ -184,9 +185,9 @@ export class StorageService {
     this.db.transaction(() => {
       this.sightings.deleteAll()
       this.clusters.deleteAll()
-      this.miningRuns.reset()
+      this.miningDays.reset()
     })()
-    log.info('Storage: wiped all task sightings, clusters, and mining cursor')
+    log.info('Storage: wiped all task sightings, clusters, and mining ledger')
   }
 
   public purge(): void {

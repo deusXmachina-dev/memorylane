@@ -71,6 +71,16 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   // Patterns (task clusters) — new TaskMiner view
   getClusters: () => ipcRenderer.invoke('main-window:getClusters'),
   getClusterDetail: (id: string) => ipcRenderer.invoke('main-window:getClusterDetail', id),
+  // Task-mining progress (ledger sweep)
+  getMiningStatus: () => ipcRenderer.invoke('main-window:getMiningStatus'),
+  onMiningProgressChanged: (callback: (status: unknown) => void) => {
+    const handler = (_event: unknown, status: unknown): void => callback(status)
+    ipcRenderer.on('main-window:miningProgressChanged', handler)
+    return () => {
+      ipcRenderer.off('main-window:miningProgressChanged', handler)
+    }
+  },
+  retryFailedMiningDays: () => ipcRenderer.invoke('main-window:retryFailedMiningDays'),
   // Patterns — legacy PatternDetector view (used when newTaskMinerEnabled is off)
   getPatterns: () => ipcRenderer.invoke('main-window:getPatterns'),
   getPatternDetail: (id: string) => ipcRenderer.invoke('main-window:getPatternDetail', id),

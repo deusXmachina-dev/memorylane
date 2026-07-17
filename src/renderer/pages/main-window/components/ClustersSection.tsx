@@ -2,9 +2,30 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@components/ui/button'
 import { ScrollArea } from '@components/ui/scroll-area'
-import type { ClusterInfo, MainWindowAPI } from '@types'
+import type { ClusterInfo, MainWindowAPI, MiningStatus } from '@types'
 import { ClusterListItem } from './ClusterListItem'
 import { ClusterDetailPane } from './ClusterDetailPane'
+
+function MiningProgressBanner({ status }: { status: MiningStatus }): React.JSX.Element {
+  const done = status.completedDays + status.failedDays
+  const current = Math.min(done + 1, status.totalDays)
+  return (
+    <div className="flex items-center gap-2 rounded-lg border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+      {status.state === 'mining' ? (
+        <>
+          <span className="size-1.5 rounded-full bg-primary animate-pulse" />
+          Analyzing your history — day {current} of {status.totalDays}. Patterns appear as days
+          finish.
+        </>
+      ) : (
+        <>
+          {status.pendingDays} day{status.pendingDays === 1 ? '' : 's'} of history left to analyze —
+          continues automatically.
+        </>
+      )}
+    </div>
+  )
+}
 
 const SORTS = [
   { id: 'seen', label: 'Most seen' },
@@ -20,12 +41,14 @@ interface ClustersSectionProps {
   clusters: ClusterInfo[]
   /** Clusters hidden by the noise floor (seen once, little total time). */
   hiddenCount: number
+  miningStatus: MiningStatus | null
 }
 
 export function ClustersSection({
   api,
   clusters,
   hiddenCount,
+  miningStatus,
 }: ClustersSectionProps): React.JSX.Element {
   const [sort, setSort] = useState<SortId>('seen')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -88,8 +111,14 @@ export function ClustersSection({
     )
   }
 
+  const miningActive =
+    miningStatus !== null &&
+    miningStatus.totalDays > 0 &&
+    (miningStatus.state === 'mining' || miningStatus.pendingDays > 0)
+
   return (
     <div className="flex flex-col gap-4 h-full min-h-0">
+      {miningActive && <MiningProgressBanner status={miningStatus} />}
       <div className="flex items-center gap-1">
         {SORTS.map((s) => (
           <Button

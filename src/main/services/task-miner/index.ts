@@ -27,7 +27,7 @@ import type { StorageService } from '../../storage'
 import type { InferenceProvider } from '../../llm'
 import { PATTERN_DETECTION_CONFIG, TASK_BACKFILL } from '../../../shared/constants'
 import log from '@main/utils/logger'
-import { isSameDay, formatApiError, getDayBoundaries } from '../pattern-detector/helpers'
+import { formatApiError, getDayBoundaries } from '../pattern-detector/helpers'
 import type {
   TaskMinerConfig,
   MiningRunResult,
@@ -47,9 +47,9 @@ export { DEFAULT_MINER_CONFIG }
 export class TaskMiner {
   private running = false
   private settleTimer: ReturnType<typeof setTimeout> | null = null
-  private backfillPending = false
   private model: string = DEFAULT_MINER_CONFIG.model
   private enabled = true
+  private statusListener?: () => void
 
   // The app injects the MlWorkerClient; enode scripts pass an in-process
   // EmbeddingService (no utilityProcess there). Not defaulted — a default
@@ -71,40 +71,40 @@ export class TaskMiner {
     log.info(`[TaskMiner] Model updated to: ${this.model}`)
   }
 
-  /**
-   * Stand the scheduled daily run down while the one-time backfill is queued or
-   * running. The backfill seeds many days at once and records today's run, so a
-   * concurrent daily run would be redundant — and worse, racing for the shared
-   * settle timer would preempt the backfill. Set this before capture resume.
-   */
-  setBackfillPending(pending: boolean): void {
-    this.backfillPending = pending
-  }
-
   /** True while a run is executing or its settle timer is armed. */
   isBusy(): boolean {
     return this.running || this.settleTimer !== null
   }
 
+  /** Notified whenever the mining ledger changes (day claimed/finished, sweep start/end). */
+  setStatusListener(listener: () => void): void {
+    this.statusListener = listener
+  }
+
+  private emitStatus(): void {
+    this.statusListener?.()
+  }
+
   /**
-   * Try to schedule a mining run. Call this on screen unlock / wake.
+   * Startup entry point: recover days left `running` by a crash, then try to
+   * schedule a sweep (the settle timer keeps the launch path calm and a fresh
+   * DB starts its 60-day seed without waiting for the first unlock).
+   */
+  startup(): void {
+    const recovered = this.storage.miningDays.resetStaleRunning(TASK_BACKFILL.MAX_DAY_ATTEMPTS)
+    if (recovered) log.info(`[TaskMiner] Recovered ${recovered} interrupted mining day(s)`)
+    this.scheduleRun()
+  }
+
+  /**
+   * Try to schedule a mining sweep. Call this on screen unlock / wake.
    */
   scheduleRun(): void {
     if (!this.enabled) return
-    if (this.backfillPending) {
-      log.info('[TaskMiner] One-time backfill pending — deferring scheduled run')
-      return
-    }
     if (this.running || this.settleTimer) return
 
     if (!this.provider || !this.provider.isConfigured()) {
       log.info('[TaskMiner] No inference provider configured, skipping')
-      return
-    }
-
-    const lastRun = this.storage.miningRuns.getLastRunTimestamp()
-    if (lastRun && isSameDay(lastRun, Date.now())) {
-      log.info('[TaskMiner] Already ran today, skipping')
       return
     }
 
@@ -116,12 +116,171 @@ export class TaskMiner {
       return
     }
 
-    log.info(`[TaskMiner] Scheduling run in ${PATTERN_DETECTION_CONFIG.SETTLE_DELAY_MS / 1000}s`)
+    this.ensureEnqueued()
+    if (!this.storage.miningDays.hasPending()) {
+      log.info('[TaskMiner] No days pending, skipping')
+      return
+    }
+
+    log.info(`[TaskMiner] Scheduling sweep in ${PATTERN_DETECTION_CONFIG.SETTLE_DELAY_MS / 1000}s`)
     const provider = this.provider
     this.settleTimer = setTimeout(() => {
       this.settleTimer = null
-      void this.execute(provider)
+      void this.sweep(provider)
     }, PATTERN_DETECTION_CONFIG.SETTLE_DELAY_MS)
+  }
+
+  /**
+   * Enqueue every unmined day from the last `TASK_BACKFILL.DAYS` calendar days
+   * (bounded by the oldest activity) as pending ledger rows. This one rule is
+   * the first-launch backfill (empty ledger → up to 60 pending days), the
+   * daily enqueue (yesterday), and the gap-fill after downtime — no special
+   * cases. Days already in the ledger, whatever their status, are untouched.
+   */
+  private ensureEnqueued(): number {
+    const oldest = this.storage.activities.getDateRange().oldest
+    if (oldest === null) return 0
+    const days: string[] = []
+    for (let back = TASK_BACKFILL.DAYS; back >= 1; back--) {
+      const { end, label } = getDayBoundaries(back)
+      if (end < oldest) continue
+      days.push(label)
+    }
+    const added = this.storage.miningDays.enqueueMissing(days)
+    if (added > 0) log.info(`[TaskMiner] Enqueued ${added} day(s) for mining`)
+    return added
+  }
+
+  /** Days back from today for a 'YYYY-MM-DD' ledger day (local calendar). */
+  private daysAgo(day: string): number {
+    const [y, m, d] = day.split('-').map(Number)
+    const now = new Date()
+    const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    const dayMidnight = new Date(y, m - 1, d).getTime()
+    return Math.round((todayMidnight - dayMidnight) / 86_400_000)
+  }
+
+  /**
+   * Drain the ledger: claim pending days oldest-first (earlier days' cluster
+   * labels feed the known-procedure vocabulary later days scan against) and
+   * mine each one. A day's sightings and its `completed` status commit in one
+   * transaction (see runDetection.onCommit), so a crash retries cleanly. A
+   * failed day records the attempt and stops the sweep — the next trigger
+   * retries it, and once its attempts are exhausted the claim skips past it.
+   * Clusters at the CLUSTER_EVERY_DAYS barrier and once at the end.
+   */
+  private async sweep(provider: InferenceProvider): Promise<BackfillSummary> {
+    if (this.running) {
+      log.info('[TaskMiner] Sweep already in progress, skipping')
+      return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'busy' }
+    }
+    this.running = true
+    this.emitStatus()
+    try {
+      let daysMined = 0
+      let daysSkipped = 0
+      let daysFailed = 0
+      let minedSinceCluster = 0
+      let didWork = false
+      let clustering: ClusteringRunSummary | undefined
+
+      for (;;) {
+        const claim = this.storage.miningDays.claimOldestPending()
+        if (!claim) break
+        didWork = true
+        // Push the claim so the banner's currentDay is live while the day mines.
+        this.emitStatus()
+        const back = this.daysAgo(claim.day)
+        const { start, end } = getDayBoundaries(back)
+
+        // Mined outside the ledger (CLI backfill, pre-ledger runs): record it
+        // as done rather than writing duplicate sightings.
+        if (this.storage.sightings.hasInWindow(start, end)) {
+          this.storage.miningDays.markCompleted(claim.day, { skippedReason: 'had-sightings' })
+          daysSkipped++
+          this.emitStatus()
+          continue
+        }
+
+        try {
+          await runDetection(provider, this.storage, this.embedder, {
+            model: this.model,
+            scanOnly: true,
+            clustering: false,
+            lookbackDays: back,
+            onCommit: (stats) => this.storage.miningDays.markCompleted(claim.day, { ...stats }),
+          })
+          daysMined++
+          minedSinceCluster++
+          const counts = this.storage.miningDays.countByStatus()
+          log.info(
+            `[TaskMiner] Day ${claim.day} completed (attempt ${claim.attempts}) — ` +
+              `${counts.completed} done, ${counts.pending} pending, ${counts.failed} failed`,
+          )
+        } catch (error) {
+          const message = formatApiError(error)
+          this.storage.miningDays.markAttemptFailed(
+            claim.day,
+            message,
+            TASK_BACKFILL.MAX_DAY_ATTEMPTS,
+          )
+          daysFailed++
+          log.error(
+            `[TaskMiner] Day ${claim.day} failed (attempt ${claim.attempts}/${TASK_BACKFILL.MAX_DAY_ATTEMPTS}): ${message}`,
+          )
+          this.emitStatus()
+          // Stop the sweep: the next trigger retries, and a provider outage
+          // isn't hammered once per remaining day.
+          break
+        }
+        this.emitStatus()
+
+        if (minedSinceCluster >= TASK_BACKFILL.CLUSTER_EVERY_DAYS) {
+          clustering = await this.cluster(provider, {
+            ...DEFAULT_MINER_CONFIG,
+            model: this.model,
+            clustering: true,
+          })
+          minedSinceCluster = 0
+        }
+      }
+
+      // Final clustering pass — also after an all-skipped drain, so a ledger
+      // enqueued over pre-ledger sightings still gets its clusters refreshed.
+      // Skipped when nothing settled (e.g. the first day failed): there is
+      // nothing new to cluster, and a provider outage shouldn't get one more
+      // doomed LLM call.
+      if (daysMined + daysSkipped > 0 && (minedSinceCluster > 0 || !clustering)) {
+        clustering = await this.cluster(provider, {
+          ...DEFAULT_MINER_CONFIG,
+          model: this.model,
+          clustering: true,
+        })
+      }
+
+      if (didWork) {
+        log.info(
+          `[TaskMiner] Sweep complete: ${daysMined} day(s) mined, ` +
+            `${daysSkipped} already present, ${daysFailed} failed`,
+        )
+      }
+      return { daysMined, daysSkipped, daysFailed, clustering }
+    } finally {
+      this.running = false
+      this.emitStatus()
+    }
+  }
+
+  /**
+   * Enqueue and drain the ledger immediately, bypassing the settle timer.
+   * Backs the dev "wipe & re-mine" flow.
+   */
+  async sweepNow(provider: InferenceProvider): Promise<BackfillSummary> {
+    if (!provider.isConfigured()) {
+      return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'no-provider' }
+    }
+    this.ensureEnqueued()
+    return this.sweep(provider)
   }
 
   /**
@@ -173,7 +332,11 @@ export class TaskMiner {
   }
 
   /**
-   * One-time backfill: mine `days` calendar days into sightings, oldest first,
+   * CLI-only multi-day backfill (`scripts/mine-tasks.ts`); the app itself
+   * mines through the mining_days ledger sweep instead. Days mined here are
+   * absorbed by the sweep's had-sightings short-circuit, never re-mined.
+   *
+   * Mines `days` calendar days into sightings, oldest first,
    * clustering at a `CLUSTER_EVERY_DAYS` barrier so each chunk's labels become
    * known-procedure vocabulary for the next chunk (canonical titles cross-day).
    * `offsetDays` shifts the window back — 0 means the window ends yesterday; 20
@@ -279,39 +442,6 @@ export class TaskMiner {
         `Backfill mined ${daysMined} day(s) (${daysSkipped} already present, ${daysFailed} failed)`,
       )
       return { daysMined, daysSkipped, daysFailed, clustering }
-    } finally {
-      this.running = false
-    }
-  }
-
-  private async execute(provider: InferenceProvider): Promise<void> {
-    if (this.running) {
-      log.info('[TaskMiner] Run already in progress, skipping scheduled run')
-      return
-    }
-    this.running = true
-    try {
-      const result = await runDetection(provider, this.storage, this.embedder, {
-        model: this.model,
-      })
-      log.info(
-        `[TaskMiner] Run complete: ${result.candidatesKept} sightings ` +
-          `(${result.candidatesRejected} rejected), ` +
-          `tokens: ${result.tokenUsage.total.input}in/${result.tokenUsage.total.output}out`,
-      )
-      const clustering = await this.cluster(provider, {
-        ...DEFAULT_MINER_CONFIG,
-        model: this.model,
-      })
-      if (clustering) {
-        log.info(
-          `[TaskMiner] Clustering complete: +${clustering.attached} attached, ` +
-            `${clustering.newClusters} new clusters, ${clustering.labeled} labeled` +
-            (clustering.llmError ? ` (LLM review failed: ${clustering.llmError})` : ''),
-        )
-      }
-    } catch (error) {
-      log.error('[TaskMiner] Run failed:', formatApiError(error))
     } finally {
       this.running = false
     }

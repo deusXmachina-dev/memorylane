@@ -148,6 +148,8 @@ export const TASK_BACKFILL = {
   // Re-cluster at this many-day barrier during backfill so earlier days' labels
   // become known-procedure vocabulary for later days (canonical titles cross-day).
   CLUSTER_EVERY_DAYS: 5,
+  // Mining attempts per calendar day before the ledger marks it failed.
+  MAX_DAY_ATTEMPTS: 3,
 }
 
 // User-initiated timed capture pause (auto-resumes when the timer elapses).

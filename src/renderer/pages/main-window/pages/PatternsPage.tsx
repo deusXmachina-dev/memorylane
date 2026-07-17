@@ -1,5 +1,5 @@
 import * as React from 'react'
-import type { ClustersView, MainWindowAPI, PatternInfo } from '@types'
+import type { ClustersView, MainWindowAPI, MiningStatus, PatternInfo } from '@types'
 import { PageLayout } from '../components/shell/PageLayout'
 import { ClustersSection } from '../components/ClustersSection'
 import { PatternsSection } from '../components/PatternsSection'
@@ -10,6 +10,7 @@ interface PatternsPageProps {
   newTaskMinerEnabled: boolean
   clusters: ClustersView | null
   patterns: PatternInfo[] | null
+  miningStatus: MiningStatus | null
   onPatternsChange: () => void
 }
 
@@ -18,6 +19,7 @@ export function PatternsPage({
   newTaskMinerEnabled,
   clusters,
   patterns,
+  miningStatus,
   onPatternsChange,
 }: PatternsPageProps): React.JSX.Element {
   const subtitle = newTaskMinerEnabled
@@ -39,6 +41,7 @@ export function PatternsPage({
           api={api}
           clusters={clusters!.clusters}
           hiddenCount={clusters!.hiddenCount}
+          miningStatus={miningStatus}
         />
       ) : (
         <PatternsSection api={api} patterns={patterns!} onPatternsChange={onPatternsChange} />
