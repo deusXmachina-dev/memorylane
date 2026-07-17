@@ -23,6 +23,7 @@
   "settings": {
     "import/resolver": {
       "typescript": {
+        "noWarnOnMultipleProjects": true,
         "project": [
           "./tsconfig.json",
           "./tsconfig.web.json",
