@@ -21,4 +21,4 @@ export interface ActivitySummary {
   summary: string
 }
 
-export type { ActivityDetail } from '../../shared/types'
+export type { ActivityDetail } from '@types'
