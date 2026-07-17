@@ -13,6 +13,7 @@ vi.mock('@main/utils/logger', () => ({
 import { EnterpriseAccessProvider } from './enterprise-access-provider'
 import { ENTERPRISE_BACKEND_CONFIG } from '../../shared/constants'
 import { DeviceIdentityUnavailableError, type DeviceIdentity } from '../settings/device-identity'
+import { jsonResponse } from '@main/utils/test-utils'
 
 const TENANT_TOKEN = 'tt_GigKRAyNbQ1U8jBSEKTq7uiiufT392Si'
 const EMAIL = 'alice@corp.com'
@@ -29,10 +30,6 @@ const ACTIVATION_CODE = `${TENANT_TOKEN}.${urlsafeBase64(EMAIL)}`
 
 const DEFAULT_DOC_BYTES = Buffer.from('%PDF-1.4 fake consent doc')
 const DEFAULT_DOC_SHA = createHash('sha256').update(DEFAULT_DOC_BYTES).digest('hex')
-
-function jsonResponse(body: unknown, ok = true, status = 200): Response {
-  return { ok, status, json: async () => body } as Response
-}
 
 function descriptorResponse(
   overrides: {

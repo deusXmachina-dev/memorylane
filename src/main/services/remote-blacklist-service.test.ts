@@ -5,10 +5,7 @@ vi.mock('@main/utils/logger', () => ({
 }))
 
 import { RemoteBlacklistService } from './remote-blacklist-service'
-
-function jsonResponse(body: unknown): Response {
-  return { ok: true, status: 200, json: async () => body } as Response
-}
+import { jsonResponse } from '@main/utils/test-utils'
 
 describe('RemoteBlacklistService', () => {
   const originalFetch = globalThis.fetch
@@ -90,7 +87,7 @@ describe('RemoteBlacklistService', () => {
   it('keeps the last blacklist on 401 (does not clear on deactivation)', async () => {
     const responses: Response[] = [
       jsonResponse({ excludedApps: ['slack'], excludedUrlPatterns: ['*bank*'] }),
-      { ok: false, status: 401, json: async () => ({}) } as Response,
+      jsonResponse({}, false, 401),
     ]
     globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
@@ -107,7 +104,7 @@ describe('RemoteBlacklistService', () => {
   it('keeps the last blacklist and swallows the error on a failed fetch', async () => {
     const responses: Response[] = [
       jsonResponse({ excludedApps: ['slack'], excludedUrlPatterns: [] }),
-      { ok: false, status: 500, json: async () => ({}) } as Response,
+      jsonResponse({}, false, 500),
     ]
     globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 

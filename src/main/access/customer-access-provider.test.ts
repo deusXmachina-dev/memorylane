@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 const { openExternalMock } = vi.hoisted(() => ({
-  openExternalMock: vi.fn(async () => undefined),
+  openExternalMock: vi.fn<(url: string) => Promise<void>>(async () => undefined),
 }))
 
 vi.mock('electron', () => ({
@@ -22,12 +22,9 @@ vi.mock('@main/utils/logger', () => ({
 import { CustomerAccessProvider } from './customer-access-provider'
 import { MANAGED_KEY_CONFIG } from '../../shared/constants'
 import { DeviceIdentityUnavailableError, type DeviceIdentity } from '../settings/device-identity'
+import { jsonResponse } from '@main/utils/test-utils'
 
 type FetchCall = Parameters<typeof fetch>
-
-function jsonResponse(body: unknown, ok = true, status = 200): Response {
-  return { ok, status, json: async () => body, text: async () => '' } as Response
-}
 
 function makeFetchMock(responses: Response[]): Mock<typeof fetch> {
   const queue = [...responses]
@@ -119,7 +116,7 @@ describe('CustomerAccessProvider', () => {
     expect(JSON.parse(String(linkCall[1]?.body))).toEqual({ plan: 'explorer' })
 
     expect(openExternalMock).toHaveBeenCalledWith(signedUrl)
-    const openedUrl = openExternalMock.mock.calls[0]?.[0] as string
+    const openedUrl = openExternalMock.mock.calls[0]?.[0]
     expect(openedUrl).not.toContain('device_id=')
   })
 
@@ -152,7 +149,7 @@ describe('CustomerAccessProvider', () => {
     expect(String(linkCall[0])).not.toContain('device_id=')
 
     expect(openExternalMock).toHaveBeenCalledWith(signedUrl)
-    const openedUrl = openExternalMock.mock.calls[0]?.[0] as string
+    const openedUrl = openExternalMock.mock.calls[0]?.[0]
     expect(openedUrl).not.toContain('device_id=')
   })
 

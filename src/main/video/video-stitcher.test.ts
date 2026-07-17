@@ -1,5 +1,6 @@
 import type { ChildProcess } from 'child_process'
 import { EventEmitter } from 'events'
+import { PassThrough } from 'stream'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
@@ -12,15 +13,15 @@ vi.mock('child_process', () => ({
   spawn: vi.fn(),
 }))
 
-interface MockChildProcess extends EventEmitter {
-  stdout: EventEmitter
-  stderr: EventEmitter
+type MockChildProcess = ChildProcess & {
+  stdout: PassThrough
+  stderr: PassThrough
 }
 
 function createMockChildProcess(): MockChildProcess {
   const processEmitter = new EventEmitter() as MockChildProcess
-  processEmitter.stdout = new EventEmitter()
-  processEmitter.stderr = new EventEmitter()
+  processEmitter.stdout = new PassThrough()
+  processEmitter.stderr = new PassThrough()
   return processEmitter
 }
 
@@ -75,7 +76,7 @@ describe('FfmpegVideoStitcher', () => {
     const outputPath = path.join(tempDir, 'out.mp4')
 
     const mockChild = createMockChildProcess()
-    vi.mocked(childProcess.spawn).mockReturnValue(mockChild as ChildProcess)
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
 
     const stitcher = new FfmpegVideoStitcher()
     const promise = stitcher.stitch({
@@ -134,7 +135,7 @@ describe('FfmpegVideoStitcher', () => {
     const frameC = createFrame(tempDir, 'c.png')
 
     const mockChild = createMockChildProcess()
-    vi.mocked(childProcess.spawn).mockReturnValue(mockChild as ChildProcess)
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
 
     const stitcher = new FfmpegVideoStitcher()
     const promise = stitcher.stitch({
@@ -163,7 +164,7 @@ describe('FfmpegVideoStitcher', () => {
     const frameB = createFrame(tempDir, 'b.png')
 
     const mockChild = createMockChildProcess()
-    vi.mocked(childProcess.spawn).mockReturnValue(mockChild as ChildProcess)
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
 
     const stitcher = new FfmpegVideoStitcher()
     const promise = stitcher.stitch({
@@ -192,7 +193,7 @@ describe('FfmpegVideoStitcher', () => {
     const outputPath = path.join(tempDir, 'out.mp4')
 
     const mockChild = createMockChildProcess()
-    vi.mocked(childProcess.spawn).mockReturnValue(mockChild as ChildProcess)
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
 
     const stitcher = new FfmpegVideoStitcher()
     const promise = stitcher.stitch({
@@ -272,7 +273,7 @@ describe('FfmpegVideoStitcher', () => {
     const frameB = createFrame(tempDir, 'b.png')
 
     const mockChild = createMockChildProcess()
-    vi.mocked(childProcess.spawn).mockReturnValue(mockChild as ChildProcess)
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
 
     const stitcher = new FfmpegVideoStitcher()
     const promise = stitcher.stitch({
@@ -302,7 +303,7 @@ describe('FfmpegVideoStitcher', () => {
     const frameB = createFrame(tempDir, 'b.png')
 
     const mockChild = createMockChildProcess()
-    vi.mocked(childProcess.spawn).mockReturnValue(mockChild as ChildProcess)
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
 
     const stitcher = new FfmpegVideoStitcher()
     const promise = stitcher.stitch({
