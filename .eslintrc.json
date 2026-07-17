@@ -14,6 +14,11 @@
     "prettier"
   ],
   "parser": "@typescript-eslint/parser",
+  "rules": {
+    // false-positives on better-sqlite3, whose typings export Database both as
+    // the default and as a named member
+    "import/no-named-as-default": "off"
+  },
   "ignorePatterns": ["*.config.ts", "build/", "dist/"], // because we use dynamic imports in paths.ts
   "settings": {
     "import/resolver": {
