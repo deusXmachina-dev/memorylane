@@ -46,10 +46,14 @@ function makeExtracted(activityId: string): ExtractedActivity {
   }
 }
 
+function makeRepo(add: ActivityRepository['add']): ActivityRepository {
+  return { add } as ActivityRepository
+}
+
 describe('SqliteActivitySink', () => {
   it('persists mapped extracted activity', async () => {
     const add = vi.fn()
-    const repo = { add } as unknown as ActivityRepository
+    const repo = makeRepo(add)
     const sink = new SqliteActivitySink(repo)
     const activity = makeActivity('activity-1')
     const extracted = makeExtracted('activity-1')
@@ -73,7 +77,7 @@ describe('SqliteActivitySink', () => {
 
   it('throws on activityId mismatch', async () => {
     const add = vi.fn()
-    const repo = { add } as unknown as ActivityRepository
+    const repo = makeRepo(add)
     const sink = new SqliteActivitySink(repo)
     const activity = makeActivity('activity-1')
     const extracted = makeExtracted('activity-2')
@@ -86,7 +90,7 @@ describe('SqliteActivitySink', () => {
     const add = vi.fn().mockImplementation(() => {
       throw new Error('UNIQUE constraint failed: activities.id')
     })
-    const repo = { add } as unknown as ActivityRepository
+    const repo = makeRepo(add)
     const sink = new SqliteActivitySink(repo)
     const activity = makeActivity('activity-1')
     const extracted = makeExtracted('activity-1')
@@ -100,7 +104,7 @@ describe('SqliteActivitySink', () => {
     const add = vi.fn().mockImplementation(() => {
       throw storageError
     })
-    const repo = { add } as unknown as ActivityRepository
+    const repo = makeRepo(add)
     const sink = new SqliteActivitySink(repo)
     const activity = makeActivity('activity-1')
     const extracted = makeExtracted('activity-1')

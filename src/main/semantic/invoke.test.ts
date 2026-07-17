@@ -26,11 +26,11 @@ function jsonResponse(body: unknown, init: ResponseInit = { status: 200 }): Resp
 
 describe('invokeRawVideoCompletion', () => {
   it('parses a successful chat-completion response', async () => {
-    const fetchImpl = (async () =>
+    const fetchImpl: typeof globalThis.fetch = async () =>
       jsonResponse({
         choices: [{ message: { content: 'a summary' } }],
         usage: { prompt_tokens: 10, completion_tokens: 4 },
-      })) as unknown as typeof globalThis.fetch
+      })
 
     const outcome = await invokeRawVideoCompletion({
       route: makeRoute(),
@@ -46,7 +46,7 @@ describe('invokeRawVideoCompletion', () => {
   })
 
   it('formats structured error responses with code/provider_message details', async () => {
-    const fetchImpl = (async () =>
+    const fetchImpl: typeof globalThis.fetch = async () =>
       jsonResponse(
         {
           error: {
@@ -56,7 +56,7 @@ describe('invokeRawVideoCompletion', () => {
           },
         },
         { status: 400, statusText: 'Bad Request' },
-      )) as unknown as typeof globalThis.fetch
+      )
 
     await expect(
       invokeRawVideoCompletion({
@@ -70,12 +70,12 @@ describe('invokeRawVideoCompletion', () => {
   })
 
   it('falls back to raw response text on a non-OK non-JSON body', async () => {
-    const fetchImpl = (async () =>
+    const fetchImpl: typeof globalThis.fetch = async () =>
       new Response('upstream is down', {
         status: 502,
         statusText: 'Bad Gateway',
         headers: { 'content-type': 'text/plain' },
-      })) as unknown as typeof globalThis.fetch
+      })
 
     await expect(
       invokeRawVideoCompletion({
@@ -89,8 +89,7 @@ describe('invokeRawVideoCompletion', () => {
   })
 
   it('throws "Empty response body" when an OK response has no body', async () => {
-    const fetchImpl = (async () =>
-      new Response('', { status: 200 })) as unknown as typeof globalThis.fetch
+    const fetchImpl: typeof globalThis.fetch = async () => new Response('', { status: 200 })
 
     await expect(
       invokeRawVideoCompletion({
@@ -104,9 +103,9 @@ describe('invokeRawVideoCompletion', () => {
   })
 
   it('propagates fetch errors (e.g. abort/network)', async () => {
-    const fetchImpl = (async () => {
+    const fetchImpl: typeof globalThis.fetch = async () => {
       throw new Error('aborted by test')
-    }) as unknown as typeof globalThis.fetch
+    }
 
     await expect(
       invokeRawVideoCompletion({
@@ -120,10 +119,10 @@ describe('invokeRawVideoCompletion', () => {
   })
 
   it('rejects content types that are not text or input_video', async () => {
-    const fetchImpl = (async () =>
+    const fetchImpl: typeof globalThis.fetch = async () =>
       jsonResponse({
         choices: [{ message: { content: 'ok' } }],
-      })) as unknown as typeof globalThis.fetch
+      })
 
     await expect(
       invokeRawVideoCompletion({
@@ -140,10 +139,10 @@ describe('invokeRawVideoCompletion', () => {
 
   it('omits the Authorization header when apiKey is empty (Ollama case)', async () => {
     let seenHeaders: Record<string, string> | null = null
-    const fetchImpl = (async (_url: string, init?: RequestInit) => {
+    const fetchImpl: typeof globalThis.fetch = async (_url, init) => {
       seenHeaders = (init?.headers as Record<string, string>) ?? {}
       return jsonResponse({ choices: [{ message: { content: 'ok' } }] })
-    }) as unknown as typeof globalThis.fetch
+    }
 
     await invokeRawVideoCompletion({
       route: makeRoute({ apiKey: '' }),

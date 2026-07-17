@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 const { openExternalMock } = vi.hoisted(() => ({
-  openExternalMock: vi.fn(async () => undefined),
+  openExternalMock: vi.fn<(url: string) => Promise<void>>(async () => undefined),
 }))
 
 vi.mock('electron', () => ({
@@ -22,21 +22,17 @@ vi.mock('@main/utils/logger', () => ({
 import { CustomerAccessProvider } from './customer-access-provider'
 import { MANAGED_KEY_CONFIG } from '../../shared/constants'
 import { DeviceIdentityUnavailableError, type DeviceIdentity } from '../settings/device-identity'
+import { jsonResponse } from '@main/utils/test-utils'
 
-type FetchCall = [unknown, RequestInit | undefined]
+type FetchCall = Parameters<typeof fetch>
 
-function jsonResponse(body: unknown, ok = true, status = 200): Response {
-  return { ok, status, json: async () => body, text: async () => '' } as unknown as Response
-}
-
-function makeFetchMock(responses: Response[]): typeof fetch {
+function makeFetchMock(responses: Response[]): Mock<typeof fetch> {
   const queue = [...responses]
-  return vi.fn(async () => queue.shift() as Response) as unknown as typeof fetch
+  return vi.fn<typeof fetch>(async () => queue.shift() as Response)
 }
 
-function findCall(fetchMock: typeof fetch, urlPart: string): FetchCall {
-  const calls = (fetchMock as unknown as { mock: { calls: FetchCall[] } }).mock.calls
-  const call = calls.find((c) => String(c[0]).includes(urlPart))
+function findCall(fetchMock: Mock<typeof fetch>, urlPart: string): FetchCall {
+  const call = fetchMock.mock.calls.find((c) => String(c[0]).includes(urlPart))
   if (!call) throw new Error(`No fetch call to ${urlPart}`)
   return call
 }
@@ -50,7 +46,7 @@ describe('CustomerAccessProvider', () => {
   const originalFetch = globalThis.fetch
   const deviceIdentity = {
     getDeviceId: () => 'device-123',
-  } as unknown as DeviceIdentity
+  } as DeviceIdentity
 
   beforeEach(() => {
     vi.useFakeTimers()
@@ -120,7 +116,7 @@ describe('CustomerAccessProvider', () => {
     expect(JSON.parse(String(linkCall[1]?.body))).toEqual({ plan: 'explorer' })
 
     expect(openExternalMock).toHaveBeenCalledWith(signedUrl)
-    const openedUrl = openExternalMock.mock.calls[0]?.[0] as string
+    const openedUrl = openExternalMock.mock.calls[0]?.[0]
     expect(openedUrl).not.toContain('device_id=')
   })
 
@@ -153,7 +149,7 @@ describe('CustomerAccessProvider', () => {
     expect(String(linkCall[0])).not.toContain('device_id=')
 
     expect(openExternalMock).toHaveBeenCalledWith(signedUrl)
-    const openedUrl = openExternalMock.mock.calls[0]?.[0] as string
+    const openedUrl = openExternalMock.mock.calls[0]?.[0]
     expect(openedUrl).not.toContain('device_id=')
   })
 
@@ -199,13 +195,13 @@ describe('CustomerAccessProvider', () => {
   })
 
   it('surfaces a retry error and skips the backend when device identity is unavailable during checkout', async () => {
-    const fetchMock = vi.fn() as unknown as typeof fetch
+    const fetchMock = vi.fn<typeof fetch>()
     globalThis.fetch = fetchMock
     const throwingIdentity = {
-      getDeviceId: () => {
+      getDeviceId: (): string => {
         throw new DeviceIdentityUnavailableError('secure storage unavailable')
       },
-    } as unknown as DeviceIdentity
+    } as DeviceIdentity
     const provider = new CustomerAccessProvider(throwingIdentity)
     const updates: Array<{ status: string | null }> = []
     provider.setUpdateCallback((state) => {
@@ -214,23 +210,23 @@ describe('CustomerAccessProvider', () => {
 
     await provider.startCheckout('explorer')
 
-    expect((fetchMock as unknown as { mock: { calls: unknown[] } }).mock.calls).toHaveLength(0)
+    expect(fetchMock.mock.calls).toHaveLength(0)
     expect(openExternalMock).not.toHaveBeenCalled()
     expect(updates.map((u) => u.status)).not.toContain('polling')
   })
 
   it('throws a clean retry error from the portal when device identity is unavailable', async () => {
-    const fetchMock = vi.fn() as unknown as typeof fetch
+    const fetchMock = vi.fn<typeof fetch>()
     globalThis.fetch = fetchMock
     const throwingIdentity = {
-      getDeviceId: () => {
+      getDeviceId: (): string => {
         throw new DeviceIdentityUnavailableError('secure storage unavailable')
       },
-    } as unknown as DeviceIdentity
+    } as DeviceIdentity
     const provider = new CustomerAccessProvider(throwingIdentity)
 
     await expect(provider.openSubscriptionPortal()).rejects.toThrow(/temporarily unavailable/i)
-    expect((fetchMock as unknown as { mock: { calls: unknown[] } }).mock.calls).toHaveLength(0)
+    expect(fetchMock.mock.calls).toHaveLength(0)
     expect(openExternalMock).not.toHaveBeenCalled()
   })
 
@@ -280,9 +276,9 @@ describe('CustomerAccessProvider', () => {
     })
 
     it('keeps the managed key when fetch itself throws (network error)', async () => {
-      globalThis.fetch = vi.fn(async () => {
+      globalThis.fetch = vi.fn<typeof fetch>(async () => {
         throw new TypeError('network error')
-      }) as unknown as typeof fetch
+      })
       const provider = new CustomerAccessProvider(deviceIdentity)
       const payloads: unknown[] = []
       provider.setUpdateCallback((_, payload) => payloads.push(payload))
@@ -293,13 +289,13 @@ describe('CustomerAccessProvider', () => {
     })
 
     it('keeps the managed key and skips the backend when device identity is unavailable', async () => {
-      const fetchMock = vi.fn() as unknown as typeof fetch
+      const fetchMock = vi.fn<typeof fetch>()
       globalThis.fetch = fetchMock
       const throwingIdentity = {
-        getDeviceId: () => {
+        getDeviceId: (): string => {
           throw new DeviceIdentityUnavailableError('secure storage unavailable')
         },
-      } as unknown as DeviceIdentity
+      } as DeviceIdentity
       const provider = new CustomerAccessProvider(throwingIdentity)
       const payloads: unknown[] = []
       provider.setUpdateCallback((_, payload) => payloads.push(payload))
@@ -307,7 +303,7 @@ describe('CustomerAccessProvider', () => {
       await provider.refreshAccessState()
 
       expect(payloads).toEqual([])
-      expect((fetchMock as unknown as { mock: { calls: unknown[] } }).mock.calls).toHaveLength(0)
+      expect(fetchMock.mock.calls).toHaveLength(0)
     })
 
     it('invalidates the managed key on an authoritative 200 {key: null}', async () => {
@@ -344,16 +340,14 @@ describe('CustomerAccessProvider', () => {
       await provider.startCheckout('explorer')
 
       const payloads: unknown[] = []
-      const callsBefore = (fetchMock as unknown as { mock: { calls: unknown[] } }).mock.calls.length
+      const callsBefore = fetchMock.mock.calls.length
       provider.setUpdateCallback((_, payload) => payloads.push(payload))
 
       await provider.refreshAccessState()
 
       expect(payloads).toEqual([])
       // No new fetch fired — refresh short-circuited on the polling guard.
-      expect((fetchMock as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBe(
-        callsBefore,
-      )
+      expect(fetchMock.mock.calls.length).toBe(callsBefore)
     })
   })
 })

@@ -31,10 +31,10 @@ let frameStream: InMemoryStream<Frame>
 let eventStream: InMemoryStream<EventWindow>
 let harness: PipelineHarness
 let capture: RuntimeCaptureController
-let setRetain: ReturnType<typeof vi.fn>
-let sweepNow: ReturnType<typeof vi.fn>
-let startCapture: ReturnType<typeof vi.fn>
-let stopCapture: ReturnType<typeof vi.fn>
+let setRetain: (value: boolean) => void
+let sweepNow: () => void
+let startCapture: () => void
+let stopCapture: () => void
 let capturing: boolean
 
 beforeEach(() => {
@@ -52,21 +52,25 @@ beforeEach(() => {
   })
   capturing = false
 
+  const flush: () => void = vi.fn()
+  const drainActivities: () => Promise<void> = vi.fn().mockResolvedValue(undefined)
+  const waitForIdle: () => Promise<void> = vi.fn().mockResolvedValue(undefined)
+
   harness = {
     frameStream,
     eventStream,
-    eventCapturer: { flush: vi.fn() },
-    drainActivities: vi.fn().mockResolvedValue(undefined),
+    eventCapturer: { flush },
+    drainActivities,
     setRetainScreenshots: setRetain,
     sweepNow,
-  } as unknown as PipelineHarness
+  } as PipelineHarness
 
   capture = {
     isCapturingNow: () => capturing,
     startCapture,
     stopCapture,
-    waitForIdle: vi.fn().mockResolvedValue(undefined),
-  } as unknown as RuntimeCaptureController
+    waitForIdle,
+  } as RuntimeCaptureController
 })
 
 afterEach(() => {

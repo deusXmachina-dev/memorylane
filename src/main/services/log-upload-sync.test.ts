@@ -13,12 +13,15 @@ import type { LogUploadState } from './log-upload-store'
 const NOW = 1_700_000_000_000
 
 function mockFetchResponse(status: number, body: object | string = { ok: true }) {
-  return vi.fn(async () => ({
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => (typeof body === 'object' ? body : JSON.parse(body)),
-    text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
-  }))
+  return vi.fn<typeof fetch>(
+    async () =>
+      ({
+        ok: status >= 200 && status < 300,
+        status,
+        json: async () => (typeof body === 'object' ? body : JSON.parse(body)),
+        text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
+      }) as Response,
+  )
 }
 
 describe('LogUploadSync', () => {
@@ -68,14 +71,14 @@ describe('LogUploadSync', () => {
 
   it('uploads a zipped bundle with Bearer auth when activated and changed', async () => {
     const fetchMock = mockFetchResponse(200)
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const { sync, zipFiles, state } = makeSync()
     sync.requestSync('startup')
     await sync.stop()
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit]
+    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit]
     expect(url.toString()).toBe('http://localhost:8000/api/device/logs')
     expect(init.method).toBe('POST')
     expect(init.body).toBeInstanceOf(FormData)
@@ -93,7 +96,7 @@ describe('LogUploadSync', () => {
 
   it('skips when sharing is disabled', async () => {
     const fetchMock = mockFetchResponse(200)
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const { sync, zipFiles } = makeSync({ isSyncEnabled: () => false })
     sync.requestSync('startup')
@@ -105,7 +108,7 @@ describe('LogUploadSync', () => {
 
   it('skips when the device is not activated', async () => {
     const fetchMock = mockFetchResponse(200)
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const { sync, zipFiles } = makeSync({ isActivated: () => false })
     sync.requestSync('startup')
@@ -117,7 +120,7 @@ describe('LogUploadSync', () => {
 
   it('skips a second upload when the logs are unchanged', async () => {
     const fetchMock = mockFetchResponse(200)
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const { sync, zipFiles } = makeSync()
     sync.requestSync('first')
@@ -132,7 +135,7 @@ describe('LogUploadSync', () => {
 
   it('throttles a changed bundle within the min interval', async () => {
     const fetchMock = mockFetchResponse(200)
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const { sync, zipFiles } = makeSync({ minIntervalMs: 10_000 })
     // A recent upload with a different signature: changed, but throttled.
@@ -152,7 +155,7 @@ describe('LogUploadSync', () => {
 
   it('does not advance the marker when the upload fails', async () => {
     const fetchMock = mockFetchResponse(500, 'server error')
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const { sync, state } = makeSync()
     sync.requestSync('startup')
@@ -164,7 +167,7 @@ describe('LogUploadSync', () => {
 
   it('triggerUpload returns an error when sharing is disabled', async () => {
     const fetchMock = mockFetchResponse(200)
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const { sync, zipFiles } = makeSync({ isSyncEnabled: () => false })
     const result = await sync.triggerUpload()
@@ -176,7 +179,7 @@ describe('LogUploadSync', () => {
 
   it('triggerUpload forces an upload even when logs are unchanged', async () => {
     const fetchMock = mockFetchResponse(200)
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const { sync } = makeSync()
     // First upload establishes the marker (signature recorded).
@@ -190,7 +193,7 @@ describe('LogUploadSync', () => {
 
   it('triggerUpload surfaces an upload failure', async () => {
     const fetchMock = mockFetchResponse(500, 'server error')
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const { sync, state } = makeSync()
     const result = await sync.triggerUpload()

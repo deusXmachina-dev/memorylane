@@ -17,7 +17,7 @@ vi.mock('./clustering', () => ({ runClustering: vi.fn(async () => ({})) }))
 const mockedRunDetection = vi.mocked(runDetection)
 const mockedRunClustering = vi.mocked(runClustering)
 
-const configuredProvider = { isConfigured: () => true } as unknown as InferenceProvider
+const configuredProvider = { isConfigured: () => true } as InferenceProvider
 const embedder: MinerEmbedder = {
   embed: async () => [0.1, 0.2, 0.3],
   embedBatch: async (texts) => texts.map(() => [0.1, 0.2, 0.3]),

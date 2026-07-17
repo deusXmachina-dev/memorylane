@@ -1,5 +1,5 @@
 ---
-name: deploy-plugin
+name: release-plugin
 description: Deploy the MemoryLane Claude Code plugin by verifying only plugin/marketplace files changed, bumping the plugin version, then committing and pushing.
 ---
 

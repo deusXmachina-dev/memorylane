@@ -1,3 +1,4 @@
+import type { ChildProcess } from 'child_process'
 import { EventEmitter } from 'events'
 import { PassThrough } from 'stream'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -20,7 +21,7 @@ vi.mock('@main/utils/logger', () => ({
   default: mockLogger,
 }))
 
-interface MockChildProcess extends EventEmitter {
+type MockChildProcess = ChildProcess & {
   stdout: PassThrough
   stderr: PassThrough
   pid: number
@@ -65,9 +66,7 @@ describe('app-watcher-win backend', () => {
 
     vi.mocked(fs.existsSync).mockReturnValue(true)
     const child = createMockChildProcess()
-    vi.mocked(childProcess.spawn).mockReturnValue(
-      child as unknown as ReturnType<typeof childProcess.spawn>,
-    )
+    vi.mocked(childProcess.spawn).mockReturnValue(child)
 
     const mod = await import('./app-watcher-win')
     const callback = vi.fn()
@@ -97,9 +96,7 @@ describe('app-watcher-win backend', () => {
 
     vi.mocked(fs.existsSync).mockReturnValue(true)
     const child = createMockChildProcess()
-    vi.mocked(childProcess.spawn).mockReturnValue(
-      child as unknown as ReturnType<typeof childProcess.spawn>,
-    )
+    vi.mocked(childProcess.spawn).mockReturnValue(child)
 
     const mod = await import('./app-watcher-win')
     const callback = vi.fn()
@@ -121,9 +118,7 @@ describe('app-watcher-win backend', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true)
     const firstChild = createMockChildProcess(111)
     const secondChild = createMockChildProcess(222)
-    vi.mocked(childProcess.spawn)
-      .mockReturnValueOnce(firstChild as unknown as ReturnType<typeof childProcess.spawn>)
-      .mockReturnValueOnce(secondChild as unknown as ReturnType<typeof childProcess.spawn>)
+    vi.mocked(childProcess.spawn).mockReturnValueOnce(firstChild).mockReturnValueOnce(secondChild)
 
     const mod = await import('./app-watcher-win')
     mod.startAppWatcherWin(vi.fn())
@@ -141,9 +136,7 @@ describe('app-watcher-win backend', () => {
 
     vi.mocked(fs.existsSync).mockReturnValue(true)
     const child = createMockChildProcess()
-    vi.mocked(childProcess.spawn).mockReturnValue(
-      child as unknown as ReturnType<typeof childProcess.spawn>,
-    )
+    vi.mocked(childProcess.spawn).mockReturnValue(child)
 
     const mod = await import('./app-watcher-win')
     mod.startAppWatcherWin(() => {

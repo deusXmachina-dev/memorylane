@@ -10,7 +10,7 @@ function useTheme() {
 }
 
 function getAPI(): MainWindowAPI {
-  const api = (window as unknown as { mainWindowAPI?: MainWindowAPI }).mainWindowAPI
+  const api = window.mainWindowAPI
   if (!api) throw new Error('mainWindowAPI not available')
   return api
 }

@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { ACTIVITY_CONFIG, VISUAL_DETECTOR_CONFIG } from '@constants'
 import type { Activity, ActivityFrame } from '@main/activity/activity-types'
 import { ActivitySemanticService, SemanticFileDebugDumper } from './activity-semantic-service'
@@ -91,7 +91,7 @@ interface FetchCall {
 type FetchHandler = (call: FetchCall) => unknown | Promise<unknown>
 
 interface FetchMock {
-  fn: ReturnType<typeof vi.fn>
+  fn: Mock<(url: RequestInfo | URL, init?: RequestInit) => Promise<Response>>
   calls: FetchCall[]
   setHandler: (handler: FetchHandler) => void
 }
@@ -222,7 +222,7 @@ function setupService(options: SetupOptions = {}): {
   const provider = new InferenceProviderImpl({
     credentials: vendorCredentials,
     getActiveVendor: () => activeVendor,
-    fetch: fetchMock.fn as unknown as typeof globalThis.fetch,
+    fetch: fetchMock.fn,
   })
 
   // For custom-endpoint runs, the configured model becomes the only model for
@@ -242,7 +242,7 @@ function setupService(options: SetupOptions = {}): {
     usageTracker: options.usageTracker ?? { recordUsage: vi.fn() },
     summaryModeTracker: options.summaryModeTracker ?? { record: vi.fn() },
     debugDumper: options.debugDumper,
-    fetchImpl: fetchMock.fn as unknown as typeof globalThis.fetch,
+    fetchImpl: fetchMock.fn,
     healthStatePath: options.healthStatePath,
   })
   return { service, fetchMock, provider }

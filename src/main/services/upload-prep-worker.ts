@@ -28,7 +28,7 @@ interface ParentPortLike {
   on(event: 'message', listener: (e: { data: UploadPrepRequest }) => void): void
   postMessage(message: UploadPrepResponse | WorkerLogEvent, transfer?: ArrayBuffer[]): void
 }
-const parentPort = (process as unknown as { parentPort?: ParentPortLike }).parentPort
+const parentPort = process.parentPort as ParentPortLike | undefined
 if (parentPort) {
   forwardLogsToParent(parentPort)
   parentPort.on('message', ({ data }) => {

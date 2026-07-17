@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Dirent } from 'fs'
 
-vi.mock('fs/promises', () => ({ readdir: vi.fn() }))
+const { readdirMock } = vi.hoisted(() => ({
+  readdirMock: vi.fn<(dir: string) => Promise<Dirent[]>>(),
+}))
+
+vi.mock('fs/promises', () => ({ readdir: readdirMock }))
 vi.mock('child_process', () => ({ execFile: vi.fn() }))
 vi.mock('@main/utils/logger', () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -17,32 +21,31 @@ function dirent(name: string, isDir: boolean): Dirent {
     isSymbolicLink: () => false,
     isFIFO: () => false,
     isSocket: () => false,
-  } as unknown as Dirent
+  } as Dirent
 }
 
-async function setupReaddir(tree: Record<string, Array<[string, boolean]>>): Promise<void> {
-  const fsp = await import('fs/promises')
-  vi.mocked(fsp.readdir).mockImplementation((async (dir: string) => {
+function setupReaddir(tree: Record<string, Array<[string, boolean]>>): void {
+  readdirMock.mockImplementation(async (dir) => {
     const entries = tree[dir.replace(/\\/g, '/')]
     if (!entries) return []
     return entries.map(([n, d]) => dirent(n, d))
-  }) as unknown as typeof fsp.readdir)
+  })
 }
 
 async function setupPowershellOutput(lines: string[]): Promise<void> {
   const cp = await import('child_process')
-  vi.mocked(cp.execFile).mockImplementation(((...args: unknown[]) => {
+  vi.mocked(cp.execFile).mockImplementation((...args: unknown[]) => {
     const cb = args[args.length - 1]
     if (typeof cb === 'function') {
       ;(cb as (e: Error | null, out: string, err: string) => void)(null, lines.join('\n'), '')
     }
     return {} as ReturnType<typeof cp.execFile>
-  }) as unknown as typeof cp.execFile)
+  })
 }
 
 async function setupPowershellFailure(): Promise<void> {
   const cp = await import('child_process')
-  vi.mocked(cp.execFile).mockImplementation(((...args: unknown[]) => {
+  vi.mocked(cp.execFile).mockImplementation((...args: unknown[]) => {
     const cb = args[args.length - 1]
     if (typeof cb === 'function') {
       ;(cb as (e: Error | null, out: string, err: string) => void)(
@@ -52,7 +55,7 @@ async function setupPowershellFailure(): Promise<void> {
       )
     }
     return {} as ReturnType<typeof cp.execFile>
-  }) as unknown as typeof cp.execFile)
+  })
 }
 
 describe('listInstalledApps (windows)', () => {
@@ -72,7 +75,7 @@ describe('listInstalledApps (windows)', () => {
   it('keeps only shortcuts whose target is an .exe and uses the exe stem as matchToken', async () => {
     const programsA = 'C:/ProgramData/Microsoft/Windows/Start Menu/Programs'
     const programsB = 'C:/AppData/Microsoft/Windows/Start Menu/Programs'
-    await setupReaddir({
+    setupReaddir({
       [programsA]: [
         ['Google Chrome.lnk', false],
         ['Event Viewer.lnk', false],
@@ -103,7 +106,7 @@ describe('listInstalledApps (windows)', () => {
 
   it('returns empty list when powershell resolver fails', async () => {
     const programs = 'C:/ProgramData/Microsoft/Windows/Start Menu/Programs'
-    await setupReaddir({
+    setupReaddir({
       [programs]: [['Google Chrome.lnk', false]],
       'C:/AppData/Microsoft/Windows/Start Menu/Programs': [],
     })
@@ -116,7 +119,7 @@ describe('listInstalledApps (windows)', () => {
 
   it('dedupes multiple shortcuts pointing to the same exe', async () => {
     const programs = 'C:/ProgramData/Microsoft/Windows/Start Menu/Programs'
-    await setupReaddir({
+    setupReaddir({
       [programs]: [
         ['Python 3.14 (64-bit).lnk', false],
         ['Python 3.14.lnk', false],

@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import type { Activity, ActivityFrame } from '@main/activity/activity-types'
 import { ActivitySemanticService, SemanticFileDebugDumper } from './activity-semantic-service'
 import { InferenceProviderImpl } from '@main/llm/index'
+import type { VendorCredentialsManager } from '@main/settings/vendor-credentials-manager'
 import { FfmpegVideoStitcher } from '@main/video/video-stitcher'
 
 const RUN_INTEGRATION = process.env.RUN_SEMANTIC_OLLAMA_INTEGRATION === '1'
@@ -125,13 +126,12 @@ describeIntegration('semantic service ollama custom endpoint integration', () =>
       copyMediaAssets: true,
     })
 
+    const getCredentials: VendorCredentialsManager['getCredentials'] = () => ({
+      apiKey: OLLAMA_API_KEY ?? '',
+      baseURL: OLLAMA_BASE_URL,
+    })
     const provider = new InferenceProviderImpl({
-      credentials: {
-        getCredentials: () => ({
-          apiKey: OLLAMA_API_KEY ?? '',
-          baseURL: OLLAMA_BASE_URL,
-        }),
-      } as unknown as import('@main/settings/vendor-credentials-manager').VendorCredentialsManager,
+      credentials: { getCredentials } as VendorCredentialsManager,
       getActiveVendor: () => 'openai-compatible',
     })
     const service = new ActivitySemanticService(provider, {

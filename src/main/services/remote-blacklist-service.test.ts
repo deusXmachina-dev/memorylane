@@ -5,10 +5,7 @@ vi.mock('@main/utils/logger', () => ({
 }))
 
 import { RemoteBlacklistService } from './remote-blacklist-service'
-
-function jsonResponse(body: unknown): Response {
-  return { ok: true, status: 200, json: async () => body } as unknown as Response
-}
+import { jsonResponse } from '@main/utils/test-utils'
 
 describe('RemoteBlacklistService', () => {
   const originalFetch = globalThis.fetch
@@ -39,10 +36,10 @@ describe('RemoteBlacklistService', () => {
   })
 
   it('fetches with the device bearer and exposes the synced blacklist', async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn<typeof fetch>(async () =>
       jsonResponse({ excludedApps: ['slack', 1, 'msedge'], excludedUrlPatterns: ['*bank*'] }),
     )
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    globalThis.fetch = fetchMock
 
     const { service, onChange } = makeService()
     await service.sync()
@@ -64,8 +61,8 @@ describe('RemoteBlacklistService', () => {
   })
 
   it('does not fetch or notify when the device is not activated', async () => {
-    const fetchMock = vi.fn()
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    const fetchMock = vi.fn<typeof fetch>()
+    globalThis.fetch = fetchMock
 
     const { service, onChange } = makeService({ isActivated: () => false })
     await service.sync()
@@ -76,9 +73,9 @@ describe('RemoteBlacklistService', () => {
   })
 
   it('notifies only when the blacklist actually changes', async () => {
-    globalThis.fetch = vi.fn(async () =>
+    globalThis.fetch = vi.fn<typeof fetch>(async () =>
       jsonResponse({ excludedApps: ['slack'], excludedUrlPatterns: [] }),
-    ) as unknown as typeof fetch
+    )
 
     const { service, onChange } = makeService()
     await service.sync()
@@ -90,9 +87,9 @@ describe('RemoteBlacklistService', () => {
   it('keeps the last blacklist on 401 (does not clear on deactivation)', async () => {
     const responses: Response[] = [
       jsonResponse({ excludedApps: ['slack'], excludedUrlPatterns: ['*bank*'] }),
-      { ok: false, status: 401, json: async () => ({}) } as unknown as Response,
+      jsonResponse({}, false, 401),
     ]
-    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as unknown as typeof fetch
+    globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
     const { service, onChange } = makeService()
     await service.sync()
@@ -107,9 +104,9 @@ describe('RemoteBlacklistService', () => {
   it('keeps the last blacklist and swallows the error on a failed fetch', async () => {
     const responses: Response[] = [
       jsonResponse({ excludedApps: ['slack'], excludedUrlPatterns: [] }),
-      { ok: false, status: 500, json: async () => ({}) } as unknown as Response,
+      jsonResponse({}, false, 500),
     ]
-    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as unknown as typeof fetch
+    globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
     const { service, onChange } = makeService()
     await service.sync()
@@ -124,7 +121,7 @@ describe('RemoteBlacklistService', () => {
       jsonResponse({ excludedApps: ['slack'], excludedUrlPatterns: [] }),
       jsonResponse({ excludedApps: [], excludedUrlPatterns: [] }),
     ]
-    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as unknown as typeof fetch
+    globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
     const writeStored = vi.fn()
     const { service, onChange } = makeService({ writeStored })
@@ -137,9 +134,9 @@ describe('RemoteBlacklistService', () => {
   })
 
   it('persists the blacklist to the store whenever it changes', async () => {
-    globalThis.fetch = vi.fn(async () =>
+    globalThis.fetch = vi.fn<typeof fetch>(async () =>
       jsonResponse({ excludedApps: ['slack'], excludedUrlPatterns: ['*bank*'] }),
-    ) as unknown as typeof fetch
+    )
 
     const writeStored = vi.fn()
     const { service } = makeService({ writeStored })
@@ -152,8 +149,10 @@ describe('RemoteBlacklistService', () => {
   })
 
   it('loads the cached blacklist on start() and enforces it before any fetch', async () => {
-    const fetchMock = vi.fn(async () => jsonResponse({ excludedApps: [], excludedUrlPatterns: [] }))
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ excludedApps: [], excludedUrlPatterns: [] }),
+    )
+    globalThis.fetch = fetchMock
 
     const cached = { apps: ['slack'], urlPatterns: ['*bank*'] }
     const { service, onChange } = makeService({ readStored: () => cached })
@@ -167,9 +166,9 @@ describe('RemoteBlacklistService', () => {
   })
 
   it('treats an empty/missing cache on start() as a no-op', async () => {
-    globalThis.fetch = vi.fn(async () =>
+    globalThis.fetch = vi.fn<typeof fetch>(async () =>
       jsonResponse({ excludedApps: [], excludedUrlPatterns: [] }),
-    ) as unknown as typeof fetch
+    )
 
     const { service, onChange } = makeService({ readStored: () => null })
     service.start()

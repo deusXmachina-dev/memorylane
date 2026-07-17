@@ -13,6 +13,7 @@ vi.mock('@main/utils/logger', () => ({
 import { EnterpriseAccessProvider } from './enterprise-access-provider'
 import { ENTERPRISE_BACKEND_CONFIG } from '../../shared/constants'
 import { DeviceIdentityUnavailableError, type DeviceIdentity } from '../settings/device-identity'
+import { jsonResponse } from '@main/utils/test-utils'
 
 const TENANT_TOKEN = 'tt_GigKRAyNbQ1U8jBSEKTq7uiiufT392Si'
 const EMAIL = 'alice@corp.com'
@@ -48,7 +49,7 @@ function descriptorResponse(
       title: overrides.title ?? 'Employee data consent',
       content_type: overrides.contentType ?? 'application/pdf',
     }),
-  } as unknown as Response
+  } as Response
 }
 
 function pdfResponse(bytes: Buffer = DEFAULT_DOC_BYTES): Response {
@@ -56,14 +57,14 @@ function pdfResponse(bytes: Buffer = DEFAULT_DOC_BYTES): Response {
     ok: true,
     arrayBuffer: async () =>
       bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
-  } as unknown as Response
+  } as Response
 }
 
 describe('EnterpriseAccessProvider', () => {
   const originalFetch = globalThis.fetch
   const deviceIdentity = {
     getDeviceId: () => 'device-123',
-  } as unknown as DeviceIdentity
+  } as DeviceIdentity
 
   beforeEach(() => {
     vi.useFakeTimers()
@@ -76,7 +77,7 @@ describe('EnterpriseAccessProvider', () => {
 
   it('parks in awaiting_consent after fetching descriptor and verifying the PDF', async () => {
     const responses = [descriptorResponse(), pdfResponse()]
-    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
+    globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null }> = []
@@ -93,13 +94,13 @@ describe('EnterpriseAccessProvider', () => {
   })
 
   it('maps transport failures during activation to a friendly message and fails the activation', async () => {
-    globalThis.fetch = vi.fn(async () => {
+    globalThis.fetch = vi.fn<typeof fetch>(async () => {
       throw new TypeError('fetch failed', {
         cause: Object.assign(new Error('getaddrinfo ENOTFOUND backend.example'), {
           code: 'ENOTFOUND',
         }),
       })
-    }) as typeof fetch
+    })
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
@@ -116,11 +117,9 @@ describe('EnterpriseAccessProvider', () => {
   })
 
   it('keeps the backend error message when the activation code is rejected', async () => {
-    globalThis.fetch = vi.fn(async () => ({
-      ok: false,
-      status: 403,
-      json: async () => ({ error: 'Invalid activation code' }),
-    })) as unknown as typeof fetch
+    globalThis.fetch = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ error: 'Invalid activation code' }, false, 403),
+    )
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
@@ -135,13 +134,13 @@ describe('EnterpriseAccessProvider', () => {
   })
 
   it('maps transport failures during refresh to a friendly message', async () => {
-    globalThis.fetch = vi.fn(async () => {
+    globalThis.fetch = vi.fn<typeof fetch>(async () => {
       throw new TypeError('fetch failed', {
         cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:443'), {
           code: 'ECONNREFUSED',
         }),
       })
-    }) as typeof fetch
+    })
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
@@ -157,13 +156,9 @@ describe('EnterpriseAccessProvider', () => {
   it('keeps an activated device activated when a refresh hits a transport failure', async () => {
     const responses: Array<() => Response> = [
       // GET /license/status -> activated
-      () => ({ ok: true, json: async () => ({ activated: true }) }) as unknown as Response,
+      () => jsonResponse({ activated: true }),
       // GET /license/inference-config -> managed key
-      () =>
-        ({
-          ok: true,
-          json: async () => ({ provider: 'openrouter', apiKey: 'key-123' }),
-        }) as unknown as Response,
+      () => jsonResponse({ provider: 'openrouter', apiKey: 'key-123' }),
       // next refresh: offline
       () => {
         throw new TypeError('fetch failed', {
@@ -173,7 +168,7 @@ describe('EnterpriseAccessProvider', () => {
         })
       },
     ]
-    globalThis.fetch = vi.fn(async () => (responses.shift() as () => Response)()) as typeof fetch
+    globalThis.fetch = vi.fn<typeof fetch>(async () => (responses.shift() as () => Response)())
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
@@ -191,7 +186,7 @@ describe('EnterpriseAccessProvider', () => {
   })
 
   it('rejects malformed activation codes without making any network calls', async () => {
-    const fetchMock = vi.fn() as unknown as typeof fetch
+    const fetchMock = vi.fn<typeof fetch>()
     globalThis.fetch = fetchMock
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
@@ -203,14 +198,14 @@ describe('EnterpriseAccessProvider', () => {
     await expect(provider.activateEnterpriseLicense('not-a-code')).rejects.toThrow(
       /must start with `tt_`/,
     )
-    expect((fetchMock as unknown as { mock: { calls: unknown[] } }).mock.calls).toHaveLength(0)
+    expect(fetchMock.mock.calls).toHaveLength(0)
     expect(updates.at(-1)?.status).toBe('error')
   })
 
   it('rejects descriptors with disallowed content types', async () => {
-    globalThis.fetch = vi.fn(async () =>
+    globalThis.fetch = vi.fn<typeof fetch>(async () =>
       descriptorResponse({ contentType: 'text/html' }),
-    ) as unknown as typeof fetch
+    )
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null }> = []
@@ -224,7 +219,7 @@ describe('EnterpriseAccessProvider', () => {
 
   it('rejects descriptors whose url points off the configured backend origin', async () => {
     const responses = [descriptorResponse({ url: 'https://attacker.example/leak' })]
-    const fetchMock = vi.fn(async () => responses.shift() as Response) as unknown as typeof fetch
+    const fetchMock = vi.fn<typeof fetch>(async () => responses.shift() as Response)
     globalThis.fetch = fetchMock
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
@@ -237,7 +232,7 @@ describe('EnterpriseAccessProvider', () => {
       /backend origin/i,
     )
     // Descriptor was fetched, but the off-origin document fetch must not have happened.
-    const calls = (fetchMock as unknown as { mock: { calls: unknown[][] } }).mock.calls
+    const calls = fetchMock.mock.calls
     expect(calls).toHaveLength(1)
     expect(String(calls[0][0])).toContain('/license/consent-document')
     expect(updates.at(-1)?.status).toBe('error')
@@ -248,7 +243,7 @@ describe('EnterpriseAccessProvider', () => {
       descriptorResponse({ sha256: 'a'.repeat(64) }),
       pdfResponse(Buffer.from([1, 2, 3, 4])),
     ]
-    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
+    globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null }> = []
@@ -266,30 +261,24 @@ describe('EnterpriseAccessProvider', () => {
     const fetchCalls: Array<{ url: string; init?: RequestInit }> = []
     const responses = [
       // GET /license/consent-document -> already_approved sentinel
-      {
-        ok: true,
-        json: async () => ({ state: 'already_approved', version: 0 }),
-      } as unknown as Response,
+      jsonResponse({ state: 'already_approved', version: 0 }),
       // POST /license/activate (outcome=accepted, no document_version)
-      { ok: true, json: async () => ({ ok: true }) } as unknown as Response,
+      jsonResponse({ ok: true }),
       // GET /license/status (poll #1: activated)
-      { ok: true, json: async () => ({ activated: true }) } as unknown as Response,
+      jsonResponse({ activated: true }),
       // GET /license/inference-config
-      {
-        ok: true,
-        json: async () => ({
-          provider: 'openrouter',
-          apiKey: 'sk-or-enterprise',
-          project: null,
-          location: null,
-          expiresAt: null,
-        }),
-      } as unknown as Response,
+      jsonResponse({
+        provider: 'openrouter',
+        apiKey: 'sk-or-enterprise',
+        project: null,
+        location: null,
+        expiresAt: null,
+      }),
     ]
-    globalThis.fetch = vi.fn(async (input: unknown, init?: RequestInit) => {
+    globalThis.fetch = vi.fn<typeof fetch>(async (input, init) => {
       fetchCalls.push({ url: String(input), init })
       return responses.shift() as Response
-    }) as typeof fetch
+    })
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; payload?: unknown }> = []
@@ -323,11 +312,7 @@ describe('EnterpriseAccessProvider', () => {
   it('fails the activation with a friendly message when the external-consent bind hits a transport failure', async () => {
     const responses: Array<() => Response> = [
       // GET /license/consent-document -> already_approved sentinel
-      () =>
-        ({
-          ok: true,
-          json: async () => ({ state: 'already_approved' }),
-        }) as unknown as Response,
+      () => jsonResponse({ state: 'already_approved' }),
       // POST /license/activate -> network failure
       () => {
         throw new TypeError('fetch failed', {
@@ -337,7 +322,7 @@ describe('EnterpriseAccessProvider', () => {
         })
       },
     ]
-    globalThis.fetch = vi.fn(async () => (responses.shift() as () => Response)()) as typeof fetch
+    globalThis.fetch = vi.fn<typeof fetch>(async () => (responses.shift() as () => Response)())
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
@@ -356,30 +341,20 @@ describe('EnterpriseAccessProvider', () => {
   it('treats 502 on external-consent bind as provisional success and starts polling', async () => {
     const responses = [
       // GET /license/consent-document -> already_approved sentinel
-      {
-        ok: true,
-        json: async () => ({ state: 'already_approved' }),
-      } as unknown as Response,
+      jsonResponse({ state: 'already_approved' }),
       // POST /license/activate fails with 502
-      {
-        ok: false,
-        status: 502,
-        json: async () => ({ error: 'upstream' }),
-      } as unknown as Response,
+      jsonResponse({ error: 'upstream' }, false, 502),
       // poll resolves anyway
-      { ok: true, json: async () => ({ activated: true }) } as unknown as Response,
-      {
-        ok: true,
-        json: async () => ({
-          provider: 'openrouter',
-          apiKey: 'sk-or-enterprise',
-          project: null,
-          location: null,
-          expiresAt: null,
-        }),
-      } as unknown as Response,
+      jsonResponse({ activated: true }),
+      jsonResponse({
+        provider: 'openrouter',
+        apiKey: 'sk-or-enterprise',
+        project: null,
+        location: null,
+        expiresAt: null,
+      }),
     ]
-    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
+    globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null }> = []
@@ -395,10 +370,7 @@ describe('EnterpriseAccessProvider', () => {
   })
 
   it('rejects descriptors with an unknown state value as malformed', async () => {
-    globalThis.fetch = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({ state: 'pending_review' }),
-    })) as unknown as typeof fetch
+    globalThis.fetch = vi.fn<typeof fetch>(async () => jsonResponse({ state: 'pending_review' }))
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
@@ -415,22 +387,19 @@ describe('EnterpriseAccessProvider', () => {
       descriptorResponse(),
       pdfResponse(),
       // POST /license/activate
-      { ok: true, json: async () => ({ ok: true }) } as unknown as Response,
+      jsonResponse({ ok: true }),
       // GET /license/status (poll #1: activated)
-      { ok: true, json: async () => ({ activated: true }) } as unknown as Response,
+      jsonResponse({ activated: true }),
       // GET /license/inference-config
-      {
-        ok: true,
-        json: async () => ({
-          provider: 'openrouter',
-          apiKey: 'sk-or-enterprise',
-          project: null,
-          location: null,
-          expiresAt: null,
-        }),
-      } as unknown as Response,
+      jsonResponse({
+        provider: 'openrouter',
+        apiKey: 'sk-or-enterprise',
+        project: null,
+        location: null,
+        expiresAt: null,
+      }),
     ]
-    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
+    globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; payload?: unknown }> = []
@@ -452,13 +421,13 @@ describe('EnterpriseAccessProvider', () => {
 
   it('keeps the consent prompt open and throws a retry error when identity is unavailable at consent submit', async () => {
     const responses = [descriptorResponse(), pdfResponse()]
-    const fetchMock = vi.fn(async () => responses.shift() as Response) as typeof fetch
+    const fetchMock = vi.fn<typeof fetch>(async () => responses.shift() as Response)
     globalThis.fetch = fetchMock
     const throwingIdentity = {
-      getDeviceId: () => {
+      getDeviceId: (): string => {
         throw new DeviceIdentityUnavailableError('secure storage unavailable')
       },
-    } as unknown as DeviceIdentity
+    } as DeviceIdentity
 
     const provider = new EnterpriseAccessProvider(throwingIdentity)
     const updates: Array<{ status: string | null }> = []
@@ -468,8 +437,7 @@ describe('EnterpriseAccessProvider', () => {
 
     await provider.activateEnterpriseLicense(ACTIVATION_CODE)
     expect(updates.at(-1)?.status).toBe('awaiting_consent')
-    const fetchCountAfterActivate = (fetchMock as unknown as { mock: { calls: unknown[] } }).mock
-      .calls.length
+    const fetchCountAfterActivate = fetchMock.mock.calls.length
 
     await expect(provider.submitConsentDecision('accepted')).rejects.toThrow(
       /temporarily unavailable/i,
@@ -477,9 +445,7 @@ describe('EnterpriseAccessProvider', () => {
 
     // No activate POST was attempted, the prompt stays open, and we did not
     // fall into the error state — the user can simply retry.
-    expect((fetchMock as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBe(
-      fetchCountAfterActivate,
-    )
+    expect(fetchMock.mock.calls.length).toBe(fetchCountAfterActivate)
     expect(updates.at(-1)?.status).toBe('awaiting_consent')
     expect(await provider.getPendingConsent()).not.toBeNull()
   })
@@ -489,32 +455,26 @@ describe('EnterpriseAccessProvider', () => {
     const responses = [
       descriptorResponse(),
       pdfResponse(),
-      { ok: true, json: async () => ({ ok: true }) } as unknown as Response,
-      { ok: true, json: async () => ({ activated: true }) } as unknown as Response,
-      {
-        ok: true,
-        json: async () => ({
-          provider: 'vertex',
-          apiKey: 'ya29.fake-token',
-          project: 'demo-project-42',
-          location: 'us-central1',
-          expiresAt: expiresAtSec,
-        }),
-      } as unknown as Response,
+      jsonResponse({ ok: true }),
+      jsonResponse({ activated: true }),
+      jsonResponse({
+        provider: 'vertex',
+        apiKey: 'ya29.fake-token',
+        project: 'demo-project-42',
+        location: 'us-central1',
+        expiresAt: expiresAtSec,
+      }),
       // Refetch ~60s before expiresAt — second inference-config call.
-      { ok: true, json: async () => ({ activated: true }) } as unknown as Response,
-      {
-        ok: true,
-        json: async () => ({
-          provider: 'vertex',
-          apiKey: 'ya29.refreshed-token',
-          project: 'demo-project-42',
-          location: 'us-central1',
-          expiresAt: expiresAtSec + 3600,
-        }),
-      } as unknown as Response,
+      jsonResponse({ activated: true }),
+      jsonResponse({
+        provider: 'vertex',
+        apiKey: 'ya29.refreshed-token',
+        project: 'demo-project-42',
+        location: 'us-central1',
+        expiresAt: expiresAtSec + 3600,
+      }),
     ]
-    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
+    globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; payload?: unknown }> = []
@@ -550,27 +510,24 @@ describe('EnterpriseAccessProvider', () => {
     const responses = [
       descriptorResponse({ version: 7 }),
       pdfResponse(),
-      { ok: true, json: async () => ({ ok: true }) } as unknown as Response,
-      { ok: true, json: async () => ({ activated: true }) } as unknown as Response,
-      {
-        ok: true,
-        json: async () => ({
-          provider: 'openrouter',
-          apiKey: 'sk-or-enterprise',
-          project: null,
-          location: null,
-          expiresAt: null,
-        }),
-      } as unknown as Response,
+      jsonResponse({ ok: true }),
+      jsonResponse({ activated: true }),
+      jsonResponse({
+        provider: 'openrouter',
+        apiKey: 'sk-or-enterprise',
+        project: null,
+        location: null,
+        expiresAt: null,
+      }),
     ]
-    const fetchMock = vi.fn(async () => responses.shift() as Response) as unknown as typeof fetch
+    const fetchMock = vi.fn<typeof fetch>(async () => responses.shift() as Response)
     globalThis.fetch = fetchMock
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     await provider.activateEnterpriseLicense(ACTIVATION_CODE)
     await provider.submitConsentDecision('accepted')
 
-    const calls = (fetchMock as unknown as { mock: { calls: unknown[][] } }).mock.calls
+    const calls = fetchMock.mock.calls
     const activateCall = calls.find((c) => String(c[0]).includes('/license/activate'))
     expect(activateCall).toBeDefined()
     const init = activateCall![1] as RequestInit
@@ -589,20 +546,17 @@ describe('EnterpriseAccessProvider', () => {
     const responses = [
       descriptorResponse(),
       pdfResponse(),
-      { ok: true, json: async () => ({ ok: true }) } as unknown as Response,
-      { ok: true, json: async () => ({ activated: true }) } as unknown as Response,
-      {
-        ok: true,
-        json: async () => ({
-          provider: 'openrouter',
-          apiKey: 'sk-or-enterprise',
-          project: null,
-          location: null,
-          expiresAt: null,
-        }),
-      } as unknown as Response,
+      jsonResponse({ ok: true }),
+      jsonResponse({ activated: true }),
+      jsonResponse({
+        provider: 'openrouter',
+        apiKey: 'sk-or-enterprise',
+        project: null,
+        location: null,
+        expiresAt: null,
+      }),
     ]
-    const fetchMock = vi.fn(async () => responses.shift() as Response) as unknown as typeof fetch
+    const fetchMock = vi.fn<typeof fetch>(async () => responses.shift() as Response)
     globalThis.fetch = fetchMock
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
@@ -610,9 +564,7 @@ describe('EnterpriseAccessProvider', () => {
     await provider.submitConsentDecision('accepted')
     await vi.advanceTimersByTimeAsync(ENTERPRISE_BACKEND_CONFIG.POLL_INTERVAL_MS)
 
-    const calls = (
-      fetchMock as unknown as { mock: { calls: [unknown, RequestInit | undefined][] } }
-    ).mock.calls
+    const calls = fetchMock.mock.calls
 
     const descriptorCall = calls.find((c) => String(c[0]).includes('/license/consent-document'))!
     expect(String(descriptorCall[0])).not.toContain('tenant_token=')
@@ -634,12 +586,8 @@ describe('EnterpriseAccessProvider', () => {
   })
 
   it('returns to inactive when consent is declined', async () => {
-    const responses = [
-      descriptorResponse(),
-      pdfResponse(),
-      { ok: true, json: async () => ({ declined: true }) } as unknown as Response,
-    ]
-    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
+    const responses = [descriptorResponse(), pdfResponse(), jsonResponse({ declined: true })]
+    globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null }> = []
@@ -658,25 +606,18 @@ describe('EnterpriseAccessProvider', () => {
       descriptorResponse(),
       pdfResponse(),
       // POST /license/activate fails with 502
-      {
-        ok: false,
-        status: 502,
-        json: async () => ({ error: 'upstream' }),
-      } as unknown as Response,
+      jsonResponse({ error: 'upstream' }, false, 502),
       // poll resolves anyway
-      { ok: true, json: async () => ({ activated: true }) } as unknown as Response,
-      {
-        ok: true,
-        json: async () => ({
-          provider: 'openrouter',
-          apiKey: 'sk-or-enterprise',
-          project: null,
-          location: null,
-          expiresAt: null,
-        }),
-      } as unknown as Response,
+      jsonResponse({ activated: true }),
+      jsonResponse({
+        provider: 'openrouter',
+        apiKey: 'sk-or-enterprise',
+        project: null,
+        location: null,
+        expiresAt: null,
+      }),
     ]
-    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
+    globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null }> = []
@@ -695,13 +636,9 @@ describe('EnterpriseAccessProvider', () => {
     const responses = [
       descriptorResponse(),
       pdfResponse(),
-      {
-        ok: false,
-        status: 502,
-        json: async () => ({ error: 'Upstream failed' }),
-      } as unknown as Response,
+      jsonResponse({ error: 'Upstream failed' }, false, 502),
     ]
-    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
+    globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null }> = []
@@ -716,23 +653,21 @@ describe('EnterpriseAccessProvider', () => {
 
   it('skips refresh while awaiting_consent', async () => {
     const responses = [descriptorResponse(), pdfResponse()]
-    const fetchMock = vi.fn(
-      async () => (responses.shift() ?? descriptorResponse()) as Response,
-    ) as unknown as typeof fetch
+    const fetchMock = vi.fn<typeof fetch>(async () => responses.shift() ?? descriptorResponse())
     globalThis.fetch = fetchMock
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     await provider.activateEnterpriseLicense(ACTIVATION_CODE)
 
-    const before = (fetchMock as unknown as { mock: { calls: unknown[] } }).mock.calls.length
+    const before = fetchMock.mock.calls.length
     await provider.refreshAccessState()
-    const after = (fetchMock as unknown as { mock: { calls: unknown[] } }).mock.calls.length
+    const after = fetchMock.mock.calls.length
     expect(after).toBe(before)
   })
 
   it('times out the consent decision and surfaces an error', async () => {
     const responses = [descriptorResponse(), pdfResponse()]
-    globalThis.fetch = vi.fn(async () => responses.shift() as Response) as typeof fetch
+    globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
@@ -753,11 +688,9 @@ describe('EnterpriseAccessProvider', () => {
   })
 
   it('treats 401 on /status as inactive (unknown device pre-activation)', async () => {
-    globalThis.fetch = vi.fn(async () => ({
-      ok: false,
-      status: 401,
-      json: async () => ({ error: 'unauthorized' }),
-    })) as unknown as typeof fetch
+    globalThis.fetch = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ error: 'unauthorized' }, false, 401),
+    )
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
@@ -772,10 +705,7 @@ describe('EnterpriseAccessProvider', () => {
   })
 
   it('publishes invalidation on refresh when license status is inactive', async () => {
-    globalThis.fetch = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({ activated: false }),
-    })) as unknown as typeof fetch
+    globalThis.fetch = vi.fn<typeof fetch>(async () => jsonResponse({ activated: false }))
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; payload?: unknown }> = []
