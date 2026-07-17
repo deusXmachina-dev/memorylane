@@ -11,6 +11,7 @@ export default defineConfig({
   esbuildOptions(options) {
     options.alias = {
       '@main': path.resolve(__dirname, '../../src/main'),
+      '@': path.resolve(__dirname, '../../src'),
     }
   },
   external: ['better-sqlite3', 'sqlite-vec', '@huggingface/transformers', 'onnxruntime-node'],

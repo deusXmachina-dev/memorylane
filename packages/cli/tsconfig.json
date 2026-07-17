@@ -5,7 +5,9 @@
     "rootDir": "../..",
     "declaration": false,
     "paths": {
-      "@main/*": ["../../src/main/*"]
+      "@main/*": ["../../src/main/*"],
+      "@/*": ["../../src/*"],
+      "@types": ["../../src/shared/types"]
     }
   },
   "include": ["src/**/*", "../../src/main/**/*"]

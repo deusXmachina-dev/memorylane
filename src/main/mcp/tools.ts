@@ -12,8 +12,11 @@ import {
 import { setDbPath, clearDbPath, type DbPathSource } from './config'
 import { getDefaultDbPath } from '@main/utils/paths'
 import type { AppEdition } from '../../shared/edition'
-import type { StorageService, PatternWithStats, PatternSighting } from '../storage'
+import type { StorageService, Sighting } from '../storage'
 import type { EmbeddingService } from '../processor/embedding'
+import { buildClusterInfo, isBelowNoiseFloor, type ClusterMember } from '@main/ui/cluster-view'
+import { CLUSTER_VIEW_CONFIG } from '@/shared/constants'
+import type { ClusterInfo } from '../../shared/types'
 import log from '@main/utils/logger'
 
 export interface MCPServices {
@@ -148,10 +151,13 @@ export function registerTools(
     'list_patterns',
     {
       description:
-        'List all detected workflow patterns with stats (sighting count, last seen, confidence). ' +
-        'Patterns are recurring behaviors identified by the pattern detector across captured screen activity. ' +
-        'Results are ordered by sighting count (most frequent first). ' +
-        'Use search_patterns for keyword filtering.',
+        'List recurring task patterns mined from captured screen activity. ' +
+        'Each pattern is a task the user performs repeatedly, with stats: times seen, ' +
+        'estimated runs per week, average active minutes per run, apps involved, and last seen. ' +
+        'Classified patterns also carry a kind (procedure, monitoring, ambient, dev-loop, judgment) ' +
+        'and a "Replace with" automation recommendation. ' +
+        'Ordered most frequent first; one-off noise is hidden. ' +
+        'Use search_patterns for keyword filtering and get_pattern_details for individual runs.',
       inputSchema: {},
     },
     () => handleListPatterns(getServices()),
@@ -161,12 +167,15 @@ export function registerTools(
     'search_patterns',
     {
       description:
-        'Search detected workflow patterns by keyword. Matches against pattern name, description, and associated apps. ' +
-        'Returns matching patterns with stats. Use list_patterns to see all patterns without filtering.',
+        'Search recurring task patterns by keyword. Case-insensitive match against the pattern ' +
+        'title, description, apps, and automation recommendation. Returns the same stats as ' +
+        'list_patterns. Use list_patterns to see all patterns without filtering.',
       inputSchema: {
         query: z
           .string()
-          .describe('Search keyword to match against pattern name, description, or apps'),
+          .describe(
+            'Keyword to match against pattern title, description, apps, or automation recommendation',
+          ),
       },
     },
     (params) => handleSearchPatterns(getServices(), params),
@@ -176,17 +185,15 @@ export function registerTools(
     'get_pattern_details',
     {
       description:
-        'Fetch a specific pattern by ID with its full details and recent sightings. ' +
-        'Each sighting includes evidence text, confidence score, and the activity IDs that triggered it. ' +
+        'Fetch one recurring task pattern by ID, with its stats and recent individual runs. ' +
+        'Each run includes its time range, active minutes, apps, what was done, and the underlying ' +
+        'activity IDs (pass those to get_activity_details for exact on-screen text). ' +
         'Use after list_patterns or search_patterns to drill into a specific pattern.',
       inputSchema: {
         patternId: z
           .string()
           .describe('Pattern ID (from list_patterns or search_patterns results)'),
-        runId: z
-          .string()
-          .optional()
-          .describe('Optional: filter sightings to a specific detection run ID'),
+        limit: z.number().optional().describe('Maximum runs to return, newest first (default: 20)'),
       },
     },
     (params) => handleGetPatternDetails(getServices(), params),
@@ -578,19 +585,91 @@ async function handleBrowseTimeline(
 // Pattern tool handlers
 // ---------------------------------------------------------------------------
 
-function formatPatternLine(p: PatternWithStats): string {
-  const sightings = `${p.sightingCount} sighting${p.sightingCount !== 1 ? 's' : ''}`
-  const lastSeen = p.lastSeenAt ? `, last seen ${new Date(p.lastSeenAt).toLocaleString()}` : ''
-  const confidence =
-    p.lastConfidence !== null ? `, confidence ${(p.lastConfidence * 100).toFixed(0)}%` : ''
-  return `- ${p.id} | ${p.name} [${p.apps.join(', ')}] (${sightings}${lastSeen}${confidence})\n  ${p.description}\n  Automation idea: ${p.automationIdea}`
+const DAY_MS = 24 * 60 * 60 * 1000
+
+const MISSING_TABLES_TEXT =
+  'Task-mining tables not found in this database. Launch the MemoryLane app once ' +
+  '(it creates them on startup) and let task mining run, then retry.'
+
+function isMissingClusterTables(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /no such table: (clusters|cluster_sightings|sightings)/.test(error.message)
+  )
 }
 
-function formatSightingLine(s: PatternSighting): string {
-  const time = new Date(s.detectedAt).toLocaleString()
-  const confidence = `${(s.confidence * 100).toFixed(0)}%`
-  const duration = s.durationEstimateMin != null ? ` | ~${s.durationEstimateMin} min` : ''
-  return `- ${s.id} | ${time} | confidence: ${confidence}${duration} | run: ${s.runId}\n  Evidence: ${s.evidence}\n  Activity IDs: ${s.activityIds.join(', ')}`
+function patternToolError(action: string, error: unknown) {
+  log.error(`Error ${action}:`, error)
+  const text = isMissingClusterTables(error)
+    ? MISSING_TABLES_TEXT
+    : `Error ${action}: ${error instanceof Error ? error.message : String(error)}`
+  return {
+    content: [{ type: 'text' as const, text }],
+    isError: true,
+  }
+}
+
+function countObservedDays(storage: StorageService, now: number): number {
+  const windowStart = now - CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS * DAY_MS
+  return storage.activities.countDistinctActiveDays(windowStart, now)
+}
+
+/** ClusterInfos for all visible clusters, most frequent first, plus noise-floor hidden count. */
+function computeClusterInfos(storage: StorageService): {
+  clusters: ClusterInfo[]
+  hiddenCount: number
+  observedDays: number
+} {
+  const now = Date.now()
+  const membersByCluster = new Map<string, ClusterMember[]>()
+  for (const { clusterId, ...member } of storage.clusters.getMemberDigest()) {
+    let list = membersByCluster.get(clusterId)
+    if (!list) {
+      list = []
+      membersByCluster.set(clusterId, list)
+    }
+    list.push(member)
+  }
+  const observedDays = countObservedDays(storage, now)
+  const infos = storage.clusters
+    .getAll()
+    .map((c) => buildClusterInfo(c, membersByCluster.get(c.id) ?? [], observedDays, now))
+    // Clusters with no in-window members are dead rows awaiting cleanup, not
+    // "hidden noise" — exclude them from the view and the hidden count.
+    .filter((c) => c.timesSeen > 0)
+  const visible = infos
+    .filter((c) => !isBelowNoiseFloor(c.timesSeen, c.totalActiveMin))
+    .sort((a, b) => b.timesSeen - a.timesSeen || (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0))
+  return { clusters: visible, hiddenCount: infos.length - visible.length, observedDays }
+}
+
+function formatClusterLine(c: ClusterInfo): string {
+  const stats = [`seen ${c.timesSeen}x`]
+  if (c.observedDays > 0) {
+    stats.push(`~${c.timesPerWeek.toFixed(1)}/wk over ${c.observedDays} observed days`)
+  }
+  stats.push(`avg ${Math.round(c.avgActiveMin)} min active/run`)
+  if (c.lastSeenAt) stats.push(`last seen ${new Date(c.lastSeenAt).toLocaleString()}`)
+  const lines = [`- ${c.id} | ${c.title} [${c.apps.join(', ')}] (${stats.join(', ')})`]
+  if (c.description) lines.push(`  ${c.description}`)
+  if (c.kind) {
+    lines.push(`  Kind: ${c.kind}${c.mechanism ? ` | Replace with: ${c.mechanism}` : ''}`)
+  }
+  return lines.join('\n')
+}
+
+function formatClusterSightingLine(s: Sighting): string {
+  const start = new Date(s.startedAt).toLocaleString()
+  const end = new Date(s.endedAt).toLocaleString()
+  const activeMin = Math.round(Math.max(0, s.interactionMin))
+  const title = s.subject ? `${s.title} — ${s.subject}` : s.title
+  const lines = [
+    `- ${s.id} | ${start} -> ${end} | ~${activeMin} min active | [${s.apps.join(', ')}]`,
+  ]
+  lines.push(`  ${title}`)
+  if (s.description) lines.push(`  ${s.description}`)
+  lines.push(`  Activity IDs: ${s.activityIds.join(', ')}`)
+  return lines.join('\n')
 }
 
 async function handleListPatterns(services: MCPServices | null) {
@@ -608,42 +687,35 @@ async function handleListPatterns(services: MCPServices | null) {
 
   try {
     const storage = services.storage
-    const patterns = storage.patterns.getAllPatterns()
-    const lastRun = storage.patterns.getLastRunTimestamp()
+    const { clusters, hiddenCount, observedDays } = computeClusterInfos(storage)
 
-    if (patterns.length === 0) {
+    if (clusters.length === 0) {
       return {
         content: [
           {
             type: 'text' as const,
-            text: 'No patterns detected yet. Patterns are identified by the pattern detector as it analyzes screen activity over time.',
+            text: 'No recurring task patterns found yet. Patterns are mined from captured screen activity over time (the task miner runs periodically inside the MemoryLane app).',
           },
         ],
       }
     }
 
-    const lastRunStr = lastRun ? `Last detection run: ${new Date(lastRun).toLocaleString()}` : ''
-    const formatted = patterns.map(formatPatternLine).join('\n\n')
+    const lastMined = Math.max(0, ...storage.miningDays.getAll().map((d) => d.completedAt ?? 0))
+    const lastMinedStr =
+      lastMined > 0 ? ` Last mining run: ${new Date(lastMined).toLocaleString()}` : ''
+    const hiddenStr = hiddenCount > 0 ? ` (${hiddenCount} hidden as one-off noise)` : ''
+    const formatted = clusters.map(formatClusterLine).join('\n\n')
 
     return {
       content: [
         {
           type: 'text' as const,
-          text: `${patterns.length} pattern${patterns.length !== 1 ? 's' : ''} detected. ${lastRunStr}\n\n${formatted}`,
+          text: `${clusters.length} recurring task pattern${clusters.length !== 1 ? 's' : ''}${hiddenStr}. Stats cover the last ${CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS} days (${observedDays} observed day${observedDays !== 1 ? 's' : ''}).${lastMinedStr}\n\n${formatted}`,
         },
       ],
     }
   } catch (error) {
-    log.error('Error listing patterns:', error)
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: `Error listing patterns: ${error instanceof Error ? error.message : String(error)}`,
-        },
-      ],
-      isError: true,
-    }
+    return patternToolError('listing patterns', error)
   }
 }
 
@@ -661,10 +733,15 @@ async function handleSearchPatterns(services: MCPServices | null, { query }: { q
   }
 
   try {
-    const storage = services.storage
-    const patterns = storage.patterns.searchPatterns(query)
+    const { clusters } = computeClusterInfos(services.storage)
+    const q = query.toLowerCase()
+    const matches = clusters.filter((c) =>
+      [c.title, c.description, c.mechanism, c.apps.join(' ')].some((field) =>
+        field.toLowerCase().includes(q),
+      ),
+    )
 
-    if (patterns.length === 0) {
+    if (matches.length === 0) {
       return {
         content: [
           {
@@ -675,33 +752,24 @@ async function handleSearchPatterns(services: MCPServices | null, { query }: { q
       }
     }
 
-    const formatted = patterns.map(formatPatternLine).join('\n\n')
+    const formatted = matches.map(formatClusterLine).join('\n\n')
 
     return {
       content: [
         {
           type: 'text' as const,
-          text: `${patterns.length} pattern${patterns.length !== 1 ? 's' : ''} matching "${query}":\n\n${formatted}`,
+          text: `${matches.length} pattern${matches.length !== 1 ? 's' : ''} matching "${query}":\n\n${formatted}`,
         },
       ],
     }
   } catch (error) {
-    log.error('Error searching patterns:', error)
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: `Error searching patterns: ${error instanceof Error ? error.message : String(error)}`,
-        },
-      ],
-      isError: true,
-    }
+    return patternToolError('searching patterns', error)
   }
 }
 
 async function handleGetPatternDetails(
   services: MCPServices | null,
-  { patternId, runId }: { patternId: string; runId?: string | undefined },
+  { patternId, limit }: { patternId: string; limit?: number | undefined },
 ) {
   if (!services) {
     return {
@@ -717,9 +785,9 @@ async function handleGetPatternDetails(
 
   try {
     const storage = services.storage
-    const pattern = storage.patterns.getPatternById(patternId)
+    const cluster = storage.clusters.getById(patternId)
 
-    if (!pattern) {
+    if (!cluster) {
       return {
         content: [
           {
@@ -730,47 +798,36 @@ async function handleGetPatternDetails(
       }
     }
 
-    const header = formatPatternLine(pattern)
+    const now = Date.now()
+    const members = storage.clusters.getMembers(patternId) // started_at ASC
+    const info = buildClusterInfo(cluster, members, countObservedDays(storage, now), now)
+    const header = formatClusterLine(info)
 
-    // Get sightings — optionally filtered by runId
-    let sightings: PatternSighting[] = []
-    if (runId) {
-      sightings = storage.patterns
-        .getSightingsByRunId(runId)
-        .filter((s) => s.patternId === patternId)
+    let runsSection = ''
+    if (members.length > 0) {
+      const shown = members
+        .slice()
+        .reverse()
+        .slice(0, limit ?? 20)
+      const runsHeader =
+        shown.length < members.length
+          ? `Runs (showing ${shown.length} of ${members.length}, newest first):`
+          : `Runs (${members.length}, newest first):`
+      runsSection = `\n\n${runsHeader}\n\n${shown.map(formatClusterSightingLine).join('\n\n')}`
     } else {
-      sightings = storage.patterns.getSightingsForPattern(patternId)
-    }
-
-    let sightingsSection = ''
-    if (sightings.length > 0) {
-      const formatted = sightings.map(formatSightingLine).join('\n\n')
-      sightingsSection = `\n\nSightings (${sightings.length}):\n\n${formatted}`
-    } else if (pattern.sightingCount > 0) {
-      sightingsSection = `\n\n${pattern.sightingCount} sighting(s) recorded. Use the runId parameter to view sightings from a specific detection run.`
-    } else {
-      sightingsSection = '\n\nNo sightings recorded yet.'
+      runsSection = '\n\nNo runs recorded yet.'
     }
 
     return {
       content: [
         {
           type: 'text' as const,
-          text: `Pattern details:\n\n${header}${sightingsSection}`,
+          text: `Pattern details:\n\n${header}${runsSection}`,
         },
       ],
     }
   } catch (error) {
-    log.error('Error fetching pattern details:', error)
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: `Error fetching pattern details: ${error instanceof Error ? error.message : String(error)}`,
-        },
-      ],
-      isError: true,
-    }
+    return patternToolError('fetching pattern details', error)
   }
 }
 

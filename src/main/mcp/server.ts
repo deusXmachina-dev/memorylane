@@ -50,12 +50,13 @@ Results are ranked by semantic relevance and return summary-first context, inclu
 - **get_activity_details** — fetch full activity details including OCR screen text \
 for specific activity IDs returned by the other tools. Use this only when exact \
 on-screen text is needed; do not use OCR as the primary source for inferring user activity.
-- **list_patterns** — show all detected workflow patterns with sighting counts. \
-Use for "what patterns have you found?", "show my habits", or pattern review prompts.
-- **search_patterns** — find patterns matching a keyword. Use when the user asks \
-about patterns involving a specific app or workflow.
-- **get_pattern_details** — drill into a specific pattern to see its evidence and \
-sightings. Use after list_patterns or search_patterns.
+- **list_patterns** — show recurring tasks mined from screen activity, with \
+frequency and time stats. Use for "what do I do repeatedly?", "show my habits", \
+or automation review prompts.
+- **search_patterns** — find recurring tasks matching a keyword. Use when the user \
+asks about patterns involving a specific app or workflow.
+- **get_pattern_details** — drill into one recurring task to see its individual \
+runs and their activity IDs. Use after list_patterns or search_patterns.
 - **get_user_context** — retrieve the auto-generated user profile for grounding context. \
 Consider calling it early in a conversation for personalized responses, but don't \
 over-anchor on it.
@@ -66,7 +67,7 @@ over-anchor on it.
 2. Exact-text question: search_context/browse_timeline → get_activity_details on key IDs → quote OCR text.
 3. Drill-down: start broad with browse_timeline, then refine with search_context.
 4. Mixed question: use summaries for narrative and OCR only for precise supporting details.
-5. Automate patterns: list_patterns → get_pattern_details → write .claude/skills/ for each automatable pattern.
+5. Automate patterns: list_patterns → get_pattern_details → get_activity_details on a run's activity IDs → write .claude/skills/ for each automatable pattern.
 
 ## Tips
 
