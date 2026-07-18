@@ -83,6 +83,8 @@ export interface ReviewSighting {
   subject: string
   description: string
   apps: string[]
+  /** Top-level domains seen in this run; lets the LLM name web steps by domain. */
+  domains?: string[]
   interaction_min: number
   date: string
 }
@@ -119,6 +121,10 @@ export interface ReviewClusterVerdict {
   description?: string
   kind?: string
   mechanism?: string
+  /** Generalized, de-identified how-to for the process (the "Build AI agent" recipe). */
+  steps?: string[]
+  /** Things that differ between runs, named generically (feeds the recipe). */
+  variables?: string[]
   split?: ReviewSplitGroup[]
   /** Mixes unrelated processes and no clean split was possible — re-group deterministically. */
   incoherent?: boolean

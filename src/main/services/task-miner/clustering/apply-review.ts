@@ -1,8 +1,9 @@
 import { v4 as uuidv4 } from 'uuid'
 import type { StorageService } from '@main/storage'
-import type { ClusterVerdict } from '@main/storage/cluster-repository'
+import type { ClusterVerdict, ClusterRecipe } from '@main/storage/cluster-repository'
 import { mergePairKey } from '@main/storage/cluster-repository'
 import { CLUSTER_KINDS } from '@/shared/types'
+import { scrubPII } from '@/shared/sanitize'
 import type { ClusterKind } from '@types'
 import { averageLinkageGroups } from './attach'
 import { recomputeCentroid } from './signatures'
@@ -38,6 +39,29 @@ export function sanitizeVerdict(raw: ReviewClusterVerdict): ClusterVerdict {
   const mechanism = kind === 'procedure' ? (raw.mechanism ?? '').trim() : ''
   if (kind === 'procedure' && mechanism === '') return { kind: '', mechanism: '' }
   return { kind, mechanism }
+}
+
+const MAX_RECIPE_STEPS = 15
+const MAX_RECIPE_VARIABLES = 10
+const MAX_RECIPE_ENTRY_LEN = 200
+
+/**
+ * Whitelist the LLM's recipe into a storable, de-identified form. The model is
+ * asked to generalize and strip PII; this fails closed on shape (arrays of
+ * non-empty strings, capped in count and length) and runs a regex PII scrub as
+ * a backstop, since the recipe is copied out to external tools.
+ */
+export function sanitizeRecipe(raw: ReviewClusterVerdict): ClusterRecipe {
+  const clean = (value: unknown, cap: number): string[] =>
+    (Array.isArray(value) ? value : [])
+      .filter((s): s is string => typeof s === 'string')
+      .map((s) => scrubPII(s.trim()).slice(0, MAX_RECIPE_ENTRY_LEN))
+      .filter((s) => s.length > 0)
+      .slice(0, cap)
+  return {
+    steps: clean(raw.steps, MAX_RECIPE_STEPS),
+    variables: clean(raw.variables, MAX_RECIPE_VARIABLES),
+  }
 }
 
 /**
@@ -114,9 +138,11 @@ export function validateAndApply(
         storage.clusters.getMemberCount(survivor.id),
         now,
       )
-      // The survivor's verdict was judged against only its pre-merge members —
-      // clear it so the merged cluster is re-classified on the next review.
+      // The survivor's verdict and recipe were derived from only its pre-merge
+      // members; clear both so the merged cluster is re-classified and
+      // re-recipe'd on the next review (a stale recipe would mislead the button).
       storage.clusters.updateVerdict(survivor.id, { kind: '', mechanism: '' }, now)
+      storage.clusters.updateRecipe(survivor.id, { steps: [], variables: [] }, now)
       recomputeCentroid(storage, survivor.id, now)
       labeled++
     }
@@ -219,6 +245,13 @@ export function validateAndApply(
             storage.clusters.updateVerdict(verdict.id, sanitized, now)
           }
         }
+        // Persist the recipe only when the model returned actual steps, so a
+        // relabel that omits or empties them doesn't wipe an earlier recipe
+        // (variables alone are useless without steps).
+        const recipe = sanitizeRecipe(verdict)
+        if (recipe.steps.length > 0) {
+          storage.clusters.updateRecipe(verdict.id, recipe, now)
+        }
         labeled++
       }
     }
@@ -257,9 +290,11 @@ function applySplit(
       label: group.label,
       description: group.description,
       centroid: null,
-      // Split groups are new processes — classified on the next review.
+      // Split groups are new processes, classified and given a recipe on the next review.
       kind: '',
       mechanism: '',
+      steps: [],
+      variables: [],
       labelModel: group.label ? model : '',
       labeledSize: group.label ? group.sightingIds.length : 0,
       createdAt: now,
@@ -278,7 +313,10 @@ function applySplit(
     largest.label ? largest.sightingIds.length : 0,
     now,
   )
+  // Verdict and recipe were derived from the pre-split membership; clear both
+  // so the kept cluster is re-classified and re-recipe'd on the next review.
   storage.clusters.updateVerdict(clusterId, { kind: '', mechanism: '' }, now)
+  storage.clusters.updateRecipe(clusterId, { steps: [], variables: [] }, now)
   recomputeCentroid(storage, clusterId, now)
 }
 

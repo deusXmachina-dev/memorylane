@@ -28,6 +28,8 @@ const createCluster = (overrides: Partial<Cluster> & { id: string }): Cluster =>
   centroid: overrides.centroid ?? null,
   kind: overrides.kind ?? '',
   mechanism: overrides.mechanism ?? '',
+  steps: overrides.steps ?? [],
+  variables: overrides.variables ?? [],
   labelModel: overrides.labelModel ?? '',
   labeledSize: overrides.labeledSize ?? 0,
   createdAt: overrides.createdAt ?? 1000,

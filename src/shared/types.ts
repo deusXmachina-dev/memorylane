@@ -332,6 +332,10 @@ export interface ClusterInfo {
   kind: ClusterKind
   /** Consolidated "Replace with" recommendation; set only for 'procedure' clusters. */
   mechanism: string
+  /** Generalized, de-identified recipe steps for the "Build AI agent" prompt; [] until labeled. */
+  steps: string[]
+  /** Things that differ between runs (feeds the recipe); [] until labeled. */
+  variables: string[]
   firstSeenAt: number | null
   lastSeenAt: number | null
   /** Recurrence histogram, oldest→newest — drives the sparkline and bars. */

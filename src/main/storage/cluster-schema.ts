@@ -23,7 +23,13 @@ export function ensureClusterSchema(db: Database.Database): void {
     | { value: string }
     | undefined
   const stored = row ? Number(row.value) : 0
-  if (stored === CLUSTER_SCHEMA_VERSION) return
+  if (stored === CLUSTER_SCHEMA_VERSION) {
+    // Columns added WITHOUT a version bump (to avoid a destructive rebuild) are
+    // bolted onto already-current DBs here. Idempotent and skipped on fresh
+    // installs, which get the columns straight from CREATE TABLE below.
+    ensureClusterColumns(db)
+    return
+  }
 
   log.info(
     `Cluster schema version ${stored} -> ${CLUSTER_SCHEMA_VERSION}: rebuilding derived cluster tables`,
@@ -52,6 +58,10 @@ export function ensureClusterSchema(db: Database.Database): void {
     // centroid is the unit-normalized mean of member signatures.
     // kind = '' means not yet judged by the review LLM; mechanism is the
     // consolidated "Replace with" recommendation ('procedure' clusters only).
+    // steps/variables are the generalized, de-identified recipe (JSON arrays);
+    // '[]' until the review LLM fills them in. NOTE: these two columns are also
+    // added non-destructively in ensureClusterColumns() for DBs already at this
+    // schema version; keep the two column lists in step.
     db.exec(`
       CREATE TABLE clusters (
         id TEXT PRIMARY KEY,
@@ -62,6 +72,8 @@ export function ensureClusterSchema(db: Database.Database): void {
         labeled_size INTEGER NOT NULL DEFAULT 0,
         kind TEXT NOT NULL DEFAULT '',
         mechanism TEXT NOT NULL DEFAULT '',
+        steps TEXT NOT NULL DEFAULT '[]',
+        variables TEXT NOT NULL DEFAULT '[]',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )
@@ -95,4 +107,22 @@ export function ensureClusterSchema(db: Database.Database): void {
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
     ).run(String(CLUSTER_SCHEMA_VERSION))
   })()
+}
+
+/**
+ * Add the recipe columns (steps, variables) to an existing `clusters` table
+ * that predates them, without a version bump (so no rebuild, no data loss).
+ * Idempotent: no-ops when the columns already exist, and when the table hasn't
+ * been created yet (fresh install, CREATE TABLE already includes them).
+ */
+function ensureClusterColumns(db: Database.Database): void {
+  const cols = db.prepare(`PRAGMA table_info(clusters)`).all() as { name: string }[]
+  if (cols.length === 0) return
+  const have = new Set(cols.map((c) => c.name))
+  if (!have.has('steps')) {
+    db.exec(`ALTER TABLE clusters ADD COLUMN steps TEXT NOT NULL DEFAULT '[]'`)
+  }
+  if (!have.has('variables')) {
+    db.exec(`ALTER TABLE clusters ADD COLUMN variables TEXT NOT NULL DEFAULT '[]'`)
+  }
 }

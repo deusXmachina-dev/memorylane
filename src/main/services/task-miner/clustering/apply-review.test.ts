@@ -29,6 +29,8 @@ const createCluster = (overrides: Partial<Cluster> & { id: string }): Cluster =>
   centroid: overrides.centroid ?? null,
   kind: overrides.kind ?? '',
   mechanism: overrides.mechanism ?? '',
+  steps: overrides.steps ?? [],
+  variables: overrides.variables ?? [],
   labelModel: overrides.labelModel ?? '',
   labeledSize: overrides.labeledSize ?? 0,
   createdAt: overrides.createdAt ?? 1000,
@@ -97,6 +99,7 @@ describe('validateAndApply', () => {
     seedCluster('older', 100, ['s1'])
     seedCluster('newer', 200, ['s2'])
     storage.clusters.updateVerdict('older', { kind: 'procedure', mechanism: 'A script.' }, 200)
+    storage.clusters.updateRecipe('older', { steps: ['Open the tool'], variables: ['name'] }, 200)
 
     validateAndApply(
       storage,
@@ -112,6 +115,9 @@ describe('validateAndApply', () => {
     const survivor = storage.clusters.getById('older')!
     expect(survivor.kind).toBe('')
     expect(survivor.mechanism).toBe('')
+    // The pre-merge recipe is stale for the merged cluster; it must be cleared too.
+    expect(survivor.steps).toEqual([])
+    expect(survivor.variables).toEqual([])
   })
 
   it('rejects merges that were not proposed as candidates', () => {
@@ -404,6 +410,53 @@ describe('validateAndApply', () => {
     expect(cluster.label).toBe('Weekly invoicing')
     expect(cluster.labeledSize).toBe(3)
     expect(cluster.labelModel).toBe('test-model')
+  })
+
+  it('persists a sanitized recipe when the label verdict includes steps', () => {
+    seedCluster('c1', 100, ['s1', 's2'])
+
+    validateAndApply(
+      storage,
+      {
+        clusters: [
+          {
+            id: 'c1',
+            label: 'Follow up',
+            description: 'x',
+            steps: ['Open the thread in Gmail (mail.google.com)', 'Email jane@acme.co the recap'],
+            variables: ['customer name'],
+          },
+        ],
+      },
+      guards({ reviewableIds: new Set(['c1']) }),
+      'test-model',
+      5000,
+    )
+
+    const cluster = storage.clusters.getById('c1')!
+    expect(cluster.steps[0]).toBe('Open the thread in Gmail (mail.google.com)')
+    // scrubPII backstop runs end-to-end through sanitizeRecipe.
+    expect(cluster.steps[1]).toBe('Email [redacted] the recap')
+    expect(cluster.variables).toEqual(['customer name'])
+  })
+
+  it('keeps an existing recipe when a relabel returns no steps', () => {
+    seedCluster('c1', 100, ['s1', 's2'])
+    storage.clusters.updateRecipe('c1', { steps: ['Old step'], variables: ['old'] }, 200)
+
+    validateAndApply(
+      storage,
+      // A relabel that omits steps (returns only variables) must not wipe the recipe.
+      { clusters: [{ id: 'c1', label: 'Renamed', description: 'x', variables: [] }] },
+      guards({ reviewableIds: new Set(['c1']) }),
+      'test-model',
+      5000,
+    )
+
+    const cluster = storage.clusters.getById('c1')!
+    expect(cluster.label).toBe('Renamed')
+    expect(cluster.steps).toEqual(['Old step'])
+    expect(cluster.variables).toEqual(['old'])
   })
 
   it('persists a sanitized verdict alongside the label', () => {

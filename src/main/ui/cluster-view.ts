@@ -126,6 +126,8 @@ export function buildClusterInfo(
     description: string
     kind: ClusterKind
     mechanism: string
+    steps?: string[]
+    variables?: string[]
   },
   allMembers: ClusterMember[],
   observedDays: number,
@@ -156,6 +158,8 @@ export function buildClusterInfo(
     totalActiveMin: activeMins.reduce((sum, v) => sum + v, 0),
     kind: cluster.kind,
     mechanism: cluster.mechanism,
+    steps: cluster.steps ?? [],
+    variables: cluster.variables ?? [],
     firstSeenAt: members.length > 0 ? Math.min(...startedAts) : null,
     lastSeenAt: members.length > 0 ? Math.max(...members.map((m) => m.endedAt)) : null,
     recurrence: recurrence.buckets,

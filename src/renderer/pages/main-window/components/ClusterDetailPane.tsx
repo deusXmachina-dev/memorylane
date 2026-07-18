@@ -7,6 +7,7 @@ import type { ClusterDetailInfo, ClusterInfo, ClusterSightingInfo, MainWindowAPI
 import { formatFrequency, formatMinutes, formatMonthlyHours } from './activities/format'
 import { WeeklyTrend } from './WeeklyTrend'
 import { ClaudeWordmark } from './ClaudeWordmark'
+import { scrubPII } from '@/shared/sanitize'
 
 interface ClusterDetailPaneProps {
   api: MainWindowAPI
@@ -66,6 +67,44 @@ function buildCopyPrompt(cluster: ClusterInfo, sightings: ClusterSightingInfo[])
     `Based on your research and my answers, use /skill-creator to create a skill that automates this task.`,
   ]
   return lines.filter((l) => l !== null).join('\n')
+}
+
+/**
+ * A generalized, tool-agnostic prompt for building an automation of this task.
+ * Reads the pre-generated recipe stored on the cluster (steps + variables),
+ * which the mining LLM already de-identified. Carries NO MemoryLane references,
+ * so it pastes into any agent or web-automation builder (Task Magic, etc.). The
+ * final string is run through scrubPII as a last-mile safety net.
+ */
+function buildAgentPrompt(cluster: ClusterInfo): string {
+  const lines: string[] = [
+    `Build an AI agent that automates this task.`,
+    ``,
+    `Goal: ${cluster.description || cluster.title}`,
+    ``,
+  ]
+  if (cluster.steps.length > 0) {
+    lines.push(`Step-by-step:`)
+    cluster.steps.forEach((step, i) => lines.push(`${i + 1}. ${step}`))
+  } else {
+    lines.push(
+      `Apps: ${cluster.apps.join(', ') || 'unknown'}. Work out the steps, then confirm with me.`,
+    )
+  }
+  if (cluster.variables.length > 0) {
+    lines.push(``, `Changes each run: ${cluster.variables.join(', ')}.`)
+  }
+  lines.push(
+    ``,
+    `Before building, ask me:`,
+    `- Which steps change each run?`,
+    `- What inputs or variables each run needs?`,
+    `- What tools or API access you have?`,
+    `- What to do on errors?`,
+    ``,
+    `Then build it and tell me how to run it.`,
+  )
+  return scrubPII(lines.join('\n'))
 }
 
 function Stat({ value, label }: { value: string; label: string }): React.JSX.Element {
@@ -134,6 +173,16 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
       })
   }
 
+  const handleCopyAgentPrompt = (): void => {
+    navigator.clipboard
+      .writeText(buildAgentPrompt(cluster))
+      .then(() => toast.success('Agent prompt copied to clipboard'))
+      .catch((err) => {
+        console.warn('[clusters] clipboard.writeText failed', err)
+        toast.error('Could not copy prompt to clipboard')
+      })
+  }
+
   return (
     <div className="flex flex-col h-full">
       <ScrollArea className="flex-1 min-h-0">
@@ -141,18 +190,37 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
           {/* Header */}
           <div>
             <h2 className="text-xl font-semibold leading-tight">{cluster.title}</h2>
-            {cluster.description && (
-              <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-                {cluster.description}
-              </p>
+            {cluster.steps.length > 0 ? (
+              <div className="mt-2">
+                <ol className="list-decimal space-y-1 pl-5 text-sm leading-relaxed marker:text-muted-foreground">
+                  {cluster.steps.map((step, i) => (
+                    <li key={i}>{step}</li>
+                  ))}
+                </ol>
+                {cluster.variables.length > 0 && (
+                  <p className="mt-2 text-[11px] text-muted-foreground/70">
+                    Changes each run: {cluster.variables.join(', ')}
+                  </p>
+                )}
+              </div>
+            ) : (
+              cluster.description && (
+                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                  {cluster.description}
+                </p>
+              )
             )}
             {cluster.kind === 'procedure' && cluster.mechanism && (
               <p className="mt-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm leading-relaxed">
                 <span className="font-medium">Replace with:</span> {cluster.mechanism}
               </p>
             )}
-            {/* Disabled until sightings load: the prompt embeds their activity ids. */}
+            {/* Build AI agent uses the stored recipe; Analyze needs sightings loaded (activity ids). */}
             <div className="mt-4 flex flex-wrap gap-2">
+              <Button size="sm" onClick={handleCopyAgentPrompt}>
+                <Copy className="w-3.5 h-3.5 mr-1.5" />
+                Build AI agent
+              </Button>
               <Button size="sm" variant="secondary" onClick={handleCopyPrompt} disabled={!detail}>
                 <Copy className="w-3.5 h-3.5 mr-1.5" />
                 Analyze with
