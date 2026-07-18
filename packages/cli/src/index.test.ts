@@ -436,6 +436,18 @@ describe('command handlers', () => {
       const result = (await cmdPatterns(['--query', 'zzzzz'], storage)) as Record<string, unknown>
       expect((result.clusters as unknown[]).length).toBe(0)
     })
+
+    it('should fail with the friendly hint when cluster tables are missing', async () => {
+      const barePath = path.join(os.tmpdir(), 'temp_cli_unmigrated_test.db')
+      deleteDbFiles(barePath)
+      const bare = new StorageService(barePath)
+      try {
+        await expect(cmdPatterns([], bare)).rejects.toThrow('Task-mining tables not found')
+      } finally {
+        bare.close()
+        deleteDbFiles(barePath)
+      }
+    })
   })
 
   // -- pattern --
@@ -447,6 +459,29 @@ describe('command handlers', () => {
       expect(pattern.id).toBe('clu-1')
       expect(pattern.title).toBe('Code Review')
       expect(pattern.timesSeen).toBe(2)
+      const runs = result.runs as Array<Record<string, unknown>>
+      expect(runs.map((r) => r.id)).toEqual(['clu-sight-new', 'clu-sight-old'])
+    })
+
+    it('should exclude runs outside the stats window', async () => {
+      const staleStart = Date.now() - 100 * 24 * 60 * 60 * 1000
+      storage.sightings.add({
+        id: 'clu-sight-stale',
+        title: 'Code Review',
+        subject: 'PR 1',
+        description: 'Reviewed a pull request',
+        apps: ['Chrome'],
+        activityIds: ['act-1'],
+        startedAt: staleStart,
+        endedAt: staleStart + 60 * 60 * 1000,
+        interactionMin: 5,
+        runId: 'run-0',
+        detectedAt: staleStart,
+      })
+      storage.clusters.addMembership('clu-1', 'clu-sight-stale', staleStart)
+
+      const result = (await cmdPattern(['clu-1'], storage)) as Record<string, unknown>
+      expect((result.pattern as Record<string, unknown>).timesSeen).toBe(2)
       const runs = result.runs as Array<Record<string, unknown>>
       expect(runs.map((r) => r.id)).toEqual(['clu-sight-new', 'clu-sight-old'])
     })

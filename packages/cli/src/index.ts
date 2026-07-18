@@ -9,7 +9,15 @@ setLogger({ debug: noop, info: noop })
 import * as fs from 'fs'
 import * as path from 'path'
 import { StorageService } from '@main/storage'
-import { buildClusterInfo, computeClustersView, countObservedDays } from '@main/ui/cluster-view'
+import {
+  buildClusterInfo,
+  computeClustersView,
+  countObservedDays,
+  filterClusters,
+  isMissingClusterTables,
+  statsWindowStart,
+  MISSING_TABLES_TEXT,
+} from '@main/ui/cluster-view'
 import { getDefaultDbPath } from '@main/utils/paths'
 import { parseTimeString } from '@main/mcp/parse-time'
 import { sampleEntries } from '@main/mcp/formatting'
@@ -202,20 +210,25 @@ export async function cmdActivity(rest: string[], storage: StorageService): Prom
   return activities
 }
 
+/** Rethrows as a friendly CliError when the DB predates the cluster tables. */
+function withClusterTables<T>(read: () => T): T {
+  try {
+    return read()
+  } catch (err) {
+    if (isMissingClusterTables(err)) fail(MISSING_TABLES_TEXT)
+    throw err
+  }
+}
+
 export async function cmdPatterns(rest: string[], storage: StorageService): Promise<unknown> {
   const { flags } = parseFlags(rest)
   const query = flags.query as string | undefined
 
-  const { clusters, hiddenCount, observedDays } = computeClustersView(storage, Date.now())
-  if (!query) return { observedDays, hiddenCount, clusters }
-
-  const q = query.toLowerCase()
-  const matches = clusters.filter((c) =>
-    [c.title, c.description, c.mechanism, c.apps.join(' ')].some((field) =>
-      field.toLowerCase().includes(q),
-    ),
+  const { clusters, hiddenCount, observedDays } = withClusterTables(() =>
+    computeClustersView(storage, Date.now()),
   )
-  return { observedDays, hiddenCount, clusters: matches }
+  if (!query) return { observedDays, hiddenCount, clusters }
+  return { observedDays, hiddenCount, clusters: filterClusters(clusters, query) }
 }
 
 export async function cmdPattern(rest: string[], storage: StorageService): Promise<unknown> {
@@ -223,13 +236,15 @@ export async function cmdPattern(rest: string[], storage: StorageService): Promi
   if (positional.length === 0) fail('Usage: pattern <id>')
 
   const id = positional[0]
-  const cluster = storage.clusters.getById(id)
+  const cluster = withClusterTables(() => storage.clusters.getById(id))
   if (!cluster) fail(`Pattern not found: ${id}`)
 
   const now = Date.now()
   const members = storage.clusters.getMembers(id) // started_at ASC
   const pattern = buildClusterInfo(cluster, members, countObservedDays(storage, now), now)
-  return { pattern, runs: members.slice().reverse() }
+  // Same window as the stats, so pattern.timesSeen matches runs.length.
+  const runs = members.filter((m) => m.startedAt >= statsWindowStart(now)).reverse()
+  return { pattern, runs }
 }
 
 // ---------------------------------------------------------------------------

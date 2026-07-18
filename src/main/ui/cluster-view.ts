@@ -18,6 +18,11 @@ const DAY_MS = 24 * 60 * 60 * 1000
 // 1970-01-05 (day index 4) was a Monday; anchor week buckets to it.
 const EPOCH_MONDAY_DAY = 4
 
+/** Start of the window all cluster stats (and run listings) are computed over. */
+export function statsWindowStart(now: number): number {
+  return now - CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS * DAY_MS
+}
+
 /**
  * Days since epoch of the timestamp's LOCAL calendar day — buckets must match
  * the local days the rest of the stats (observedDays, day headings) use.
@@ -128,7 +133,7 @@ export function buildClusterInfo(
 ): ClusterInfo {
   // Window the numerator to the same period as observedDays — pruning only
   // runs during mining runs, so stored members can outlive the stats window.
-  const windowStart = now - CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS * DAY_MS
+  const windowStart = statsWindowStart(now)
   const members = allMembers.filter((m) => m.startedAt >= windowStart)
   const startedAts = members.map((m) => m.startedAt)
   const spansMin = members.map((m) => Math.max(0, m.endedAt - m.startedAt) / 60_000)
@@ -181,8 +186,29 @@ export interface ClusterViewStore {
 
 /** Frequency denominator: distinct captured days in the same window sightings are retained for. */
 export function countObservedDays(store: ClusterViewStore, now: number): number {
-  const windowStart = now - CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS * DAY_MS
-  return store.activities.countDistinctActiveDays(windowStart, now)
+  return store.activities.countDistinctActiveDays(statsWindowStart(now), now)
+}
+
+/** Case-insensitive keyword filter over the fields shown in the clusters view. */
+export function filterClusters(clusters: ClusterInfo[], query: string): ClusterInfo[] {
+  const q = query.toLowerCase()
+  return clusters.filter((c) =>
+    [c.title, c.description, c.mechanism, c.apps.join(' ')].some((field) =>
+      field.toLowerCase().includes(q),
+    ),
+  )
+}
+
+export const MISSING_TABLES_TEXT =
+  'Task-mining tables not found in this database. Launch the MemoryLane app once ' +
+  '(it creates them on startup) and let task mining run, then retry.'
+
+/** The cluster tables are created by the app, not by consumers that open the DB read-only. */
+export function isMissingClusterTables(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /no such table: (clusters|cluster_sightings|sightings|mining_days)/.test(error.message)
+  )
 }
 
 /**

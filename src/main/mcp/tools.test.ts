@@ -6,8 +6,9 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { registerTools, type EditionContext, type MCPServices } from './tools'
 import { StorageService, type Cluster, type Sighting } from '../storage'
 import { applyMigrations } from '../storage/migrator'
-import { deleteDbFiles } from '../storage/test-utils'
+import { createStoredActivity, deleteDbFiles } from '../storage/test-utils'
 import type { EmbeddingService } from '../processor/embedding'
+import { CLUSTER_VIEW_CONFIG } from '@/shared/constants'
 
 type Handler = (args: unknown) => Promise<{
   content: { type: string; text: string }[]
@@ -87,6 +88,7 @@ describe('pattern tools (task clusters)', () => {
   let handlers: Map<string, Handler>
 
   const HOUR_MS = 60 * 60 * 1000
+  const DAY_MS = 24 * HOUR_MS
   const now = Date.now()
 
   const createSighting = (overrides: Partial<Sighting> & { id: string }): Sighting => ({
@@ -142,6 +144,31 @@ describe('pattern tools (task clusters)', () => {
       const result = await handlers.get('list_patterns')!({})
       expect(result.isError).toBeUndefined()
       expect(result.content[0].text).toContain('No recurring task patterns found yet')
+    })
+
+    it('reports hidden one-offs in the empty state when all clusters are noise', async () => {
+      addClusterWithMembers(createCluster({ id: 'c-noise' }), [
+        createSighting({ id: 's1', interactionMin: 5 }),
+      ])
+
+      const text = (await handlers.get('list_patterns')!({})).content[0].text
+      expect(text).toContain('mining is working')
+      expect(text).toContain('1 task has been seen only once')
+      expect(text).not.toContain('No recurring task patterns found yet')
+    })
+
+    it('reports runs per week once activity days are observed', async () => {
+      storage.activities.add(createStoredActivity({ id: 'act-d1', startTimestamp: now - DAY_MS }))
+      storage.activities.add(
+        createStoredActivity({ id: 'act-d2', startTimestamp: now - 2 * DAY_MS }),
+      )
+      addClusterWithMembers(createCluster({ id: 'c1', label: 'Real task' }), [
+        createSighting({ id: 's1' }),
+        createSighting({ id: 's2' }),
+      ])
+
+      const text = (await handlers.get('list_patterns')!({})).content[0].text
+      expect(text).toContain('~7.0/wk over 2 observed days')
     })
 
     it('lists a labeled cluster with stats and apps', async () => {
@@ -258,7 +285,9 @@ describe('pattern tools (task clusters)', () => {
 
       const text = (await handlers.get('get_pattern_details')!({ patternId: 'c1' })).content[0].text
       expect(text).toContain('c1 | Daily standup notes')
-      expect(text).toContain('Runs (2, newest first):')
+      expect(text).toContain(
+        `Runs (2 in the last ${CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS} days, newest first):`,
+      )
       expect(text.indexOf('s-new')).toBeLessThan(text.indexOf('s-old'))
       expect(text).toContain('Test sighting — sprint 12')
       expect(text).toContain('Activity IDs: act-a, act-b')
@@ -272,9 +301,47 @@ describe('pattern tools (task clusters)', () => {
 
       const text = (await handlers.get('get_pattern_details')!({ patternId: 'c1', limit: 1 }))
         .content[0].text
-      expect(text).toContain('Runs (showing 1 of 2, newest first):')
+      expect(text).toContain(
+        `Runs (showing 1 of 2 in the last ${CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS} days, newest first):`,
+      )
       expect(text).toContain('s-new')
       expect(text).not.toContain('s-old')
+    })
+
+    it('excludes runs older than the stats window so the run count matches the header', async () => {
+      const staleStart = now - (CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS + 5) * DAY_MS
+      addClusterWithMembers(createCluster({ id: 'c1' }), [
+        createSighting({
+          id: 's-stale',
+          startedAt: staleStart,
+          endedAt: staleStart + HOUR_MS,
+          detectedAt: staleStart + HOUR_MS,
+        }),
+        createSighting({ id: 's-recent' }),
+      ])
+
+      const text = (await handlers.get('get_pattern_details')!({ patternId: 'c1' })).content[0].text
+      expect(text).toContain('seen 1x')
+      expect(text).toContain(
+        `Runs (1 in the last ${CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS} days, newest first):`,
+      )
+      expect(text).not.toContain('s-stale')
+    })
+
+    it('distinguishes a stale cluster from one with no runs at all', async () => {
+      const staleStart = now - (CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS + 5) * DAY_MS
+      addClusterWithMembers(createCluster({ id: 'c-stale' }), [
+        createSighting({
+          id: 's-stale',
+          startedAt: staleStart,
+          endedAt: staleStart + HOUR_MS,
+          detectedAt: staleStart + HOUR_MS,
+        }),
+      ])
+
+      const text = (await handlers.get('get_pattern_details')!({ patternId: 'c-stale' })).content[0]
+        .text
+      expect(text).toContain(`No runs in the last ${CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS} days.`)
     })
   })
 

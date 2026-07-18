@@ -14,7 +14,15 @@ import { getDefaultDbPath } from '@main/utils/paths'
 import type { AppEdition } from '../../shared/edition'
 import type { StorageService, Sighting } from '../storage'
 import type { EmbeddingService } from '../processor/embedding'
-import { buildClusterInfo, computeClustersView, countObservedDays } from '@main/ui/cluster-view'
+import {
+  buildClusterInfo,
+  computeClustersView,
+  countObservedDays,
+  filterClusters,
+  isMissingClusterTables,
+  statsWindowStart,
+  MISSING_TABLES_TEXT,
+} from '@main/ui/cluster-view'
 import { CLUSTER_VIEW_CONFIG } from '@/shared/constants'
 import type { ClusterInfo } from '../../shared/types'
 import log from '@main/utils/logger'
@@ -185,7 +193,8 @@ export function registerTools(
     'get_pattern_details',
     {
       description:
-        'Fetch one recurring task pattern by ID, with its stats and recent individual runs. ' +
+        'Fetch one recurring task pattern by ID, with its stats and the individual runs ' +
+        'inside the stats window. ' +
         'Each run includes its time range, active minutes, apps, what was done, and the underlying ' +
         'activity IDs (pass those to get_activity_details for exact on-screen text). ' +
         'Use after list_patterns or search_patterns to drill into a specific pattern.',
@@ -590,17 +599,6 @@ async function handleBrowseTimeline(
 // Pattern tool handlers
 // ---------------------------------------------------------------------------
 
-const MISSING_TABLES_TEXT =
-  'Task-mining tables not found in this database. Launch the MemoryLane app once ' +
-  '(it creates them on startup) and let task mining run, then retry.'
-
-function isMissingClusterTables(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    /no such table: (clusters|cluster_sightings|sightings|mining_days)/.test(error.message)
-  )
-}
-
 function patternToolError(action: string, error: unknown) {
   log.error(`Error ${action}:`, error)
   const text = isMissingClusterTables(error)
@@ -659,13 +657,12 @@ async function handleListPatterns(services: MCPServices | null) {
     const { clusters, hiddenCount, observedDays } = computeClustersView(storage, Date.now())
 
     if (clusters.length === 0) {
+      const text =
+        hiddenCount > 0
+          ? `No recurring task patterns yet, but mining is working: ${hiddenCount} task${hiddenCount !== 1 ? 's have' : ' has'} been seen only once (hidden as one-off noise). Patterns appear once a task recurs.`
+          : 'No recurring task patterns found yet. Patterns are mined from captured screen activity over time (the task miner runs periodically inside the MemoryLane app).'
       return {
-        content: [
-          {
-            type: 'text' as const,
-            text: 'No recurring task patterns found yet. Patterns are mined from captured screen activity over time (the task miner runs periodically inside the MemoryLane app).',
-          },
-        ],
+        content: [{ type: 'text' as const, text }],
       }
     }
 
@@ -703,12 +700,7 @@ async function handleSearchPatterns(services: MCPServices | null, { query }: { q
 
   try {
     const { clusters } = computeClustersView(services.storage, Date.now())
-    const q = query.toLowerCase()
-    const matches = clusters.filter((c) =>
-      [c.title, c.description, c.mechanism, c.apps.join(' ')].some((field) =>
-        field.toLowerCase().includes(q),
-      ),
-    )
+    const matches = filterClusters(clusters, query)
 
     if (matches.length === 0) {
       return {
@@ -768,9 +760,14 @@ async function handleGetPatternDetails(
     }
 
     const now = Date.now()
-    const members = storage.clusters.getMembers(patternId) // started_at ASC
-    const info = buildClusterInfo(cluster, members, countObservedDays(storage, now), now)
+    const allMembers = storage.clusters.getMembers(patternId) // started_at ASC
+    const info = buildClusterInfo(cluster, allMembers, countObservedDays(storage, now), now)
     const header = formatClusterLine(info)
+
+    // Same window as the header stats, so "seen Nx" matches the run count.
+    const windowStart = statsWindowStart(now)
+    const members = allMembers.filter((m) => m.startedAt >= windowStart)
+    const windowStr = `last ${CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS} days`
 
     let runsSection = ''
     if (members.length > 0) {
@@ -780,9 +777,11 @@ async function handleGetPatternDetails(
         .slice(0, limit ?? 20)
       const runsHeader =
         shown.length < members.length
-          ? `Runs (showing ${shown.length} of ${members.length}, newest first):`
-          : `Runs (${members.length}, newest first):`
+          ? `Runs (showing ${shown.length} of ${members.length} in the ${windowStr}, newest first):`
+          : `Runs (${members.length} in the ${windowStr}, newest first):`
       runsSection = `\n\n${runsHeader}\n\n${shown.map(formatClusterSightingLine).join('\n\n')}`
+    } else if (allMembers.length > 0) {
+      runsSection = `\n\nNo runs in the ${windowStr}.`
     } else {
       runsSection = '\n\nNo runs recorded yet.'
     }
