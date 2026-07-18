@@ -121,12 +121,12 @@ export function registerPrompts(server: McpServer): void {
               text:
                 `Look at my detected workflow patterns and automate everything you can.${focusLine}\n\n` +
                 '## Step 1 — Discover\n\n' +
-                'Call list_patterns to get all detected patterns with stats.\n' +
-                'For the top patterns (by sighting count), call get_pattern_details to ' +
-                'understand the evidence and the automation idea already stored with the pattern.\n' +
-                'For the highest-confidence sightings, call get_activity_details on their activity IDs ' +
+                'Call list_patterns to get all recurring task patterns with stats.\n' +
+                'For the top patterns (by times seen), call get_pattern_details to ' +
+                'see the individual runs and the "Replace with" recommendation stored with the pattern.\n' +
+                'For recent runs, call get_activity_details on their activity IDs ' +
                 'to read the OCR evidence — this shows exactly what was on screen.\n' +
-                'If a pattern is still unclear, use browse_timeline around the sighting timestamps ' +
+                'If a pattern is still unclear, use browse_timeline around the run timestamps ' +
                 '(±15 minutes) to see what happened before and after for more context.\n\n' +
                 '## Step 2 — Check existing skills\n\n' +
                 'Before creating anything, check what skills already exist. ' +
@@ -138,7 +138,7 @@ export function registerPrompts(server: McpServer): void {
                 '- **Automatable**: You can build a skill that does the thing (or most of it) ' +
                 'next time it comes up. Proceed to step 4.\n' +
                 '- **Not automatable**: The pattern is just normal work, requires too much ' +
-                'creative judgment, or has fewer than 2 sightings. Skip it — mention it in ' +
+                'creative judgment, or has fewer than 2 runs. Skip it — mention it in ' +
                 'the summary with a one-line reason.\n\n' +
                 'Be honest. "User writes code in VS Code" is not automatable. ' +
                 '"User copies Jira ticket ID, creates git branch, opens PR template" is.\n\n' +
@@ -146,8 +146,8 @@ export function registerPrompts(server: McpServer): void {
                 'For each automatable pattern, use the skill-creator skill you have to create a new skill. ' +
                 'Provide it with a clear description of what the skill should do, based on:\n' +
                 '- The pattern name and description\n' +
-                '- The automation_idea stored in the pattern\n' +
-                '- Any additional context from sightings or activity details\n\n' +
+                '- The "Replace with" recommendation stored with the pattern (when present)\n' +
+                '- Any additional context from runs or activity details\n\n' +
                 'Let the skill-creator handle the file format and placement. ' +
                 'Just give it the best possible brief of what the skill needs to accomplish.\n\n' +
                 '## Step 5 — Report\n\n' +

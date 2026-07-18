@@ -9,6 +9,15 @@ setLogger({ debug: noop, info: noop })
 import * as fs from 'fs'
 import * as path from 'path'
 import { StorageService } from '@main/storage'
+import {
+  buildClusterInfo,
+  computeClustersView,
+  countObservedDays,
+  filterClusters,
+  isMissingClusterTables,
+  statsWindowStart,
+  MISSING_TABLES_TEXT,
+} from '@main/ui/cluster-view'
 import { getDefaultDbPath } from '@main/utils/paths'
 import { parseTimeString } from '@main/mcp/parse-time'
 import { sampleEntries } from '@main/mcp/formatting'
@@ -201,32 +210,41 @@ export async function cmdActivity(rest: string[], storage: StorageService): Prom
   return activities
 }
 
+/** Rethrows as a friendly CliError when the DB predates the cluster tables. */
+function withClusterTables<T>(read: () => T): T {
+  try {
+    return read()
+  } catch (err) {
+    if (isMissingClusterTables(err)) fail(MISSING_TABLES_TEXT)
+    throw err
+  }
+}
+
 export async function cmdPatterns(rest: string[], storage: StorageService): Promise<unknown> {
   const { flags } = parseFlags(rest)
   const query = flags.query as string | undefined
 
-  if (query) {
-    return storage.patterns.searchPatterns(query)
-  }
-  return storage.patterns.getAllPatterns()
+  const { clusters, hiddenCount, observedDays } = withClusterTables(() =>
+    computeClustersView(storage, Date.now()),
+  )
+  if (!query) return { observedDays, hiddenCount, clusters }
+  return { observedDays, hiddenCount, clusters: filterClusters(clusters, query) }
 }
 
 export async function cmdPattern(rest: string[], storage: StorageService): Promise<unknown> {
-  const { flags, positional } = parseFlags(rest)
-  if (positional.length === 0) fail('Usage: pattern <id> [--run-id ID]')
+  const { positional } = parseFlags(rest)
+  if (positional.length === 0) fail('Usage: pattern <id>')
 
   const id = positional[0]
-  const pattern = storage.patterns.getPatternById(id)
-  if (!pattern) fail(`Pattern not found: ${id}`)
+  const cluster = withClusterTables(() => storage.clusters.getById(id))
+  if (!cluster) fail(`Pattern not found: ${id}`)
 
-  const runId = flags['run-id'] as string | undefined
-  const result: Record<string, unknown> = { pattern }
-
-  if (runId) {
-    result.sightings = storage.patterns.getSightingsByRunId(runId)
-  }
-
-  return result
+  const now = Date.now()
+  const members = storage.clusters.getMembers(id) // started_at ASC
+  const pattern = buildClusterInfo(cluster, members, countObservedDays(storage, now), now)
+  // Same window as the stats, so pattern.timesSeen matches runs.length.
+  const runs = members.filter((m) => m.startedAt >= statsWindowStart(now)).reverse()
+  return { pattern, runs }
 }
 
 // ---------------------------------------------------------------------------
@@ -264,8 +282,8 @@ Commands:
   search <query>               Search activities (FTS, vector, or both)
   timeline                     List activities by time range
   activity <id...>             Get activity details by ID(s)
-  patterns                     List detected patterns
-  pattern <id>                 Get pattern details and sightings
+  patterns                     List recurring task patterns
+  pattern <id>                 Get pattern details and runs
   set-db <path>                Save database path to config
   get-db                       Show resolved database path
 

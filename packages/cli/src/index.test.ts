@@ -211,6 +211,54 @@ describe('command handlers', () => {
       activityIds: ['act-3'],
       confidence: 0.9,
     })
+
+    // Seed a task cluster with two member sightings (recent, inside the stats window)
+    const now = Date.now()
+    const HOUR_MS = 60 * 60 * 1000
+    storage.clusters.create({
+      id: 'clu-1',
+      label: 'Code Review',
+      description: 'Reviewing PRs on GitHub',
+      centroid: null,
+      kind: 'procedure',
+      mechanism: 'Automate with gh CLI',
+      labelModel: '',
+      labeledSize: 2,
+      createdAt: now,
+      updatedAt: now,
+    })
+    const sightings = [
+      {
+        id: 'clu-sight-old',
+        title: 'Code Review',
+        subject: 'PR 41',
+        description: 'Reviewed a pull request',
+        apps: ['Chrome'],
+        activityIds: ['act-1'],
+        startedAt: now - 5 * HOUR_MS,
+        endedAt: now - 4 * HOUR_MS,
+        interactionMin: 6,
+        runId: 'run-1',
+        detectedAt: now - 4 * HOUR_MS,
+      },
+      {
+        id: 'clu-sight-new',
+        title: 'Code Review',
+        subject: 'PR 42',
+        description: 'Reviewed a pull request',
+        apps: ['Chrome'],
+        activityIds: ['act-3'],
+        startedAt: now - 2 * HOUR_MS,
+        endedAt: now - HOUR_MS,
+        interactionMin: 4,
+        runId: 'run-1',
+        detectedAt: now - HOUR_MS,
+      },
+    ]
+    for (const s of sightings) {
+      storage.sightings.add(s)
+      storage.clusters.addMembership('clu-1', s.id, now)
+    }
   })
 
   afterEach(() => {
@@ -369,53 +417,73 @@ describe('command handlers', () => {
   // -- patterns --
 
   describe('cmdPatterns', () => {
-    it('should return all patterns', async () => {
-      const result = (await cmdPatterns([], storage)) as Array<Record<string, unknown>>
-      expect(result.length).toBe(1)
-      expect(result[0].name).toBe('Code Review')
-      expect(result[0].sightingCount).toBe(1)
+    it('should return the clusters view', async () => {
+      const result = (await cmdPatterns([], storage)) as Record<string, unknown>
+      const clusters = result.clusters as Array<Record<string, unknown>>
+      expect(clusters.length).toBe(1)
+      expect(clusters[0].id).toBe('clu-1')
+      expect(clusters[0].title).toBe('Code Review')
+      expect(clusters[0].timesSeen).toBe(2)
+      expect(result.hiddenCount).toBe(0)
     })
 
-    it('should search patterns by --query', async () => {
-      const result = (await cmdPatterns(['--query', 'Review'], storage)) as Array<
-        Record<string, unknown>
-      >
-      expect(result.length).toBe(1)
+    it('should filter by --query case-insensitively', async () => {
+      const result = (await cmdPatterns(['--query', 'GH CLI'], storage)) as Record<string, unknown>
+      expect((result.clusters as unknown[]).length).toBe(1)
     })
 
     it('should return empty for non-matching query', async () => {
-      const result = (await cmdPatterns(['--query', 'zzzzz'], storage)) as unknown[]
-      expect(result.length).toBe(0)
+      const result = (await cmdPatterns(['--query', 'zzzzz'], storage)) as Record<string, unknown>
+      expect((result.clusters as unknown[]).length).toBe(0)
+    })
+
+    it('should fail with the friendly hint when cluster tables are missing', async () => {
+      const barePath = path.join(os.tmpdir(), 'temp_cli_unmigrated_test.db')
+      deleteDbFiles(barePath)
+      const bare = new StorageService(barePath)
+      try {
+        await expect(cmdPatterns([], bare)).rejects.toThrow('Task-mining tables not found')
+      } finally {
+        bare.close()
+        deleteDbFiles(barePath)
+      }
     })
   })
 
   // -- pattern --
 
   describe('cmdPattern', () => {
-    it('should return pattern by id', async () => {
-      const result = (await cmdPattern(['pat-1'], storage)) as Record<string, unknown>
+    it('should return pattern info with runs newest-first', async () => {
+      const result = (await cmdPattern(['clu-1'], storage)) as Record<string, unknown>
       const pattern = result.pattern as Record<string, unknown>
-      expect(pattern.id).toBe('pat-1')
-      expect(pattern.name).toBe('Code Review')
+      expect(pattern.id).toBe('clu-1')
+      expect(pattern.title).toBe('Code Review')
+      expect(pattern.timesSeen).toBe(2)
+      const runs = result.runs as Array<Record<string, unknown>>
+      expect(runs.map((r) => r.id)).toEqual(['clu-sight-new', 'clu-sight-old'])
     })
 
-    it('should include sightings when --run-id is given', async () => {
-      const result = (await cmdPattern(['pat-1', '--run-id', 'run-abc'], storage)) as Record<
-        string,
-        unknown
-      >
-      expect(result.pattern).toBeDefined()
-      const sightings = result.sightings as Array<Record<string, unknown>>
-      expect(sightings.length).toBe(1)
-      expect(sightings[0].evidence).toBe('Saw PR review')
-    })
+    it('should exclude runs outside the stats window', async () => {
+      const staleStart = Date.now() - 100 * 24 * 60 * 60 * 1000
+      storage.sightings.add({
+        id: 'clu-sight-stale',
+        title: 'Code Review',
+        subject: 'PR 1',
+        description: 'Reviewed a pull request',
+        apps: ['Chrome'],
+        activityIds: ['act-1'],
+        startedAt: staleStart,
+        endedAt: staleStart + 60 * 60 * 1000,
+        interactionMin: 5,
+        runId: 'run-0',
+        detectedAt: staleStart,
+      })
+      storage.clusters.addMembership('clu-1', 'clu-sight-stale', staleStart)
 
-    it('should return empty sightings for unknown run-id', async () => {
-      const result = (await cmdPattern(['pat-1', '--run-id', 'run-xxx'], storage)) as Record<
-        string,
-        unknown
-      >
-      expect((result.sightings as unknown[]).length).toBe(0)
+      const result = (await cmdPattern(['clu-1'], storage)) as Record<string, unknown>
+      expect((result.pattern as Record<string, unknown>).timesSeen).toBe(2)
+      const runs = result.runs as Array<Record<string, unknown>>
+      expect(runs.map((r) => r.id)).toEqual(['clu-sight-new', 'clu-sight-old'])
     })
 
     it('should throw for unknown pattern id', async () => {

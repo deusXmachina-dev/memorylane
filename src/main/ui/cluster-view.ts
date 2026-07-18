@@ -6,11 +6,22 @@
  */
 
 import { CLUSTER_VIEW_CONFIG } from '@/shared/constants'
-import type { ClusterInfo, ClusterKind, RecurrenceBucket, RecurrenceUnit } from '@types'
+import type {
+  ClusterInfo,
+  ClustersView,
+  ClusterKind,
+  RecurrenceBucket,
+  RecurrenceUnit,
+} from '@types'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 // 1970-01-05 (day index 4) was a Monday; anchor week buckets to it.
 const EPOCH_MONDAY_DAY = 4
+
+/** Start of the window all cluster stats (and run listings) are computed over. */
+export function statsWindowStart(now: number): number {
+  return now - CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS * DAY_MS
+}
 
 /**
  * Days since epoch of the timestamp's LOCAL calendar day — buckets must match
@@ -122,7 +133,7 @@ export function buildClusterInfo(
 ): ClusterInfo {
   // Window the numerator to the same period as observedDays — pruning only
   // runs during mining runs, so stored members can outlive the stats window.
-  const windowStart = now - CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS * DAY_MS
+  const windowStart = statsWindowStart(now)
   const members = allMembers.filter((m) => m.startedAt >= windowStart)
   const startedAts = members.map((m) => m.startedAt)
   const spansMin = members.map((m) => Math.max(0, m.endedAt - m.startedAt) / 60_000)
@@ -154,6 +165,81 @@ export function buildClusterInfo(
     recurrence: recurrence.buckets,
     recurrenceUnit: recurrence.unit,
   }
+}
+
+/** The storage surface the clusters view reads from (satisfied by StorageService). */
+export interface ClusterViewStore {
+  clusters: {
+    getAll(): {
+      id: string
+      label: string
+      description: string
+      kind: ClusterKind
+      mechanism: string
+    }[]
+    getMemberDigest(): ({ clusterId: string } & ClusterMember)[]
+  }
+  activities: {
+    countDistinctActiveDays(windowStart: number, windowEnd: number): number
+  }
+}
+
+/** Frequency denominator: distinct captured days in the same window sightings are retained for. */
+export function countObservedDays(store: ClusterViewStore, now: number): number {
+  return store.activities.countDistinctActiveDays(statsWindowStart(now), now)
+}
+
+/** Case-insensitive keyword filter over the fields shown in the clusters view. */
+export function filterClusters(clusters: ClusterInfo[], query: string): ClusterInfo[] {
+  const q = query.toLowerCase()
+  return clusters.filter((c) =>
+    [c.title, c.description, c.mechanism, c.apps.join(' ')].some((field) =>
+      field.toLowerCase().includes(q),
+    ),
+  )
+}
+
+export const MISSING_TABLES_TEXT =
+  'Task-mining tables not found in this database. Launch the MemoryLane app once ' +
+  '(it creates them on startup) and let task mining run, then retry.'
+
+/** The cluster tables are created by the app, not by consumers that open the DB read-only. */
+export function isMissingClusterTables(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /no such table: (clusters|cluster_sightings|sightings|mining_days)/.test(error.message)
+  )
+}
+
+/**
+ * The clusters view served to both the Patterns UI and the MCP pattern tools:
+ * visible clusters (most frequent first) plus the noise-floor hidden count.
+ * One digest query for all members → stats, recurrence, title fallback (no N+1).
+ */
+export function computeClustersView(
+  store: ClusterViewStore,
+  now: number,
+): ClustersView & { observedDays: number } {
+  const membersByCluster = new Map<string, ClusterMember[]>()
+  for (const { clusterId, ...member } of store.clusters.getMemberDigest()) {
+    let list = membersByCluster.get(clusterId)
+    if (!list) {
+      list = []
+      membersByCluster.set(clusterId, list)
+    }
+    list.push(member)
+  }
+  const observedDays = countObservedDays(store, now)
+  const infos = store.clusters
+    .getAll()
+    .map((c) => buildClusterInfo(c, membersByCluster.get(c.id) ?? [], observedDays, now))
+    // Clusters with no in-window members are dead rows awaiting cleanup, not
+    // "hidden noise" — exclude them from the view and the hidden count.
+    .filter((c) => c.timesSeen > 0)
+  const visible = infos
+    .filter((c) => !isBelowNoiseFloor(c.timesSeen, c.totalActiveMin))
+    .sort((a, b) => b.timesSeen - a.timesSeen || (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0))
+  return { clusters: visible, hiddenCount: infos.length - visible.length, observedDays }
 }
 
 /**

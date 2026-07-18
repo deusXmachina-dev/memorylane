@@ -5,6 +5,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@main': resolve(__dirname, '../../src/main'),
+      '@types': resolve(__dirname, '../../src/shared/types'),
+      '@': resolve(__dirname, '../../src'),
     },
   },
   test: {
