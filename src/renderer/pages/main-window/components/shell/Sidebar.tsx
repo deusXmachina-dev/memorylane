@@ -18,8 +18,8 @@ import { Logo } from '@/renderer/components/Logo'
 export type MainSection = 'activities' | 'patterns' | 'settings'
 
 const NAV_ITEMS: { id: MainSection; label: string; icon: LucideIcon }[] = [
-  { id: 'activities', label: 'Activities', icon: ListVideo },
   { id: 'patterns', label: 'Patterns', icon: Sparkles },
+  { id: 'activities', label: 'Activities', icon: ListVideo },
   { id: 'settings', label: 'Settings', icon: SettingsIcon },
 ]
 

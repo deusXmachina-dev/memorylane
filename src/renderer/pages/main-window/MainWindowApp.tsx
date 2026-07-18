@@ -49,7 +49,7 @@ const SIDEBAR_COLLAPSED_KEY = 'memorylane:sidebar:collapsed'
 
 export function MainWindowApp(): React.JSX.Element {
   const api = useMainWindowAPI()
-  const [section, setSection] = useState<MainSection>('activities')
+  const [section, setSection] = useState<MainSection>('patterns')
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(
     () => readIntFlag(localStorageAdapter, SIDEBAR_COLLAPSED_KEY, 0) === 1,
   )
@@ -637,7 +637,7 @@ export function MainWindowApp(): React.JSX.Element {
             onBack={
               computedStep !== 'dashboard'
                 ? () => {
-                    setSection('activities')
+                    setSection('patterns')
                     setSettingsInitialTab(undefined)
                   }
                 : undefined

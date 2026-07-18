@@ -39,6 +39,15 @@ export function formatMinutes(min: number): string {
   return `${Math.max(1, Math.round(min))}m`
 }
 
+/**
+ * Estimated time per month, in hours rounded to the nearest quarter-hour with a
+ * 0.25h floor (never reads as 0). e.g. 26 min → "0.5h", 5 min → "0.25h".
+ */
+export function formatMonthlyHours(minutesPerMonth: number): string {
+  const quarterHours = Math.max(1, Math.round(minutesPerMonth / 15))
+  return `${quarterHours / 4}h`
+}
+
 export function formatFrequency(perWeek: number): string {
   if (perWeek <= 0) return ''
   if (perWeek >= 0.95) return `~${Math.round(perWeek)}×/wk`
