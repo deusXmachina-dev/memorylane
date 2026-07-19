@@ -164,4 +164,3 @@ data/
 
 # Activity-summary eval fixtures, results, README (internal only — not published)
 evals/
-.gstack/
