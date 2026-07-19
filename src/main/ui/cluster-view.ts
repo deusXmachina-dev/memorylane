@@ -136,11 +136,9 @@ export function buildClusterInfo(
   const windowStart = statsWindowStart(now)
   const members = allMembers.filter((m) => m.startedAt >= windowStart)
   const startedAts = members.map((m) => m.startedAt)
-  const spansMin = members.map((m) => Math.max(0, m.endedAt - m.startedAt) / 60_000)
   const activeMins = members.map((m) => Math.max(0, m.interactionMin))
   const apps = new Set<string>()
   for (const m of members) for (const app of m.apps) apps.add(app)
-  const avgSpanMin = mean(spansMin)
   const avgActiveMin = mean(activeMins)
   const recurrence = computeRecurrence(startedAts, now)
   return {
@@ -155,8 +153,6 @@ export function buildClusterInfo(
     timesPerWeek: timesPerWeek(members.length, observedDays),
     observedDays,
     avgActiveMin,
-    avgSpanMin,
-    avgIdleMin: Math.max(0, avgSpanMin - avgActiveMin),
     totalActiveMin: activeMins.reduce((sum, v) => sum + v, 0),
     kind: cluster.kind,
     mechanism: cluster.mechanism,
