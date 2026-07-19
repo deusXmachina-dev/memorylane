@@ -115,7 +115,6 @@ describe('validateAndApply', () => {
     const survivor = storage.clusters.getById('older')!
     expect(survivor.kind).toBe('')
     expect(survivor.mechanism).toBe('')
-    // The pre-merge recipe is stale for the merged cluster; it must be cleared too.
     expect(survivor.steps).toEqual([])
     expect(survivor.variables).toEqual([])
   })
@@ -435,7 +434,6 @@ describe('validateAndApply', () => {
 
     const cluster = storage.clusters.getById('c1')!
     expect(cluster.steps[0]).toBe('Open the thread in Gmail (mail.google.com)')
-    // scrubPII backstop runs end-to-end through sanitizeRecipe.
     expect(cluster.steps[1]).toBe('Email [email address] the recap')
     expect(cluster.variables).toEqual(['customer name'])
   })
@@ -446,7 +444,6 @@ describe('validateAndApply', () => {
 
     validateAndApply(
       storage,
-      // A relabel that omits steps (returns only variables) must not wipe the recipe.
       { clusters: [{ id: 'c1', label: 'Renamed', description: 'x', variables: [] }] },
       guards({ reviewableIds: new Set(['c1']) }),
       'test-model',

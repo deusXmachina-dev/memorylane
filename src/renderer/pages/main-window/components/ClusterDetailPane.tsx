@@ -69,13 +69,8 @@ function buildCopyPrompt(cluster: ClusterInfo, sightings: ClusterSightingInfo[])
   return lines.filter((l) => l !== null).join('\n')
 }
 
-/**
- * A generalized, tool-agnostic prompt for building an automation of this task.
- * Reads the pre-generated recipe stored on the cluster (steps + variables),
- * which the mining LLM already de-identified. Carries NO MemoryLane references,
- * so it pastes into any agent or web-automation builder (Task Magic, etc.). The
- * final string is run through scrubPII as a last-mile safety net.
- */
+/** Tool-agnostic prompt built from the stored, de-identified recipe;
+ * scrubPII runs over the final string as a last-mile net. */
 function buildAgentPrompt(cluster: ClusterInfo): string {
   const lines: string[] = [
     `Build an AI agent that automates this task.`,
@@ -94,13 +89,13 @@ function buildAgentPrompt(cluster: ClusterInfo): string {
   if (cluster.variables.length > 0) {
     lines.push(``, `Changes each run: ${cluster.variables.join(', ')}.`)
   }
+  lines.push(``, `Before building, ask me:`)
+  if (cluster.variables.length === 0) {
+    lines.push(`- Which steps or inputs change each run?`)
+  }
   lines.push(
-    ``,
-    `Before building, ask me:`,
-    `- Which steps change each run?`,
-    `- What inputs or variables each run needs?`,
-    `- What tools or API access you have?`,
-    `- What to do on errors?`,
+    `- What tools and API access are available?`,
+    `- What should happen when a step fails?`,
     ``,
     `Then build it and tell me how to run it.`,
   )

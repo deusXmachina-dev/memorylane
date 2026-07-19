@@ -45,12 +45,8 @@ const MAX_RECIPE_STEPS = 15
 const MAX_RECIPE_VARIABLES = 10
 const MAX_RECIPE_ENTRY_LEN = 200
 
-/**
- * Whitelist the LLM's recipe into a storable, de-identified form. The model is
- * asked to generalize and strip PII; this fails closed on shape (arrays of
- * non-empty strings, capped in count and length) and runs a regex PII scrub as
- * a backstop, since the recipe is copied out to external tools.
- */
+/** Whitelist the LLM's recipe (shape, count/length caps) and scrub PII — the
+ * recipe is copied out to external tools. */
 export function sanitizeRecipe(raw: ReviewClusterVerdict): ClusterRecipe {
   const clean = (value: unknown, cap: number): string[] =>
     (Array.isArray(value) ? value : [])
@@ -139,8 +135,7 @@ export function validateAndApply(
         now,
       )
       // The survivor's verdict and recipe were derived from only its pre-merge
-      // members; clear both so the merged cluster is re-classified and
-      // re-recipe'd on the next review (a stale recipe would mislead the button).
+      // members — clear both so the next review redoes them.
       storage.clusters.updateVerdict(survivor.id, { kind: '', mechanism: '' }, now)
       storage.clusters.updateRecipe(survivor.id, { steps: [], variables: [] }, now)
       recomputeCentroid(storage, survivor.id, now)
@@ -245,9 +240,8 @@ export function validateAndApply(
             storage.clusters.updateVerdict(verdict.id, sanitized, now)
           }
         }
-        // Persist the recipe only when the model returned actual steps, so a
-        // relabel that omits or empties them doesn't wipe an earlier recipe
-        // (variables alone are useless without steps).
+        // Only overwrite the recipe when the model returned steps — a relabel
+        // that omits them must not wipe an existing recipe.
         const recipe = sanitizeRecipe(verdict)
         if (recipe.steps.length > 0) {
           storage.clusters.updateRecipe(verdict.id, recipe, now)
@@ -290,7 +284,7 @@ function applySplit(
       label: group.label,
       description: group.description,
       centroid: null,
-      // Split groups are new processes, classified and given a recipe on the next review.
+      // Split groups are new processes — classified on the next review.
       kind: '',
       mechanism: '',
       steps: [],
@@ -313,8 +307,6 @@ function applySplit(
     largest.label ? largest.sightingIds.length : 0,
     now,
   )
-  // Verdict and recipe were derived from the pre-split membership; clear both
-  // so the kept cluster is re-classified and re-recipe'd on the next review.
   storage.clusters.updateVerdict(clusterId, { kind: '', mechanism: '' }, now)
   storage.clusters.updateRecipe(clusterId, { steps: [], variables: [] }, now)
   recomputeCentroid(storage, clusterId, now)

@@ -412,8 +412,7 @@ export function toReviewCluster(
   const sample = members.slice(
     -(splittable ? CLUSTERING_CONFIG.MAX_SPLITTABLE_MEMBERS : CLUSTERING_CONFIG.MAX_SAMPLE_MEMBERS),
   )
-  // Domains per sampled member, so the LLM can name web steps by domain. One
-  // batched lookup across the sample's activities (not per-member).
+  // Domains per sampled member let the LLM name web steps by domain.
   const sampleActivityIds = [...new Set(sample.flatMap((s) => s.activityIds))]
   const tldById = new Map(storage.activities.getByIds(sampleActivityIds).map((a) => [a.id, a.tld]))
   const spanMs =

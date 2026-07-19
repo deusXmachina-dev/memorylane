@@ -111,6 +111,8 @@ describe('SightingRepository', () => {
         centroid: null,
         kind: '',
         mechanism: '',
+        steps: [],
+        variables: [],
         labelModel: '',
         labeledSize: 0,
         createdAt: 1000,
