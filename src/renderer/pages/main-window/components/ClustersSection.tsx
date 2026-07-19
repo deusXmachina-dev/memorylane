@@ -8,21 +8,24 @@ import { ClusterDetailPane } from './ClusterDetailPane'
 
 function MiningProgressBanner({ status }: { status: MiningStatus }): React.JSX.Element {
   const done = status.completedDays + status.failedDays
-  const current = Math.min(done + 1, status.totalDays)
+  const mining = status.state === 'mining'
+  const pct = Math.max(1.5, (done / status.totalDays) * 100)
   return (
-    <div className="flex items-center gap-2 rounded-lg border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-      {status.state === 'mining' ? (
-        <>
-          <span className="size-1.5 rounded-full bg-primary animate-pulse" />
-          Analyzing your history — day {current} of {status.totalDays}. Patterns appear as days
-          finish.
-        </>
-      ) : (
-        <>
-          {status.pendingDays} day{status.pendingDays === 1 ? '' : 's'} of history left to analyze —
-          continues automatically.
-        </>
-      )}
+    <div className="space-y-1.5">
+      <div className="flex items-baseline justify-between gap-4 text-xs">
+        <span className="truncate font-medium text-foreground/85">
+          {mining ? 'Analyzing your history' : 'Analysis paused'}
+        </span>
+        <span className="shrink-0 tabular-nums text-muted-foreground">
+          {done} of {status.totalDays} days
+        </span>
+      </div>
+      <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full bg-primary transition-[width] duration-700 ease-out"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
     </div>
   )
 }
@@ -119,19 +122,21 @@ export function ClustersSection({
   return (
     <div className="flex flex-col gap-4 h-full min-h-0">
       {miningActive && <MiningProgressBanner status={miningStatus} />}
-      <div className="flex items-center gap-1">
-        {SORTS.map((s) => (
-          <Button
-            key={s.id}
-            size="sm"
-            variant={sort === s.id ? 'default' : 'secondary'}
-            className="rounded-full h-7 px-3 text-xs"
-            onClick={() => setSort(s.id)}
-          >
-            {s.label}
-          </Button>
-        ))}
-      </div>
+      {clusters.length > 0 && (
+        <div className="flex items-center gap-1">
+          {SORTS.map((s) => (
+            <Button
+              key={s.id}
+              size="sm"
+              variant={sort === s.id ? 'default' : 'secondary'}
+              className="rounded-full h-7 px-3 text-xs"
+              onClick={() => setSort(s.id)}
+            >
+              {s.label}
+            </Button>
+          ))}
+        </div>
+      )}
 
       {clusters.length === 0 ? (
         <div className="text-sm text-muted-foreground py-12 text-center">
