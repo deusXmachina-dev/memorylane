@@ -11,7 +11,7 @@ export function buildClusterReviewSystemPrompt(): string {
 Judge by what the work MEANS, not which apps were used. Different apps can serve one process; one app can host many unrelated processes.
 
 You will receive a JSON object with:
-- "clusters": clusters needing review. Each has an id, a "splittable" flag (true = may be split; shown with an extended member sample), an existing "label" (may be empty), "stats" computed from ALL members (times_seen, span_days from first to last sighting, median_active_min), and member sightings (title, subject — the specific object that run acted on, description, apps, interaction minutes, date). Members sharing a title but differing in subject are the same process run on different objects — direct evidence for adopting that shared title as the label.
+- "clusters": clusters needing review. Each has an id, a "splittable" flag (true = may be split; shown with an extended member sample), an existing "label" (may be empty), "stats" computed from ALL members (times_seen, span_days from first to last sighting, median_active_min), and member sightings (title, subject (the specific object that run acted on), description, apps, domains (top-level domains seen in that run, for naming web steps), interaction minutes, date). Members sharing a title but differing in subject are the same process run on different objects, direct evidence for adopting that shared title as the label.
 - "merge_candidates": pairs of cluster ids that MAY be the same process. These are the only merges you are allowed to propose.
 
 Your tasks:
@@ -26,6 +26,7 @@ Your tasks:
 3. MERGE: for each merge candidate pair that is genuinely the same recurring process, output a merge with the combined label and description. Only use pairs from "merge_candidates". Merge more than two clusters at once ONLY if every pair among them is listed in "merge_candidates" — never chain (A+B and B+C does not justify merging A with C).
 4. SPLIT: if a cluster marked "splittable": true mixes two or more unrelated processes, split it into groups. Only split clusters marked splittable. Assign each listed sighting_id to exactly one group.
 5. FLAG: if a cluster marked "splittable": true mixes unrelated processes and you cannot split it cleanly, output { "id": ..., "incoherent": true } instead of a label — it will be re-grouped automatically.
+6. RECIPE: for every cluster you LABEL (not for split/merge/incoherent verdicts), also output "steps" and "variables". "steps" is an ordered, generalized how-to for the process: 3 to 12 short imperative lines, each naming the app and, when it is a website, its domain in parentheses (e.g. "Open the client thread in Gmail (mail.google.com)"). Generalize across the member runs; do not transcribe one run. "variables" lists the things that differ from run to run, named generically (e.g. "customer name", "invoice number", "search term"). This recipe is copied into outside automation tools, so it MUST be fully de-identified: never write a real person, company, email, phone number, account number, or url-with-id. Write "enter the customer name", never "enter ACME Inc"; move every changing specific into "variables" as a generic label.
 
 Rules:
 - Never invent cluster ids or sighting ids not present in the input.
@@ -33,14 +34,15 @@ Rules:
 - When unsure whether two clusters are the same process, do NOT merge; leaving them apart is recoverable, merging is not.
 - When unsure of the kind, choose the non-eliminable reading — a wrongly promised automation costs more than a missed one.
 - Never write an umbrella label that papers over a splittable mixed cluster — split it or flag it incoherent. For a non-splittable mixed cluster, label the dominant process.
+- steps and variables carry NO personal data: no real names, companies, emails, phone numbers, ids, or PII/PHI. When in doubt, replace the specific with a generic variable.
 
 Output a single JSON object, no other text:
 
 \`\`\`json
 {
   "clusters": [
-    { "id": "<cluster id>", "label": "...", "description": "...", "kind": "procedure", "mechanism": "..." },
-    { "id": "<cluster id>", "label": "...", "description": "...", "kind": "monitoring" },
+    { "id": "<cluster id>", "label": "...", "description": "...", "kind": "procedure", "mechanism": "...", "steps": ["Open ...", "..."], "variables": ["customer name", "..."] },
+    { "id": "<cluster id>", "label": "...", "description": "...", "kind": "monitoring", "steps": ["Open ...", "..."], "variables": ["..."] },
     { "id": "<splittable cluster id>", "split": [
         { "label": "...", "description": "...", "sighting_ids": ["..."] },
         { "label": "...", "description": "...", "sighting_ids": ["..."] }

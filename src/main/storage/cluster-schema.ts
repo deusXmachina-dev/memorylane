@@ -7,9 +7,9 @@ import log from '@main/utils/logger'
  * they live outside the migration system: bump this version on any schema or
  * embedding-geometry change and the tables are dropped and recreated on the
  * next launch. Version 2 = title+description signature embeddings with
- * average-linkage grouping.
+ * average-linkage grouping. Version 3 = recipe columns (steps, variables).
  */
-export const CLUSTER_SCHEMA_VERSION = 2
+export const CLUSTER_SCHEMA_VERSION = 3
 
 export function ensureClusterSchema(db: Database.Database): void {
   db.exec(`
@@ -52,6 +52,8 @@ export function ensureClusterSchema(db: Database.Database): void {
     // centroid is the unit-normalized mean of member signatures.
     // kind = '' means not yet judged by the review LLM; mechanism is the
     // consolidated "Replace with" recommendation ('procedure' clusters only).
+    // steps/variables are the generalized, de-identified recipe (JSON arrays);
+    // '[]' until the review LLM fills them in.
     db.exec(`
       CREATE TABLE clusters (
         id TEXT PRIMARY KEY,
@@ -62,6 +64,8 @@ export function ensureClusterSchema(db: Database.Database): void {
         labeled_size INTEGER NOT NULL DEFAULT 0,
         kind TEXT NOT NULL DEFAULT '',
         mechanism TEXT NOT NULL DEFAULT '',
+        steps TEXT NOT NULL DEFAULT '[]',
+        variables TEXT NOT NULL DEFAULT '[]',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )

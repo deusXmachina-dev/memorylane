@@ -23,6 +23,10 @@ export interface Cluster {
   kind: ClusterKind
   /** Consolidated "Replace with" recommendation for 'procedure' clusters. */
   mechanism: string
+  /** Generalized, de-identified recipe steps (the "Build AI agent" recipe); [] until labeled. */
+  steps: string[]
+  /** Things that differ between runs (feeds the recipe); [] until labeled. */
+  variables: string[]
   labelModel: string
   /** Member count at the last labeling — relabel once the cluster doubles. */
   labeledSize: number
@@ -33,6 +37,23 @@ export interface Cluster {
 export interface ClusterVerdict {
   kind: ClusterKind
   mechanism: string
+}
+
+/** The generalized, sanitized recipe for a cluster, written by the review LLM. */
+export interface ClusterRecipe {
+  steps: string[]
+  variables: string[]
+}
+
+/** Parse a JSON string-array column, tolerating null/legacy/corrupt values. */
+function parseJsonStringArray(value: unknown): string[] {
+  if (typeof value !== 'string' || value.length === 0) return []
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === 'string') : []
+  } catch {
+    return []
+  }
 }
 
 /** Canonical key for an unordered cluster pair — the one format shared by
@@ -109,8 +130,8 @@ export class ClusterRepository {
     this.db
       .prepare(
         `INSERT INTO clusters (id, label, description, centroid, kind, mechanism,
-                               label_model, labeled_size, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                               steps, variables, label_model, labeled_size, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         cluster.id,
@@ -119,6 +140,8 @@ export class ClusterRepository {
         cluster.centroid ? vectorToBlob(cluster.centroid) : null,
         cluster.kind,
         cluster.mechanism,
+        JSON.stringify(cluster.steps),
+        JSON.stringify(cluster.variables),
         cluster.labelModel,
         cluster.labeledSize,
         cluster.createdAt,
@@ -286,6 +309,16 @@ export class ClusterRepository {
       .run(verdict.kind, verdict.mechanism, updatedAt, clusterId)
   }
 
+  updateRecipe(clusterId: string, recipe: ClusterRecipe, updatedAt: number): void {
+    this.db
+      .prepare(
+        `UPDATE clusters
+         SET steps = ?, variables = ?, updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(JSON.stringify(recipe.steps), JSON.stringify(recipe.variables), updatedAt, clusterId)
+  }
+
   /**
    * Clear all derived cluster state — clusters, memberships, signatures, and
    * the merge-decline ledger. Sightings are untouched; re-mining rebuilds
@@ -422,6 +455,8 @@ export class ClusterRepository {
       centroid: row.centroid ? blobToVector(row.centroid as Buffer) : null,
       kind: row.kind as ClusterKind,
       mechanism: row.mechanism as string,
+      steps: parseJsonStringArray(row.steps),
+      variables: parseJsonStringArray(row.variables),
       labelModel: row.label_model as string,
       labeledSize: row.labeled_size as number,
       createdAt: row.created_at as number,
