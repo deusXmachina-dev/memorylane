@@ -39,10 +39,24 @@ export function formatMinutes(min: number): string {
   return `${Math.max(1, Math.round(min))}m`
 }
 
+const WEEKS_PER_MONTH = 30.44 / 7
+
+/**
+ * Estimated time per month, in hours rounded to the nearest quarter-hour with a
+ * 0.25h floor (a real value never reads as 0). e.g. 7 min/run × 1×/wk → "0.5h".
+ * Empty when there's no measured frequency or time.
+ */
+export function formatMonthlyHours(avgActiveMin: number, timesPerWeek: number): string {
+  const minutesPerMonth = avgActiveMin * timesPerWeek * WEEKS_PER_MONTH
+  if (minutesPerMonth <= 0) return ''
+  const quarterHours = Math.max(1, Math.round(minutesPerMonth / 15))
+  return `${quarterHours / 4}h`
+}
+
 export function formatFrequency(perWeek: number): string {
   if (perWeek <= 0) return ''
   if (perWeek >= 0.95) return `~${Math.round(perWeek)}×/wk`
-  const perMonth = perWeek * (30.44 / 7)
+  const perMonth = perWeek * WEEKS_PER_MONTH
   return perMonth >= 0.95 ? `~${Math.round(perMonth)}×/mo` : '<1×/mo'
 }
 

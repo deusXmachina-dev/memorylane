@@ -327,10 +327,6 @@ export interface ClusterInfo {
   observedDays: number
   /** Mean per-run active time (union of cited-activity intervals), in minutes. */
   avgActiveMin: number
-  /** Mean per-run wall-clock span (first activity start → last end), in minutes. */
-  avgSpanMin: number
-  /** Mean per-run inactive time inside the span: max(0, span − active), in minutes. */
-  avgIdleMin: number
   /** Active minutes summed across all kept sightings (sightings are pruned at 90 days). */
   totalActiveMin: number
   kind: ClusterKind

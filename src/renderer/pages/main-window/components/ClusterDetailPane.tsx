@@ -1,13 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Badge } from '@components/ui/badge'
 import { Button } from '@components/ui/button'
 import { ScrollArea } from '@components/ui/scroll-area'
 import { ChevronDown, ChevronUp, Copy } from 'lucide-react'
-import { CLUSTER_VIEW_CONFIG } from '@/shared/constants'
 import type { ClusterDetailInfo, ClusterInfo, ClusterSightingInfo, MainWindowAPI } from '@types'
-import { formatFrequency, formatMinutes, formatShortDate } from './activities/format'
-import { RecurrenceBars } from './RecurrenceBars'
+import { formatFrequency, formatMinutes, formatMonthlyHours } from './activities/format'
+import { WeeklyTrend } from './WeeklyTrend'
+import { ClaudeWordmark } from './ClaudeWordmark'
 
 interface ClusterDetailPaneProps {
   api: MainWindowAPI
@@ -36,25 +35,24 @@ function buildCopyPrompt(cluster: ClusterInfo, sightings: ClusterSightingInfo[])
     cluster.description ? `Context: ${cluster.description}` : null,
     `Apps involved: ${cluster.apps.join(', ') || 'unknown'}.`,
     cluster.timesPerWeek > 0
-      ? `I do this about ${formatFrequency(cluster.timesPerWeek)} (${cluster.timesSeen} runs over ${cluster.observedDays} active days); a run takes ~${Math.round(cluster.avgSpanMin)} min start-to-end (~${Math.round(cluster.avgActiveMin)} min hands-on).`
-      : `I've done this ${cluster.timesSeen} time${cluster.timesSeen === 1 ? '' : 's'}; a run takes ~${Math.round(cluster.avgSpanMin)} min start-to-end (~${Math.round(cluster.avgActiveMin)} min hands-on).`,
+      ? `I do this about ${formatFrequency(cluster.timesPerWeek)} (${cluster.timesSeen} runs over ${cluster.observedDays} active days); a run takes ~${Math.round(cluster.avgActiveMin)} min of hands-on work.`
+      : `I've done this ${cluster.timesSeen} time${cluster.timesSeen === 1 ? '' : 's'}; a run takes ~${Math.round(cluster.avgActiveMin)} min of hands-on work.`,
     ``,
-    `## Step 1 — Research`,
+    `## Step 1: Research`,
     ``,
     `Use the MemoryLane MCP tools to understand what this task really involves:`,
     ``,
     sampleActivityIds.length > 0
       ? `1. Call get_activity_details on these activity IDs to read the OCR evidence of what I actually did: ${sampleActivityIds.join(', ')}.`
       : `1. Call browse_timeline around the occurrences below to see what I was doing.`,
-    `2. Call browse_timeline around those timestamps (±15 minutes) to see the full workflow — what triggers this task and what follows.`,
+    `2. Call browse_timeline around those timestamps (±15 minutes) to see the full workflow: what triggers this task and what follows.`,
     ``,
     `Recent occurrences:`,
     ...recent.map(
-      (s) =>
-        `- ${formatSightingTime(s.startedAt)} — ${s.title}${s.subject ? ` — ${s.subject}` : ''}`,
+      (s) => `- ${formatSightingTime(s.startedAt)}: ${s.title}${s.subject ? `, ${s.subject}` : ''}`,
     ),
     ``,
-    `## Step 2 — Ask me questions`,
+    `## Step 2: Ask me questions`,
     ``,
     `Before building anything, ask me clarifying questions:`,
     `- Which steps vary between occurrences?`,
@@ -63,7 +61,7 @@ function buildCopyPrompt(cluster: ClusterInfo, sightings: ClusterSightingInfo[])
     ``,
     `Wait for my answers before proceeding.`,
     ``,
-    `## Step 3 — Create a Claude Code skill`,
+    `## Step 3: Create a Claude Code skill`,
     ``,
     `Based on your research and my answers, use /skill-creator to create a skill that automates this task.`,
   ]
@@ -124,6 +122,7 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
 
   const sightings = detail?.sightings ?? []
   const visibleSightings = showAll ? sightings : sightings.slice(0, INITIAL_SIGHTINGS)
+  const trendTimestamps = useMemo(() => (detail?.sightings ?? []).map((s) => s.startedAt), [detail])
 
   const handleCopyPrompt = (): void => {
     navigator.clipboard
@@ -141,17 +140,7 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
         <div className="px-6 py-5 space-y-5">
           {/* Header */}
           <div>
-            <div
-              className="text-[11px] uppercase tracking-wide text-muted-foreground"
-              title={`${cluster.timesSeen} runs across ${cluster.observedDays} active days`}
-            >
-              Cluster ·{' '}
-              {formatFrequency(cluster.timesPerWeek) &&
-                `${formatFrequency(cluster.timesPerWeek)} · `}
-              Seen {cluster.timesSeen}× since{' '}
-              {cluster.firstSeenAt === null ? '—' : formatShortDate(cluster.firstSeenAt)}
-            </div>
-            <h2 className="mt-1 text-xl font-semibold leading-tight">{cluster.title}</h2>
+            <h2 className="text-xl font-semibold leading-tight">{cluster.title}</h2>
             {cluster.description && (
               <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
                 {cluster.description}
@@ -162,64 +151,40 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
                 <span className="font-medium">Replace with:</span> {cluster.mechanism}
               </p>
             )}
-            {cluster.apps.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-1">
-                {cluster.apps.map((app) => (
-                  <Badge key={app} variant="secondary" className="text-[10px]">
-                    {app}
-                  </Badge>
-                ))}
-              </div>
-            )}
-            {/* Disabled until sightings load — the prompt embeds their activity ids. */}
-            <Button size="sm" onClick={handleCopyPrompt} disabled={!detail} className="mt-4">
-              <Copy className="w-3.5 h-3.5 mr-1.5" />
-              Copy prompt for Claude
-            </Button>
+            {/* Disabled until sightings load: the prompt embeds their activity ids. */}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button size="sm" variant="secondary" onClick={handleCopyPrompt} disabled={!detail}>
+                <Copy className="w-3.5 h-3.5 mr-1.5" />
+                Analyze with
+                <ClaudeWordmark />
+              </Button>
+            </div>
           </div>
 
           {/* Stats */}
           <div className="border-y py-4">
-            <div className="grid grid-cols-4 gap-3">
-              <Stat value={String(cluster.timesSeen)} label="Times seen" />
-              <Stat value={formatMinutes(cluster.avgSpanMin)} label="Span / run" />
-              <Stat value={formatMinutes(cluster.avgActiveMin)} label="Active / run" />
+            <div className="grid grid-cols-3 gap-3">
+              <Stat value={`${cluster.timesSeen}×`} label="Times done" />
+              <Stat value={formatMinutes(cluster.avgActiveMin)} label="Avg. net time" />
               <Stat
-                value={formatMinutes(cluster.totalActiveMin)}
-                label={`Total active (${CLUSTER_VIEW_CONFIG.STATS_WINDOW_DAYS}d)`}
+                value={formatMonthlyHours(cluster.avgActiveMin, cluster.timesPerWeek) || '—'}
+                label="Est. per month"
               />
             </div>
-            {cluster.avgIdleMin >= 2 && (
-              <p className="mt-3 text-[11px] text-muted-foreground">
-                ~{Math.round(cluster.avgIdleMin)}m inactive per run — the span includes breaks and
-                interruptions.
-              </p>
-            )}
           </div>
 
-          {/* Recurrence */}
-          <div>
-            <div className="flex items-baseline justify-between">
-              <h3 className="text-sm font-semibold">Recurrence</h3>
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                Sightings / {cluster.recurrenceUnit === 'week' ? 'week' : 'day'}
-              </span>
+          {/* Last 4 weeks — only once sightings are in, so the chart never shows
+              a false flat-zero while loading (or after a failed load). */}
+          {detail && (
+            <div>
+              <h3 className="text-sm font-semibold">Last 4 weeks</h3>
+              <WeeklyTrend className="mt-2" timestamps={trendTimestamps} />
             </div>
-            <RecurrenceBars
-              className="mt-3"
-              buckets={cluster.recurrence}
-              unit={cluster.recurrenceUnit}
-            />
-          </div>
+          )}
 
           {/* Sightings */}
           <div>
-            <div className="flex items-baseline gap-2">
-              <h3 className="text-sm font-semibold">Sightings</h3>
-              <span className="text-[11px] text-muted-foreground uppercase tracking-wide">
-                {cluster.timesSeen} instance{cluster.timesSeen === 1 ? '' : 's'}
-              </span>
-            </div>
+            <h3 className="text-sm font-semibold">History</h3>
 
             {showLoading && !detail && (
               <div className="mt-3 text-xs text-muted-foreground">Loading sightings…</div>
@@ -247,13 +212,12 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
                           <span className="font-normal text-muted-foreground"> — {s.subject}</span>
                         )}
                       </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
-                        {s.apps.map((app) => (
-                          <Badge key={app} variant="outline" className="text-[10px] font-normal">
-                            {app}
-                          </Badge>
-                        ))}
-                        <span className="tabular-nums">{formatMinutes(s.activeMin)} active</span>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground/50">
+                        <span>
+                          {s.apps.length} app{s.apps.length === 1 ? '' : 's'}
+                        </span>
+                        <span aria-hidden>·</span>
+                        <span className="tabular-nums">{formatMinutes(s.activeMin)}</span>
                         <span aria-hidden>·</span>
                         <span className="tabular-nums">{formatSightingTime(s.startedAt)}</span>
                       </div>

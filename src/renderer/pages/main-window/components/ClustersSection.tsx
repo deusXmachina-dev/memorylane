@@ -28,7 +28,7 @@ function MiningProgressBanner({ status }: { status: MiningStatus }): React.JSX.E
 }
 
 const SORTS = [
-  { id: 'seen', label: 'Most seen' },
+  { id: 'seen', label: 'Most often' },
   { id: 'recent', label: 'Recent' },
   { id: 'longest', label: 'Longest' },
 ] as const
@@ -69,7 +69,7 @@ export function ClustersSection({
         copy.sort((a, b) => (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0))
         break
       case 'longest':
-        copy.sort((a, b) => b.avgSpanMin - a.avgSpanMin)
+        copy.sort((a, b) => b.avgActiveMin - a.avgActiveMin)
         break
       case 'seen':
       default:
@@ -131,7 +131,6 @@ export function ClustersSection({
             {s.label}
           </Button>
         ))}
-        <span className="ml-auto text-xs text-muted-foreground">{clusters.length} found</span>
       </div>
 
       {clusters.length === 0 ? (
