@@ -19,7 +19,7 @@ interface WeeklyTrendProps {
  * Occurrences per Monday–Sunday week over the last 4 weeks. The final bucket is
  * the current (partial) week. Older occurrences fall outside and are ignored.
  */
-function weeklyCounts(timestamps: number[], now: number): number[] {
+export function weeklyCounts(timestamps: number[], now: number): number[] {
   const d = new Date(now)
   const mondayOffset = (d.getDay() + 6) % 7 // 0 = Monday
   // Boundaries via calendar dates (not ms arithmetic) so weeks stay anchored to
@@ -39,6 +39,10 @@ function weeklyCounts(timestamps: number[], now: number): number[] {
   return counts
 }
 
+// Clamp control points to the viewbox so spiky data (e.g. 5,0,0,5) can't bow
+// the curve past the baseline into the area fill.
+const clampY = (y: number): number => Math.min(VB_H, Math.max(0, y))
+
 /** Catmull-Rom smoothed path through the points (nice rounded line, not jagged). */
 function smoothPath(points: { x: number; y: number }[]): string {
   if (points.length === 0) return ''
@@ -49,9 +53,9 @@ function smoothPath(points: { x: number; y: number }[]): string {
     const p2 = points[i + 1]
     const p3 = points[i + 2] ?? points[i + 1]
     const c1x = p1.x + (p2.x - p0.x) / 6
-    const c1y = p1.y + (p2.y - p0.y) / 6
+    const c1y = clampY(p1.y + (p2.y - p0.y) / 6)
     const c2x = p2.x - (p3.x - p1.x) / 6
-    const c2y = p2.y - (p3.y - p1.y) / 6
+    const c2y = clampY(p2.y - (p3.y - p1.y) / 6)
     d += `C ${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)} `
   }
   return d.trim()

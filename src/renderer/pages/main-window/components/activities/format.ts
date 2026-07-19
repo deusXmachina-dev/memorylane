@@ -43,7 +43,7 @@ const WEEKS_PER_MONTH = 30.44 / 7
 
 /**
  * Estimated time per month, in hours rounded to the nearest quarter-hour with a
- * 0.25h floor (a real value never reads as 0). e.g. 26 min/run × 1/wk → "0.5h".
+ * 0.25h floor (a real value never reads as 0). e.g. 7 min/run × 1×/wk → "0.5h".
  * Empty when there's no measured frequency or time.
  */
 export function formatMonthlyHours(avgActiveMin: number, timesPerWeek: number): string {

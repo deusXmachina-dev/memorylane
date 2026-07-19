@@ -4,12 +4,7 @@ import { Button } from '@components/ui/button'
 import { ScrollArea } from '@components/ui/scroll-area'
 import { ChevronDown, ChevronUp, Copy } from 'lucide-react'
 import type { ClusterDetailInfo, ClusterInfo, ClusterSightingInfo, MainWindowAPI } from '@types'
-import {
-  formatFrequency,
-  formatMinutes,
-  formatMonthlyHours,
-  formatShortDate,
-} from './activities/format'
+import { formatFrequency, formatMinutes, formatMonthlyHours } from './activities/format'
 import { WeeklyTrend } from './WeeklyTrend'
 import { ClaudeWordmark } from './ClaudeWordmark'
 
@@ -224,7 +219,7 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
                         <span aria-hidden>·</span>
                         <span className="tabular-nums">{formatMinutes(s.activeMin)}</span>
                         <span aria-hidden>·</span>
-                        <span className="tabular-nums">{formatShortDate(s.startedAt)}</span>
+                        <span className="tabular-nums">{formatSightingTime(s.startedAt)}</span>
                       </div>
                     </div>
                   </li>
