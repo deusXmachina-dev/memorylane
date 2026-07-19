@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@components/ui/button'
-import { Tabs, TabsList, TabsPanel, TabsTab } from '@components/ui/tabs'
+import { Tabs, TabsList, TabsContent, TabsTrigger } from '@components/ui/tabs'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import type { AppEditionConfig } from '@/shared/edition'
 import type { CaptureSettings, SemanticPipelineMode, Vendor, VendorStatus } from '@types'
@@ -278,14 +278,14 @@ export function SettingsPage({
       {form && (
         <Tabs defaultValue={initialTab ?? 'privacy'}>
           <TabsList>
-            <TabsTab value="privacy">Privacy</TabsTab>
-            <TabsTab value="data">Data</TabsTab>
-            {showAiModels && <TabsTab value="ai-models">AI models</TabsTab>}
-            <TabsTab value="integrations">Integrations</TabsTab>
-            {devMode && <TabsTab value="developer">Developer</TabsTab>}
+            <TabsTrigger value="privacy">Privacy</TabsTrigger>
+            <TabsTrigger value="data">Data</TabsTrigger>
+            {showAiModels && <TabsTrigger value="ai-models">AI models</TabsTrigger>}
+            <TabsTrigger value="integrations">Integrations</TabsTrigger>
+            {devMode && <TabsTrigger value="developer">Developer</TabsTrigger>}
           </TabsList>
 
-          <TabsPanel value="privacy" className="pt-2">
+          <TabsContent value="privacy" className="pt-2">
             <CapturePrivacySection
               form={form}
               hotkeyPlatform={hotkeyPlatform}
@@ -295,9 +295,9 @@ export function SettingsPage({
               onExcludedRulesCommit={commitExcludedRules}
               onObserved={() => void load()}
             />
-          </TabsPanel>
+          </TabsContent>
 
-          <TabsPanel value="data" className="pt-2">
+          <TabsContent value="data" className="pt-2">
             <DataTabPanel
               api={api}
               editionConfig={editionConfig}
@@ -306,10 +306,10 @@ export function SettingsPage({
               uploadDetailLevel={form.uploadDetailLevel}
               onUploadDetailLevelChange={setUploadDetailLevel}
             />
-          </TabsPanel>
+          </TabsContent>
 
           {showAiModels && (
-            <TabsPanel value="ai-models" className="pt-2">
+            <TabsContent value="ai-models" className="pt-2">
               <AiModelsSection
                 api={api}
                 form={form}
@@ -324,17 +324,17 @@ export function SettingsPage({
                 onPatternDetectionEnabledChange={setPatternDetectionEnabled}
                 onReset={() => void handleReset()}
               />
-            </TabsPanel>
+            </TabsContent>
           )}
 
-          <TabsPanel value="integrations" className="pt-2">
+          <TabsContent value="integrations" className="pt-2">
             <IntegrationsTabPanel api={api} />
-          </TabsPanel>
+          </TabsContent>
 
           {devMode && (
-            <TabsPanel value="developer" className="pt-2">
+            <TabsContent value="developer" className="pt-2">
               <DeveloperSection api={api} />
-            </TabsPanel>
+            </TabsContent>
           )}
         </Tabs>
       )}

@@ -119,7 +119,7 @@
     "radix-ui": "^1.4.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "shadcn": "^3.8.4",
+    "shadcn": "^4.13.1",
     "sharp": "^0.34.5",
     "sonner": "^2.0.7",
     "sqlite-vec": "^0.1.7-alpha.2",

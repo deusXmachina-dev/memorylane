@@ -13,7 +13,7 @@ import { Input } from '@components/ui/input'
 import { Textarea } from '@components/ui/textarea'
 import { Card, CardContent } from '@components/ui/card'
 import { Switch } from '@components/ui/switch'
-import { Tabs, TabsList, TabsTab, TabsPanel } from '@components/ui/tabs'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@components/ui/tabs'
 import type { MainWindowAPI } from '@types'
 import type { EvalFixtureLoad, EvalFixtureSummary } from '@/shared/eval-review'
 import { setDevMode } from '@/renderer/lib/dev-mode'
@@ -26,19 +26,19 @@ export function DeveloperSection({ api }: { api: MainWindowAPI }): React.JSX.Ele
     <div className="space-y-6">
       <Tabs defaultValue="recorder">
         <TabsList>
-          <TabsTab value="recorder">Recorder</TabsTab>
-          <TabsTab value="tasks">Tasks</TabsTab>
+          <TabsTrigger value="recorder">Recorder</TabsTrigger>
+          <TabsTrigger value="tasks">Tasks</TabsTrigger>
         </TabsList>
-        <TabsPanel value="recorder" className="pt-2">
+        <TabsContent value="recorder" className="pt-2">
           <RecorderSection api={api} />
-        </TabsPanel>
-        <TabsPanel value="tasks" className="pt-2">
+        </TabsContent>
+        <TabsContent value="tasks" className="pt-2">
           <div className="space-y-6">
             <TaskMinerModeSection api={api} />
             <TaskMaintenanceSection api={api} />
             <TaskGoldenSection api={api} />
           </div>
-        </TabsPanel>
+        </TabsContent>
       </Tabs>
 
       <div className="pt-2">
