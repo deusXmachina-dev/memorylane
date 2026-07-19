@@ -1,4 +1,5 @@
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+import { useMemo } from 'react'
+
 const WEEK_LABELS = ['3W ago', '2W ago', 'last week', 'this week']
 
 // Viewbox is stretched to full width (preserveAspectRatio="none"); the chart's
@@ -21,17 +22,19 @@ interface WeeklyTrendProps {
 function weeklyCounts(timestamps: number[], now: number): number[] {
   const d = new Date(now)
   const mondayOffset = (d.getDay() + 6) % 7 // 0 = Monday
-  const mondayThisWeek = new Date(
-    d.getFullYear(),
-    d.getMonth(),
-    d.getDate() - mondayOffset,
-  ).getTime()
-  const start = mondayThisWeek - 3 * WEEK_MS
+  // Boundaries via calendar dates (not ms arithmetic) so weeks stay anchored to
+  // local Monday midnight across DST transitions.
+  const mondays = [-3, -2, -1, 0, 1].map((w) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate() - mondayOffset + w * 7).getTime(),
+  )
   const counts = [0, 0, 0, 0]
   for (const t of timestamps) {
-    if (t < start) continue
-    const idx = Math.floor((t - start) / WEEK_MS)
-    if (idx >= 0 && idx < 4) counts[idx] += 1
+    for (let i = 0; i < 4; i++) {
+      if (t >= mondays[i] && t < mondays[i + 1]) {
+        counts[i] += 1
+        break
+      }
+    }
   }
   return counts
 }
@@ -59,7 +62,7 @@ function smoothPath(points: { x: number; y: number }[]): string {
  * the count floating above each point (following the curve) and faded week labels.
  */
 export function WeeklyTrend({ timestamps, className }: WeeklyTrendProps): React.JSX.Element {
-  const counts = weeklyCounts(timestamps, Date.now())
+  const counts = useMemo(() => weeklyCounts(timestamps, Date.now()), [timestamps])
   const max = Math.max(...counts, 1)
   const points = counts.map((v, i) => ({
     x: (i / (counts.length - 1)) * VB_W,

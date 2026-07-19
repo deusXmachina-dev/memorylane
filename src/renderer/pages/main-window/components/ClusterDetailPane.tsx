@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@components/ui/button'
 import { ScrollArea } from '@components/ui/scroll-area'
@@ -127,6 +127,7 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
 
   const sightings = detail?.sightings ?? []
   const visibleSightings = showAll ? sightings : sightings.slice(0, INITIAL_SIGHTINGS)
+  const trendTimestamps = useMemo(() => (detail?.sightings ?? []).map((s) => s.startedAt), [detail])
 
   const handleCopyPrompt = (): void => {
     navigator.clipboard
@@ -169,21 +170,22 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
           <div className="border-y py-4">
             <div className="grid grid-cols-3 gap-3">
               <Stat value={`${cluster.timesSeen}×`} label="Times done" />
-              <Stat value={formatMinutes(cluster.avgActiveMin)} label="avg. net time" />
+              <Stat value={formatMinutes(cluster.avgActiveMin)} label="Avg. net time" />
               <Stat
-                value={formatMonthlyHours(
-                  cluster.avgActiveMin * cluster.timesPerWeek * (30.44 / 7),
-                )}
+                value={formatMonthlyHours(cluster.avgActiveMin, cluster.timesPerWeek) || '—'}
                 label="Est. per month"
               />
             </div>
           </div>
 
-          {/* Last 4 weeks */}
-          <div>
-            <h3 className="text-sm font-semibold">Last 4 weeks</h3>
-            <WeeklyTrend className="mt-2" timestamps={sightings.map((s) => s.startedAt)} />
-          </div>
+          {/* Last 4 weeks — only once sightings are in, so the chart never shows
+              a false flat-zero while loading (or after a failed load). */}
+          {detail && (
+            <div>
+              <h3 className="text-sm font-semibold">Last 4 weeks</h3>
+              <WeeklyTrend className="mt-2" timestamps={trendTimestamps} />
+            </div>
+          )}
 
           {/* Sightings */}
           <div>

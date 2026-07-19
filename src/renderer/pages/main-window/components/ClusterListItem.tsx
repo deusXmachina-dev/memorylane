@@ -13,6 +13,7 @@ export function ClusterListItem({
   selected,
   onSelect,
 }: ClusterListItemProps): React.JSX.Element {
+  const monthly = formatMonthlyHours(cluster.avgActiveMin, cluster.timesPerWeek)
   return (
     <button
       type="button"
@@ -32,10 +33,12 @@ export function ClusterListItem({
         <span className="tabular-nums">{cluster.timesSeen}×</span>
         <span aria-hidden>·</span>
         <span className="tabular-nums">{formatMinutes(cluster.avgActiveMin)}</span>
-        <span aria-hidden>·</span>
-        <span className="tabular-nums">
-          {formatMonthlyHours(cluster.avgActiveMin * cluster.timesPerWeek * (30.44 / 7))}/mo
-        </span>
+        {monthly && (
+          <>
+            <span aria-hidden>·</span>
+            <span className="tabular-nums">{monthly}/mo</span>
+          </>
+        )}
       </div>
     </button>
   )
