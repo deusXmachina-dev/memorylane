@@ -436,7 +436,7 @@ describe('validateAndApply', () => {
     const cluster = storage.clusters.getById('c1')!
     expect(cluster.steps[0]).toBe('Open the thread in Gmail (mail.google.com)')
     // scrubPII backstop runs end-to-end through sanitizeRecipe.
-    expect(cluster.steps[1]).toBe('Email [redacted] the recap')
+    expect(cluster.steps[1]).toBe('Email [email address] the recap')
     expect(cluster.variables).toEqual(['customer name'])
   })
 
