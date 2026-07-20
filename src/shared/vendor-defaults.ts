@@ -15,7 +15,7 @@ export interface ModelPreset {
  */
 export const MODEL_DEFAULTS_VERSION = 2
 
-interface VendorPresets {
+export interface VendorPresets {
   /** Presets for each model slot. The first entry is the vendor's default. */
   semanticVideo: ModelPreset[]
   semanticSnapshot: ModelPreset[]

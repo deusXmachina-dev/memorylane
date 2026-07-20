@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Cpu, Sparkles } from 'lucide-react'
 import { Button } from '@components/ui/button'
@@ -18,7 +18,7 @@ import type {
   VendorStatus,
 } from '@types'
 import { VENDORS } from '@types'
-import { VENDOR_PRESETS, getVendorDefaults } from '@/shared/vendor-defaults'
+import { VENDOR_PRESETS, type VendorPresets } from '@/shared/vendor-defaults'
 import { ManageKeySection } from '../ManageKeySection'
 import { ModelSelector } from './ModelSelector'
 import { SegmentedControl } from './SegmentedControl'
@@ -72,7 +72,25 @@ export function AiModelsSection({
   const hasLlmAccess = activeStatus?.hasKey === true
   const selectorMode: 'preset' | 'freetext' =
     activeStatus?.source === 'managed' ? 'preset' : 'freetext'
-  const vendorDefaults = getVendorDefaults(activeVendor)
+  // Baked presets render immediately; the effective (remote-aware) lists
+  // replace them once fetched so managed-mode pickers can show remote models.
+  const [presetsByVendor, setPresetsByVendor] =
+    useState<Record<Vendor, VendorPresets>>(VENDOR_PRESETS)
+  useEffect(() => {
+    let cancelled = false
+    void api.getModelPresets().then((presets) => {
+      if (!cancelled && presets) setPresetsByVendor(presets)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [api])
+  const presets = presetsByVendor[activeVendor]
+  const vendorDefaults = {
+    semanticVideoModel: presets.semanticVideo[0]?.id ?? '',
+    semanticSnapshotModel: presets.semanticSnapshot[0]?.id ?? '',
+    patternDetectionModel: presets.patternDetection[0]?.id ?? '',
+  }
   const videoSupported = vendorDefaults.semanticVideoModel.length > 0
   const visibleVendors = isEnterprise ? VENDORS : VENDORS.filter((v) => v !== 'google')
 
@@ -184,7 +202,7 @@ export function AiModelsSection({
                 {form.semanticPipelineMode !== 'image' && (
                   <ModelSelector
                     mode={selectorMode}
-                    presets={VENDOR_PRESETS[activeVendor].semanticVideo}
+                    presets={presets.semanticVideo}
                     value={form.semanticVideoModel}
                     defaultValue={vendorDefaults.semanticVideoModel}
                     onChange={(v) => onModelChange('semanticVideoModel', v)}
@@ -194,7 +212,7 @@ export function AiModelsSection({
                 {form.semanticPipelineMode !== 'video' && (
                   <ModelSelector
                     mode={selectorMode}
-                    presets={VENDOR_PRESETS[activeVendor].semanticSnapshot}
+                    presets={presets.semanticSnapshot}
                     value={form.semanticSnapshotModel}
                     defaultValue={vendorDefaults.semanticSnapshotModel}
                     onChange={(v) => onModelChange('semanticSnapshotModel', v)}
@@ -203,7 +221,7 @@ export function AiModelsSection({
                 )}
                 <ModelSelector
                   mode={selectorMode}
-                  presets={VENDOR_PRESETS[activeVendor].patternDetection}
+                  presets={presets.patternDetection}
                   value={form.patternDetectionModel}
                   defaultValue={vendorDefaults.patternDetectionModel}
                   onChange={(v) => onModelChange('patternDetectionModel', v)}

@@ -1,4 +1,5 @@
 import type { AppEditionConfig } from './edition'
+import type { VendorPresets } from './vendor-defaults'
 import type {
   EvalFixtureLoad,
   EvalFixtureSummary,
@@ -244,6 +245,8 @@ export interface CaptureSettings {
   urlMatchSchemaVersion?: number
   appMatchSchemaVersion?: number
   modelDefaultsVersion?: number
+  /** Version of the last-applied remote model config; 0 = never applied. */
+  remoteModelConfigVersion?: number
   activeVendor: Vendor
   semanticVideoModel: string
   semanticSnapshotModel: string
@@ -484,6 +487,8 @@ export interface MainWindowAPI {
   listSeenDomains: () => Promise<SeenDomain[]>
   // Capture settings
   getCaptureSettings: () => Promise<CaptureSettings>
+  /** Preset lists per vendor with the remote model config layered in. */
+  getModelPresets: () => Promise<Record<Vendor, VendorPresets>>
   saveCaptureSettings: (settings: Partial<CaptureSettings>) => Promise<SaveResult>
   resetCaptureSettings: () => Promise<SaveResult>
   // Patterns (task clusters) — new TaskMiner view

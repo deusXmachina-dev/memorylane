@@ -167,4 +167,28 @@ describe('applyVendorSwitch', () => {
     applyVendorSwitch(deps, makeSettings({ activeVendor: 'openrouter' }))
     expect(semanticService.testConnection).toHaveBeenCalledTimes(1)
   })
+
+  it('builds chains from the remote config and diverges the user-context model', () => {
+    const { deps, semanticService, patternDetector, userContextBuilder } = makeDeps()
+    deps.getRemoteModelConfig = () => ({
+      version: 2,
+      models: {
+        semanticVideo: ['remote/video-model'],
+        userContext: ['remote/context-model'],
+      },
+    })
+    const next = makeSettings({
+      activeVendor: 'openrouter',
+      semanticVideoModel: 'remote/video-model',
+      patternDetectionModel: 'minimax/minimax-m3',
+      semanticPipelineMode: 'auto',
+    })
+
+    applyVendorSwitch(deps, next)
+
+    const [videoModels] = semanticService.updateModels.mock.calls[0] as [string[], string[]]
+    expect(videoModels).toEqual(['remote/video-model'])
+    expect(patternDetector.updateModel).toHaveBeenCalledWith('minimax/minimax-m3')
+    expect(userContextBuilder.updateModel).toHaveBeenCalledWith('remote/context-model')
+  })
 })

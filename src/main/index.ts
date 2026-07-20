@@ -38,6 +38,11 @@ import { LogUploadSync } from './services/log-upload-sync'
 import { readLogUploadState, writeLogUploadState } from './services/log-upload-store'
 import { RemoteBlacklistService } from './services/remote-blacklist-service'
 import { readRemoteBlacklist, writeRemoteBlacklist } from './services/remote-blacklist-store'
+import { RemoteModelConfigService } from './services/remote-model-config-service'
+import { readRemoteModelConfig, writeRemoteModelConfig } from './services/remote-model-config-store'
+import type { RemoteModelConfig } from '../shared/remote-model-config'
+import { resolveTextTaskModels } from './settings/effective-model-presets'
+import { applyRemoteModelConfig } from './ui/remote-model-apply'
 import { DeviceReportSync } from './services/device-report-sync'
 import { readDeviceReportState, writeDeviceReportState } from './services/device-report-store'
 import { createMainRuntime, type MainRuntime } from './runtime'
@@ -129,6 +134,7 @@ let rawDatabaseExportSync: RawDatabaseExportSync | null = null
 let databaseUploadSync: DatabaseUploadSync | null = null
 let logUploadSync: LogUploadSync | null = null
 let remoteBlacklist: RemoteBlacklistService | null = null
+let remoteModelConfig: RemoteModelConfigService | null = null
 let deviceReportSync: DeviceReportSync | null = null
 let observation: ObservationController | null = null
 
@@ -146,6 +152,7 @@ app.on('before-quit', (event) => {
 
   runtime?.accessProvider.stopPeriodicRefresh()
   remoteBlacklist?.stop()
+  remoteModelConfig?.stop()
   deviceReportSync?.stop()
   observation?.dispose()
 
@@ -217,6 +224,31 @@ app.on('ready', async () => {
   const { initMainWindowIPC, openMainWindow, sendStatusToRenderer, sendManagedExclusionsUpdate } =
     await import('./ui/main-window')
 
+  // Per-edition backend base URL, shared by device reporting and remote config.
+  const backendBaseUrl =
+    editionConfig.edition === 'enterprise'
+      ? ENTERPRISE_BACKEND_CONFIG.BACKEND_URL
+      : MANAGED_KEY_CONFIG.BACKEND_URL
+
+  // Remote model config (DEU-202): constructed before the runtime so chain
+  // building can already see the disk cache; onChange is late-bound below once
+  // the miners exist, and start() only runs after that binding.
+  let applyRemoteModel: ((config: RemoteModelConfig) => void) | null = null
+  const cachedModelConfig = readRemoteModelConfig()
+  remoteModelConfig = new RemoteModelConfigService({
+    getDeviceId: () => deviceIdentity.getDeviceId(),
+    isActivated:
+      editionConfig.edition === 'enterprise'
+        ? () => runtime?.accessProvider.getAccessState().isEnterpriseActivated ?? false
+        : () => true,
+    getBackendUrl: () => backendBaseUrl,
+    onChange: (config) => applyRemoteModel?.(config),
+    readStored: () => readRemoteModelConfig(),
+    writeStored: (config) => writeRemoteModelConfig(config),
+  })
+  const getRemoteModelConfig = (): RemoteModelConfig | null =>
+    remoteModelConfig?.getConfig() ?? cachedModelConfig
+
   runtime = await createMainRuntime({
     edition: editionConfig.edition,
     onCaptureStateChanged: () => {
@@ -232,6 +264,7 @@ app.on('ready', async () => {
     deviceIdentity,
     vendorCredentials: vendorCredentialsManager,
     getActiveVendor: () => captureSettingsManager.get().activeVendor,
+    getRemoteModelConfig,
     initialVideoModel: initialCaptureSettings.semanticVideoModel,
     initialSnapshotModel: initialCaptureSettings.semanticSnapshotModel,
   })
@@ -247,18 +280,14 @@ app.on('ready', async () => {
   rawDatabaseExportSync.start()
 
   // Report the running app version in both editions so the fleet's version
-  // distribution is visible server-side. Picks the per-edition backend base URL.
-  const reportBackendUrl =
-    editionConfig.edition === 'enterprise'
-      ? ENTERPRISE_BACKEND_CONFIG.BACKEND_URL
-      : MANAGED_KEY_CONFIG.BACKEND_URL
+  // distribution is visible server-side.
   deviceReportSync = new DeviceReportSync({
     getDeviceId: () => deviceIdentity.getDeviceId(),
     isActivated:
       editionConfig.edition === 'enterprise'
         ? () => runtime?.accessProvider.getAccessState().isEnterpriseActivated ?? false
         : () => true,
-    getBackendUrl: () => reportBackendUrl,
+    getBackendUrl: () => backendBaseUrl,
     getVersion: () => app.getVersion(),
     edition: editionConfig.edition,
     readStored: () => readDeviceReportState(),
@@ -306,24 +335,48 @@ app.on('ready', async () => {
     remoteBlacklist.start()
   }
 
+  const settings = captureSettingsManager.get()
+  const initialTextModels = resolveTextTaskModels(
+    settings.patternDetectionModel,
+    settings.activeVendor,
+    getRemoteModelConfig(),
+  )
   userContextBuilder = new UserContextBuilder(runtime.storage, runtime.inferenceProvider)
-  userContextBuilder.updateModel(captureSettingsManager.get().patternDetectionModel)
+  userContextBuilder.updateModel(initialTextModels.userContext)
   // The scheduled analyzer. The newTaskMinerEnabled developer toggle (default
   // off) picks the new TaskMiner (mining + clustering) over the legacy
   // PatternDetector. Read once here — flipping the toggle takes effect on the
   // next launch. Both use the patternDetection* capture settings for enable
   // state and model.
-  const settings = captureSettingsManager.get()
   if (settings.newTaskMinerEnabled) {
     taskMiner = new TaskMiner(runtime.storage, runtime.inferenceProvider, runtime.mlWorker)
     taskMiner.setEnabled(settings.patternDetectionEnabled)
-    taskMiner.updateModel(settings.patternDetectionModel)
+    taskMiner.updateModel(initialTextModels.taskMining)
+    taskMiner.updateClusterModel(getRemoteModelConfig()?.models.clusterReview?.[0] ?? null)
   } else {
     patternDetector = new PatternDetector(runtime.storage, runtime.inferenceProvider)
     patternDetector.setEnabled(settings.patternDetectionEnabled)
-    patternDetector.updateModel(settings.patternDetectionModel)
+    patternDetector.updateModel(initialTextModels.taskMining)
   }
   const scheduledMiner = taskMiner ?? patternDetector
+
+  // Miners exist now — bind the apply step and start syncing. The cached-load
+  // notification re-applies idempotently; the first network sync follows.
+  applyRemoteModel = (config) => {
+    if (!runtime) return
+    applyRemoteModelConfig(
+      {
+        semanticService: runtime.semanticService,
+        patternDetector: scheduledMiner ?? undefined,
+        userContextBuilder: userContextBuilder ?? undefined,
+        taskMiner: taskMiner ?? undefined,
+      },
+      captureSettingsManager,
+      config,
+    )
+  }
+  remoteModelConfig.start()
+
   const captureCoordinator = createCaptureCoordinator({
     capture: runtime.capture,
     captureStateManager,
@@ -428,6 +481,7 @@ app.on('ready', async () => {
     captureSettingsManager,
     patternDetector: scheduledMiner ?? undefined,
     userContextBuilder: userContextBuilder ?? undefined,
+    getRemoteModelConfig,
     getCaptureHotkeyLabel: hotkeyManager.getLabel,
     reconfigureCaptureHotkey,
     updateExclusions: (exclusions) => runtime?.updateExclusions(exclusions),

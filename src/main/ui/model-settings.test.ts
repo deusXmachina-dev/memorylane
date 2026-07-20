@@ -113,4 +113,30 @@ describe('applyModelSettings', () => {
 
     expect(semanticService.updateModels).not.toHaveBeenCalled()
   })
+
+  it('uses remote chains for the tail and diverges the user-context model', () => {
+    const { deps, semanticService, patternDetector, userContextBuilder } = makeDeps()
+    deps.getRemoteModelConfig = () => ({
+      version: 2,
+      models: {
+        semanticVideo: ['remote/video-a', 'remote/video-b'],
+        userContext: ['remote/context-model'],
+      },
+    })
+    const previous = makeSettings({
+      semanticVideoModel: 'remote/video-a',
+      patternDetectionModel: 'old/model',
+    })
+    const updated = makeSettings({
+      semanticVideoModel: 'remote/video-b',
+      patternDetectionModel: 'new/model',
+    })
+
+    applyModelSettings(deps, updated, previous)
+
+    const [videoModels] = semanticService.updateModels.mock.calls[0] as [string[], string[]]
+    expect(videoModels).toEqual(['remote/video-b', 'remote/video-a'])
+    expect(patternDetector.updateModel).toHaveBeenCalledWith('new/model')
+    expect(userContextBuilder.updateModel).toHaveBeenCalledWith('remote/context-model')
+  })
 })

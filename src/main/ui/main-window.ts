@@ -28,7 +28,8 @@ import { listInstalledApps } from '../apps/installed-apps'
 import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
 import { VENDORS } from '../../shared/types'
 import { computeClustersView } from './cluster-view'
-import { VENDOR_PRESETS, getVendorDefaults } from '../../shared/vendor-defaults'
+import { getEffectivePresets } from '@main/settings/effective-model-presets'
+import type { RemoteModelConfig } from '../../shared/remote-model-config'
 import { applyVendorSwitch } from './vendor-switch'
 import { applyModelSettings } from './model-settings'
 import type { EvalRecorder } from '../eval/eval-recorder'
@@ -111,6 +112,8 @@ interface MainWindowDependencies {
   captureSettingsManager: CaptureSettingsManager
   patternDetector?: PatternDetectorService
   userContextBuilder?: UserContextBuilderService
+  /** Latest remote model config (cached or synced); null when none is known. */
+  getRemoteModelConfig?: () => RemoteModelConfig | null
   getCaptureHotkeyLabel: () => string
   reconfigureCaptureHotkey: (accelerator: string) => { success: boolean; error?: string }
   updateExclusions: (exclusions: {
@@ -163,10 +166,17 @@ app.on('before-quit', () => {
 function reconcileManagedModelSelections(
   captureSettings: CaptureSettingsManager,
   vendor: Vendor,
+  remote: RemoteModelConfig | null,
 ): boolean {
-  const presets = VENDOR_PRESETS[vendor]
+  // Validate against the effective (remote-aware) presets — the baked lists
+  // would flag remote-applied models as stale and reset them.
+  const presets = getEffectivePresets(vendor, remote)
   const settings = captureSettings.get()
-  const defaults = getVendorDefaults(vendor)
+  const defaults = {
+    semanticVideoModel: presets.semanticVideo[0]?.id ?? '',
+    semanticSnapshotModel: presets.semanticSnapshot[0]?.id ?? '',
+    patternDetectionModel: presets.patternDetection[0]?.id ?? '',
+  }
   const updates: Partial<{
     semanticVideoModel: string
     semanticSnapshotModel: string
@@ -707,7 +717,11 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       // prior BYOK session with a freetext model id) is unreachable and stale.
       // Reset such slots to the vendor's preset default; valid preset picks
       // are preserved.
-      const reconciled = reconcileManagedModelSelections(deps.captureSettingsManager, vendor)
+      const reconciled = reconcileManagedModelSelections(
+        deps.captureSettingsManager,
+        vendor,
+        deps.getRemoteModelConfig?.() ?? null,
+      )
       if (switching || reconciled) {
         applyVendorSwitch(deps, deps.captureSettingsManager.get())
       } else if (changed) {
@@ -1068,6 +1082,15 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   ipcMain.handle('main-window:getCaptureSettings', () => {
     if (!deps) return null
     return deps.captureSettingsManager.get()
+  })
+
+  // Preset lists with the remote model config layered in, so the managed-mode
+  // grid can display remotely-swapped models the baked presets don't know.
+  ipcMain.handle('main-window:getModelPresets', () => {
+    const remote = deps?.getRemoteModelConfig?.() ?? null
+    return Object.fromEntries(
+      VENDORS.map((vendor) => [vendor, getEffectivePresets(vendor, remote)]),
+    )
   })
 
   ipcMain.handle(

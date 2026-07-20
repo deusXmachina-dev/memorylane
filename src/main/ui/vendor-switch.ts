@@ -1,5 +1,7 @@
+import type { RemoteModelConfig } from '../../shared/remote-model-config'
 import type { CaptureSettings, SemanticPipelineMode } from '../../shared/types'
-import { VENDOR_PRESETS, buildModelChain } from '../../shared/vendor-defaults'
+import { buildModelChain } from '../../shared/vendor-defaults'
+import { getEffectivePresets, resolveTextTaskModels } from '@main/settings/effective-model-presets'
 
 /**
  * Structural shape of the dependencies that `applyVendorSwitch` touches.
@@ -15,6 +17,7 @@ export interface VendorSwitchDeps {
   patternDetector?: { updateModel(model: string): void }
   userContextBuilder?: { updateModel(model: string): void }
   inferenceProvider: { notifyConfigChanged(): void }
+  getRemoteModelConfig?: () => RemoteModelConfig | null
 }
 
 /**
@@ -27,14 +30,16 @@ export interface VendorSwitchDeps {
  * with.
  */
 export function applyVendorSwitch(d: VendorSwitchDeps, next: CaptureSettings): void {
-  const presets = VENDOR_PRESETS[next.activeVendor]
+  const remote = d.getRemoteModelConfig?.() ?? null
+  const presets = getEffectivePresets(next.activeVendor, remote)
   d.semanticService.updateModels(
     buildModelChain(next.semanticVideoModel, presets.semanticVideo),
     buildModelChain(next.semanticSnapshotModel, presets.semanticSnapshot),
   )
   d.semanticService.updatePipelinePreference(next.semanticPipelineMode)
-  d.patternDetector?.updateModel(next.patternDetectionModel)
-  d.userContextBuilder?.updateModel(next.patternDetectionModel)
+  const text = resolveTextTaskModels(next.patternDetectionModel, next.activeVendor, remote)
+  d.patternDetector?.updateModel(text.taskMining)
+  d.userContextBuilder?.updateModel(text.userContext)
   d.inferenceProvider.notifyConfigChanged()
   void d.semanticService.testConnection()
 }

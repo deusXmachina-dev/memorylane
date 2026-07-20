@@ -24,7 +24,9 @@ import type { SemanticPipelinePreference } from '@main/semantic/activity-semanti
 import { InteractionEventDebugDumper } from '@main/debug/interaction-event-debug-dump'
 import { InferenceProviderImpl, type InferenceProvider } from './llm'
 import type { Vendor } from '../shared/types'
-import { VENDOR_PRESETS, buildModelChain } from '../shared/vendor-defaults'
+import type { RemoteModelConfig } from '../shared/remote-model-config'
+import { buildModelChain } from '../shared/vendor-defaults'
+import { getEffectivePresets } from '@main/settings/effective-model-presets'
 import { createCaptureBlacklistCoordinator } from '@main/capture/capture-blacklist-coordinator'
 import {
   createCaptureController,
@@ -74,6 +76,7 @@ export async function createMainRuntime(params: {
   edition: AppEdition
   vendorCredentials: VendorCredentialsManager
   getActiveVendor: () => Vendor
+  getRemoteModelConfig?: () => RemoteModelConfig | null
   initialVideoModel?: string
   initialSnapshotModel?: string
 }): Promise<MainRuntime> {
@@ -121,7 +124,10 @@ export async function createMainRuntime(params: {
     )
   }
 
-  const presets = VENDOR_PRESETS[params.getActiveVendor()]
+  const presets = getEffectivePresets(
+    params.getActiveVendor(),
+    params.getRemoteModelConfig?.() ?? null,
+  )
   const initialVideoModels = buildModelChain(params.initialVideoModel ?? '', presets.semanticVideo)
   const initialSnapshotModels = buildModelChain(
     params.initialSnapshotModel ?? '',

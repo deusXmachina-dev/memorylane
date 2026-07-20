@@ -65,6 +65,7 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   listSeenDomains: () => ipcRenderer.invoke('main-window:listSeenDomains'),
   // Capture settings
   getCaptureSettings: () => ipcRenderer.invoke('main-window:getCaptureSettings'),
+  getModelPresets: () => ipcRenderer.invoke('main-window:getModelPresets'),
   saveCaptureSettings: (settings: Record<string, unknown>) =>
     ipcRenderer.invoke('main-window:saveCaptureSettings', settings),
   resetCaptureSettings: () => ipcRenderer.invoke('main-window:resetCaptureSettings'),
