@@ -1,0 +1,29 @@
+name: Dependabot auto-merge
+
+# Enable GitHub auto-merge on Dependabot PRs. Patch and minor bumps only;
+# majors wait for manual review. No PR CI exists yet, so a qualifying PR
+# merges once mergeable; if required checks are added later, auto-merge
+# will wait for them automatically.
+
+permissions:
+  contents: write
+  pull-requests: write
+
+on:
+  pull_request:
+
+jobs:
+  automerge:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Fetch metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # v2.5.0
+
+      - name: Enable auto-merge for patch and minor updates
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
