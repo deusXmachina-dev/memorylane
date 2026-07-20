@@ -1,13 +1,13 @@
-# MemoryLane v1.5.0-alpha.1
+# MemoryLane v1.5.0-alpha.2
 
-Alpha prerelease. Task-mining reliability and integration improvements, plus stability fixes.
+Alpha prerelease. Patterns-first UI with honest metrics, sanitized AI agent recipes, and a refreshed design.
 
 ## What's Changed
 
-- **MCP tools use clusters**: the pattern tools (`list_patterns`, `get_pattern_details`) now serve task-mining clusters instead of legacy pattern data (#226).
-- **Per-day mining ledger**: mining runs day by day with a unified sweep (bootstrap, daily, and gap-fill), transactional day commits, and a progress banner in the UI (#221).
-- **Clearer activation errors**: network failures during activation now show actionable messages (#222).
-- **Stability**: daemon write errors no longer crash the app (#220); frame/video deletion retries on transient Windows file locks (#219).
+- **Patterns-first UI**: Patterns is now the default landing screen. Cards and details show hands-on time plus an estimated monthly figure, and a new chart tracks the last 4 weeks of sightings (#227).
+- **Build AI agent recipe**: patterns now carry a generalized, de-identified step-by-step recipe generated at mining time; the "Build AI agent" button copies it, sanitized (#228).
+- **Refreshed design**: new theme across the app (#229).
+- **Accurate mining progress**: the progress banner reports the current sweep instead of lifetime totals (#229).
 
 ## Known Issues & Limitations
 
@@ -25,4 +25,4 @@ Alpha prerelease. Task-mining reliability and integration improvements, plus sta
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.4.0...v1.5.0-alpha.1
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.0-alpha.1...v1.5.0-alpha.2
