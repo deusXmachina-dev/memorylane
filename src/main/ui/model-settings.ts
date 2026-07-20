@@ -1,22 +1,20 @@
+import type { RemoteModelConfig } from '../../shared/remote-model-config'
 import type { CaptureSettings } from '../../shared/types'
-import { VENDOR_PRESETS, buildModelChain } from '../../shared/vendor-defaults'
+import { pushModelSelections, type ModelPushDeps } from './apply-models'
 
 /**
  * Structural shape of the dependencies that `applyModelSettings` touches.
  * Defined separately so the helper is unit-testable without a full
  * `MainWindowDependencies` mock.
  */
-export interface ModelSettingsDeps {
-  semanticService: {
-    updateModels(videoModels: string[], snapshotModels: string[]): void
-  }
+export interface ModelSettingsDeps extends ModelPushDeps {
   patternDetector?: { updateModel(model: string): void; setEnabled(enabled: boolean): void }
-  userContextBuilder?: { updateModel(model: string): void }
+  getRemoteModelConfig?: () => RemoteModelConfig | null
 }
 
 /**
- * Diff `updated` vs `previous` capture settings and push only the changed
- * model-related fields into the live runtime services.
+ * Diff `updated` vs `previous` capture settings and push model-related changes
+ * into the live runtime services.
  */
 export function applyModelSettings(
   d: ModelSettingsDeps,
@@ -24,19 +22,12 @@ export function applyModelSettings(
   previous: CaptureSettings,
 ): void {
   if (
+    updated.activeVendor !== previous.activeVendor ||
     updated.semanticVideoModel !== previous.semanticVideoModel ||
     updated.semanticSnapshotModel !== previous.semanticSnapshotModel ||
-    updated.activeVendor !== previous.activeVendor
+    updated.patternDetectionModel !== previous.patternDetectionModel
   ) {
-    const presets = VENDOR_PRESETS[updated.activeVendor]
-    d.semanticService.updateModels(
-      buildModelChain(updated.semanticVideoModel, presets.semanticVideo),
-      buildModelChain(updated.semanticSnapshotModel, presets.semanticSnapshot),
-    )
-  }
-  if (updated.patternDetectionModel !== previous.patternDetectionModel) {
-    d.patternDetector?.updateModel(updated.patternDetectionModel)
-    d.userContextBuilder?.updateModel(updated.patternDetectionModel)
+    pushModelSelections(d, updated, d.getRemoteModelConfig?.() ?? null)
   }
   if (updated.patternDetectionEnabled !== previous.patternDetectionEnabled) {
     d.patternDetector?.setEnabled(updated.patternDetectionEnabled)

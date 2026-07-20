@@ -1,7 +1,7 @@
-import log from '@main/utils/logger'
 import { backendPlatformToken } from '@main/utils/platform'
 import type { ManagedExclusions } from '../../shared/types'
 import { ENTERPRISE_BACKEND_CONFIG } from '../../shared/constants'
+import { RemoteSyncService, type RemoteSyncServiceParams } from './remote-sync-service'
 import { coerceManagedExclusions } from './remote-blacklist-store'
 
 const EMPTY: ManagedExclusions = { apps: [], urlPatterns: [] }
@@ -11,133 +11,36 @@ const EMPTY: ManagedExclusions = { apps: [], urlPatterns: [] }
 // the policy rarely, so there's no need to poll more often.
 const DEFAULT_SYNC_INTERVAL_MS = ENTERPRISE_BACKEND_CONFIG.STATUS_REFRESH_INTERVAL_MS
 
-function serialize(blacklist: ManagedExclusions): string {
-  return JSON.stringify([blacklist.apps, blacklist.urlPatterns])
-}
-
-export interface RemoteBlacklistServiceParams {
-  getDeviceId: () => string
-  isActivated: () => boolean
-  getBackendUrl: () => string
-  /** Fired when the blacklist changes (including the first fetch); the
-   * coordinator unions it with the user's list. */
-  onChange: (blacklist: ManagedExclusions) => void
-  /** Last-known blacklist cached on disk, or null. Loaded on start() so a
-   * restart enforces before the first network sync. */
-  readStored?: () => ManagedExclusions | null
-  /** Persists the latest blacklist so it survives restarts and backend outages. */
-  writeStored?: (blacklist: ManagedExclusions) => void
-  intervalMs?: number
-}
-
 /**
- * Polls the tenant's centralized blacklist on a timer and caches it to a
- * dedicated file (never the user's settings). The coordinator unions it with the
+ * Polls the tenant's centralized blacklist. The coordinator unions it with the
  * user's exclusions, so managed entries are always enforced and not removable.
- *
- * The cache is durable: loaded on start() and replaced only by a clean HTTP 200.
- * Any failure (4xx/5xx, network, even 401) is logged and keeps the cache, so a
- * backend blip never drops the blacklist. Only a 200 with an empty list clears it.
+ * A backend blip never drops the blacklist — only a clean 200 with an empty
+ * list clears it.
  */
-export class RemoteBlacklistService {
-  private readonly getDeviceId: () => string
-  private readonly isActivated: () => boolean
-  private readonly getBackendUrl: () => string
-  private readonly onChange: (blacklist: ManagedExclusions) => void
-  private readonly readStored?: () => ManagedExclusions | null
-  private readonly writeStored?: (blacklist: ManagedExclusions) => void
-  private readonly intervalMs: number
-
-  private blacklist: ManagedExclusions = EMPTY
-  private serialized = serialize(EMPTY)
-  private timer: ReturnType<typeof setInterval> | null = null
-  private syncing = false
-
-  constructor(params: RemoteBlacklistServiceParams) {
-    this.getDeviceId = params.getDeviceId
-    this.isActivated = params.isActivated
-    this.getBackendUrl = params.getBackendUrl
-    this.onChange = params.onChange
-    this.readStored = params.readStored
-    this.writeStored = params.writeStored
-    this.intervalMs = params.intervalMs ?? DEFAULT_SYNC_INTERVAL_MS
+export class RemoteBlacklistService extends RemoteSyncService<ManagedExclusions> {
+  constructor(params: RemoteSyncServiceParams<ManagedExclusions>) {
+    super('RemoteBlacklist', params, DEFAULT_SYNC_INTERVAL_MS)
   }
 
   getBlacklist(): ManagedExclusions {
-    return this.blacklist
+    return this.getValue() ?? EMPTY
   }
 
-  start(): void {
-    if (this.timer !== null) return
-    this.loadCached()
-    this.timer = setInterval(() => void this.sync(), this.intervalMs)
-    this.timer.unref?.()
-    void this.sync()
+  protected describe(blacklist: ManagedExclusions): string {
+    return `blacklist: ${blacklist.apps.length} apps, ${blacklist.urlPatterns.length} url patterns`
   }
 
-  /** Enforces the on-disk blacklist ahead of the first sync, so a restart has no
-   * blacklist-free window. Missing/empty cache is a no-op. */
-  private loadCached(): void {
-    const cached = this.readStored?.()
-    if (!cached) return
-    const serialized = serialize(cached)
-    if (serialized === this.serialized) return
-    this.blacklist = cached
-    this.serialized = serialized
-    log.info(
-      `[RemoteBlacklist] Loaded cached blacklist: ${cached.apps.length} apps, ` +
-        `${cached.urlPatterns.length} url patterns`,
-    )
-    this.onChange(cached)
+  protected serialize(blacklist: ManagedExclusions): string {
+    return JSON.stringify([blacklist.apps, blacklist.urlPatterns])
   }
 
-  stop(): void {
-    if (this.timer !== null) {
-      clearInterval(this.timer)
-      this.timer = null
-    }
-  }
-
-  /** One sync pass. Skips while a prior pass is in flight or the device isn't
-   * activated; updates the held blacklist and notifies only on a real change. */
-  async sync(): Promise<void> {
-    if (this.syncing || !this.isActivated()) return
-    this.syncing = true
-    try {
-      const next = await this.fetchBlacklist()
-      const serialized = serialize(next)
-      if (serialized === this.serialized) return
-      this.blacklist = next
-      this.serialized = serialized
-      this.writeStored?.(next)
-      log.info(
-        `[RemoteBlacklist] Synced centralized blacklist: ${next.apps.length} apps, ` +
-          `${next.urlPatterns.length} url patterns`,
-      )
-      this.onChange(next)
-    } catch (error) {
-      log.warn('[RemoteBlacklist] Sync failed:', error)
-    } finally {
-      this.syncing = false
-    }
-  }
-
-  private async fetchBlacklist(): Promise<ManagedExclusions> {
-    const base = this.getBackendUrl().replace(/\/?$/, '/')
-    const url = new URL('api/license/blacklist', base)
+  protected async fetchRemote(base: string): Promise<ManagedExclusions> {
+    const url = this.endpoint(base, 'api/license/blacklist')
     // Narrow app tokens to this platform's identifiers (macOS bundle ids vs.
     // Windows process names); the device can't match the other's.
     const platform = backendPlatformToken()
     if (platform) url.searchParams.set('platform', platform)
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${this.getDeviceId()}` },
-    })
-    // Any non-200 (including 401) is a failure: the sync loop swallows the throw
-    // and keeps the last-known blacklist. Only a clean 200 replaces it.
-    if (!response.ok) {
-      throw new Error(`Remote blacklist request failed (${response.status})`)
-    }
-    const data = (await response.json()) as {
+    const data = (await this.fetchJson(url)) as {
       excludedApps?: unknown
       excludedUrlPatterns?: unknown
     }

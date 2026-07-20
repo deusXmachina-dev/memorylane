@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { applyVendorSwitch, type VendorSwitchDeps } from './vendor-switch'
 import type { CaptureSettings, Vendor } from '../../shared/types'
 import { VENDOR_PRESETS } from '../../shared/vendor-defaults'
+import { makeCaptureSettings } from '@main/utils/test-utils'
 
 function makeDeps(): {
   deps: VendorSwitchDeps
@@ -12,6 +13,7 @@ function makeDeps(): {
   }
   patternDetector: { updateModel: ReturnType<typeof vi.fn> }
   userContextBuilder: { updateModel: ReturnType<typeof vi.fn> }
+  taskMiner: { updateClusterModel: ReturnType<typeof vi.fn> }
   inferenceProvider: { notifyConfigChanged: ReturnType<typeof vi.fn> }
 } {
   const semanticService = {
@@ -21,43 +23,33 @@ function makeDeps(): {
   }
   const patternDetector = { updateModel: vi.fn() }
   const userContextBuilder = { updateModel: vi.fn() }
+  const taskMiner = { updateClusterModel: vi.fn() }
   const inferenceProvider = { notifyConfigChanged: vi.fn() }
   const deps: VendorSwitchDeps = {
     semanticService,
     patternDetector,
     userContextBuilder,
+    taskMiner,
     inferenceProvider,
   }
-  return { deps, semanticService, patternDetector, userContextBuilder, inferenceProvider }
+  return {
+    deps,
+    semanticService,
+    patternDetector,
+    userContextBuilder,
+    taskMiner,
+    inferenceProvider,
+  }
 }
 
 function makeSettings(overrides: Partial<CaptureSettings> = {}): CaptureSettings {
-  return {
-    autoStartEnabled: true,
-    visualThreshold: 8,
-    typingDebounceMs: 2000,
-    scrollDebounceMs: 2000,
-    clickDebounceMs: 3000,
-    minActivityDurationMs: 3000,
-    maxActivityDurationMs: 300000,
-    maxScreenshotsForLlm: 6,
-    semanticRequestTimeoutMs: 120000,
+  return makeCaptureSettings({
     semanticPipelineMode: 'image',
-    captureHotkeyAccelerator: 'CommandOrControl+Shift+M',
-    databaseExportDirectory: '',
-    excludePrivateBrowsing: true,
-    excludedApps: [],
-    excludedUrlPatterns: [],
-    activeVendor: 'openrouter',
-    modelsByVendor: {},
-    newTaskMinerEnabled: true,
     semanticVideoModel: '',
     semanticSnapshotModel: '',
     patternDetectionModel: '',
-    patternDetectionEnabled: true,
-    uploadDetailLevel: 'off',
     ...overrides,
-  }
+  })
 }
 
 describe('applyVendorSwitch', () => {
@@ -166,5 +158,43 @@ describe('applyVendorSwitch', () => {
     const { deps, semanticService } = makeDeps()
     applyVendorSwitch(deps, makeSettings({ activeVendor: 'openrouter' }))
     expect(semanticService.testConnection).toHaveBeenCalledTimes(1)
+  })
+
+  it('builds chains from the remote config and diverges the user-context model', () => {
+    const { deps, semanticService, patternDetector, userContextBuilder } = makeDeps()
+    deps.getRemoteModelConfig = () => ({
+      version: 2,
+      models: {
+        semanticVideo: ['remote/video-model'],
+        userContext: ['remote/context-model'],
+      },
+    })
+    const next = makeSettings({
+      activeVendor: 'openrouter',
+      semanticVideoModel: 'remote/video-model',
+      patternDetectionModel: 'minimax/minimax-m3',
+      semanticPipelineMode: 'auto',
+    })
+
+    applyVendorSwitch(deps, next)
+
+    const [videoModels] = semanticService.updateModels.mock.calls[0] as [string[], string[]]
+    expect(videoModels).toEqual(['remote/video-model'])
+    expect(patternDetector.updateModel).toHaveBeenCalledWith('minimax/minimax-m3')
+    expect(userContextBuilder.updateModel).toHaveBeenCalledWith('remote/context-model')
+  })
+
+  it('sets the cluster override on openrouter and clears it on other vendors', () => {
+    const { deps, taskMiner } = makeDeps()
+    deps.getRemoteModelConfig = () => ({
+      version: 2,
+      models: { clusterReview: ['remote/cluster-model'] },
+    })
+
+    applyVendorSwitch(deps, makeSettings({ activeVendor: 'openrouter' }))
+    expect(taskMiner.updateClusterModel).toHaveBeenLastCalledWith('remote/cluster-model')
+
+    applyVendorSwitch(deps, makeSettings({ activeVendor: 'openai-compatible' }))
+    expect(taskMiner.updateClusterModel).toHaveBeenLastCalledWith(null)
   })
 })

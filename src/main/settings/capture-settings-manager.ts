@@ -315,6 +315,8 @@ export class CaptureSettingsManager {
         let finalSnapshotModel = semanticSnapshotModel
         let finalPatternModel = patternDetectionModel
         let finalModelsByVendor = modelsByVendor
+        let remoteModelConfigVersion =
+          typeof data.remoteModelConfigVersion === 'number' ? data.remoteModelConfigVersion : 0
         if ((data.modelDefaultsVersion ?? 0) < MODEL_DEFAULTS_VERSION) {
           finalModelsByVendor = { ...modelsByVendor }
           for (const vendor of VENDORS) {
@@ -327,6 +329,9 @@ export class CaptureSettingsManager {
             finalSnapshotModel = active.semanticSnapshotModel
             finalPatternModel = active.patternDetectionModel
           }
+          // A baked-defaults wipe also clears the remote stamp so the next sync
+          // re-applies the remote config on top of the fresh defaults.
+          remoteModelConfigVersion = 0
           this.modelDefaultsUpgraded = true
           log.info(
             `[CaptureSettings] Model defaults v${data.modelDefaultsVersion ?? 0} → v${MODEL_DEFAULTS_VERSION}: overriding stored model picks with vendor defaults`,
@@ -361,6 +366,7 @@ export class CaptureSettingsManager {
           ),
           databaseExportDirectory: normalizeDatabaseExportDirectory(data.databaseExportDirectory),
           modelDefaultsVersion: MODEL_DEFAULTS_VERSION,
+          remoteModelConfigVersion,
           activeVendor,
           semanticVideoModel: finalVideoModel,
           semanticSnapshotModel: finalSnapshotModel,

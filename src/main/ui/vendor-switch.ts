@@ -1,20 +1,19 @@
+import type { RemoteModelConfig } from '../../shared/remote-model-config'
 import type { CaptureSettings, SemanticPipelineMode } from '../../shared/types'
-import { VENDOR_PRESETS, buildModelChain } from '../../shared/vendor-defaults'
+import { pushModelSelections, type ModelPushDeps } from './apply-models'
 
 /**
  * Structural shape of the dependencies that `applyVendorSwitch` touches.
  * Defined separately so the helper is unit-testable without a full
  * `MainWindowDependencies` mock.
  */
-export interface VendorSwitchDeps {
-  semanticService: {
-    updateModels(videoModels: string[], snapshotModels: string[]): void
+export interface VendorSwitchDeps extends ModelPushDeps {
+  semanticService: ModelPushDeps['semanticService'] & {
     updatePipelinePreference(mode: SemanticPipelineMode): void
     testConnection(): Promise<void>
   }
-  patternDetector?: { updateModel(model: string): void }
-  userContextBuilder?: { updateModel(model: string): void }
   inferenceProvider: { notifyConfigChanged(): void }
+  getRemoteModelConfig?: () => RemoteModelConfig | null
 }
 
 /**
@@ -27,14 +26,8 @@ export interface VendorSwitchDeps {
  * with.
  */
 export function applyVendorSwitch(d: VendorSwitchDeps, next: CaptureSettings): void {
-  const presets = VENDOR_PRESETS[next.activeVendor]
-  d.semanticService.updateModels(
-    buildModelChain(next.semanticVideoModel, presets.semanticVideo),
-    buildModelChain(next.semanticSnapshotModel, presets.semanticSnapshot),
-  )
+  pushModelSelections(d, next, d.getRemoteModelConfig?.() ?? null)
   d.semanticService.updatePipelinePreference(next.semanticPipelineMode)
-  d.patternDetector?.updateModel(next.patternDetectionModel)
-  d.userContextBuilder?.updateModel(next.patternDetectionModel)
   d.inferenceProvider.notifyConfigChanged()
   void d.semanticService.testConnection()
 }

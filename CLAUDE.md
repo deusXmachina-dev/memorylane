@@ -108,6 +108,7 @@ The `enode.sh` wrapper sets `ELECTRON_RUN_AS_NODE=1` and executes the command th
 ## UI Guidelines
 
 - Prefer React UI components (modals, toasts, inline messages) over browser-native dialogs (`alert()`, `confirm()`, `prompt()`).
+- Styling comes from the shadcn design preset <https://ui.shadcn.com/create?preset=bJMTbSgy>. Never edit the preset tokens in `src/renderer/index.css` (`:root`/`.dark`); adjust looks via component `className`s.
 
 ## Findings
 

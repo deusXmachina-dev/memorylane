@@ -50,6 +50,8 @@ export class TaskMiner {
   private sweepBaseline: { completed: number; failed: number } | null = null
   private settleTimer: ReturnType<typeof setTimeout> | null = null
   private model: string = DEFAULT_MINER_CONFIG.model
+  /** Remote override for the clustering (label/merge/split) passes; null = follow `model`. */
+  private clusterModel: string | null = null
   private enabled = true
   private statusListener?: () => void
 
@@ -71,6 +73,11 @@ export class TaskMiner {
   updateModel(model: string): void {
     this.model = model && model.trim().length > 0 ? model.trim() : DEFAULT_MINER_CONFIG.model
     log.info(`[TaskMiner] Model updated to: ${this.model}`)
+  }
+
+  updateClusterModel(model: string | null): void {
+    this.clusterModel = model && model.trim().length > 0 ? model.trim() : null
+    log.info(`[TaskMiner] Cluster model updated to: ${this.clusterModel ?? '(follow miner model)'}`)
   }
 
   /** True while a run is executing or its settle timer is armed. */
@@ -318,7 +325,7 @@ export class TaskMiner {
         embedder: this.embedder,
         clusterVectors: this.embedder.clusterVectors?.bind(this.embedder),
         provider: this.enabled && this.provider?.isConfigured() ? this.provider : undefined,
-        model: this.model,
+        model: this.clusterModel ?? this.model,
       })
     } catch (error) {
       log.error('[TaskMiner] Cluster rebuild failed:', formatApiError(error))
@@ -475,7 +482,7 @@ export class TaskMiner {
         embedder: this.embedder,
         clusterVectors: this.embedder.clusterVectors?.bind(this.embedder),
         provider,
-        model: cfg.model,
+        model: this.clusterModel ?? cfg.model,
         onProgress,
       })
     } catch (error) {

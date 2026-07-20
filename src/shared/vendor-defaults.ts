@@ -15,7 +15,7 @@ export interface ModelPreset {
  */
 export const MODEL_DEFAULTS_VERSION = 2
 
-interface VendorPresets {
+export interface VendorPresets {
   /** Presets for each model slot. The first entry is the vendor's default. */
   semanticVideo: ModelPreset[]
   semanticSnapshot: ModelPreset[]
@@ -83,13 +83,17 @@ export const VENDOR_PRESETS: Record<Vendor, VendorPresets> = {
   },
 }
 
-export function getVendorDefaults(vendor: Vendor): VendorModelDefaults {
-  const p = VENDOR_PRESETS[vendor]
+/** The default pick per slot: the head of each preset list, '' when empty. */
+export function getPresetDefaults(p: VendorPresets): VendorModelDefaults {
   return {
     semanticVideoModel: p.semanticVideo[0]?.id ?? '',
     semanticSnapshotModel: p.semanticSnapshot[0]?.id ?? '',
     patternDetectionModel: p.patternDetection[0]?.id ?? '',
   }
+}
+
+export function getVendorDefaults(vendor: Vendor): VendorModelDefaults {
+  return getPresetDefaults(VENDOR_PRESETS[vendor])
 }
 
 /**

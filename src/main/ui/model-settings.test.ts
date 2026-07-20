@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { applyModelSettings, type ModelSettingsDeps } from './model-settings'
 import type { CaptureSettings } from '../../shared/types'
 import { VENDOR_PRESETS } from '../../shared/vendor-defaults'
+import { makeCaptureSettings } from '@main/utils/test-utils'
 
 function makeDeps(): {
   deps: ModelSettingsDeps
@@ -20,32 +21,7 @@ function makeDeps(): {
 }
 
 function makeSettings(overrides: Partial<CaptureSettings> = {}): CaptureSettings {
-  return {
-    autoStartEnabled: true,
-    visualThreshold: 8,
-    typingDebounceMs: 2000,
-    scrollDebounceMs: 2000,
-    clickDebounceMs: 3000,
-    minActivityDurationMs: 3000,
-    maxActivityDurationMs: 300000,
-    maxScreenshotsForLlm: 6,
-    semanticRequestTimeoutMs: 120000,
-    semanticPipelineMode: 'image',
-    captureHotkeyAccelerator: 'CommandOrControl+Shift+M',
-    databaseExportDirectory: '',
-    excludePrivateBrowsing: true,
-    excludedApps: [],
-    excludedUrlPatterns: [],
-    activeVendor: 'openrouter',
-    modelsByVendor: {},
-    newTaskMinerEnabled: true,
-    semanticVideoModel: VENDOR_PRESETS.openrouter.semanticVideo[0].id,
-    semanticSnapshotModel: VENDOR_PRESETS.openrouter.semanticSnapshot[0].id,
-    patternDetectionModel: VENDOR_PRESETS.openrouter.patternDetection[0].id,
-    patternDetectionEnabled: true,
-    uploadDetailLevel: 'off',
-    ...overrides,
-  }
+  return makeCaptureSettings({ semanticPipelineMode: 'image', ...overrides })
 }
 
 describe('applyModelSettings', () => {
@@ -112,5 +88,31 @@ describe('applyModelSettings', () => {
     applyModelSettings(deps, settings, settings)
 
     expect(semanticService.updateModels).not.toHaveBeenCalled()
+  })
+
+  it('uses remote chains for the tail and diverges the user-context model', () => {
+    const { deps, semanticService, patternDetector, userContextBuilder } = makeDeps()
+    deps.getRemoteModelConfig = () => ({
+      version: 2,
+      models: {
+        semanticVideo: ['remote/video-a', 'remote/video-b'],
+        userContext: ['remote/context-model'],
+      },
+    })
+    const previous = makeSettings({
+      semanticVideoModel: 'remote/video-a',
+      patternDetectionModel: 'old/model',
+    })
+    const updated = makeSettings({
+      semanticVideoModel: 'remote/video-b',
+      patternDetectionModel: 'new/model',
+    })
+
+    applyModelSettings(deps, updated, previous)
+
+    const [videoModels] = semanticService.updateModels.mock.calls[0] as [string[], string[]]
+    expect(videoModels).toEqual(['remote/video-b', 'remote/video-a'])
+    expect(patternDetector.updateModel).toHaveBeenCalledWith('new/model')
+    expect(userContextBuilder.updateModel).toHaveBeenCalledWith('remote/context-model')
   })
 })

@@ -218,6 +218,30 @@ describe('TaskMiner sweep', () => {
     expect(mockedRunClustering).toHaveBeenCalledTimes(2)
   })
 
+  it('clusters with the remote cluster-model override when one is set', async () => {
+    seedDays(1)
+    miner.updateModel('mining/model')
+    miner.updateClusterModel('cluster/model')
+
+    await miner.sweepNow(configuredProvider)
+
+    expect(mockedRunClustering).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'cluster/model' }),
+    )
+  })
+
+  it('clusters with the mining model when no cluster override is set', async () => {
+    seedDays(1)
+    miner.updateModel('mining/model')
+    miner.updateClusterModel(null)
+
+    await miner.sweepNow(configuredProvider)
+
+    expect(mockedRunClustering).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'mining/model' }),
+    )
+  })
+
   it('scheduleRun arms nothing when every day is already settled', async () => {
     seedDays(2)
     // Enough activities to pass the MIN_ACTIVITIES guard, all inside days the

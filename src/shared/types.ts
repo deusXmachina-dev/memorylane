@@ -244,6 +244,8 @@ export interface CaptureSettings {
   urlMatchSchemaVersion?: number
   appMatchSchemaVersion?: number
   modelDefaultsVersion?: number
+  /** Version of the last-applied remote model config; 0 = never applied. */
+  remoteModelConfigVersion?: number
   activeVendor: Vendor
   semanticVideoModel: string
   semanticSnapshotModel: string
