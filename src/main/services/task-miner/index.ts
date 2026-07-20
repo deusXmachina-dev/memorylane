@@ -46,6 +46,8 @@ export { DEFAULT_MINER_CONFIG }
 
 export class TaskMiner {
   private running = false
+  /** Settled counts snapshotted at sweep start; null outside a sweep. */
+  private sweepBaseline: { completed: number; failed: number } | null = null
   private settleTimer: ReturnType<typeof setTimeout> | null = null
   private model: string = DEFAULT_MINER_CONFIG.model
   private enabled = true
@@ -74,6 +76,11 @@ export class TaskMiner {
   /** True while a run is executing or its settle timer is armed. */
   isBusy(): boolean {
     return this.running || this.settleTimer !== null
+  }
+
+  /** Settled counts at the current sweep's start, for per-run progress; null outside a sweep. */
+  getSweepBaseline(): { completed: number; failed: number } | null {
+    return this.sweepBaseline
   }
 
   /** Notified whenever the mining ledger changes (day claimed/finished, sweep start/end). */
@@ -175,6 +182,8 @@ export class TaskMiner {
       return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'busy' }
     }
     this.running = true
+    const settled = this.storage.miningDays.countByStatus()
+    this.sweepBaseline = { completed: settled.completed, failed: settled.failed }
     this.emitStatus()
     try {
       let daysMined = 0
@@ -267,6 +276,7 @@ export class TaskMiner {
       return { daysMined, daysSkipped, daysFailed, clustering }
     } finally {
       this.running = false
+      this.sweepBaseline = null
       this.emitStatus()
     }
   }

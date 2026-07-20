@@ -399,13 +399,19 @@ app.on('ready', async () => {
       }
     }
     const counts = storageRef.miningDays.countByStatus()
+    // Progress is per-run: days settled before this sweep started don't count,
+    // so a daily sweep reads "0 of 1", not "59 of 60".
+    const base = taskMiner.getSweepBaseline()
+    const completedDays = Math.max(0, counts.completed - (base?.completed ?? counts.completed))
+    const failedDays = Math.max(0, counts.failed - (base?.failed ?? counts.failed))
+    const pendingDays = counts.pending + counts.running
     return {
       state: taskMiner.isBusy() ? 'mining' : 'idle',
       currentDay: storageRef.miningDays.getRunningDay(),
-      pendingDays: counts.pending + counts.running,
-      completedDays: counts.completed,
-      failedDays: counts.failed,
-      totalDays: counts.pending + counts.running + counts.completed + counts.failed,
+      pendingDays,
+      completedDays,
+      failedDays,
+      totalDays: pendingDays + completedDays + failedDays,
     }
   }
   taskMiner?.setStatusListener(() => sendMiningProgress(buildMiningStatus()))

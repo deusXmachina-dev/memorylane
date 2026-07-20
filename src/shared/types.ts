@@ -424,15 +424,16 @@ export interface ManagedExclusions {
   urlPatterns: string[]
 }
 
-/** Task-mining ledger progress, pushed to the renderer while a sweep runs. */
+/** Task-mining progress for the current sweep, pushed to the renderer while it runs. */
 export interface MiningStatus {
   state: 'idle' | 'mining'
   /** Day currently being mined ('YYYY-MM-DD'); null between days. */
   currentDay: string | null
   pendingDays: number
+  /** Days settled during this sweep — not lifetime ledger totals. */
   completedDays: number
   failedDays: number
-  /** All days the ledger knows about (completed + pending + running + failed). */
+  /** Days this sweep is processing (completed + failed this run + still pending). */
   totalDays: number
 }
 

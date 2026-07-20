@@ -5,12 +5,12 @@
   "tsx": true,
   "tailwind": {
     "config": "",
-    "css": "@/renderer/index.css",
-    "baseColor": "neutral",
+    "css": "src/renderer/index.css",
+    "baseColor": "stone",
     "cssVariables": true,
     "prefix": ""
   },
-  "iconLibrary": "phosphor",
+  "iconLibrary": "lucide",
   "rtl": false,
   "aliases": {
     "components": "@/renderer/components",
@@ -20,6 +20,6 @@
     "hooks": "@/renderer/hooks"
   },
   "menuColor": "default",
-  "menuAccent": "bold",
+  "menuAccent": "subtle",
   "registries": {}
 }
