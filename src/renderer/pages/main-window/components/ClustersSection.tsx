@@ -22,9 +22,13 @@ function MiningProgressBanner({ status }: { status: MiningStatus }): React.JSX.E
       </div>
       <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
         <div
-          className="h-full rounded-full bg-primary transition-[width] duration-700 ease-out"
+          className="relative h-full overflow-hidden rounded-full bg-primary transition-[width] duration-700 ease-out"
           style={{ width: `${pct}%` }}
-        />
+        >
+          {mining && (
+            <div className="absolute inset-y-0 w-1/3 animate-[mining-glow_1.6s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+          )}
+        </div>
       </div>
     </div>
   )
