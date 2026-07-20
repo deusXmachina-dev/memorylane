@@ -33,34 +33,17 @@ export function getEffectivePresets(
   }
 }
 
-export interface TextTaskModels {
-  taskMining: string
-  userContext: string
-  clusterReview: string
-}
-
 /**
- * Splits the single stored `patternDetectionModel` pick into the three text
- * tasks. Remote config (OpenRouter only) can point each task at its own model;
- * without a remote opinion all three follow the stored pick.
+ * The user-context builder follows the stored `patternDetectionModel` pick
+ * unless remote config (OpenRouter only) points it at its own model.
  */
-export function resolveTextTaskModels(
+export function resolveUserContextModel(
   patternDetectionPick: string,
   vendor: Vendor,
   remote: RemoteModelConfig | null,
-): TextTaskModels {
-  if (vendor !== 'openrouter' || remote === null) {
-    return {
-      taskMining: patternDetectionPick,
-      userContext: patternDetectionPick,
-      clusterReview: patternDetectionPick,
-    }
-  }
-  return {
-    taskMining: patternDetectionPick,
-    userContext: remote.models.userContext?.[0] ?? patternDetectionPick,
-    clusterReview: remote.models.clusterReview?.[0] ?? patternDetectionPick,
-  }
+): string {
+  if (vendor !== 'openrouter') return patternDetectionPick
+  return remote?.models.userContext?.[0] ?? patternDetectionPick
 }
 
 /**

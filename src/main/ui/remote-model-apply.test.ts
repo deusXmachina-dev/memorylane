@@ -7,11 +7,9 @@ vi.mock('@main/utils/logger', () => ({
 import type { RemoteModelConfig } from '../../shared/remote-model-config'
 import type { CaptureSettings } from '../../shared/types'
 import { VENDOR_PRESETS } from '../../shared/vendor-defaults'
-import {
-  applyRemoteModelConfig,
-  type RemoteModelApplyDeps,
-  type RemoteModelSettingsManager,
-} from './remote-model-apply'
+import { makeCaptureSettings as makeSettings } from '@main/utils/test-utils'
+import type { ModelPushDeps } from './apply-models'
+import { applyRemoteModelConfig, type RemoteModelSettingsManager } from './remote-model-apply'
 
 const REMOTE: RemoteModelConfig = {
   version: 3,
@@ -22,36 +20,6 @@ const REMOTE: RemoteModelConfig = {
     userContext: ['remote/context-model'],
     clusterReview: ['remote/cluster-model'],
   },
-}
-
-function makeSettings(overrides: Partial<CaptureSettings> = {}): CaptureSettings {
-  return {
-    autoStartEnabled: true,
-    visualThreshold: 8,
-    typingDebounceMs: 2000,
-    scrollDebounceMs: 2000,
-    clickDebounceMs: 3000,
-    minActivityDurationMs: 3000,
-    maxActivityDurationMs: 300000,
-    maxScreenshotsForLlm: 6,
-    semanticRequestTimeoutMs: 120000,
-    semanticPipelineMode: 'auto',
-    captureHotkeyAccelerator: 'CommandOrControl+Shift+M',
-    databaseExportDirectory: '',
-    excludePrivateBrowsing: true,
-    excludedApps: [],
-    excludedUrlPatterns: [],
-    activeVendor: 'openrouter',
-    modelsByVendor: {},
-    newTaskMinerEnabled: true,
-    semanticVideoModel: VENDOR_PRESETS.openrouter.semanticVideo[0].id,
-    semanticSnapshotModel: VENDOR_PRESETS.openrouter.semanticSnapshot[0].id,
-    patternDetectionModel: VENDOR_PRESETS.openrouter.patternDetection[0].id,
-    patternDetectionEnabled: true,
-    remoteModelConfigVersion: 0,
-    uploadDetailLevel: 'off',
-    ...overrides,
-  }
 }
 
 function makeManager(initial: CaptureSettings): RemoteModelSettingsManager & {
@@ -78,7 +46,7 @@ function makeManager(initial: CaptureSettings): RemoteModelSettingsManager & {
 }
 
 function makeDeps(): {
-  deps: RemoteModelApplyDeps
+  deps: ModelPushDeps
   semanticService: { updateModels: ReturnType<typeof vi.fn> }
   patternDetector: { updateModel: ReturnType<typeof vi.fn> }
   userContextBuilder: { updateModel: ReturnType<typeof vi.fn> }

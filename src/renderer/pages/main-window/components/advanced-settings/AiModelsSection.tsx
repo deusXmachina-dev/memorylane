@@ -18,7 +18,7 @@ import type {
   VendorStatus,
 } from '@types'
 import { VENDORS } from '@types'
-import { VENDOR_PRESETS, getVendorDefaults } from '@/shared/vendor-defaults'
+import { getVendorDefaults } from '@/shared/vendor-defaults'
 import { ManageKeySection } from '../ManageKeySection'
 import { ModelSelector } from './ModelSelector'
 import { SegmentedControl } from './SegmentedControl'
@@ -187,8 +187,6 @@ export function AiModelsSection({
                   <p className="text-xs font-medium text-muted-foreground">Model selection</p>
                   {form.semanticPipelineMode !== 'image' && (
                     <ModelSelector
-                      mode="freetext"
-                      presets={VENDOR_PRESETS[activeVendor].semanticVideo}
                       value={form.semanticVideoModel}
                       defaultValue={vendorDefaults.semanticVideoModel}
                       onChange={(v) => onModelChange('semanticVideoModel', v)}
@@ -197,8 +195,6 @@ export function AiModelsSection({
                   )}
                   {form.semanticPipelineMode !== 'video' && (
                     <ModelSelector
-                      mode="freetext"
-                      presets={VENDOR_PRESETS[activeVendor].semanticSnapshot}
                       value={form.semanticSnapshotModel}
                       defaultValue={vendorDefaults.semanticSnapshotModel}
                       onChange={(v) => onModelChange('semanticSnapshotModel', v)}
@@ -206,8 +202,6 @@ export function AiModelsSection({
                     />
                   )}
                   <ModelSelector
-                    mode="freetext"
-                    presets={VENDOR_PRESETS[activeVendor].patternDetection}
                     value={form.patternDetectionModel}
                     defaultValue={vendorDefaults.patternDetectionModel}
                     onChange={(v) => onModelChange('patternDetectionModel', v)}

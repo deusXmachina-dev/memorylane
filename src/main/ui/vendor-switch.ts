@@ -1,26 +1,17 @@
 import type { RemoteModelConfig } from '../../shared/remote-model-config'
 import type { CaptureSettings, SemanticPipelineMode } from '../../shared/types'
-import { buildModelChain } from '../../shared/vendor-defaults'
-import {
-  getEffectivePresets,
-  resolveClusterModelOverride,
-  resolveTextTaskModels,
-} from '@main/settings/effective-model-presets'
+import { pushModelSelections, type ModelPushDeps } from './apply-models'
 
 /**
  * Structural shape of the dependencies that `applyVendorSwitch` touches.
  * Defined separately so the helper is unit-testable without a full
  * `MainWindowDependencies` mock.
  */
-export interface VendorSwitchDeps {
-  semanticService: {
-    updateModels(videoModels: string[], snapshotModels: string[]): void
+export interface VendorSwitchDeps extends ModelPushDeps {
+  semanticService: ModelPushDeps['semanticService'] & {
     updatePipelinePreference(mode: SemanticPipelineMode): void
     testConnection(): Promise<void>
   }
-  patternDetector?: { updateModel(model: string): void }
-  userContextBuilder?: { updateModel(model: string): void }
-  taskMiner?: { updateClusterModel(model: string | null): void }
   inferenceProvider: { notifyConfigChanged(): void }
   getRemoteModelConfig?: () => RemoteModelConfig | null
 }
@@ -35,17 +26,8 @@ export interface VendorSwitchDeps {
  * with.
  */
 export function applyVendorSwitch(d: VendorSwitchDeps, next: CaptureSettings): void {
-  const remote = d.getRemoteModelConfig?.() ?? null
-  const presets = getEffectivePresets(next.activeVendor, remote)
-  d.semanticService.updateModels(
-    buildModelChain(next.semanticVideoModel, presets.semanticVideo),
-    buildModelChain(next.semanticSnapshotModel, presets.semanticSnapshot),
-  )
+  pushModelSelections(d, next, d.getRemoteModelConfig?.() ?? null)
   d.semanticService.updatePipelinePreference(next.semanticPipelineMode)
-  const text = resolveTextTaskModels(next.patternDetectionModel, next.activeVendor, remote)
-  d.patternDetector?.updateModel(text.taskMining)
-  d.userContextBuilder?.updateModel(text.userContext)
-  d.taskMiner?.updateClusterModel(resolveClusterModelOverride(next.activeVendor, remote))
   d.inferenceProvider.notifyConfigChanged()
   void d.semanticService.testConnection()
 }

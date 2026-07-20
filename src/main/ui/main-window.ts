@@ -29,6 +29,7 @@ import type { VendorCredentialsManager } from '../settings/vendor-credentials-ma
 import { VENDORS } from '../../shared/types'
 import { computeClustersView } from './cluster-view'
 import { getEffectivePresets } from '@main/settings/effective-model-presets'
+import { getPresetDefaults } from '../../shared/vendor-defaults'
 import type { RemoteModelConfig } from '../../shared/remote-model-config'
 import { applyVendorSwitch } from './vendor-switch'
 import { applyModelSettings } from './model-settings'
@@ -174,11 +175,7 @@ function reconcileManagedModelSelections(
   // would flag remote-applied models as stale and reset them.
   const presets = getEffectivePresets(vendor, remote)
   const settings = captureSettings.get()
-  const defaults = {
-    semanticVideoModel: presets.semanticVideo[0]?.id ?? '',
-    semanticSnapshotModel: presets.semanticSnapshot[0]?.id ?? '',
-    patternDetectionModel: presets.patternDetection[0]?.id ?? '',
-  }
+  const defaults = getPresetDefaults(presets)
   const updates: Partial<{
     semanticVideoModel: string
     semanticSnapshotModel: string

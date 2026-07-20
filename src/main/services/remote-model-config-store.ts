@@ -1,13 +1,9 @@
-import * as fs from 'fs'
-import * as path from 'path'
-import log from '@main/utils/logger'
+import { createUserDataJsonStore } from '@main/utils/json-file-store'
 import {
   REMOTE_MODEL_SLOTS,
   type RemoteModelConfig,
   type RemoteModelSlot,
 } from '../../shared/remote-model-config'
-
-const FILE_NAME = 'remote-model-config.json'
 
 const MODEL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]*$/
 const MAX_MODEL_ID_LENGTH = 128
@@ -49,37 +45,11 @@ export function coerceRemoteModelConfig(data: unknown): RemoteModelConfig | null
   return { version, models: result }
 }
 
-function defaultPath(): string {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const electron = require('electron') as typeof import('electron')
-  return path.join(electron.app.getPath('userData'), FILE_NAME)
-}
+const store = createUserDataJsonStore(
+  'remote-model-config.json',
+  'RemoteModelConfig',
+  coerceRemoteModelConfig,
+)
 
-/**
- * Reads the last-known remote model config cached on disk. Returns null when
- * the file is missing or unreadable/corrupt, so callers fall back to baked
- * presets until the first successful sync.
- */
-export function readRemoteModelConfig(filePath: string = defaultPath()): RemoteModelConfig | null {
-  try {
-    const raw = fs.readFileSync(filePath, 'utf-8')
-    return coerceRemoteModelConfig(JSON.parse(raw))
-  } catch {
-    return null
-  }
-}
-
-/**
- * Persists the latest remote model config. Failures are swallowed (logged) — a
- * disk hiccup must never break the sync loop.
- */
-export function writeRemoteModelConfig(
-  config: RemoteModelConfig,
-  filePath: string = defaultPath(),
-): void {
-  try {
-    fs.writeFileSync(filePath, JSON.stringify(config, null, 2))
-  } catch (error) {
-    log.warn('[RemoteModelConfig] Failed to persist config:', error)
-  }
-}
+export const readRemoteModelConfig = store.read
+export const writeRemoteModelConfig = store.write

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { applyVendorSwitch, type VendorSwitchDeps } from './vendor-switch'
 import type { CaptureSettings, Vendor } from '../../shared/types'
 import { VENDOR_PRESETS } from '../../shared/vendor-defaults'
+import { makeCaptureSettings } from '@main/utils/test-utils'
 
 function makeDeps(): {
   deps: VendorSwitchDeps
@@ -42,32 +43,13 @@ function makeDeps(): {
 }
 
 function makeSettings(overrides: Partial<CaptureSettings> = {}): CaptureSettings {
-  return {
-    autoStartEnabled: true,
-    visualThreshold: 8,
-    typingDebounceMs: 2000,
-    scrollDebounceMs: 2000,
-    clickDebounceMs: 3000,
-    minActivityDurationMs: 3000,
-    maxActivityDurationMs: 300000,
-    maxScreenshotsForLlm: 6,
-    semanticRequestTimeoutMs: 120000,
+  return makeCaptureSettings({
     semanticPipelineMode: 'image',
-    captureHotkeyAccelerator: 'CommandOrControl+Shift+M',
-    databaseExportDirectory: '',
-    excludePrivateBrowsing: true,
-    excludedApps: [],
-    excludedUrlPatterns: [],
-    activeVendor: 'openrouter',
-    modelsByVendor: {},
-    newTaskMinerEnabled: true,
     semanticVideoModel: '',
     semanticSnapshotModel: '',
     patternDetectionModel: '',
-    patternDetectionEnabled: true,
-    uploadDetailLevel: 'off',
     ...overrides,
-  }
+  })
 }
 
 describe('applyVendorSwitch', () => {

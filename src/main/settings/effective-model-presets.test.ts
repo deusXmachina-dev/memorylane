@@ -5,7 +5,7 @@ import { VENDOR_PRESETS } from '../../shared/vendor-defaults'
 import {
   getEffectivePresets,
   resolveClusterModelOverride,
-  resolveTextTaskModels,
+  resolveUserContextModel,
 } from './effective-model-presets'
 
 const REMOTE: RemoteModelConfig = {
@@ -42,29 +42,21 @@ describe('getEffectivePresets', () => {
   })
 })
 
-describe('resolveTextTaskModels', () => {
-  it('follows the stored pick for all tasks without remote config', () => {
-    expect(resolveTextTaskModels('minimax/minimax-m3', 'openrouter', null)).toEqual({
-      taskMining: 'minimax/minimax-m3',
-      userContext: 'minimax/minimax-m3',
-      clusterReview: 'minimax/minimax-m3',
-    })
+describe('resolveUserContextModel', () => {
+  it('follows the stored pick without remote config', () => {
+    expect(resolveUserContextModel('minimax/minimax-m3', 'openrouter', null)).toBe(
+      'minimax/minimax-m3',
+    )
   })
 
   it('follows the stored pick for non-openrouter vendors', () => {
-    expect(resolveTextTaskModels('gemini-2.5-flash', 'google', REMOTE)).toEqual({
-      taskMining: 'gemini-2.5-flash',
-      userContext: 'gemini-2.5-flash',
-      clusterReview: 'gemini-2.5-flash',
-    })
+    expect(resolveUserContextModel('gemini-2.5-flash', 'google', REMOTE)).toBe('gemini-2.5-flash')
   })
 
-  it('diverges tasks with a remote opinion and defaults the rest to the pick', () => {
-    expect(resolveTextTaskModels('xiaomi/mimo-v2.5', 'openrouter', REMOTE)).toEqual({
-      taskMining: 'xiaomi/mimo-v2.5',
-      userContext: 'minimax/minimax-m3',
-      clusterReview: 'xiaomi/mimo-v2.5',
-    })
+  it('diverges to the remote opinion when present', () => {
+    expect(resolveUserContextModel('xiaomi/mimo-v2.5', 'openrouter', REMOTE)).toBe(
+      'minimax/minimax-m3',
+    )
   })
 })
 
