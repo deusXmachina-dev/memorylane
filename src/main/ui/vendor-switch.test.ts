@@ -12,6 +12,7 @@ function makeDeps(): {
   }
   patternDetector: { updateModel: ReturnType<typeof vi.fn> }
   userContextBuilder: { updateModel: ReturnType<typeof vi.fn> }
+  taskMiner: { updateClusterModel: ReturnType<typeof vi.fn> }
   inferenceProvider: { notifyConfigChanged: ReturnType<typeof vi.fn> }
 } {
   const semanticService = {
@@ -21,14 +22,23 @@ function makeDeps(): {
   }
   const patternDetector = { updateModel: vi.fn() }
   const userContextBuilder = { updateModel: vi.fn() }
+  const taskMiner = { updateClusterModel: vi.fn() }
   const inferenceProvider = { notifyConfigChanged: vi.fn() }
   const deps: VendorSwitchDeps = {
     semanticService,
     patternDetector,
     userContextBuilder,
+    taskMiner,
     inferenceProvider,
   }
-  return { deps, semanticService, patternDetector, userContextBuilder, inferenceProvider }
+  return {
+    deps,
+    semanticService,
+    patternDetector,
+    userContextBuilder,
+    taskMiner,
+    inferenceProvider,
+  }
 }
 
 function makeSettings(overrides: Partial<CaptureSettings> = {}): CaptureSettings {
@@ -190,5 +200,19 @@ describe('applyVendorSwitch', () => {
     expect(videoModels).toEqual(['remote/video-model'])
     expect(patternDetector.updateModel).toHaveBeenCalledWith('minimax/minimax-m3')
     expect(userContextBuilder.updateModel).toHaveBeenCalledWith('remote/context-model')
+  })
+
+  it('sets the cluster override on openrouter and clears it on other vendors', () => {
+    const { deps, taskMiner } = makeDeps()
+    deps.getRemoteModelConfig = () => ({
+      version: 2,
+      models: { clusterReview: ['remote/cluster-model'] },
+    })
+
+    applyVendorSwitch(deps, makeSettings({ activeVendor: 'openrouter' }))
+    expect(taskMiner.updateClusterModel).toHaveBeenLastCalledWith('remote/cluster-model')
+
+    applyVendorSwitch(deps, makeSettings({ activeVendor: 'openai-compatible' }))
+    expect(taskMiner.updateClusterModel).toHaveBeenLastCalledWith(null)
   })
 })

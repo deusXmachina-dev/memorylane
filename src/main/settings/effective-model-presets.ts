@@ -62,3 +62,15 @@ export function resolveTextTaskModels(
     clusterReview: remote.models.clusterReview?.[0] ?? patternDetectionPick,
   }
 }
+
+/**
+ * The TaskMiner clustering-pass override; null = follow the miner model.
+ * OpenRouter only — any other vendor must never run a remote OpenRouter id.
+ */
+export function resolveClusterModelOverride(
+  vendor: Vendor,
+  remote: RemoteModelConfig | null,
+): string | null {
+  if (vendor !== 'openrouter') return null
+  return remote?.models.clusterReview?.[0] ?? null
+}

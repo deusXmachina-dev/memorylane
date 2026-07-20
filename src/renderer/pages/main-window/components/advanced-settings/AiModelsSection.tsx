@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { toast } from 'sonner'
 import { Cpu, Sparkles } from 'lucide-react'
 import { Button } from '@components/ui/button'
@@ -18,7 +18,7 @@ import type {
   VendorStatus,
 } from '@types'
 import { VENDORS } from '@types'
-import { VENDOR_PRESETS, type VendorPresets } from '@/shared/vendor-defaults'
+import { VENDOR_PRESETS, getVendorDefaults } from '@/shared/vendor-defaults'
 import { ManageKeySection } from '../ManageKeySection'
 import { ModelSelector } from './ModelSelector'
 import { SegmentedControl } from './SegmentedControl'
@@ -70,27 +70,10 @@ export function AiModelsSection({
   const activeVendor = form.activeVendor
   const activeStatus = credentialStatuses?.[activeVendor] ?? null
   const hasLlmAccess = activeStatus?.hasKey === true
-  const selectorMode: 'preset' | 'freetext' =
-    activeStatus?.source === 'managed' ? 'preset' : 'freetext'
-  // Baked presets render immediately; the effective (remote-aware) lists
-  // replace them once fetched so managed-mode pickers can show remote models.
-  const [presetsByVendor, setPresetsByVendor] =
-    useState<Record<Vendor, VendorPresets>>(VENDOR_PRESETS)
-  useEffect(() => {
-    let cancelled = false
-    void api.getModelPresets().then((presets) => {
-      if (!cancelled && presets) setPresetsByVendor(presets)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [api])
-  const presets = presetsByVendor[activeVendor]
-  const vendorDefaults = {
-    semanticVideoModel: presets.semanticVideo[0]?.id ?? '',
-    semanticSnapshotModel: presets.semanticSnapshot[0]?.id ?? '',
-    patternDetectionModel: presets.patternDetection[0]?.id ?? '',
-  }
+  // Managed keys hide the advanced options below: models are chosen remotely
+  // (DEU-202) and the tuning knobs aren't meant for managed installs.
+  const isManagedKey = activeStatus?.source === 'managed'
+  const vendorDefaults = getVendorDefaults(activeVendor)
   const videoSupported = vendorDefaults.semanticVideoModel.length > 0
   const visibleVendors = isEnterprise ? VENDORS : VENDORS.filter((v) => v !== 'google')
 
@@ -163,159 +146,163 @@ export function AiModelsSection({
               />
             }
           />
-          <div className="py-3 first:pt-0 last:pb-0">
-            <SettingsDisclosure label="Advanced options">
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">Semantic media pipeline</p>
-                <SegmentedControl
-                  ariaLabel="Semantic media pipeline"
-                  value={form.semanticPipelineMode}
-                  onChange={onSemanticPipelineModeChange}
-                  options={[
-                    { value: 'auto', label: 'Auto', disabled: !videoSupported },
-                    { value: 'video', label: 'Video only', disabled: !videoSupported },
-                    { value: 'image', label: 'Image only' },
-                  ]}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {!videoSupported
-                    ? `${VENDOR_LABELS[activeVendor]} has no default video model — using image snapshots only.`
-                    : form.semanticPipelineMode === 'auto'
-                      ? 'Tries video first, then falls back to images when needed.'
-                      : form.semanticPipelineMode === 'video'
-                        ? 'Uses only the video pipeline and never falls back to images.'
-                        : 'Uses only image snapshots and skips video requests.'}
-                </p>
-                <SliderRow
-                  label="LLM request timeout"
-                  value={form.semanticRequestTimeoutMs}
-                  min={15_000}
-                  max={300_000}
-                  step={5_000}
-                  format={formatMinSec}
-                  onChange={(v) => onSettingChange('semanticRequestTimeoutMs', v)}
-                  onCommit={(v) => onSettingCommit('semanticRequestTimeoutMs', v)}
-                />
-              </div>
-              <div className="space-y-3">
-                <p className="text-xs font-medium text-muted-foreground">Model selection</p>
-                {form.semanticPipelineMode !== 'image' && (
-                  <ModelSelector
-                    mode={selectorMode}
-                    presets={presets.semanticVideo}
-                    value={form.semanticVideoModel}
-                    defaultValue={vendorDefaults.semanticVideoModel}
-                    onChange={(v) => onModelChange('semanticVideoModel', v)}
-                    label="Video analysis model"
+          {!isManagedKey && (
+            <div className="py-3 first:pt-0 last:pb-0">
+              <SettingsDisclosure label="Advanced options">
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Semantic media pipeline
+                  </p>
+                  <SegmentedControl
+                    ariaLabel="Semantic media pipeline"
+                    value={form.semanticPipelineMode}
+                    onChange={onSemanticPipelineModeChange}
+                    options={[
+                      { value: 'auto', label: 'Auto', disabled: !videoSupported },
+                      { value: 'video', label: 'Video only', disabled: !videoSupported },
+                      { value: 'image', label: 'Image only' },
+                    ]}
                   />
-                )}
-                {form.semanticPipelineMode !== 'video' && (
-                  <ModelSelector
-                    mode={selectorMode}
-                    presets={presets.semanticSnapshot}
-                    value={form.semanticSnapshotModel}
-                    defaultValue={vendorDefaults.semanticSnapshotModel}
-                    onChange={(v) => onModelChange('semanticSnapshotModel', v)}
-                    label="Snapshot analysis model"
+                  <p className="text-xs text-muted-foreground">
+                    {!videoSupported
+                      ? `${VENDOR_LABELS[activeVendor]} has no default video model — using image snapshots only.`
+                      : form.semanticPipelineMode === 'auto'
+                        ? 'Tries video first, then falls back to images when needed.'
+                        : form.semanticPipelineMode === 'video'
+                          ? 'Uses only the video pipeline and never falls back to images.'
+                          : 'Uses only image snapshots and skips video requests.'}
+                  </p>
+                  <SliderRow
+                    label="LLM request timeout"
+                    value={form.semanticRequestTimeoutMs}
+                    min={15_000}
+                    max={300_000}
+                    step={5_000}
+                    format={formatMinSec}
+                    onChange={(v) => onSettingChange('semanticRequestTimeoutMs', v)}
+                    onCommit={(v) => onSettingCommit('semanticRequestTimeoutMs', v)}
                   />
-                )}
-                <ModelSelector
-                  mode={selectorMode}
-                  presets={presets.patternDetection}
-                  value={form.patternDetectionModel}
-                  defaultValue={vendorDefaults.patternDetectionModel}
-                  onChange={(v) => onModelChange('patternDetectionModel', v)}
-                  label="Automation opportunities model"
-                />
-              </div>
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">Capture sensitivity</p>
-                <SliderRow
-                  label="Visual change sensitivity"
-                  value={form.visualThreshold}
-                  min={1}
-                  max={20}
-                  step={1}
-                  format={(v) =>
-                    `${v}% — ${v <= 5 ? 'more captures' : v >= 15 ? 'fewer captures' : 'balanced'}`
-                  }
-                  onChange={(v) => onSettingChange('visualThreshold', v)}
-                  onCommit={(v) => onSettingCommit('visualThreshold', v)}
-                />
-              </div>
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">Interaction timeouts</p>
-                <SliderRow
-                  label="Typing debounce"
-                  value={form.typingDebounceMs}
-                  min={500}
-                  max={10_000}
-                  step={100}
-                  format={formatMs}
-                  onChange={(v) => onSettingChange('typingDebounceMs', v)}
-                  onCommit={(v) => onSettingCommit('typingDebounceMs', v)}
-                />
-                <SliderRow
-                  label="Scroll debounce"
-                  value={form.scrollDebounceMs}
-                  min={200}
-                  max={5_000}
-                  step={100}
-                  format={formatMs}
-                  onChange={(v) => onSettingChange('scrollDebounceMs', v)}
-                  onCommit={(v) => onSettingCommit('scrollDebounceMs', v)}
-                />
-                <SliderRow
-                  label="Click debounce"
-                  value={form.clickDebounceMs}
-                  min={500}
-                  max={10_000}
-                  step={100}
-                  format={formatMs}
-                  onChange={(v) => onSettingChange('clickDebounceMs', v)}
-                  onCommit={(v) => onSettingCommit('clickDebounceMs', v)}
-                />
-              </div>
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">Activity windows</p>
-                <SliderRow
-                  label="Minimum activity duration"
-                  value={form.minActivityDurationMs}
-                  min={1_000}
-                  max={30_000}
-                  step={1_000}
-                  format={formatMs}
-                  onChange={(v) => onSettingChange('minActivityDurationMs', v)}
-                  onCommit={(v) => onSettingCommit('minActivityDurationMs', v)}
-                />
-                <SliderRow
-                  label="Maximum activity duration"
-                  value={form.maxActivityDurationMs}
-                  min={60_000}
-                  max={1_800_000}
-                  step={60_000}
-                  format={formatMs}
-                  onChange={(v) => onSettingChange('maxActivityDurationMs', v)}
-                  onCommit={(v) => onSettingCommit('maxActivityDurationMs', v)}
-                />
-                <SliderRow
-                  label="Max screenshots for LLM"
-                  value={form.maxScreenshotsForLlm}
-                  min={1}
-                  max={20}
-                  step={1}
-                  format={(v) => `${v}`}
-                  onChange={(v) => onSettingChange('maxScreenshotsForLlm', v)}
-                  onCommit={(v) => onSettingCommit('maxScreenshotsForLlm', v)}
-                />
-              </div>
-              <div className="flex justify-end">
-                <Button variant="ghost" size="sm" onClick={onReset}>
-                  Reset to defaults
-                </Button>
-              </div>
-            </SettingsDisclosure>
-          </div>
+                </div>
+                <div className="space-y-3">
+                  <p className="text-xs font-medium text-muted-foreground">Model selection</p>
+                  {form.semanticPipelineMode !== 'image' && (
+                    <ModelSelector
+                      mode="freetext"
+                      presets={VENDOR_PRESETS[activeVendor].semanticVideo}
+                      value={form.semanticVideoModel}
+                      defaultValue={vendorDefaults.semanticVideoModel}
+                      onChange={(v) => onModelChange('semanticVideoModel', v)}
+                      label="Video analysis model"
+                    />
+                  )}
+                  {form.semanticPipelineMode !== 'video' && (
+                    <ModelSelector
+                      mode="freetext"
+                      presets={VENDOR_PRESETS[activeVendor].semanticSnapshot}
+                      value={form.semanticSnapshotModel}
+                      defaultValue={vendorDefaults.semanticSnapshotModel}
+                      onChange={(v) => onModelChange('semanticSnapshotModel', v)}
+                      label="Snapshot analysis model"
+                    />
+                  )}
+                  <ModelSelector
+                    mode="freetext"
+                    presets={VENDOR_PRESETS[activeVendor].patternDetection}
+                    value={form.patternDetectionModel}
+                    defaultValue={vendorDefaults.patternDetectionModel}
+                    onChange={(v) => onModelChange('patternDetectionModel', v)}
+                    label="Automation opportunities model"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Capture sensitivity</p>
+                  <SliderRow
+                    label="Visual change sensitivity"
+                    value={form.visualThreshold}
+                    min={1}
+                    max={20}
+                    step={1}
+                    format={(v) =>
+                      `${v}% — ${v <= 5 ? 'more captures' : v >= 15 ? 'fewer captures' : 'balanced'}`
+                    }
+                    onChange={(v) => onSettingChange('visualThreshold', v)}
+                    onCommit={(v) => onSettingCommit('visualThreshold', v)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Interaction timeouts</p>
+                  <SliderRow
+                    label="Typing debounce"
+                    value={form.typingDebounceMs}
+                    min={500}
+                    max={10_000}
+                    step={100}
+                    format={formatMs}
+                    onChange={(v) => onSettingChange('typingDebounceMs', v)}
+                    onCommit={(v) => onSettingCommit('typingDebounceMs', v)}
+                  />
+                  <SliderRow
+                    label="Scroll debounce"
+                    value={form.scrollDebounceMs}
+                    min={200}
+                    max={5_000}
+                    step={100}
+                    format={formatMs}
+                    onChange={(v) => onSettingChange('scrollDebounceMs', v)}
+                    onCommit={(v) => onSettingCommit('scrollDebounceMs', v)}
+                  />
+                  <SliderRow
+                    label="Click debounce"
+                    value={form.clickDebounceMs}
+                    min={500}
+                    max={10_000}
+                    step={100}
+                    format={formatMs}
+                    onChange={(v) => onSettingChange('clickDebounceMs', v)}
+                    onCommit={(v) => onSettingCommit('clickDebounceMs', v)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Activity windows</p>
+                  <SliderRow
+                    label="Minimum activity duration"
+                    value={form.minActivityDurationMs}
+                    min={1_000}
+                    max={30_000}
+                    step={1_000}
+                    format={formatMs}
+                    onChange={(v) => onSettingChange('minActivityDurationMs', v)}
+                    onCommit={(v) => onSettingCommit('minActivityDurationMs', v)}
+                  />
+                  <SliderRow
+                    label="Maximum activity duration"
+                    value={form.maxActivityDurationMs}
+                    min={60_000}
+                    max={1_800_000}
+                    step={60_000}
+                    format={formatMs}
+                    onChange={(v) => onSettingChange('maxActivityDurationMs', v)}
+                    onCommit={(v) => onSettingCommit('maxActivityDurationMs', v)}
+                  />
+                  <SliderRow
+                    label="Max screenshots for LLM"
+                    value={form.maxScreenshotsForLlm}
+                    min={1}
+                    max={20}
+                    step={1}
+                    format={(v) => `${v}`}
+                    onChange={(v) => onSettingChange('maxScreenshotsForLlm', v)}
+                    onCommit={(v) => onSettingCommit('maxScreenshotsForLlm', v)}
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <Button variant="ghost" size="sm" onClick={onReset}>
+                    Reset to defaults
+                  </Button>
+                </div>
+              </SettingsDisclosure>
+            </div>
+          )}
         </SettingsSection>
       )}
     </div>

@@ -41,7 +41,10 @@ import { readRemoteBlacklist, writeRemoteBlacklist } from './services/remote-bla
 import { RemoteModelConfigService } from './services/remote-model-config-service'
 import { readRemoteModelConfig, writeRemoteModelConfig } from './services/remote-model-config-store'
 import type { RemoteModelConfig } from '../shared/remote-model-config'
-import { resolveTextTaskModels } from './settings/effective-model-presets'
+import {
+  resolveClusterModelOverride,
+  resolveTextTaskModels,
+} from './settings/effective-model-presets'
 import { applyRemoteModelConfig } from './ui/remote-model-apply'
 import { DeviceReportSync } from './services/device-report-sync'
 import { readDeviceReportState, writeDeviceReportState } from './services/device-report-store'
@@ -232,22 +235,29 @@ app.on('ready', async () => {
 
   // Remote model config (DEU-202): constructed before the runtime so chain
   // building can already see the disk cache; onChange is late-bound below once
-  // the miners exist, and start() only runs after that binding.
+  // the miners exist, and start() only runs after that binding. Managed-key
+  // installs only — BYOK and custom endpoints keep full model control.
+  const isOpenRouterManaged = (): boolean =>
+    vendorCredentialsManager.getStatus('openrouter').source === 'managed'
   let applyRemoteModel: ((config: RemoteModelConfig) => void) | null = null
   const cachedModelConfig = readRemoteModelConfig()
   remoteModelConfig = new RemoteModelConfigService({
     getDeviceId: () => deviceIdentity.getDeviceId(),
     isActivated:
       editionConfig.edition === 'enterprise'
-        ? () => runtime?.accessProvider.getAccessState().isEnterpriseActivated ?? false
-        : () => true,
+        ? () =>
+            isOpenRouterManaged() &&
+            (runtime?.accessProvider.getAccessState().isEnterpriseActivated ?? false)
+        : isOpenRouterManaged,
     getBackendUrl: () => backendBaseUrl,
     onChange: (config) => applyRemoteModel?.(config),
     readStored: () => readRemoteModelConfig(),
     writeStored: (config) => writeRemoteModelConfig(config),
   })
-  const getRemoteModelConfig = (): RemoteModelConfig | null =>
-    remoteModelConfig?.getConfig() ?? cachedModelConfig
+  const getRemoteModelConfig = (): RemoteModelConfig | null => {
+    if (!isOpenRouterManaged()) return null
+    return remoteModelConfig?.getConfig() ?? cachedModelConfig
+  }
 
   runtime = await createMainRuntime({
     edition: editionConfig.edition,
@@ -352,7 +362,9 @@ app.on('ready', async () => {
     taskMiner = new TaskMiner(runtime.storage, runtime.inferenceProvider, runtime.mlWorker)
     taskMiner.setEnabled(settings.patternDetectionEnabled)
     taskMiner.updateModel(initialTextModels.taskMining)
-    taskMiner.updateClusterModel(getRemoteModelConfig()?.models.clusterReview?.[0] ?? null)
+    taskMiner.updateClusterModel(
+      resolveClusterModelOverride(settings.activeVendor, getRemoteModelConfig()),
+    )
   } else {
     patternDetector = new PatternDetector(runtime.storage, runtime.inferenceProvider)
     patternDetector.setEnabled(settings.patternDetectionEnabled)
@@ -363,7 +375,7 @@ app.on('ready', async () => {
   // Miners exist now — bind the apply step and start syncing. The cached-load
   // notification re-applies idempotently; the first network sync follows.
   applyRemoteModel = (config) => {
-    if (!runtime) return
+    if (!runtime || !isOpenRouterManaged()) return
     applyRemoteModelConfig(
       {
         semanticService: runtime.semanticService,
@@ -481,6 +493,7 @@ app.on('ready', async () => {
     captureSettingsManager,
     patternDetector: scheduledMiner ?? undefined,
     userContextBuilder: userContextBuilder ?? undefined,
+    taskMiner: taskMiner ?? undefined,
     getRemoteModelConfig,
     getCaptureHotkeyLabel: hotkeyManager.getLabel,
     reconfigureCaptureHotkey,

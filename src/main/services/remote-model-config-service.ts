@@ -10,7 +10,8 @@ const DEFAULT_SYNC_INTERVAL_MS = 5 * 60 * 1000
 
 export interface RemoteModelConfigServiceParams {
   getDeviceId: () => string
-  /** Enterprise gates on activation; customer always syncs. */
+  /** Gates syncing entirely: requires a managed OpenRouter key (plus
+   * enterprise activation in that edition). BYOK/custom installs never poll. */
   isActivated: () => boolean
   getBackendUrl: () => string
   /** Fired when the config changes (including the cached load on start()). */

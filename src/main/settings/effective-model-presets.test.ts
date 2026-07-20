@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import type { RemoteModelConfig } from '../../shared/remote-model-config'
 import { VENDOR_PRESETS } from '../../shared/vendor-defaults'
-import { getEffectivePresets, resolveTextTaskModels } from './effective-model-presets'
+import {
+  getEffectivePresets,
+  resolveClusterModelOverride,
+  resolveTextTaskModels,
+} from './effective-model-presets'
 
 const REMOTE: RemoteModelConfig = {
   version: 3,
@@ -61,5 +65,23 @@ describe('resolveTextTaskModels', () => {
       userContext: 'minimax/minimax-m3',
       clusterReview: 'xiaomi/mimo-v2.5',
     })
+  })
+})
+
+describe('resolveClusterModelOverride', () => {
+  const WITH_CLUSTER: RemoteModelConfig = {
+    version: 1,
+    models: { clusterReview: ['remote/cluster-model'] },
+  }
+
+  it('returns the remote head for openrouter and null without an opinion', () => {
+    expect(resolveClusterModelOverride('openrouter', WITH_CLUSTER)).toBe('remote/cluster-model')
+    expect(resolveClusterModelOverride('openrouter', REMOTE)).toBeNull()
+    expect(resolveClusterModelOverride('openrouter', null)).toBeNull()
+  })
+
+  it('never returns an override for other vendors', () => {
+    expect(resolveClusterModelOverride('google', WITH_CLUSTER)).toBeNull()
+    expect(resolveClusterModelOverride('openai-compatible', WITH_CLUSTER)).toBeNull()
   })
 })

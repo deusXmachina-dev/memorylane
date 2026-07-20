@@ -112,7 +112,9 @@ interface MainWindowDependencies {
   captureSettingsManager: CaptureSettingsManager
   patternDetector?: PatternDetectorService
   userContextBuilder?: UserContextBuilderService
-  /** Latest remote model config (cached or synced); null when none is known. */
+  taskMiner?: { updateClusterModel(model: string | null): void }
+  /** Latest remote model config (cached or synced); null when the OpenRouter
+   * key isn't managed or none is known. */
   getRemoteModelConfig?: () => RemoteModelConfig | null
   getCaptureHotkeyLabel: () => string
   reconfigureCaptureHotkey: (accelerator: string) => { success: boolean; error?: string }
@@ -1082,15 +1084,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   ipcMain.handle('main-window:getCaptureSettings', () => {
     if (!deps) return null
     return deps.captureSettingsManager.get()
-  })
-
-  // Preset lists with the remote model config layered in, so the managed-mode
-  // grid can display remotely-swapped models the baked presets don't know.
-  ipcMain.handle('main-window:getModelPresets', () => {
-    const remote = deps?.getRemoteModelConfig?.() ?? null
-    return Object.fromEntries(
-      VENDORS.map((vendor) => [vendor, getEffectivePresets(vendor, remote)]),
-    )
   })
 
   ipcMain.handle(

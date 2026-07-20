@@ -1,5 +1,4 @@
 import type { AppEditionConfig } from './edition'
-import type { VendorPresets } from './vendor-defaults'
 import type {
   EvalFixtureLoad,
   EvalFixtureSummary,
@@ -487,8 +486,6 @@ export interface MainWindowAPI {
   listSeenDomains: () => Promise<SeenDomain[]>
   // Capture settings
   getCaptureSettings: () => Promise<CaptureSettings>
-  /** Preset lists per vendor with the remote model config layered in. */
-  getModelPresets: () => Promise<Record<Vendor, VendorPresets>>
   saveCaptureSettings: (settings: Partial<CaptureSettings>) => Promise<SaveResult>
   resetCaptureSettings: () => Promise<SaveResult>
   // Patterns (task clusters) — new TaskMiner view

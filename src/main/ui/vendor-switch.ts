@@ -1,7 +1,11 @@
 import type { RemoteModelConfig } from '../../shared/remote-model-config'
 import type { CaptureSettings, SemanticPipelineMode } from '../../shared/types'
 import { buildModelChain } from '../../shared/vendor-defaults'
-import { getEffectivePresets, resolveTextTaskModels } from '@main/settings/effective-model-presets'
+import {
+  getEffectivePresets,
+  resolveClusterModelOverride,
+  resolveTextTaskModels,
+} from '@main/settings/effective-model-presets'
 
 /**
  * Structural shape of the dependencies that `applyVendorSwitch` touches.
@@ -16,6 +20,7 @@ export interface VendorSwitchDeps {
   }
   patternDetector?: { updateModel(model: string): void }
   userContextBuilder?: { updateModel(model: string): void }
+  taskMiner?: { updateClusterModel(model: string | null): void }
   inferenceProvider: { notifyConfigChanged(): void }
   getRemoteModelConfig?: () => RemoteModelConfig | null
 }
@@ -40,6 +45,7 @@ export function applyVendorSwitch(d: VendorSwitchDeps, next: CaptureSettings): v
   const text = resolveTextTaskModels(next.patternDetectionModel, next.activeVendor, remote)
   d.patternDetector?.updateModel(text.taskMining)
   d.userContextBuilder?.updateModel(text.userContext)
+  d.taskMiner?.updateClusterModel(resolveClusterModelOverride(next.activeVendor, remote))
   d.inferenceProvider.notifyConfigChanged()
   void d.semanticService.testConnection()
 }
