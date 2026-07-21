@@ -5,11 +5,12 @@
  * short and detailed summary of who the user is. These summaries are stored
  * in the DB and injected into other LLM prompts for personalization.
  *
- * Scheduling mirrors PatternDetector: call scheduleRun() on screen unlock
+ * Scheduling mirrors TaskMiner: call scheduleRun() on screen unlock
  * and the service handles interval guards, settle delays, and error isolation.
  */
 
 import { generateText } from 'ai'
+import { isSameDay, getDayBoundaries } from '@main/utils/day'
 import type { StorageService, ActivityDetail } from '../storage'
 import type { InferenceProvider } from '../llm'
 import type { UserContext } from '../storage/user-context-repository'
@@ -45,24 +46,6 @@ export type ProgressCallback = (message: string) => void
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function isSameDay(a: number, b: number): boolean {
-  const da = new Date(a)
-  const db = new Date(b)
-  return (
-    da.getFullYear() === db.getFullYear() &&
-    da.getMonth() === db.getMonth() &&
-    da.getDate() === db.getDate()
-  )
-}
-
-function getDayBoundaries(daysBack: number): { start: number; end: number } {
-  const now = new Date()
-  const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysBack)
-  const start = day.getTime()
-  const end = start + 24 * 60 * 60 * 1000 - 1
-  return { start, end }
-}
 
 interface AggregatedProfile {
   total_activities: number
