@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { PingDot } from '@components/ui/ping-dot'
 import type { ObservationState } from '@types'
 
 function formatCountdown(seconds: number): string {
@@ -36,10 +37,7 @@ export function ObservationRunningBanner({
       aria-live="polite"
       className="mt-2 flex items-center gap-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs"
     >
-      <span className="relative inline-flex size-2 shrink-0">
-        <span className="absolute inset-0 animate-ping rounded-full bg-primary opacity-75" />
-        <span className="relative inline-flex size-2 rounded-full bg-primary" />
-      </span>
+      <PingDot />
       <div className="flex-1 leading-snug">
         <span className="font-medium text-foreground">Observing: </span>
         <span className="text-muted-foreground">

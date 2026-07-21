@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@components/ui/button'
+import { PingDot } from '@components/ui/ping-dot'
 import { ScrollArea } from '@components/ui/scroll-area'
 import type { ClusterInfo, MainWindowAPI, MiningStatus } from '@types'
 import { ClusterListItem } from './ClusterListItem'
@@ -12,16 +13,9 @@ function MiningProgressBanner({ status }: { status: MiningStatus }): React.JSX.E
   const pct = Math.max(1.5, (done / status.totalDays) * 100)
   return (
     <div className="space-y-1.5">
-      <div className="flex items-baseline justify-between gap-4 text-xs">
+      <div className="flex items-center justify-between gap-4 text-xs">
         <span className="flex min-w-0 items-center gap-2 font-medium text-foreground/85">
-          <span className="relative inline-flex size-2 shrink-0">
-            {mining && (
-              <span className="absolute inset-0 animate-ping rounded-full bg-primary opacity-75" />
-            )}
-            <span
-              className={`relative inline-flex size-2 rounded-full ${mining ? 'bg-primary' : 'bg-muted-foreground'}`}
-            />
-          </span>
+          <PingDot active={mining} />
           <span className="truncate">{mining ? 'Analyzing your history' : 'Analysis paused'}</span>
         </span>
         <span className="shrink-0 tabular-nums text-muted-foreground">
