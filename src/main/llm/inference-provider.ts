@@ -40,6 +40,26 @@ export interface InferenceProviderOptions {
   getActiveVendor: () => Vendor
   /** Optional fetch override forwarded to all underlying SDK providers (tests). */
   fetch?: typeof globalThis.fetch
+  /** Per-request timeout for SDK provider HTTP calls. Defaults to DEFAULT_REQUEST_TIMEOUT_MS. */
+  requestTimeoutMs?: number
+}
+
+/**
+ * Upstream providers can accept a request and then stall indefinitely while
+ * the gateway keeps the connection alive, so an explicit deadline is the only
+ * thing that ever fails the call. Normal completions finish well under this.
+ */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 5 * 60 * 1000
+
+export function withRequestTimeout(
+  fetchImpl: typeof globalThis.fetch,
+  timeoutMs: number,
+): typeof globalThis.fetch {
+  return (input, init) => {
+    const timeout = AbortSignal.timeout(timeoutMs)
+    const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout
+    return fetchImpl(input, { ...init, signal })
+  }
 }
 
 interface CacheEntry {
@@ -51,6 +71,7 @@ export class InferenceProviderImpl implements InferenceProvider {
   private readonly credentials: VendorCredentialsManager
   private readonly getActiveVendorAccessor: () => Vendor
   private readonly customFetch: typeof globalThis.fetch | undefined
+  private readonly requestTimeoutMs: number
   private readonly sdkCache = new Map<Vendor, CacheEntry>()
   private readonly loggedRouteSnapshots = new Set<string>()
   private readonly listeners = new Set<() => void>()
@@ -59,6 +80,7 @@ export class InferenceProviderImpl implements InferenceProvider {
     this.credentials = options.credentials
     this.getActiveVendorAccessor = options.getActiveVendor
     this.customFetch = options.fetch
+    this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
   }
 
   isConfigured(): boolean {
@@ -80,7 +102,9 @@ export class InferenceProviderImpl implements InferenceProvider {
     if (cached && cached.signature === signature) {
       return cached.sdkProvider.languageModel(modelId)
     }
-    const sdkProvider = createSdkProvider(vendor, creds, { fetch: this.customFetch })
+    const sdkProvider = createSdkProvider(vendor, creds, {
+      fetch: withRequestTimeout(this.customFetch ?? globalThis.fetch, this.requestTimeoutMs),
+    })
     this.sdkCache.set(vendor, { signature, sdkProvider })
     log.info(`[InferenceProvider] built provider ${describeRoute(vendor, creds)}`)
     return sdkProvider.languageModel(modelId)
