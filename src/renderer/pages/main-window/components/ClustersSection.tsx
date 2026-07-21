@@ -13,8 +13,16 @@ function MiningProgressBanner({ status }: { status: MiningStatus }): React.JSX.E
   return (
     <div className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-4 text-xs">
-        <span className="truncate font-medium text-foreground/85">
-          {mining ? 'Analyzing your history' : 'Analysis paused'}
+        <span className="flex min-w-0 items-center gap-2 font-medium text-foreground/85">
+          <span className="relative inline-flex size-2 shrink-0">
+            {mining && (
+              <span className="absolute inset-0 animate-ping rounded-full bg-primary opacity-75" />
+            )}
+            <span
+              className={`relative inline-flex size-2 rounded-full ${mining ? 'bg-primary' : 'bg-muted-foreground'}`}
+            />
+          </span>
+          <span className="truncate">{mining ? 'Analyzing your history' : 'Analysis paused'}</span>
         </span>
         <span className="shrink-0 tabular-nums text-muted-foreground">
           {done} of {status.totalDays} days
@@ -22,13 +30,9 @@ function MiningProgressBanner({ status }: { status: MiningStatus }): React.JSX.E
       </div>
       <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
         <div
-          className="relative h-full overflow-hidden rounded-full bg-primary transition-[width] duration-700 ease-out"
+          className="h-full rounded-full bg-primary transition-[width] duration-700 ease-out"
           style={{ width: `${pct}%` }}
-        >
-          {mining && (
-            <div className="absolute inset-y-0 w-1/3 animate-[mining-glow_1.6s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
-          )}
-        </div>
+        />
       </div>
     </div>
   )
