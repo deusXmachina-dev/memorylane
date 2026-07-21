@@ -30,7 +30,6 @@ import { listInstalledApps } from './apps/installed-apps'
 import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
 import { TaskMiner } from './services/task-miner'
 import type { MiningStatus } from '../shared/types'
-import { PatternDetector } from './services/pattern-detector'
 import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
 import { DatabaseUploadSync } from './services/database-upload-sync'
@@ -129,7 +128,6 @@ app.on('window-all-closed', () => {
 let runtime: MainRuntime | null = null
 let userContextBuilder: UserContextBuilder | null = null
 let taskMiner: TaskMiner | null = null
-let patternDetector: PatternDetector | null = null
 let rawDatabaseExportSync: RawDatabaseExportSync | null = null
 let databaseUploadSync: DatabaseUploadSync | null = null
 let logUploadSync: LogUploadSync | null = null
@@ -338,25 +336,16 @@ app.on('ready', async () => {
 
   const settings = captureSettingsManager.get()
   userContextBuilder = new UserContextBuilder(runtime.storage, runtime.inferenceProvider)
-  // The scheduled analyzer. The newTaskMinerEnabled developer toggle (default
-  // off) picks the new TaskMiner (mining + clustering) over the legacy
-  // PatternDetector. Read once here — flipping the toggle takes effect on the
-  // next launch. Both use the patternDetection* capture settings for enable
-  // state and model.
-  if (settings.newTaskMinerEnabled) {
-    taskMiner = new TaskMiner(runtime.storage, runtime.inferenceProvider, runtime.mlWorker)
-    taskMiner.setEnabled(settings.patternDetectionEnabled)
-  } else {
-    patternDetector = new PatternDetector(runtime.storage, runtime.inferenceProvider)
-    patternDetector.setEnabled(settings.patternDetectionEnabled)
-  }
-  const scheduledMiner = taskMiner ?? patternDetector
+  // The scheduled analyzer (mining + clustering). Uses the patternDetection*
+  // capture settings for enable state and model.
+  taskMiner = new TaskMiner(runtime.storage, runtime.inferenceProvider, runtime.mlWorker)
+  taskMiner.setEnabled(settings.patternDetectionEnabled)
   pushModelSelections(
     {
       semanticService: runtime.semanticService,
-      patternDetector: scheduledMiner ?? undefined,
+      patternDetector: taskMiner,
       userContextBuilder,
-      taskMiner: taskMiner ?? undefined,
+      taskMiner,
     },
     settings,
     getRemoteModelConfig(),
@@ -369,7 +358,7 @@ app.on('ready', async () => {
     applyRemoteModelConfig(
       {
         semanticService: runtime.semanticService,
-        patternDetector: scheduledMiner ?? undefined,
+        patternDetector: taskMiner ?? undefined,
         userContextBuilder: userContextBuilder ?? undefined,
         taskMiner: taskMiner ?? undefined,
       },
@@ -384,7 +373,7 @@ app.on('ready', async () => {
     captureStateManager,
     isPaused: shouldPause,
     userContextBuilder,
-    patternDetector: scheduledMiner,
+    patternDetector: taskMiner,
     onStateChanged: () => {
       void updateTrayMenu()
       void sendStatusToRenderer()
@@ -481,7 +470,7 @@ app.on('ready', async () => {
     semanticService: runtime.semanticService,
     accessProvider: runtime.accessProvider,
     captureSettingsManager,
-    patternDetector: scheduledMiner ?? undefined,
+    patternDetector: taskMiner ?? undefined,
     userContextBuilder: userContextBuilder ?? undefined,
     taskMiner: taskMiner ?? undefined,
     getRemoteModelConfig,
@@ -495,9 +484,7 @@ app.on('ready', async () => {
     purgeAll: () => runtime?.purgeAll() ?? Promise.reject(new Error('Runtime not initialized')),
     wipeAndRemineTasks: async () => {
       if (!runtime) throw new Error('Runtime not initialized')
-      // Task mining is a new-miner-only maintenance action; there's nothing to
-      // wipe or re-mine when the legacy PatternDetector is active.
-      if (!taskMiner) throw new Error('Task mining is disabled (enable it in Developer settings)')
+      if (!taskMiner) throw new Error('Task miner not initialized')
       // Don't wipe while a sweep is in flight: it would keep committing days
       // into the freshly wiped ledger. Bail without touching data; the busy
       // check and the sweep's own guard-claim run with no await between them.

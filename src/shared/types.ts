@@ -252,12 +252,6 @@ export interface CaptureSettings {
   patternDetectionModel: string
   modelsByVendor: Partial<Record<Vendor, VendorModelSelection>>
   patternDetectionEnabled: boolean
-  /**
-   * Developer toggle: when true, use the new TaskMiner + clusters view; when
-   * false (default), use the legacy PatternDetector + patterns view. Read once
-   * at startup — flipping it takes effect on the next app launch.
-   */
-  newTaskMinerEnabled: boolean
   uploadDetailLevel: 'off' | 'summary' | 'detailed'
 }
 
@@ -375,50 +369,6 @@ export interface ClustersView {
   hiddenCount: number
 }
 
-// Legacy pattern-detector view types. Used only when the newTaskMinerEnabled
-// developer toggle is off (the default), which restores the pre-cutover
-// PatternDetector + patterns UI.
-export interface PatternInfo {
-  id: string
-  name: string
-  description: string
-  apps: string[]
-  automationIdea: string
-  createdAt: number
-  rejectedAt: number | null
-  promptCopiedAt: number | null
-  approvedAt: number | null
-  completedAt: number | null
-  sightingCount: number
-  lastSeenAt: number | null
-  lastConfidence: number | null
-  estimatedHoursPerWeek: number | null
-}
-
-export interface PatternActivityRef {
-  id: string
-  startTimestamp: number
-  endTimestamp: number
-  appName: string
-  windowTitle: string
-  tld: string | null
-  summary: string
-}
-
-export interface PatternSightingInfo {
-  id: string
-  detectedAt: number
-  evidence: string
-  confidence: number
-  durationEstimateMin: number | null
-  activities: PatternActivityRef[]
-}
-
-export interface PatternDetailInfo {
-  pattern: PatternInfo
-  sightings: PatternSightingInfo[]
-}
-
 /** The tenant's centrally-synced capture blacklist, surfaced read-only in the
  * exclusions UI so users can see what their organization enforces. */
 export interface ManagedExclusions {
@@ -496,14 +446,6 @@ export interface MainWindowAPI {
   onMiningProgressChanged: (callback: (status: MiningStatus) => void) => () => void
   // Dev-only: give failed mining days a fresh set of attempts
   retryFailedMiningDays: () => Promise<{ retried: number }>
-  // Patterns — legacy PatternDetector view (used when newTaskMinerEnabled is off)
-  getPatterns: () => Promise<PatternInfo[]>
-  getPatternDetail: (id: string) => Promise<PatternDetailInfo | null>
-  approvePattern: (id: string) => Promise<SaveResult>
-  rejectPattern: (id: string) => Promise<SaveResult>
-  completePattern: (id: string) => Promise<SaveResult>
-  uncompletePattern: (id: string) => Promise<SaveResult>
-  markPatternPromptCopied: (id: string) => Promise<SaveResult>
   // Dev-only: wipe all mined sightings/clusters and re-mine from scratch
   wipeAndRemineTasks: () => Promise<WipeAndRemineResult>
   // Theme

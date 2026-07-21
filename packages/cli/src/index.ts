@@ -113,7 +113,7 @@ export async function cmdStats(storage: StorageService): Promise<unknown> {
   const count = storage.activities.count()
   const dateRange = storage.activities.getDateRange()
   const dbSize = storage.getDbSize()
-  const patternCount = storage.patterns.patternCount()
+  const patternCount = storage.clusters.getAll().length
 
   return {
     dbPath: storage.getDbPath(),

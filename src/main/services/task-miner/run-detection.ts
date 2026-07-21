@@ -15,13 +15,13 @@ import type {
 } from './types'
 import { DEFAULT_MINER_CONFIG } from './types'
 import {
+  computeEpisodeWindow,
   getDayBoundaries,
   serializeActivities,
   tryExtractJsonArray,
   extractJsonObject,
-} from '../pattern-detector/helpers'
-import { buildVerificationTools } from '../pattern-detector/tools'
-import { computeEpisodeWindow } from './helpers'
+} from './helpers'
+import { buildVerificationTools } from './tools'
 import { normalizeScanCandidates } from './candidate-normalizer'
 import { buildScanSystemPrompt, buildGroundingSystemPrompt } from './prompts'
 import { getKnownProcedureTitles } from './known-procedures'

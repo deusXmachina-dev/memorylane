@@ -193,25 +193,6 @@ describe('command handlers', () => {
       }),
     )
 
-    // Seed a pattern + sighting
-    storage.patterns.addPattern({
-      id: 'pat-1',
-      name: 'Code Review',
-      description: 'Reviewing PRs on GitHub',
-      apps: ['Chrome'],
-      automationIdea: 'Auto-merge simple PRs',
-      createdAt: 1000,
-    })
-    storage.patterns.addSighting({
-      id: 'sight-1',
-      patternId: 'pat-1',
-      detectedAt: 2000,
-      runId: 'run-abc',
-      evidence: 'Saw PR review',
-      activityIds: ['act-3'],
-      confidence: 0.9,
-    })
-
     // Seed a task cluster with two member sightings (recent, inside the stats window)
     const now = Date.now()
     const HOUR_MS = 60 * 60 * 1000
@@ -222,6 +203,8 @@ describe('command handlers', () => {
       centroid: null,
       kind: 'procedure',
       mechanism: 'Automate with gh CLI',
+      steps: [],
+      variables: [],
       labelModel: '',
       labeledSize: 2,
       createdAt: now,

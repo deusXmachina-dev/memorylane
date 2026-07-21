@@ -67,17 +67,16 @@ export interface EvalPromoteSummary {
 // Task-mining goldens (Developer → Tasks tab)
 // ---------------------------------------------------------------------------
 
-/** A legacy pattern-detection sighting, for the Tasks tab's list. */
+/** A mined sighting, for the Tasks tab's list. */
 export interface TaskSightingSummary {
   id: string
-  patternName: string
-  evidence: string
+  title: string
+  description: string
   apps: string[]
   activityIds: string[]
   detectedAt: number
-  /** Earliest start / latest end of the sighting's activities, or null if unresolved. */
-  startedAt: number | null
-  endedAt: number | null
+  startedAt: number
+  endedAt: number
   activityCount: number
 }
 

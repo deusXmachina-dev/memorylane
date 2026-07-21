@@ -813,111 +813,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     },
   )
 
-  // Patterns (legacy PatternDetector view) — used when newTaskMinerEnabled is off.
-  handle('main-window:getPatterns', () => {
-    if (!deps) return []
-    return deps.storage.patterns.getAllPatterns()
-  })
-
-  handle('main-window:getPatternDetail', (_event: IpcMainInvokeEvent, id: string) => {
-    if (!deps) return null
-    const detail = deps.storage.patterns.getPatternDetail(id)
-    if (!detail) return null
-
-    const allActivityIds = Array.from(new Set(detail.sightings.flatMap((s) => s.activityIds)))
-    const activities = deps.storage.activities.getByIds(allActivityIds)
-    const activityById = new Map(
-      activities.map((a) => [
-        a.id,
-        {
-          id: a.id,
-          startTimestamp: a.startTimestamp,
-          endTimestamp: a.endTimestamp,
-          appName: a.appName,
-          windowTitle: a.windowTitle,
-          tld: a.tld,
-          summary: a.summary,
-        },
-      ]),
-    )
-
-    return {
-      pattern: detail.pattern,
-      sightings: detail.sightings.map((s) => ({
-        id: s.id,
-        detectedAt: s.detectedAt,
-        evidence: s.evidence,
-        confidence: s.confidence,
-        durationEstimateMin: s.durationEstimateMin,
-        activities: s.activityIds
-          .map((aid) => activityById.get(aid))
-          .filter((a): a is NonNullable<typeof a> => a !== undefined),
-      })),
-    }
-  })
-
-  ipcMain.handle('main-window:approvePattern', (_event: IpcMainInvokeEvent, id: string) => {
-    if (!deps) return { success: false, error: 'Dependencies not initialized' }
-    try {
-      deps.storage.patterns.approvePattern(id)
-      return { success: true }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      log.warn(`[MainWindow] Failed to approve pattern ${id}:`, error)
-      return { success: false, error: message }
-    }
-  })
-
-  ipcMain.handle('main-window:rejectPattern', (_event: IpcMainInvokeEvent, id: string) => {
-    if (!deps) return { success: false, error: 'Dependencies not initialized' }
-    try {
-      deps.storage.patterns.rejectPattern(id)
-      return { success: true }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      log.warn(`[MainWindow] Failed to reject pattern ${id}:`, error)
-      return { success: false, error: message }
-    }
-  })
-
-  ipcMain.handle('main-window:completePattern', (_event: IpcMainInvokeEvent, id: string) => {
-    if (!deps) return { success: false, error: 'Dependencies not initialized' }
-    try {
-      deps.storage.patterns.completePattern(id)
-      return { success: true }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      log.warn(`[MainWindow] Failed to complete pattern ${id}:`, error)
-      return { success: false, error: message }
-    }
-  })
-
-  ipcMain.handle('main-window:uncompletePattern', (_event: IpcMainInvokeEvent, id: string) => {
-    if (!deps) return { success: false, error: 'Dependencies not initialized' }
-    try {
-      deps.storage.patterns.uncompletePattern(id)
-      return { success: true }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      log.warn(`[MainWindow] Failed to uncomplete pattern ${id}:`, error)
-      return { success: false, error: message }
-    }
-  })
-
-  ipcMain.handle(
-    'main-window:markPatternPromptCopied',
-    (_event: IpcMainInvokeEvent, id: string) => {
-      if (!deps) return { success: false, error: 'Dependencies not initialized' }
-      try {
-        deps.storage.patterns.markPromptCopied(id)
-        return { success: true }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error'
-        return { success: false, error: message }
-      }
-    },
-  )
-
   // Activities
   ipcMain.handle(
     'main-window:listRecentActivities',
@@ -1330,32 +1225,23 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     },
   )
 
-  // Task-mining goldens (Developer → Tasks tab). Source: legacy pattern-detection
-  // sightings; output: {userData}/task-fixtures via taskFixtureStore.
+  // Task-mining goldens (Developer → Tasks tab). Source: mined sightings;
+  // output: {userData}/task-fixtures via taskFixtureStore.
   ipcMain.handle('main-window:evalListTaskSightings', () => {
     if (!deps) return []
-    const sightings = deps.storage.patterns.getAllSightings()
-    const allActivityIds = Array.from(new Set(sightings.flatMap((s) => s.activityIds)))
-    const activities = deps.storage.activities.getByIds(allActivityIds)
-    const spanById = new Map(activities.map((a) => [a.id, a]))
-    return sightings.map((s): TaskSightingSummary => {
-      const acts = s.activityIds
-        .map((id) => spanById.get(id))
-        .filter((a): a is NonNullable<typeof a> => a !== undefined)
-      const startedAt = acts.length ? Math.min(...acts.map((a) => a.startTimestamp)) : null
-      const endedAt = acts.length ? Math.max(...acts.map((a) => a.endTimestamp)) : null
-      return {
+    return deps.storage.sightings.getAll().map(
+      (s): TaskSightingSummary => ({
         id: s.id,
-        patternName: s.patternName,
-        evidence: s.evidence,
-        apps: s.patternApps,
+        title: s.title,
+        description: s.description,
+        apps: s.apps,
         activityIds: s.activityIds,
         detectedAt: s.detectedAt,
-        startedAt,
-        endedAt,
+        startedAt: s.startedAt,
+        endedAt: s.endedAt,
         activityCount: s.activityIds.length,
-      }
-    })
+      }),
+    )
   })
 
   ipcMain.handle(
@@ -1364,7 +1250,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       if (!deps || typeof sightingId !== 'string') return null
       const before = typeof beforeMin === 'number' ? beforeMin : 60
       const after = typeof afterMin === 'number' ? afterMin : 60
-      const sighting = deps.storage.patterns.getAllSightings().find((s) => s.id === sightingId)
+      const sighting = deps.storage.sightings.getById(sightingId)
       if (!sighting) return null
       try {
         const { activities, dayStart, windowFrom, windowTo } = buildWindowedActivities(
@@ -1373,14 +1259,14 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
           before,
           after,
         )
-        const name = `${sighting.patternName}-${dayString(dayStart)}`
+        const name = `${sighting.title}-${dayString(dayStart)}`
         const goldenMd = renderSightingGoldenMd(
           name,
           {
-            title: sighting.patternName,
-            apps: sighting.patternApps,
+            title: sighting.title,
+            apps: sighting.apps,
             activityIds: sighting.activityIds,
-            description: sighting.evidence,
+            description: sighting.description,
           },
           activities,
         )
@@ -1409,7 +1295,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       if (typeof goldenMd !== 'string' || typeof name !== 'string') {
         return { success: false as const, error: 'Invalid arguments' }
       }
-      const sighting = deps.storage.patterns.getAllSightings().find((s) => s.id === sightingId)
+      const sighting = deps.storage.sightings.getById(sightingId)
       if (!sighting) return { success: false as const, error: 'Sighting not found' }
       try {
         const { activities, dayStart } = buildWindowedActivities(
@@ -1421,7 +1307,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         const fixture = deps.taskFixtureStore.write(name, activities, goldenMd, {
           name,
           label: name,
-          description: `Built from sighting "${sighting.patternName}"; ${activities.length} activities (±${before}/${after} min).`,
+          description: `Built from sighting "${sighting.title}"; ${activities.length} activities (±${before}/${after} min).`,
           activityCount: activities.length,
           sourceDay: dayString(dayStart),
           schemaVersion: TASK_FIXTURE_SCHEMA_VERSION,

@@ -88,7 +88,7 @@ describe('StorageService', () => {
     })
 
     describe('purge', () => {
-      it('removes all activities, vectors, FTS entries, patterns, sightings, and user context', () => {
+      it('removes all activities, vectors, FTS entries, sightings, and user context', () => {
         storage = new StorageService(TEST_DB_PATH)
         applyMigrations(storage.getDatabase())
 
@@ -104,35 +104,23 @@ describe('StorageService', () => {
           ocrText: 'function hello',
           vector: v(0.1, 0.2, 0.3),
         })
-        storage.patterns.addPattern({
-          id: 'pat-1',
-          name: 'Pattern A',
-          description: 'desc',
-          apps: ['Editor'],
-          automationIdea: 'auto',
-          createdAt: 1500,
-          rejectedAt: null,
-          promptCopiedAt: null,
-          approvedAt: null,
-          completedAt: null,
-        })
-        storage.patterns.addSighting({
+        storage.sightings.add({
           id: 'sight-1',
-          patternId: 'pat-1',
-          detectedAt: 1600,
-          runId: 'run-1',
-          evidence: 'evidence',
+          title: 'Sighting A',
+          subject: '',
+          description: 'evidence',
+          apps: ['Editor'],
           activityIds: ['act-1'],
-          confidence: 0.9,
-          durationEstimateMin: 5,
+          startedAt: 1000,
+          endedAt: 2000,
+          interactionMin: 5,
+          runId: 'run-1',
+          detectedAt: 1600,
         })
-        storage.patterns.recordRun('run-1', 1)
         storage.userContext.upsert('short summary', 'detailed summary')
 
         expect(storage.activities.count()).toBe(1)
-        expect(storage.patterns.getAllPatterns().length).toBe(1)
-        expect(storage.patterns.getSightingsForPattern('pat-1').length).toBe(1)
-        expect(storage.patterns.getLastRunTimestamp()).not.toBeNull()
+        expect(storage.sightings.getAll().length).toBe(1)
         expect(storage.userContext.get()).not.toBeNull()
 
         storage.purge()
@@ -140,9 +128,7 @@ describe('StorageService', () => {
         expect(storage.activities.count()).toBe(0)
         expect(storage.activities.searchFTS('hello').length).toBe(0)
         expect(storage.activities.searchVectors(v(0.1, 0.2, 0.3)).length).toBe(0)
-        expect(storage.patterns.getAllPatterns().length).toBe(0)
-        expect(storage.patterns.getSightingsForPattern('pat-1').length).toBe(0)
-        expect(storage.patterns.getLastRunTimestamp()).toBeNull()
+        expect(storage.sightings.getAll().length).toBe(0)
         expect(storage.userContext.get()).toBeNull()
       })
 

@@ -37,7 +37,6 @@ import type {
   McpRegistrationStatus,
   ClustersView,
   MiningStatus,
-  PatternInfo,
   PermissionState,
   PermissionStatus,
   UpdateInfo,
@@ -66,11 +65,7 @@ export function MainWindowApp(): React.JSX.Element {
   const [stats, setStats] = useState<MainWindowStats | null>(null)
   const [mcpStatus, setMcpStatus] = useState<McpRegistrationStatus | null>(null)
   const [clusters, setClusters] = useState<ClustersView | null>(null)
-  const [patterns, setPatterns] = useState<PatternInfo[] | null>(null)
   const [miningStatus, setMiningStatus] = useState<MiningStatus | null>(null)
-  // Developer toggle read once at startup. Off (default) → legacy PatternDetector
-  // + patterns view; on → new TaskMiner + clusters view. Takes effect on restart.
-  const [newTaskMinerEnabled, setNewTaskMinerEnabled] = useState(false)
   const [initialLoaded, setInitialLoaded] = useState(false)
   const [lastCompletedStepIndex, setLastCompletedStepIndex] = useState<number>(() =>
     readLastCompletedIndex(localStorageAdapter),
@@ -127,7 +122,6 @@ export function MainWindowApp(): React.JSX.Element {
       ])
       setCredentialStatuses(statuses)
       setActiveVendor(settings.activeVendor)
-      setNewTaskMinerEnabled(settings.newTaskMinerEnabled)
     } catch {
       /* ignored */
     }
@@ -157,14 +151,6 @@ export function MainWindowApp(): React.JSX.Element {
     }
   }, [api])
 
-  const loadPatterns = useCallback(async () => {
-    try {
-      setPatterns(await api.getPatterns())
-    } catch {
-      setPatterns([])
-    }
-  }, [api])
-
   const loadPermissionStatus = useCallback(async () => {
     try {
       updatePermissionStatus(await api.getPermissionStatus())
@@ -181,7 +167,6 @@ export function MainWindowApp(): React.JSX.Element {
       loadStats(),
       loadMcpStatus(),
       loadClusters(),
-      loadPatterns(),
       loadPermissionStatus(),
     ])
   }, [
@@ -191,7 +176,6 @@ export function MainWindowApp(): React.JSX.Element {
     loadStats,
     loadMcpStatus,
     loadClusters,
-    loadPatterns,
     loadPermissionStatus,
   ])
 
@@ -328,14 +312,13 @@ export function MainWindowApp(): React.JSX.Element {
       setPausedUntilMs(status.pausedUntilMs)
       void loadStats()
       void loadClusters()
-      void loadPatterns()
       void activitiesRefreshRef.current()
     })
     void loadAll().then(() => {
       setInitialLoaded(true)
     })
     return () => unsubscribe()
-  }, [api, loadAll, loadStats, loadClusters, loadPatterns])
+  }, [api, loadAll, loadStats, loadClusters])
 
   useEffect(() => {
     void api.getMiningStatus().then(setMiningStatus)
@@ -416,7 +399,6 @@ export function MainWindowApp(): React.JSX.Element {
       loadStats(),
       loadMcpStatus(),
       loadClusters(),
-      loadPatterns(),
       loadPermissionStatus(),
       activitiesRefreshRef.current(),
     ])
@@ -426,7 +408,6 @@ export function MainWindowApp(): React.JSX.Element {
     loadStats,
     loadMcpStatus,
     loadClusters,
-    loadPatterns,
     loadPermissionStatus,
   ])
 
@@ -619,16 +600,7 @@ export function MainWindowApp(): React.JSX.Element {
           />
         )
       case 'patterns':
-        return (
-          <PatternsPage
-            api={api}
-            newTaskMinerEnabled={newTaskMinerEnabled}
-            clusters={clusters}
-            patterns={patterns}
-            miningStatus={miningStatus}
-            onPatternsChange={() => void loadPatterns()}
-          />
-        )
+        return <PatternsPage api={api} clusters={clusters} miningStatus={miningStatus} />
       case 'settings':
         return (
           <SettingsPage

@@ -18,7 +18,7 @@ import type { StorageService } from '@main/storage'
 import type { Cluster } from '@main/storage/cluster-repository'
 import type { InferenceProvider } from '@main/llm'
 import log from '@main/utils/logger'
-import { formatApiError } from '../../pattern-detector/helpers'
+import { formatApiError } from '../helpers'
 import type { ProgressCallback } from '../types'
 import { dot } from './vector-math'
 import {

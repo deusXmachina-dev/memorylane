@@ -44,7 +44,6 @@
     "mcp:inspector": "npx @modelcontextprotocol/inspector npm run mcp:start",
     "install:local": "node ./scripts/install-local.js",
     "sign:win": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/sign-windows.ps1",
-    "detect-patterns:prune": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/prune-patterns.ts",
     "mine-tasks": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/mine-tasks.ts",
     "build-user-context": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/build-user-context.ts",
     "eval-summaries": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/eval-summaries.ts",

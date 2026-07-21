@@ -17,17 +17,13 @@
  *
  * Includes built-in scheduling: call scheduleRun() on screen unlock and the
  * service handles interval guards, settle delays, and error isolation.
- *
- * Mirrors the public surface of PatternDetector so it can be swapped in by the
- * scheduler/coordinator when the flag is on. The existing pattern detector is
- * left completely untouched.
  */
 
 import type { StorageService } from '../../storage'
 import type { InferenceProvider } from '../../llm'
 import { PATTERN_DETECTION_CONFIG, TASK_BACKFILL } from '../../../shared/constants'
 import log from '@main/utils/logger'
-import { formatApiError, getDayBoundaries } from '../pattern-detector/helpers'
+import { formatApiError, getDayBoundaries } from './helpers'
 import type {
   TaskMinerConfig,
   MiningRunResult,

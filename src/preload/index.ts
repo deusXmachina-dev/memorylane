@@ -81,15 +81,6 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
     }
   },
   retryFailedMiningDays: () => ipcRenderer.invoke('main-window:retryFailedMiningDays'),
-  // Patterns — legacy PatternDetector view (used when newTaskMinerEnabled is off)
-  getPatterns: () => ipcRenderer.invoke('main-window:getPatterns'),
-  getPatternDetail: (id: string) => ipcRenderer.invoke('main-window:getPatternDetail', id),
-  approvePattern: (id: string) => ipcRenderer.invoke('main-window:approvePattern', id),
-  rejectPattern: (id: string) => ipcRenderer.invoke('main-window:rejectPattern', id),
-  completePattern: (id: string) => ipcRenderer.invoke('main-window:completePattern', id),
-  uncompletePattern: (id: string) => ipcRenderer.invoke('main-window:uncompletePattern', id),
-  markPatternPromptCopied: (id: string) =>
-    ipcRenderer.invoke('main-window:markPatternPromptCopied', id),
   // Theme
   getTheme: () => ipcRenderer.invoke('main-window:getTheme') as Promise<'dark' | 'light'>,
   onThemeChanged: (callback: (theme: 'dark' | 'light') => void) => {
