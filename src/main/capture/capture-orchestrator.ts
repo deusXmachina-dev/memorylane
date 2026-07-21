@@ -31,7 +31,7 @@ export function createCaptureCoordinator(params: {
   isPaused: () => boolean
   userContextBuilder: UserContextBuilder | null
   /** The scheduled background miner (TaskMiner; structural for tests). */
-  patternDetector: { scheduleRun(): void } | null
+  taskMiner: { scheduleRun(): void } | null
   /**
    * Notifies the UI (tray + renderer) after any capture-state transition
    * (start/stop/pause/resume) so the displayed state stays in sync — including
@@ -54,7 +54,7 @@ export function createCaptureCoordinator(params: {
 
   const scheduleBackgroundAnalyzers = (): void => {
     params.userContextBuilder?.scheduleRun()
-    params.patternDetector?.scheduleRun()
+    params.taskMiner?.scheduleRun()
   }
 
   const notifyStateChanged = (): void => {

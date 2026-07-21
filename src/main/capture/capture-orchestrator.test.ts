@@ -25,14 +25,14 @@ describe('createCaptureCoordinator', () => {
     const capture = createCaptureMock()
     const stateManager = createCaptureStateManagerMock()
     const userContextBuilder = { scheduleRun: vi.fn() }
-    const patternDetector = { scheduleRun: vi.fn() }
+    const taskMiner = { scheduleRun: vi.fn() }
 
     const coordinator = createCaptureCoordinator({
       capture,
       captureStateManager: stateManager as never,
       isPaused: () => false,
       userContextBuilder: userContextBuilder as never,
-      patternDetector: patternDetector as never,
+      taskMiner: taskMiner as never,
     })
 
     coordinator.controls.requestStartCapture()
@@ -40,21 +40,21 @@ describe('createCaptureCoordinator', () => {
     expect(stateManager.setCaptureEnabled).toHaveBeenCalledWith(true)
     expect(capture.startCapture).toHaveBeenCalledTimes(1)
     expect(userContextBuilder.scheduleRun).toHaveBeenCalledTimes(1)
-    expect(patternDetector.scheduleRun).toHaveBeenCalledTimes(1)
+    expect(taskMiner.scheduleRun).toHaveBeenCalledTimes(1)
   })
 
   it('does not start capture or schedule analyzers on manual start while paused', () => {
     const capture = createCaptureMock()
     const stateManager = createCaptureStateManagerMock()
     const userContextBuilder = { scheduleRun: vi.fn() }
-    const patternDetector = { scheduleRun: vi.fn() }
+    const taskMiner = { scheduleRun: vi.fn() }
 
     const coordinator = createCaptureCoordinator({
       capture,
       captureStateManager: stateManager as never,
       isPaused: () => true,
       userContextBuilder: userContextBuilder as never,
-      patternDetector: patternDetector as never,
+      taskMiner: taskMiner as never,
     })
 
     coordinator.controls.requestStartCapture()
@@ -62,28 +62,28 @@ describe('createCaptureCoordinator', () => {
     expect(stateManager.setCaptureEnabled).toHaveBeenCalledWith(true)
     expect(capture.startCapture).not.toHaveBeenCalled()
     expect(userContextBuilder.scheduleRun).not.toHaveBeenCalled()
-    expect(patternDetector.scheduleRun).not.toHaveBeenCalled()
+    expect(taskMiner.scheduleRun).not.toHaveBeenCalled()
   })
 
   it('keeps scheduling behavior on resume path', () => {
     const capture = createCaptureMock()
     const stateManager = createCaptureStateManagerMock()
     const userContextBuilder = { scheduleRun: vi.fn() }
-    const patternDetector = { scheduleRun: vi.fn() }
+    const taskMiner = { scheduleRun: vi.fn() }
 
     const coordinator = createCaptureCoordinator({
       capture,
       captureStateManager: stateManager as never,
       isPaused: () => false,
       userContextBuilder: userContextBuilder as never,
-      patternDetector: patternDetector as never,
+      taskMiner: taskMiner as never,
     })
 
     coordinator.resumeCaptureIfDesired('resume')
 
     expect(capture.startCapture).toHaveBeenCalledTimes(1)
     expect(userContextBuilder.scheduleRun).toHaveBeenCalledTimes(1)
-    expect(patternDetector.scheduleRun).toHaveBeenCalledTimes(1)
+    expect(taskMiner.scheduleRun).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -105,7 +105,7 @@ describe('createCaptureCoordinator timed pause', () => {
       captureStateManager: stateManager as never,
       isPaused: overrides?.isPaused ?? (() => false),
       userContextBuilder: { scheduleRun: vi.fn() } as never,
-      patternDetector: { scheduleRun: vi.fn() } as never,
+      taskMiner: { scheduleRun: vi.fn() } as never,
       onStateChanged,
     })
     return { capture, stateManager, onStateChanged, coordinator }

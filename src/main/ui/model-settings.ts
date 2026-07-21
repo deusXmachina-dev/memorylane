@@ -8,7 +8,11 @@ import { pushModelSelections, type ModelPushDeps } from './apply-models'
  * `MainWindowDependencies` mock.
  */
 export interface ModelSettingsDeps extends ModelPushDeps {
-  patternDetector?: { updateModel(model: string): void; setEnabled(enabled: boolean): void }
+  taskMiner?: {
+    updateModel(model: string): void
+    updateClusterModel(model: string | null): void
+    setEnabled(enabled: boolean): void
+  }
   getRemoteModelConfig?: () => RemoteModelConfig | null
 }
 
@@ -30,6 +34,6 @@ export function applyModelSettings(
     pushModelSelections(d, updated, d.getRemoteModelConfig?.() ?? null)
   }
   if (updated.patternDetectionEnabled !== previous.patternDetectionEnabled) {
-    d.patternDetector?.setEnabled(updated.patternDetectionEnabled)
+    d.taskMiner?.setEnabled(updated.patternDetectionEnabled)
   }
 }

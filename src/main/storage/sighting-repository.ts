@@ -74,10 +74,12 @@ export class SightingRepository {
     return rows.map((r) => this.rowToSighting(r))
   }
 
-  getAll(): Sighting[] {
-    const rows = this.db
-      .prepare(`SELECT * FROM sightings ORDER BY started_at DESC`)
-      .all() as Record<string, unknown>[]
+  getAll(limit?: number): Sighting[] {
+    const rows = (
+      limit === undefined
+        ? this.db.prepare(`SELECT * FROM sightings ORDER BY started_at DESC`).all()
+        : this.db.prepare(`SELECT * FROM sightings ORDER BY started_at DESC LIMIT ?`).all(limit)
+    ) as Record<string, unknown>[]
     return rows.map((r) => this.rowToSighting(r))
   }
 

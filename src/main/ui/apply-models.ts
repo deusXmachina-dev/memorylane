@@ -12,9 +12,11 @@ export interface ModelPushDeps {
   semanticService: {
     updateModels(videoModels: string[], snapshotModels: string[]): void
   }
-  patternDetector?: { updateModel(model: string): void }
   userContextBuilder?: { updateModel(model: string): void }
-  taskMiner?: { updateClusterModel(model: string | null): void }
+  taskMiner?: {
+    updateModel(model: string): void
+    updateClusterModel(model: string | null): void
+  }
 }
 
 type ModelSelection = Pick<
@@ -37,9 +39,9 @@ export function pushModelSelections(
     buildModelChain(s.semanticVideoModel, presets.semanticVideo),
     buildModelChain(s.semanticSnapshotModel, presets.semanticSnapshot),
   )
-  d.patternDetector?.updateModel(s.patternDetectionModel)
+  d.taskMiner?.updateModel(s.patternDetectionModel)
+  d.taskMiner?.updateClusterModel(resolveClusterModelOverride(s.activeVendor, remote))
   d.userContextBuilder?.updateModel(
     resolveUserContextModel(s.patternDetectionModel, s.activeVendor, remote),
   )
-  d.taskMiner?.updateClusterModel(resolveClusterModelOverride(s.activeVendor, remote))
 }

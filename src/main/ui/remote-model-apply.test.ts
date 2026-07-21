@@ -48,18 +48,18 @@ function makeManager(initial: CaptureSettings): RemoteModelSettingsManager & {
 function makeDeps(): {
   deps: ModelPushDeps
   semanticService: { updateModels: ReturnType<typeof vi.fn> }
-  patternDetector: { updateModel: ReturnType<typeof vi.fn> }
   userContextBuilder: { updateModel: ReturnType<typeof vi.fn> }
-  taskMiner: { updateClusterModel: ReturnType<typeof vi.fn> }
+  taskMiner: {
+    updateModel: ReturnType<typeof vi.fn>
+    updateClusterModel: ReturnType<typeof vi.fn>
+  }
 } {
   const semanticService = { updateModels: vi.fn() }
-  const patternDetector = { updateModel: vi.fn() }
   const userContextBuilder = { updateModel: vi.fn() }
-  const taskMiner = { updateClusterModel: vi.fn() }
+  const taskMiner = { updateModel: vi.fn(), updateClusterModel: vi.fn() }
   return {
-    deps: { semanticService, patternDetector, userContextBuilder, taskMiner },
+    deps: { semanticService, userContextBuilder, taskMiner },
     semanticService,
-    patternDetector,
     userContextBuilder,
     taskMiner,
   }
@@ -149,11 +149,11 @@ describe('applyRemoteModelConfig', () => {
 
   it('pushes diverged text-task models and the cluster override live', () => {
     const manager = makeManager(makeSettings())
-    const { deps, patternDetector, userContextBuilder, taskMiner } = makeDeps()
+    const { deps, userContextBuilder, taskMiner } = makeDeps()
 
     applyRemoteModelConfig(deps, manager, REMOTE)
 
-    expect(patternDetector.updateModel).toHaveBeenCalledWith('remote/mining-model')
+    expect(taskMiner.updateModel).toHaveBeenCalledWith('remote/mining-model')
     expect(userContextBuilder.updateModel).toHaveBeenCalledWith('remote/context-model')
     expect(taskMiner.updateClusterModel).toHaveBeenCalledWith('remote/cluster-model')
   })
