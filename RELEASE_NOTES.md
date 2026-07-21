@@ -1,13 +1,12 @@
-# MemoryLane v1.5.0-alpha.2
+# MemoryLane v1.5.0-alpha.3
 
-Alpha prerelease. Patterns-first UI with honest metrics, sanitized AI agent recipes, and a refreshed design.
+Alpha prerelease. Task miner becomes the only analysis engine, every pattern gets recipe steps, and managed installs receive model updates remotely.
 
 ## What's Changed
 
-- **Patterns-first UI**: Patterns is now the default landing screen. Cards and details show hands-on time plus an estimated monthly figure, and a new chart tracks the last 4 weeks of sightings (#227).
-- **Build AI agent recipe**: patterns now carry a generalized, de-identified step-by-step recipe generated at mining time; the "Build AI agent" button copies it, sanitized (#228).
-- **Refreshed design**: new theme across the app (#229).
-- **Accurate mining progress**: the progress banner reports the current sweep instead of lifetime totals (#229).
+- **Task miner cutover**: the legacy pattern detector is fully removed; the task miner is now the only analyzer. Installs that still ran the old detector start a fresh ~60-day backfill on first launch (existing data is kept).
+- **Recipe steps everywhere**: every pattern now carries step-by-step recipe lines (app, domain, intent) in the Build AI agent prompt. Existing clusters are re-mined once to gain steps (#235).
+- **Remote model config**: managed installs poll the backend for model picks, so degraded or repriced models can be swapped without an app update. BYOK and custom-endpoint installs keep full model control (#233).
 
 ## Known Issues & Limitations
 
@@ -25,4 +24,4 @@ Alpha prerelease. Patterns-first UI with honest metrics, sanitized AI agent reci
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.0-alpha.1...v1.5.0-alpha.2
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.0-alpha.2...v1.5.0-alpha.3
