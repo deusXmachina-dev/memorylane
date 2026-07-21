@@ -29,7 +29,6 @@ export function makeCaptureSettings(overrides: Partial<CaptureSettings> = {}): C
     excludedUrlPatterns: [],
     activeVendor: 'openrouter',
     modelsByVendor: {},
-    newTaskMinerEnabled: true,
     semanticVideoModel: VENDOR_PRESETS.openrouter.semanticVideo[0].id,
     semanticSnapshotModel: VENDOR_PRESETS.openrouter.semanticSnapshot[0].id,
     patternDetectionModel: VENDOR_PRESETS.openrouter.patternDetection[0].id,

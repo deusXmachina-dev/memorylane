@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeEpisodeWindow } from './helpers'
+import { computeEpisodeWindow, tryExtractJsonArray } from './helpers'
 
 describe('computeEpisodeWindow', () => {
   it('derives the window from min start / max end and sums interaction time', () => {
@@ -78,5 +78,31 @@ describe('computeEpisodeWindow', () => {
     expect(w.startedAt).toBe(0)
     expect(w.endedAt).toBe(7_200_000)
     expect(w.interactionMin).toBe(90) // 30 + 60 active, idle gap excluded
+  })
+})
+
+describe('tryExtractJsonArray', () => {
+  it('parses a fenced JSON array', () => {
+    expect(tryExtractJsonArray('```json\n[{"a":1}]\n```')).toEqual([{ a: 1 }])
+  })
+
+  it('parses a bare JSON array', () => {
+    expect(tryExtractJsonArray('[1, 2]')).toEqual([1, 2])
+  })
+
+  it('parses an array embedded in prose', () => {
+    expect(tryExtractJsonArray('Here you go: [1] done')).toEqual([1])
+  })
+
+  it('returns an empty array for a parsed [] (a real answer, not a failure)', () => {
+    expect(tryExtractJsonArray('[]')).toEqual([])
+    expect(tryExtractJsonArray('```json\n[]\n```')).toEqual([])
+  })
+
+  it('returns null when no JSON array can be parsed', () => {
+    expect(tryExtractJsonArray('')).toBeNull()
+    expect(tryExtractJsonArray('sorry, I cannot help with that')).toBeNull()
+    expect(tryExtractJsonArray('{"not": "an array"}')).toBeNull()
+    expect(tryExtractJsonArray('[{"truncated": ')).toBeNull()
   })
 })

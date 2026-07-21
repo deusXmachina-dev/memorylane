@@ -1,6 +1,6 @@
 import { generateText } from 'ai'
 import type { InferenceProvider } from '@main/llm'
-import { extractJsonObject } from '../../pattern-detector/helpers'
+import { extractJsonObject } from '../helpers'
 import type { ReviewInput, ReviewOutput } from './types'
 import { CLUSTERING_CONFIG } from './types'
 import { buildClusterReviewSystemPrompt, serializeReviewInput } from './prompts'

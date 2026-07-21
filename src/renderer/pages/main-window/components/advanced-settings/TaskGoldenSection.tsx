@@ -106,14 +106,14 @@ export function TaskGoldenSection({ api }: { api: MainWindowAPI }): React.JSX.El
                 onClick={() => setSelected({ kind: 'sighting', sighting: s })}
                 className="block w-full py-2 text-left"
               >
-                <div className="text-sm font-medium">{s.patternName}</div>
+                <div className="text-sm font-medium">{s.title}</div>
                 <div className="text-xs text-muted-foreground">
                   {new Date(s.detectedAt).toLocaleString()} · {s.activityCount} activities ·{' '}
                   {s.apps.slice(0, 3).join(', ') || 'no apps'}
                 </div>
-                {s.evidence && (
+                {s.description && (
                   <div className="mt-0.5 line-clamp-2 text-xs text-muted-foreground/80">
-                    {s.evidence}
+                    {s.description}
                   </div>
                 )}
               </button>
@@ -241,7 +241,7 @@ function SightingPromote({
         <Button variant="ghost" size="sm" onClick={onBack}>
           <ArrowLeftIcon /> Back
         </Button>
-        <div className="text-sm font-medium">{sighting.patternName}</div>
+        <div className="text-sm font-medium">{sighting.title}</div>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
