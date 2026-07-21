@@ -54,9 +54,6 @@ export class TaskMiner {
   private clusterModel: string | null = null
   private enabled = true
   private statusListener?: () => void
-  /** Set by cancelSweep(); the sweep loop bails at the next day boundary. */
-  private abortRequested = false
-  private currentSweep: Promise<BackfillSummary> | null = null
 
   // The app injects the MlWorkerClient; enode scripts pass an in-process
   // EmbeddingService (no utilityProcess there). Not defaulted — a default
@@ -186,38 +183,11 @@ export class TaskMiner {
    * retries it, and once its attempts are exhausted the claim skips past it.
    * Clusters at the CLUSTER_EVERY_DAYS barrier and once at the end.
    */
-  private sweep(provider: InferenceProvider): Promise<BackfillSummary> {
+  private async sweep(provider: InferenceProvider): Promise<BackfillSummary> {
     if (this.running) {
       log.info('[TaskMiner] Sweep already in progress, skipping')
-      return Promise.resolve({ daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'busy' })
+      return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'busy' }
     }
-    const sweep = this.runSweep(provider).finally(() => {
-      if (this.currentSweep === sweep) this.currentSweep = null
-    })
-    this.currentSweep = sweep
-    return sweep
-  }
-
-  /**
-   * Preempt the miner: clear any scheduled sweep and stop the running one at
-   * its next day boundary (the in-flight day finishes — aborting a single LLM
-   * call mid-commit isn't worth the plumbing). Resolves once the miner is
-   * idle. Backs the dev "wipe & re-mine" flow, which must not race a sweep
-   * committing days into the freshly wiped ledger.
-   */
-  async cancelSweep(): Promise<void> {
-    if (this.settleTimer) {
-      clearTimeout(this.settleTimer)
-      this.settleTimer = null
-    }
-    while (this.currentSweep) {
-      this.abortRequested = true
-      await this.currentSweep.catch(() => {})
-    }
-    this.abortRequested = false
-  }
-
-  private async runSweep(provider: InferenceProvider): Promise<BackfillSummary> {
     this.running = true
     const settled = this.storage.miningDays.countByStatus()
     this.sweepBaseline = { completed: settled.completed, failed: settled.failed }
@@ -231,10 +201,6 @@ export class TaskMiner {
       let clustering: ClusteringRunSummary | undefined
 
       for (;;) {
-        if (this.abortRequested) {
-          log.info('[TaskMiner] Sweep cancelled')
-          break
-        }
         const claim = this.storage.miningDays.claimOldestPending()
         if (!claim) break
         didWork = true
@@ -285,7 +251,7 @@ export class TaskMiner {
         }
         this.emitStatus()
 
-        if (!this.abortRequested && minedSinceCluster >= TASK_BACKFILL.CLUSTER_EVERY_DAYS) {
+        if (minedSinceCluster >= TASK_BACKFILL.CLUSTER_EVERY_DAYS) {
           clustering = await this.cluster(provider, {
             ...DEFAULT_MINER_CONFIG,
             model: this.model,
@@ -300,11 +266,7 @@ export class TaskMiner {
       // Skipped when nothing settled (e.g. the first day failed): there is
       // nothing new to cluster, and a provider outage shouldn't get one more
       // doomed LLM call.
-      if (
-        !this.abortRequested &&
-        daysMined + daysSkipped > 0 &&
-        (minedSinceCluster > 0 || !clustering)
-      ) {
+      if (daysMined + daysSkipped > 0 && (minedSinceCluster > 0 || !clustering)) {
         clustering = await this.cluster(provider, {
           ...DEFAULT_MINER_CONFIG,
           model: this.model,

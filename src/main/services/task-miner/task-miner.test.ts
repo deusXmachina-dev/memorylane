@@ -190,41 +190,6 @@ describe('TaskMiner sweep', () => {
     expect(second).toMatchObject({ daysMined: 3, daysFailed: 0 })
   })
 
-  it('cancelSweep stops a running sweep at the day boundary and leaves the miner idle', async () => {
-    seedDays(3)
-    // Block the first day's mine so the cancel lands mid-sweep.
-    let release!: () => void
-    const gate = new Promise<void>((r) => (release = r))
-    mockedRunDetection.mockImplementationOnce(async (_provider, _storage, _embedder, config) => {
-      await gate
-      config?.onCommit?.({
-        candidatesFromScan: 1,
-        candidatesKept: 1,
-        candidatesRejected: 0,
-        tokensIn: 10,
-        tokensOut: 5,
-      })
-      return {} as never
-    })
-
-    const sweep = miner.sweepNow(configuredProvider)
-    const cancelled = miner.cancelSweep()
-    release()
-    await cancelled
-    const summary = await sweep
-
-    // The in-flight day committed; the two newer days were never attempted,
-    // and no clustering pass ran on the truncated sweep.
-    expect(summary.daysMined).toBe(1)
-    expect(mockedRunDetection).toHaveBeenCalledTimes(1)
-    expect(mockedRunClustering).not.toHaveBeenCalled()
-    expect(miner.isBusy()).toBe(false)
-
-    // Cancellation is not sticky — the next sweep drains the rest.
-    const next = await miner.sweepNow(configuredProvider)
-    expect(next.daysMined).toBe(2)
-  })
-
   it('marks a day failed after exhausting attempts and sweeps past it', async () => {
     seedDays(2)
     for (let i = 0; i < TASK_BACKFILL.MAX_DAY_ATTEMPTS; i++) {
