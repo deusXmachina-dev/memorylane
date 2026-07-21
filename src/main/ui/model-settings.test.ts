@@ -7,17 +7,18 @@ import { makeCaptureSettings } from '@main/utils/test-utils'
 function makeDeps(): {
   deps: ModelSettingsDeps
   semanticService: { updateModels: ReturnType<typeof vi.fn> }
-  patternDetector: {
+  taskMiner: {
     updateModel: ReturnType<typeof vi.fn>
+    updateClusterModel: ReturnType<typeof vi.fn>
     setEnabled: ReturnType<typeof vi.fn>
   }
   userContextBuilder: { updateModel: ReturnType<typeof vi.fn> }
 } {
   const semanticService = { updateModels: vi.fn() }
-  const patternDetector = { updateModel: vi.fn(), setEnabled: vi.fn() }
+  const taskMiner = { updateModel: vi.fn(), updateClusterModel: vi.fn(), setEnabled: vi.fn() }
   const userContextBuilder = { updateModel: vi.fn() }
-  const deps: ModelSettingsDeps = { semanticService, patternDetector, userContextBuilder }
-  return { deps, semanticService, patternDetector, userContextBuilder }
+  const deps: ModelSettingsDeps = { semanticService, taskMiner, userContextBuilder }
+  return { deps, semanticService, taskMiner, userContextBuilder }
 }
 
 function makeSettings(overrides: Partial<CaptureSettings> = {}): CaptureSettings {
@@ -25,24 +26,24 @@ function makeSettings(overrides: Partial<CaptureSettings> = {}): CaptureSettings
 }
 
 describe('applyModelSettings', () => {
-  it('propagates a changed patternDetectionModel to both patternDetector and userContextBuilder', () => {
-    const { deps, patternDetector, userContextBuilder } = makeDeps()
+  it('propagates a changed patternDetectionModel to both taskMiner and userContextBuilder', () => {
+    const { deps, taskMiner, userContextBuilder } = makeDeps()
     const previous = makeSettings({ patternDetectionModel: 'old/model' })
     const updated = makeSettings({ patternDetectionModel: 'new/model' })
 
     applyModelSettings(deps, updated, previous)
 
-    expect(patternDetector.updateModel).toHaveBeenCalledWith('new/model')
+    expect(taskMiner.updateModel).toHaveBeenCalledWith('new/model')
     expect(userContextBuilder.updateModel).toHaveBeenCalledWith('new/model')
   })
 
   it('does not call updateModel when patternDetectionModel is unchanged', () => {
-    const { deps, patternDetector, userContextBuilder } = makeDeps()
+    const { deps, taskMiner, userContextBuilder } = makeDeps()
     const settings = makeSettings({ patternDetectionModel: 'same/model' })
 
     applyModelSettings(deps, settings, settings)
 
-    expect(patternDetector.updateModel).not.toHaveBeenCalled()
+    expect(taskMiner.updateModel).not.toHaveBeenCalled()
     expect(userContextBuilder.updateModel).not.toHaveBeenCalled()
   })
 
@@ -55,14 +56,14 @@ describe('applyModelSettings', () => {
     expect(() => applyModelSettings(deps, updated, previous)).not.toThrow()
   })
 
-  it('forwards setEnabled to patternDetector when patternDetectionEnabled flips', () => {
-    const { deps, patternDetector, userContextBuilder } = makeDeps()
+  it('forwards setEnabled to taskMiner when patternDetectionEnabled flips', () => {
+    const { deps, taskMiner, userContextBuilder } = makeDeps()
     const previous = makeSettings({ patternDetectionEnabled: true })
     const updated = makeSettings({ patternDetectionEnabled: false })
 
     applyModelSettings(deps, updated, previous)
 
-    expect(patternDetector.setEnabled).toHaveBeenCalledWith(false)
+    expect(taskMiner.setEnabled).toHaveBeenCalledWith(false)
     expect(userContextBuilder.updateModel).not.toHaveBeenCalled()
   })
 
@@ -91,7 +92,7 @@ describe('applyModelSettings', () => {
   })
 
   it('uses remote chains for the tail and diverges the user-context model', () => {
-    const { deps, semanticService, patternDetector, userContextBuilder } = makeDeps()
+    const { deps, semanticService, taskMiner, userContextBuilder } = makeDeps()
     deps.getRemoteModelConfig = () => ({
       version: 2,
       models: {
@@ -112,7 +113,7 @@ describe('applyModelSettings', () => {
 
     const [videoModels] = semanticService.updateModels.mock.calls[0] as [string[], string[]]
     expect(videoModels).toEqual(['remote/video-b', 'remote/video-a'])
-    expect(patternDetector.updateModel).toHaveBeenCalledWith('new/model')
+    expect(taskMiner.updateModel).toHaveBeenCalledWith('new/model')
     expect(userContextBuilder.updateModel).toHaveBeenCalledWith('remote/context-model')
   })
 })

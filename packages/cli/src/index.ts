@@ -113,7 +113,13 @@ export async function cmdStats(storage: StorageService): Promise<unknown> {
   const count = storage.activities.count()
   const dateRange = storage.activities.getDateRange()
   const dbSize = storage.getDbSize()
-  const patternCount = storage.clusters.getAll().length
+  // Visible clusters only — same noise floor as the Patterns UI and MCP tools.
+  let patternCount = 0
+  try {
+    patternCount = computeClustersView(storage, Date.now()).clusters.length
+  } catch (err) {
+    if (!isMissingClusterTables(err)) throw err
+  }
 
   return {
     dbPath: storage.getDbPath(),

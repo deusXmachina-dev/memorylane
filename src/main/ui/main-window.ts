@@ -80,8 +80,9 @@ interface InferenceProviderLike {
   notifyConfigChanged(): void
 }
 
-interface PatternDetectorService {
+interface TaskMinerService {
   updateModel(model: string): void
+  updateClusterModel(model: string | null): void
   setEnabled(enabled: boolean): void
 }
 
@@ -111,9 +112,8 @@ interface MainWindowDependencies {
   semanticService: SemanticService
   accessProvider: AccessProvider
   captureSettingsManager: CaptureSettingsManager
-  patternDetector?: PatternDetectorService
   userContextBuilder?: UserContextBuilderService
-  taskMiner?: { updateClusterModel(model: string | null): void }
+  taskMiner?: TaskMinerService
   /** Latest remote model config (cached or synced); null when the OpenRouter
    * key isn't managed or none is known. */
   getRemoteModelConfig?: () => RemoteModelConfig | null
@@ -1229,7 +1229,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   // output: {userData}/task-fixtures via taskFixtureStore.
   ipcMain.handle('main-window:evalListTaskSightings', () => {
     if (!deps) return []
-    return deps.storage.sightings.getAll().map(
+    return deps.storage.sightings.getAll(200).map(
       (s): TaskSightingSummary => ({
         id: s.id,
         title: s.title,

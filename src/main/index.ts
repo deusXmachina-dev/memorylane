@@ -343,7 +343,6 @@ app.on('ready', async () => {
   pushModelSelections(
     {
       semanticService: runtime.semanticService,
-      patternDetector: taskMiner,
       userContextBuilder,
       taskMiner,
     },
@@ -358,7 +357,6 @@ app.on('ready', async () => {
     applyRemoteModelConfig(
       {
         semanticService: runtime.semanticService,
-        patternDetector: taskMiner ?? undefined,
         userContextBuilder: userContextBuilder ?? undefined,
         taskMiner: taskMiner ?? undefined,
       },
@@ -373,7 +371,7 @@ app.on('ready', async () => {
     captureStateManager,
     isPaused: shouldPause,
     userContextBuilder,
-    patternDetector: taskMiner,
+    taskMiner,
     onStateChanged: () => {
       void updateTrayMenu()
       void sendStatusToRenderer()
@@ -470,7 +468,6 @@ app.on('ready', async () => {
     semanticService: runtime.semanticService,
     accessProvider: runtime.accessProvider,
     captureSettingsManager,
-    patternDetector: taskMiner ?? undefined,
     userContextBuilder: userContextBuilder ?? undefined,
     taskMiner: taskMiner ?? undefined,
     getRemoteModelConfig,

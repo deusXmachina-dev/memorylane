@@ -11,9 +11,11 @@ function makeDeps(): {
     updatePipelinePreference: ReturnType<typeof vi.fn>
     testConnection: ReturnType<typeof vi.fn>
   }
-  patternDetector: { updateModel: ReturnType<typeof vi.fn> }
   userContextBuilder: { updateModel: ReturnType<typeof vi.fn> }
-  taskMiner: { updateClusterModel: ReturnType<typeof vi.fn> }
+  taskMiner: {
+    updateModel: ReturnType<typeof vi.fn>
+    updateClusterModel: ReturnType<typeof vi.fn>
+  }
   inferenceProvider: { notifyConfigChanged: ReturnType<typeof vi.fn> }
 } {
   const semanticService = {
@@ -21,13 +23,11 @@ function makeDeps(): {
     updatePipelinePreference: vi.fn(),
     testConnection: vi.fn().mockResolvedValue(undefined),
   }
-  const patternDetector = { updateModel: vi.fn() }
   const userContextBuilder = { updateModel: vi.fn() }
-  const taskMiner = { updateClusterModel: vi.fn() }
+  const taskMiner = { updateModel: vi.fn(), updateClusterModel: vi.fn() }
   const inferenceProvider = { notifyConfigChanged: vi.fn() }
   const deps: VendorSwitchDeps = {
     semanticService,
-    patternDetector,
     userContextBuilder,
     taskMiner,
     inferenceProvider,
@@ -35,7 +35,6 @@ function makeDeps(): {
   return {
     deps,
     semanticService,
-    patternDetector,
     userContextBuilder,
     taskMiner,
     inferenceProvider,
@@ -110,8 +109,8 @@ describe('applyVendorSwitch', () => {
     expect(videoModels).toEqual([])
   })
 
-  it('updates the pattern detector and user-context-builder models when present and skips when absent', () => {
-    const { deps, patternDetector, userContextBuilder } = makeDeps()
+  it('updates the task-miner and user-context-builder models when present and skips when absent', () => {
+    const { deps, taskMiner, userContextBuilder } = makeDeps()
     const next = makeSettings({
       activeVendor: 'openrouter',
       patternDetectionModel: VENDOR_PRESETS.openrouter.patternDetection[0].id,
@@ -119,14 +118,14 @@ describe('applyVendorSwitch', () => {
     })
 
     applyVendorSwitch(deps, next)
-    expect(patternDetector.updateModel).toHaveBeenCalledWith(
+    expect(taskMiner.updateModel).toHaveBeenCalledWith(
       VENDOR_PRESETS.openrouter.patternDetection[0].id,
     )
     expect(userContextBuilder.updateModel).toHaveBeenCalledWith(
       VENDOR_PRESETS.openrouter.patternDetection[0].id,
     )
 
-    // No detector or builder → no throw.
+    // No miner or builder → no throw.
     const { deps: bareDeps, semanticService } = makeDeps()
     const depsWithoutOptionals: VendorSwitchDeps = {
       semanticService: bareDeps.semanticService,
@@ -161,7 +160,7 @@ describe('applyVendorSwitch', () => {
   })
 
   it('builds chains from the remote config and diverges the user-context model', () => {
-    const { deps, semanticService, patternDetector, userContextBuilder } = makeDeps()
+    const { deps, semanticService, taskMiner, userContextBuilder } = makeDeps()
     deps.getRemoteModelConfig = () => ({
       version: 2,
       models: {
@@ -180,7 +179,7 @@ describe('applyVendorSwitch', () => {
 
     const [videoModels] = semanticService.updateModels.mock.calls[0] as [string[], string[]]
     expect(videoModels).toEqual(['remote/video-model'])
-    expect(patternDetector.updateModel).toHaveBeenCalledWith('minimax/minimax-m3')
+    expect(taskMiner.updateModel).toHaveBeenCalledWith('minimax/minimax-m3')
     expect(userContextBuilder.updateModel).toHaveBeenCalledWith('remote/context-model')
   })
 
