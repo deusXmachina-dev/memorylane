@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@components/ui/button'
+import { PingDot } from '@components/ui/ping-dot'
 import { ScrollArea } from '@components/ui/scroll-area'
 import type { ClusterInfo, MainWindowAPI, MiningStatus } from '@types'
 import { ClusterListItem } from './ClusterListItem'
@@ -12,9 +13,10 @@ function MiningProgressBanner({ status }: { status: MiningStatus }): React.JSX.E
   const pct = Math.max(1.5, (done / status.totalDays) * 100)
   return (
     <div className="space-y-1.5">
-      <div className="flex items-baseline justify-between gap-4 text-xs">
-        <span className="truncate font-medium text-foreground/85">
-          {mining ? 'Analyzing your history' : 'Analysis paused'}
+      <div className="flex items-center justify-between gap-4 text-xs">
+        <span className="flex min-w-0 items-center gap-2 font-medium text-foreground/85">
+          <PingDot active={mining} />
+          <span className="truncate">{mining ? 'Analyzing your history' : 'Analysis paused'}</span>
         </span>
         <span className="shrink-0 tabular-nums text-muted-foreground">
           {done} of {status.totalDays} days
@@ -22,13 +24,9 @@ function MiningProgressBanner({ status }: { status: MiningStatus }): React.JSX.E
       </div>
       <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
         <div
-          className="relative h-full overflow-hidden rounded-full bg-primary transition-[width] duration-700 ease-out"
+          className="h-full rounded-full bg-primary transition-[width] duration-700 ease-out"
           style={{ width: `${pct}%` }}
-        >
-          {mining && (
-            <div className="absolute inset-y-0 w-1/3 animate-[mining-glow_1.6s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/60 to-transparent" />
-          )}
-        </div>
+        />
       </div>
     </div>
   )

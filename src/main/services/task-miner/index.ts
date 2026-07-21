@@ -139,6 +139,8 @@ export class TaskMiner {
       this.settleTimer = null
       void this.sweep(provider)
     }, PATTERN_DETECTION_CONFIG.SETTLE_DELAY_MS)
+    // An armed timer counts as busy — push so an open window flips to "Analyzing" now.
+    this.emitStatus()
   }
 
   /**
