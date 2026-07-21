@@ -8,8 +8,10 @@ import log from '@main/utils/logger'
  * embedding-geometry change and the tables are dropped and recreated on the
  * next launch. Version 2 = title+description signature embeddings with
  * average-linkage grouping. Version 3 = recipe columns (steps, variables).
+ * Version 4 = "App (domain): action" recipe step format; the wipe forces a
+ * relabel so clusters labeled before recipes existed finally get steps.
  */
-export const CLUSTER_SCHEMA_VERSION = 3
+export const CLUSTER_SCHEMA_VERSION = 4
 
 export function ensureClusterSchema(db: Database.Database): void {
   db.exec(`

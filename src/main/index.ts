@@ -498,12 +498,10 @@ app.on('ready', async () => {
       // Task mining is a new-miner-only maintenance action; there's nothing to
       // wipe or re-mine when the legacy PatternDetector is active.
       if (!taskMiner) throw new Error('Task mining is disabled (enable it in Developer settings)')
-      // Don't wipe while a sweep is in flight: it would keep committing days
-      // into the freshly wiped ledger. Bail without touching data; the busy
-      // check and the sweep's own guard-claim run with no await between them.
-      if (taskMiner.isBusy()) {
-        return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'busy' as const }
-      }
+      // Preempt any in-flight sweep first — a wipe mid-sweep would have days
+      // committing into the freshly wiped ledger. This is the dev "start
+      // over" button; it always wins.
+      await taskMiner.cancelSweep()
       // wipeTasks() clears the mining_days ledger too, so sweepNow re-enqueues
       // and re-mines the full window; if it fails midway, the remaining days
       // stay pending and the next trigger resumes.

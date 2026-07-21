@@ -26,7 +26,7 @@ Your tasks:
 3. MERGE: for each merge candidate pair that is genuinely the same recurring process, output a merge with the combined label and description. Only use pairs from "merge_candidates". Merge more than two clusters at once ONLY if every pair among them is listed in "merge_candidates" — never chain (A+B and B+C does not justify merging A with C).
 4. SPLIT: if a cluster marked "splittable": true mixes two or more unrelated processes, split it into groups. Only split clusters marked splittable. Assign each listed sighting_id to exactly one group.
 5. FLAG: if a cluster marked "splittable": true mixes unrelated processes and you cannot split it cleanly, output { "id": ..., "incoherent": true } instead of a label — it will be re-grouped automatically.
-6. RECIPE: for every cluster you LABEL (not for split/merge/incoherent verdicts), also output "steps" and "variables". "steps" is an ordered, generalized how-to for the process: 3 to 12 short imperative lines, each naming the app and, when it is a website, its domain in parentheses (e.g. "Open the client thread in Gmail (mail.google.com)"). Generalize across the member runs; do not transcribe one run. "variables" lists the things that differ from run to run, named generically (e.g. "customer name", "invoice number", "search term"). This recipe is copied into outside automation tools, so it MUST be fully de-identified: never write a real person, company, email, phone number, account number, or url-with-id. Write "enter the customer name", never "enter ACME Inc"; move every changing specific into "variables" as a generic label.
+6. RECIPE: for every cluster you LABEL (not for split/merge/incoherent verdicts), also output "steps" and "variables". "steps" is an ordered, generalized how-to for the process: 3 to 12 short lines, each starting with the app name — plus its domain in parentheses when it is a website — then a colon and the imperative action (e.g. "Gmail (mail.google.com): open the client thread"). Generalize across the member runs; do not transcribe one run. "variables" lists the things that differ from run to run, named generically (e.g. "customer name", "invoice number", "search term"). This recipe is copied into outside automation tools, so it MUST be fully de-identified: never write a real person, company, email, phone number, account number, or url-with-id. Write "enter the customer name", never "enter ACME Inc"; move every changing specific into "variables" as a generic label.
 
 Rules:
 - Never invent cluster ids or sighting ids not present in the input.
@@ -41,8 +41,8 @@ Output a single JSON object, no other text:
 \`\`\`json
 {
   "clusters": [
-    { "id": "<cluster id>", "label": "...", "description": "...", "kind": "procedure", "mechanism": "...", "steps": ["Open ...", "..."], "variables": ["customer name", "..."] },
-    { "id": "<cluster id>", "label": "...", "description": "...", "kind": "monitoring", "steps": ["Open ...", "..."], "variables": ["..."] },
+    { "id": "<cluster id>", "label": "...", "description": "...", "kind": "procedure", "mechanism": "...", "steps": ["App (domain): ...", "..."], "variables": ["customer name", "..."] },
+    { "id": "<cluster id>", "label": "...", "description": "...", "kind": "monitoring", "steps": ["App (domain): ...", "..."], "variables": ["..."] },
     { "id": "<splittable cluster id>", "split": [
         { "label": "...", "description": "...", "sighting_ids": ["..."] },
         { "label": "...", "description": "...", "sighting_ids": ["..."] }
