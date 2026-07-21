@@ -16,11 +16,11 @@ import type {
 import { DEFAULT_MINER_CONFIG } from './types'
 import {
   computeEpisodeWindow,
-  getDayBoundaries,
   serializeActivities,
   tryExtractJsonArray,
   extractJsonObject,
 } from './helpers'
+import { getDayBoundaries } from '@main/utils/day'
 import { buildVerificationTools } from './tools'
 import { normalizeScanCandidates } from './candidate-normalizer'
 import { buildScanSystemPrompt, buildGroundingSystemPrompt } from './prompts'

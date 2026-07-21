@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import log from '@main/utils/logger'
-import { isSameDay } from './task-miner/helpers'
+import { isSameDay } from '@main/utils/day'
 import { type StripOptions } from './strip-database-for-upload'
 
 // Poll cadence, NOT the upload frequency. We check hourly whether today's

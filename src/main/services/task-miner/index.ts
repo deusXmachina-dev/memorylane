@@ -23,7 +23,8 @@ import type { StorageService } from '../../storage'
 import type { InferenceProvider } from '../../llm'
 import { PATTERN_DETECTION_CONFIG, TASK_BACKFILL } from '../../../shared/constants'
 import log from '@main/utils/logger'
-import { formatApiError, getDayBoundaries } from './helpers'
+import { formatApiError } from './helpers'
+import { getDayBoundaries } from '@main/utils/day'
 import type {
   TaskMinerConfig,
   MiningRunResult,
