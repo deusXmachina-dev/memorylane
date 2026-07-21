@@ -153,6 +153,7 @@ the ledger, A$ shown as the example).**
 period-decimal pattern in the examples below (`~A$6,200`) is the **English-market**
 convention (Philippines, Malaysia, Australia, New Zealand business English). It is
 NOT universal:
+
 - **Philippines:** ₱ (PHP), English convention (comma thousands, period decimal).
 - **Malaysia:** RM (MYR), English convention.
 - **Australia:** A$ (AUD), English convention.
@@ -163,17 +164,17 @@ NOT universal:
 - **Germany / Austria:** € (EUR), reversed convention (`~4.200,00 €`).
 - **Switzerland:** CHF, reversed convention but apostrophe thousands-separator
   is also common (`CHF 4'200.00`); confirm with the client which they use.
-Detect the target locale from the ledger's `meta.location`/`cost_basis.currency`
-and the client's market, then apply THAT locale's separator convention
-consistently across every page; never default to the English pattern for a
-non-English-convention market. Rounding grain, `~` usage, and the "New capacity
-unlocked" wording rules below apply the same regardless of locale, only the
-separator and symbol change.
+  Detect the target locale from the ledger's `meta.location`/`cost_basis.currency`
+  and the client's market, then apply THAT locale's separator convention
+  consistently across every page; never default to the English pattern for a
+  non-English-convention market. Rounding grain, `~` usage, and the "New capacity
+  unlocked" wording rules below apply the same regardless of locale, only the
+  separator and symbol change.
 
 **Report language.** The house style and copy below is written in English. If
 the client requests the deck **in a local language** (Filipino/Tagalog, Bahasa
 Malaysia, Czech, Slovak, German), translate the narrative, page titles, KPI
-labels, and chip *display text* into that language, but never translate the
+labels, and chip _display text_ into that language, but never translate the
 underlying ledger enum **values** (`basis: seen|reasoned|estimated`,
 `verdict: kill|leave_as_is|redesign|automate`, etc.); those stay in English so
 the JSON keeps parsing/reconciling correctly, only their rendered label changes.
@@ -425,7 +426,7 @@ per process for detail pages), then assemble; else do them in order.
    **PII scan (mandatory, before the review gate):** regex-scan the rendered
    `report.html` text for emails (`[\w.+-]+@[\w-]+\.\w`), phone-number patterns,
    `@handles`, credential/token URL params (`(token|key|secret|sig|signature|
-   auth|session|sid|apikey|api_key|password)=...`, a JWT, an AWS/API key
+auth|session|sid|apikey|api_key|password)=...`, a JWT, an AWS/API key
    pattern), card/bank numbers (Luhn-gated) and IBANs, and national IDs across
    every market this ships to, not just US SSN (see the analyst skill's
    Privacy scrub for the exact per-market regex: Philippines SSS/TIN/PhilHealth,
