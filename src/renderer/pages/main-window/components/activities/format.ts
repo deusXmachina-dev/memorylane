@@ -30,6 +30,15 @@ export function formatDuration(ms: number): string {
   return m === 0 ? `${h}h` : `${h}h ${m}m`
 }
 
+export function formatSightingTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
 export function formatShortDate(ms: number): string {
   return new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
 }
