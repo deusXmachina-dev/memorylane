@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3'
 import type { SearchFilters } from '../../shared/types'
 import type { StoredActivity, ActivitySummary, ActivityDetail } from './types'
 import { vectorToBlob, blobToVector, sanitizeFtsQuery, SQLITE_VEC_KNN_MAX } from './utils'
-import { NON_WEBSITE_HOSTS } from '../../shared/app-utils'
+import { NON_WEBSITE_HOSTS, activityAppIdentity } from '../../shared/app-utils'
 import log from '@main/utils/logger'
 
 interface CountRow {
@@ -58,7 +58,7 @@ export class ActivityRepository {
 
     const rows = this.db
       .prepare(
-        `SELECT a.id, a.start_timestamp, a.end_timestamp, a.app_name, a.window_title, a.summary
+        `SELECT a.id, a.start_timestamp, a.end_timestamp, a.app_name, a.window_title, a.tld, a.summary
        FROM activities_fts fts
        JOIN activities a ON a.rowid = fts.rowid
        WHERE activities_fts MATCH ?
@@ -106,7 +106,7 @@ export class ActivityRepository {
 
     const rows = this.db
       .prepare(
-        `SELECT a.id, a.start_timestamp, a.end_timestamp, a.app_name, a.window_title, a.summary
+        `SELECT a.id, a.start_timestamp, a.end_timestamp, a.app_name, a.window_title, a.tld, a.summary
        FROM (
          SELECT id, distance
          FROM activities_vec
@@ -149,7 +149,7 @@ export class ActivityRepository {
 
     const rows = this.db
       .prepare(
-        `SELECT id, start_timestamp, end_timestamp, app_name, window_title, summary
+        `SELECT id, start_timestamp, end_timestamp, app_name, window_title, tld, summary
        FROM activities
        ${whereClause}
        ORDER BY start_timestamp ASC`,
@@ -315,24 +315,30 @@ export class ActivityRepository {
   }
 
   private rowToSummary(row: Record<string, unknown>): ActivitySummary {
+    const appName = row.app_name as string
+    const tld = (row.tld as string) ?? null
     return {
       id: row.id as string,
       startTimestamp: row.start_timestamp as number,
       endTimestamp: row.end_timestamp as number,
-      appName: row.app_name as string,
+      appName,
       windowTitle: row.window_title as string,
+      identity: activityAppIdentity({ appName, tld }),
       summary: row.summary as string,
     }
   }
 
   private rowToDetail(row: Record<string, unknown>): ActivityDetail {
+    const appName = row.app_name as string
+    const tld = (row.tld as string) ?? null
     return {
       id: row.id as string,
       startTimestamp: row.start_timestamp as number,
       endTimestamp: row.end_timestamp as number,
-      appName: row.app_name as string,
+      appName,
       windowTitle: row.window_title as string,
-      tld: (row.tld as string) ?? null,
+      tld,
+      identity: activityAppIdentity({ appName, tld }),
       summary: row.summary as string,
     }
   }
@@ -379,8 +385,11 @@ export class ActivityRepository {
       params.push(filters.endTime)
     }
     if (filters.appName !== undefined) {
-      conditions.push(`${prefix}app_name = ? COLLATE NOCASE`)
-      params.push(filters.appName)
+      // Identity match: an app is its website host for web work, its app name
+      // otherwise — "notion" matches the Notion app and notion.so.
+      const escaped = filters.appName.replace(/[\\%_]/g, (c) => `\\${c}`)
+      conditions.push(`(${prefix}app_name LIKE ? ESCAPE '\\' OR ${prefix}tld LIKE ? ESCAPE '\\')`)
+      params.push(`%${escaped}%`, `%${escaped}%`)
     }
 
     return { conditions, params }

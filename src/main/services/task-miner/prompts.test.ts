@@ -41,11 +41,16 @@ describe('buildGroundingSystemPrompt', () => {
     title: 'Provision test tenant',
     subject: 'Acme staging tenant',
     description: 'Did the thing. Replace with: a script.',
-    apps: ['Admin'],
     activity_ids: ['a1', 'a2'],
   }
 
   it('carries subject through the keep-JSON so scanOnly=false persists it', () => {
-    expect(buildGroundingSystemPrompt(candidate)).toContain('"subject"')
+    expect(buildGroundingSystemPrompt(candidate, ['admin.acme.com'])).toContain('"subject"')
+  })
+
+  it('shows derived app identities and asks for no apps back', () => {
+    const prompt = buildGroundingSystemPrompt(candidate, ['admin.acme.com', 'Ghostty'])
+    expect(prompt).toContain('- Apps: admin.acme.com, Ghostty')
+    expect(prompt).not.toContain('"apps"')
   })
 })

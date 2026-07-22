@@ -82,9 +82,8 @@ export interface ReviewSighting {
   title: string
   subject: string
   description: string
+  /** App identities off the sighting: website host for web work, app name otherwise. */
   apps: string[]
-  /** Top-level domains seen in this run; lets the LLM name web steps by domain. */
-  domains?: string[]
   interaction_min: number
   date: string
 }

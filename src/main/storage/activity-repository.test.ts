@@ -422,6 +422,45 @@ describe('ActivityRepository', () => {
       expect(results[0].id).toBe('app-1')
     })
 
+    it('matches the appName filter against desktop app and website host alike', () => {
+      storage.activities.add(
+        createStoredActivity({ id: 'idn-1', appName: 'Notion', startTimestamp: 1000 }),
+      )
+      storage.activities.add(
+        createStoredActivity({
+          id: 'idn-2',
+          appName: 'Google Chrome',
+          tld: 'www.notion.so',
+          startTimestamp: 2000,
+        }),
+      )
+      storage.activities.add(
+        createStoredActivity({ id: 'idn-3', appName: 'Ghostty', startTimestamp: 3000 }),
+      )
+
+      const results = storage.activities.getByTimeRange(null, null, { appName: 'notion' })
+
+      expect(results.map((r) => r.id)).toEqual(['idn-1', 'idn-2'])
+    })
+
+    it('exposes the identity on results: host for web work, app name otherwise', () => {
+      storage.activities.add(
+        createStoredActivity({
+          id: 'idn-web',
+          appName: 'Google Chrome',
+          tld: 'dashboard.stripe.com',
+          startTimestamp: 1000,
+        }),
+      )
+      storage.activities.add(
+        createStoredActivity({ id: 'idn-app', appName: 'Ghostty', startTimestamp: 2000 }),
+      )
+
+      const results = storage.activities.getByTimeRange(null, null)
+
+      expect(results.map((r) => r.identity)).toEqual(['dashboard.stripe.com', 'Ghostty'])
+    })
+
     it('should return lightweight ActivitySummary without ocrText or vector', () => {
       storage.activities.add(
         createStoredActivity({

@@ -24,6 +24,7 @@ import {
   MISSING_TABLES_TEXT,
 } from '@main/ui/cluster-view'
 import { CLUSTER_VIEW_CONFIG } from '@/shared/constants'
+import { activityAppIdentity } from '@/shared/app-utils'
 import type { ClusterInfo } from '../../shared/types'
 import log from '@main/utils/logger'
 
@@ -84,7 +85,7 @@ export function registerTools(
           .string()
           .optional()
           .describe(
-            'Filter: only include results from this application (e.g., "VS Code", "Chrome", "Slack")',
+            'Filter: app or website, case-insensitive substring over app name and site host — "notion" matches the Notion app and notion.so, "stripe" matches dashboard.stripe.com',
           ),
       },
     },
@@ -111,7 +112,7 @@ export function registerTools(
           .string()
           .optional()
           .describe(
-            'Filter: only include results from this application (e.g., "VS Code", "Chrome", "Slack")',
+            'Filter: app or website, case-insensitive substring over app name and site host — "notion" matches the Notion app and notion.so, "stripe" matches dashboard.stripe.com',
           ),
         limit: z.number().optional().describe('Maximum number of results to return (default: 100)'),
         sampling: z
@@ -882,7 +883,8 @@ async function handleGetActivityDetails(services: MCPServices | null, { ids }: {
       .map((a) => {
         const timeStr = new Date(a.startTimestamp).toLocaleString()
         const endTimeStr = new Date(a.endTimestamp).toLocaleString()
-        const appInfo = a.appName ? ` [${a.appName}]` : ''
+        const identity = activityAppIdentity(a)
+        const appInfo = identity ? ` [${identity}]` : ''
         const summaryLine = a.summary ? `\nSummary: ${a.summary}` : ''
         return `ID: ${a.id}\n[${timeStr} → ${endTimeStr}]${appInfo}${summaryLine}\nOCR: ${a.ocrText}`
       })

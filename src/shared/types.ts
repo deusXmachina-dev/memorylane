@@ -68,7 +68,8 @@ export interface ClassificationResult {
 export interface SearchFilters {
   startTime?: number | undefined // Unix ms
   endTime?: number | undefined // Unix ms
-  appName?: string | undefined // Exact match
+  /** Case-insensitive substring over app name or website host — "notion" matches the Notion app and notion.so. */
+  appName?: string | undefined
 }
 
 export interface SearchOptions extends SearchFilters {
@@ -208,6 +209,8 @@ export interface ActivityDetail {
   appName: string
   windowTitle: string
   tld: string | null
+  /** Computed at read (`tld || app_name`): website host for web work, app name otherwise. Never stored. */
+  identity: string
   summary: string
 }
 

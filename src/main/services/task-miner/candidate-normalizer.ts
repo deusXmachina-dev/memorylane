@@ -16,18 +16,6 @@ const scanCandidateSchema = z.object({
     (value) => (typeof value === 'string' ? value.trim() : ''),
     z.string().min(1),
   ),
-  apps: z
-    .preprocess(
-      (value) =>
-        Array.isArray(value)
-          ? value
-              .filter((item): item is string => typeof item === 'string')
-              .map((item) => item.trim())
-              .filter((item) => item.length > 0)
-          : [],
-      z.array(z.string()),
-    )
-    .default([]),
   activity_ids: z
     .preprocess(
       (value) =>

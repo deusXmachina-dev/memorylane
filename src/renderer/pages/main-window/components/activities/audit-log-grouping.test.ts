@@ -3,13 +3,16 @@ import type { ActivityDetail } from '@types'
 import { groupIntoRunsByDay, ROLLUP_GAP_MS } from './audit-log-grouping'
 
 function makeActivity(overrides: Partial<ActivityDetail> & { id: string }): ActivityDetail {
+  const appName = overrides.appName ?? 'Chrome'
+  const tld = overrides.tld ?? null
   return {
     id: overrides.id,
     startTimestamp: overrides.startTimestamp ?? 0,
     endTimestamp: overrides.endTimestamp ?? (overrides.startTimestamp ?? 0) + 1_000,
-    appName: overrides.appName ?? 'Chrome',
+    appName,
     windowTitle: overrides.windowTitle ?? '',
-    tld: overrides.tld ?? null,
+    tld,
+    identity: overrides.identity ?? tld ?? appName,
     summary: overrides.summary ?? '',
   }
 }

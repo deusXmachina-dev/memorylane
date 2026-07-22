@@ -9,6 +9,7 @@ describe('mcp formatting', () => {
       endTimestamp: new Date('2026-03-02T10:05:00.000Z').getTime(),
       appName: 'KeePassXC',
       windowTitle: 'Q - KeePassXC',
+      identity: 'KeePassXC',
       summary: 'Looked up a credential entry.',
     })
 
@@ -16,11 +17,26 @@ describe('mcp formatting', () => {
     expect(formatTimelineEntry(entry)).toContain('[window: "Q - KeePassXC"]')
   })
 
+  it('shows the identity as the app on timeline lines', () => {
+    const entry = activityToTimelineEntry({
+      id: 'activity-3',
+      startTimestamp: new Date('2026-03-02T10:20:00.000Z').getTime(),
+      endTimestamp: new Date('2026-03-02T10:25:00.000Z').getTime(),
+      appName: 'Google Chrome',
+      windowTitle: 'Stripe',
+      identity: 'dashboard.stripe.com',
+      summary: 'Checked a payment.',
+    })
+
+    expect(formatTimelineEntry(entry)).toContain('[dashboard.stripe.com]')
+    expect(formatTimelineEntry(entry)).not.toContain('Google Chrome')
+  })
+
   it('omits the window field when no title is available', () => {
     const formatted = formatTimelineEntry({
       id: 'activity-2',
       timestamp: new Date('2026-03-02T10:10:00.000Z').getTime(),
-      appName: 'Terminal',
+      app: 'Terminal',
       windowTitle: '',
       summary: 'Ran tests.',
     })

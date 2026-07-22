@@ -22,7 +22,8 @@ export function formatActivityLine(activity: {
 export interface TimelineEntry {
   id: string
   timestamp: number
-  appName: string
+  /** App identity: website host for web work, app name otherwise. */
+  app: string
   windowTitle: string
   summary: string
 }
@@ -34,7 +35,7 @@ export function activityToTimelineEntry(activity: ActivitySummary): TimelineEntr
   return {
     id: activity.id,
     timestamp: activity.startTimestamp,
-    appName: activity.appName ?? '',
+    app: activity.identity ?? '',
     windowTitle: activity.windowTitle ?? '',
     summary: activity.summary ?? '',
   }
@@ -45,7 +46,7 @@ export function activityToTimelineEntry(activity: ActivitySummary): TimelineEntr
  */
 export function formatTimelineEntry(entry: TimelineEntry): string {
   const timeStr = new Date(entry.timestamp).toLocaleString()
-  const appInfo = entry.appName ? ` [${entry.appName}]` : ''
+  const appInfo = entry.app ? ` [${entry.app}]` : ''
   const windowInfo = entry.windowTitle ? ` [window: ${JSON.stringify(entry.windowTitle)}]` : ''
   const summary = entry.summary || '(no summary)'
   return `- ${entry.id} | ${timeStr}${appInfo}${windowInfo} | ${summary}`

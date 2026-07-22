@@ -21,6 +21,7 @@ import {
   extractJsonObject,
 } from './helpers'
 import { getDayBoundaries } from '@main/utils/day'
+import { deriveSightingApps } from '../../../shared/app-utils'
 import { buildVerificationTools } from './tools'
 import { normalizeScanCandidates } from './candidate-normalizer'
 import { buildScanSystemPrompt, buildGroundingSystemPrompt } from './prompts'
@@ -255,9 +256,12 @@ export async function runDetection(
     try {
       let parsed: Record<string, unknown> = {}
       if (!cfg.scanOnly) {
-        const groundPrompt = buildGroundingSystemPrompt(candidate)
-
         const candidateActivities = storage.activities.getByIds(candidate.activity_ids)
+        const groundPrompt = buildGroundingSystemPrompt(
+          candidate,
+          deriveSightingApps(candidateActivities),
+        )
+
         const enrichedActivities = candidateActivities.map((a) => ({
           id: a.id,
           app: a.appName,
@@ -272,7 +276,6 @@ export async function runDetection(
             title: candidate.title,
             subject: candidate.subject,
             description: candidate.description,
-            apps: candidate.apps,
             activities: enrichedActivities,
           },
           null,
@@ -331,7 +334,7 @@ export async function runDetection(
       const title = (parsed.title as string) || candidate.title
       const subject = ((parsed.subject as string) || candidate.subject || '').trim()
       const description = (parsed.description as string) || candidate.description
-      const apps = (parsed.apps as string[]) || candidate.apps
+      const apps = deriveSightingApps(resolved)
 
       // One candidate = one run on one object = one sighting. The scan separates
       // instances by the object worked on, not by the clock, so a run is never

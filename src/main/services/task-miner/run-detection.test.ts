@@ -44,12 +44,13 @@ describe('runDetection day commit', () => {
     applyMigrations(storage.getDatabase())
     mockedGenerateText.mockReset()
     // Two activities yesterday — enough for one MIN_RUN_ACTIVITIES candidate.
+    // One desktop, one web, so derived sighting apps cover both identities.
     for (const i of [1, 2]) {
       storage.activities.add({
         id: `act-${i}`,
-        appName: 'TestApp',
+        appName: i === 2 ? 'Google Chrome' : 'TestApp',
         windowTitle: 'w',
-        tld: null,
+        tld: i === 2 ? 'www.notion.so' : null,
         startTimestamp: dayStart(1) + i * 1000,
         endTimestamp: dayStart(1) + i * 1000 + 500,
         summary: 's',
@@ -93,7 +94,7 @@ describe('runDetection day commit', () => {
     mockedGenerateText.mockResolvedValue(
       scanResponse(
         `\`\`\`json
-[{"title":"Do the thing","subject":"thing","description":"d","apps":["TestApp"],"activity_ids":["a1","a2"]}]
+[{"title":"Do the thing","subject":"thing","description":"d","activity_ids":["a1","a2"]}]
 \`\`\``,
       ),
     )
@@ -103,6 +104,7 @@ describe('runDetection day commit', () => {
 
     expect(result.candidatesKept).toBe(1)
     expect(storage.sightings.hasInWindow(dayStart(1), dayStart(0) - 1)).toBe(true)
+    expect(storage.sightings.getAll()[0].apps).toEqual(['TestApp', 'notion.so'])
     expect(onCommit).toHaveBeenCalledWith(expect.objectContaining({ candidatesKept: 1 }))
   })
 
@@ -110,7 +112,7 @@ describe('runDetection day commit', () => {
     mockedGenerateText.mockResolvedValue(
       scanResponse(
         `\`\`\`json
-[{"title":"Do the thing","subject":"thing","description":"d","apps":["TestApp"],"activity_ids":["a1","a2"]}]
+[{"title":"Do the thing","subject":"thing","description":"d","activity_ids":["a1","a2"]}]
 \`\`\``,
       ),
     )
