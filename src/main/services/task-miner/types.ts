@@ -61,7 +61,6 @@ export interface Candidate {
   /** The specific object this run acted on — defines the instance (one per object). */
   subject: string
   description: string
-  apps: string[]
   activity_ids: string[]
 }
 

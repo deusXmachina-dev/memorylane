@@ -84,7 +84,7 @@ export function registerTools(
           .string()
           .optional()
           .describe(
-            'Filter: only include results from this application (e.g., "VS Code", "Chrome", "Slack")',
+            'Filter: app or website, case-insensitive substring over app name and site host — "notion" matches the Notion app and notion.so, "stripe" matches dashboard.stripe.com',
           ),
       },
     },
@@ -111,7 +111,7 @@ export function registerTools(
           .string()
           .optional()
           .describe(
-            'Filter: only include results from this application (e.g., "VS Code", "Chrome", "Slack")',
+            'Filter: app or website, case-insensitive substring over app name and site host — "notion" matches the Notion app and notion.so, "stripe" matches dashboard.stripe.com',
           ),
         limit: z.number().optional().describe('Maximum number of results to return (default: 100)'),
         sampling: z

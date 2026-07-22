@@ -58,7 +58,6 @@ ${knownProceduresSection}
     "title": "Canonical name of the procedure — what it does, never when, and never to which object (that goes in subject). Word it so every future run of this same procedure would get this exact title.",
     "subject": "Optional. The specific object this run acted on (e.g. Invoice #4471, Customer: Acme onboarding, Q3 board report); empty string if the run acted on no single nameable object",
     "description": "What this run did, step by step, ending with: Replace with: <the concrete script, integration, alert, or platform feature>.",
-    "apps": ["App1", "App2"],
     "activity_ids": ["ids of the activities in this run"]
   }
 ]
@@ -71,8 +70,8 @@ Quality over volume: a few findings I would actually build beat a long list. Man
 // Phase 2: Grounding prompt — confirm a candidate is a real, discrete task
 // ---------------------------------------------------------------------------
 
-export function buildGroundingSystemPrompt(candidate: Candidate): string {
-  const appList = formatList(candidate.apps, 'Unknown')
+export function buildGroundingSystemPrompt(candidate: Candidate, apps: readonly string[]): string {
+  const appList = formatList(apps, 'Unknown')
   const activityIdList = formatList(candidate.activity_ids, 'None provided')
 
   return `You are verifying ONE candidate run of a repeatable task, found by a scan of my day. Confirm it is real, grounded in the evidence on screen, and correctly scoped to this single run.
@@ -103,7 +102,6 @@ If this is a real, grounded run:
   "title": "Refined title",
   "subject": "The specific object this run acted on — corrected from the evidence if the scan got it wrong",
   "description": "What this run did, step by step — informed by the OCR and timeline — ENDING with exactly one sentence: Replace with: <the concrete script, integration, alert, or platform feature>.",
-  "apps": ["App1", "App2"],
   "activity_ids": ["the exact, finalized set of supporting activity IDs"]
 }
 \`\`\`

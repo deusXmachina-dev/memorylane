@@ -9,7 +9,6 @@ function makeActivity(overrides: Partial<ActivityDetail> & { id: string }): Acti
     endTimestamp: overrides.endTimestamp ?? (overrides.startTimestamp ?? 0) + 1_000,
     appName: overrides.appName ?? 'Chrome',
     windowTitle: overrides.windowTitle ?? '',
-    tld: overrides.tld ?? null,
     summary: overrides.summary ?? '',
   }
 }

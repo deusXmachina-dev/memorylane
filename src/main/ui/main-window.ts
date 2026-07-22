@@ -828,14 +828,12 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         totalCount: 0,
         dateRange: { oldest: null, newest: null },
         topApps: [],
-        topTlds: [],
       }
     }
     return {
       totalCount: deps.storage.activities.count(),
       dateRange: deps.storage.activities.getDateRange(),
       topApps: deps.storage.activities.getTopApps(8),
-      topTlds: deps.storage.activities.getDistinctTlds(8),
     }
   })
 

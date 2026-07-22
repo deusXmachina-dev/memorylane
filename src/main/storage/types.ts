@@ -2,6 +2,7 @@ export interface StoredActivity {
   id: string
   startTimestamp: number
   endTimestamp: number
+  /** Raw captured name on write; read APIs return the app identity (tld || app_name). */
   appName: string
   windowTitle: string
   tld: string | null

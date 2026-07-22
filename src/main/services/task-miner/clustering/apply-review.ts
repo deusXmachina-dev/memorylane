@@ -223,6 +223,12 @@ export function validateAndApply(
 
       if (verdict.label) {
         if (!storage.clusters.getById(verdict.id)) continue
+        // Singletons ride along only for merge judgment — a label verdict on
+        // one would mint a single-run recipe, so it is dropped.
+        if (storage.clusters.getMemberCount(verdict.id) < 2) {
+          progress?.(`[Clustering] Dropped label for single-member cluster ${verdict.id}`)
+          continue
+        }
         storage.clusters.updateLabel(
           verdict.id,
           verdict.label,

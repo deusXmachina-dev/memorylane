@@ -51,15 +51,12 @@ interface AggregatedProfile {
   total_activities: number
   total_hours: number
   apps: { name: string; hours: number; count: number; top_windows: string[] }[]
-  top_tlds: { tld: string; hours: number }[]
   sample_summaries: string[]
 }
 
 function aggregateActivities(activities: ActivityDetail[]): AggregatedProfile {
   // Per-app stats
   const appMap = new Map<string, { totalMs: number; count: number; windows: Map<string, number> }>()
-  // Per-TLD stats
-  const tldMap = new Map<string, number>()
   // Collect unique summaries
   const summarySet = new Set<string>()
 
@@ -76,11 +73,6 @@ function aggregateActivities(activities: ActivityDetail[]): AggregatedProfile {
     app.count++
     if (a.windowTitle) {
       app.windows.set(a.windowTitle, (app.windows.get(a.windowTitle) || 0) + durationMs)
-    }
-
-    // TLD stats
-    if (a.tld) {
-      tldMap.set(a.tld, (tldMap.get(a.tld) || 0) + durationMs)
     }
 
     // Summaries (deduplicate)
@@ -103,15 +95,6 @@ function aggregateActivities(activities: ActivityDetail[]): AggregatedProfile {
         .map(([title]) => title),
     }))
 
-  // Sort TLDs by total time
-  const top_tlds = [...tldMap.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-    .map(([tld, ms]) => ({
-      tld,
-      hours: Math.round((ms / 3_600_000) * 10) / 10,
-    }))
-
   // Sample up to 80 unique summaries evenly across the set
   const allSummaries = [...summarySet]
   const maxSamples = 160
@@ -127,7 +110,6 @@ function aggregateActivities(activities: ActivityDetail[]): AggregatedProfile {
     total_activities: activities.length,
     total_hours: Math.round((totalMs / 3_600_000) * 10) / 10,
     apps,
-    top_tlds,
     sample_summaries,
   }
 }
@@ -153,7 +135,7 @@ ${existing.detailedSummary}`
 
   return `Describe the user(s) of a computer based on the aggregated activity stats below.
 
-You will receive: app usage ranked by time, top websites, and a sample of activity summaries.
+You will receive: app usage ranked by time — websites and desktop apps alike — and a sample of activity summaries.
 
 Produce:
 
@@ -361,7 +343,7 @@ async function runUserContextUpdate(
   // 2. Aggregate activities into compact stats
   const profile = aggregateActivities(allActivities)
   progress(
-    `Aggregated into ${profile.apps.length} apps, ${profile.top_tlds.length} TLDs, ${profile.sample_summaries.length} sample summaries`,
+    `Aggregated into ${profile.apps.length} apps, ${profile.sample_summaries.length} sample summaries`,
   )
 
   // 3. Load existing context for continuity

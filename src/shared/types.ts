@@ -68,7 +68,8 @@ export interface ClassificationResult {
 export interface SearchFilters {
   startTime?: number | undefined // Unix ms
   endTime?: number | undefined // Unix ms
-  appName?: string | undefined // Exact match
+  /** Case-insensitive substring over app name or website host — "notion" matches the Notion app and notion.so. */
+  appName?: string | undefined
 }
 
 export interface SearchOptions extends SearchFilters {
@@ -207,7 +208,6 @@ export interface ActivityDetail {
   endTimestamp: number
   appName: string
   windowTitle: string
-  tld: string | null
   summary: string
 }
 
@@ -215,7 +215,6 @@ export interface ActivityDigest {
   totalCount: number
   dateRange: { oldest: number | null; newest: number | null }
   topApps: { appName: string; count: number }[]
-  topTlds: { tld: string; count: number; lastSeenAt: number }[]
 }
 
 export interface MainWindowStats {

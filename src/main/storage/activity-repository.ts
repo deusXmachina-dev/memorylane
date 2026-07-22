@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3'
 import type { SearchFilters } from '../../shared/types'
 import type { StoredActivity, ActivitySummary, ActivityDetail } from './types'
 import { vectorToBlob, blobToVector, sanitizeFtsQuery, SQLITE_VEC_KNN_MAX } from './utils'
-import { NON_WEBSITE_HOSTS } from '../../shared/app-utils'
+import { NON_WEBSITE_HOSTS, activityAppIdentity } from '../../shared/app-utils'
 import log from '@main/utils/logger'
 
 interface CountRow {
@@ -58,7 +58,7 @@ export class ActivityRepository {
 
     const rows = this.db
       .prepare(
-        `SELECT a.id, a.start_timestamp, a.end_timestamp, a.app_name, a.window_title, a.summary
+        `SELECT a.id, a.start_timestamp, a.end_timestamp, a.app_name, a.window_title, a.tld, a.summary
        FROM activities_fts fts
        JOIN activities a ON a.rowid = fts.rowid
        WHERE activities_fts MATCH ?
@@ -85,7 +85,7 @@ export class ActivityRepository {
       const effectiveLimit = Math.min(limit, SQLITE_VEC_KNN_MAX)
       const rows = this.db
         .prepare(
-          `SELECT a.id, a.start_timestamp, a.end_timestamp, a.app_name, a.window_title, a.summary
+          `SELECT a.id, a.start_timestamp, a.end_timestamp, a.app_name, a.window_title, a.tld, a.summary
          FROM (
            SELECT id, distance
            FROM activities_vec
@@ -106,7 +106,7 @@ export class ActivityRepository {
 
     const rows = this.db
       .prepare(
-        `SELECT a.id, a.start_timestamp, a.end_timestamp, a.app_name, a.window_title, a.summary
+        `SELECT a.id, a.start_timestamp, a.end_timestamp, a.app_name, a.window_title, a.tld, a.summary
        FROM (
          SELECT id, distance
          FROM activities_vec
@@ -149,7 +149,7 @@ export class ActivityRepository {
 
     const rows = this.db
       .prepare(
-        `SELECT id, start_timestamp, end_timestamp, app_name, window_title, summary
+        `SELECT id, start_timestamp, end_timestamp, app_name, window_title, tld, summary
        FROM activities
        ${whereClause}
        ORDER BY start_timestamp ASC`,
@@ -280,16 +280,22 @@ export class ActivityRepository {
     const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit)))
     const rows = this.db
       .prepare(
-        `SELECT app_name AS appName, COUNT(*) AS count
+        `SELECT app_name, tld, COUNT(*) AS count
        FROM activities
        WHERE app_name IS NOT NULL AND app_name != ''
-       GROUP BY app_name
-       ORDER BY count DESC
-       LIMIT ?`,
+       GROUP BY app_name, tld`,
       )
-      .all(safeLimit) as { appName: string; count: number }[]
+      .all() as { app_name: string; tld: string | null; count: number }[]
 
-    return rows
+    const counts = new Map<string, number>()
+    for (const row of rows) {
+      const app = activityAppIdentity({ appName: row.app_name, tld: row.tld })
+      counts.set(app, (counts.get(app) ?? 0) + row.count)
+    }
+    return [...counts.entries()]
+      .map(([appName, count]) => ({ appName, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, safeLimit)
   }
 
   getDateRange(): { oldest: number | null; newest: number | null } {
@@ -319,7 +325,10 @@ export class ActivityRepository {
       id: row.id as string,
       startTimestamp: row.start_timestamp as number,
       endTimestamp: row.end_timestamp as number,
-      appName: row.app_name as string,
+      appName: activityAppIdentity({
+        appName: row.app_name as string,
+        tld: (row.tld as string) ?? null,
+      }),
       windowTitle: row.window_title as string,
       summary: row.summary as string,
     }
@@ -330,9 +339,11 @@ export class ActivityRepository {
       id: row.id as string,
       startTimestamp: row.start_timestamp as number,
       endTimestamp: row.end_timestamp as number,
-      appName: row.app_name as string,
+      appName: activityAppIdentity({
+        appName: row.app_name as string,
+        tld: (row.tld as string) ?? null,
+      }),
       windowTitle: row.window_title as string,
-      tld: (row.tld as string) ?? null,
       summary: row.summary as string,
     }
   }
@@ -342,7 +353,10 @@ export class ActivityRepository {
       id: row.id as string,
       startTimestamp: row.start_timestamp as number,
       endTimestamp: row.end_timestamp as number,
-      appName: row.app_name as string,
+      appName: activityAppIdentity({
+        appName: row.app_name as string,
+        tld: (row.tld as string) ?? null,
+      }),
       windowTitle: row.window_title as string,
       tld: (row.tld as string) ?? null,
       summary: row.summary as string,
@@ -379,8 +393,9 @@ export class ActivityRepository {
       params.push(filters.endTime)
     }
     if (filters.appName !== undefined) {
-      conditions.push(`${prefix}app_name = ? COLLATE NOCASE`)
-      params.push(filters.appName)
+      const escaped = filters.appName.replace(/[\\%_]/g, (c) => `\\${c}`)
+      conditions.push(`(${prefix}app_name LIKE ? ESCAPE '\\' OR ${prefix}tld LIKE ? ESCAPE '\\')`)
+      params.push(`%${escaped}%`, `%${escaped}%`)
     }
 
     return { conditions, params }

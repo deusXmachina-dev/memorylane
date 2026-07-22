@@ -57,7 +57,6 @@ export function serializeActivities(activities: ActivityDetail[]): object[] {
     duration_min: Math.round((a.endTimestamp - a.startTimestamp) / 60000),
     app: a.appName,
     window_title: a.windowTitle,
-    tld: a.tld,
     summary: a.summary,
   }))
 }

@@ -65,6 +65,26 @@ export function isBrowserApp(app: { bundleId?: string; processName: string }): b
   return BROWSER_PROCESS_NAMES.has(app.processName)
 }
 
+/**
+ * The app identity of an activity: the website host for web work
+ * ("dashboard.stripe.com"), the app name otherwise. Computed at retrieval —
+ * raw app_name/tld stay as captured.
+ */
+export function activityAppIdentity(a: { appName: string; tld: string | null }): string {
+  const host = (a.tld ?? '').toLowerCase()
+  if (host !== '' && !NON_WEBSITE_HOSTS.has(host)) {
+    return host.startsWith('www.') ? host.slice(4) : host
+  }
+  return a.appName
+}
+
+/** Unique app identities of a sighting's activities; browser names only when the run has nothing else. */
+export function deriveSightingApps(activities: readonly { appName: string }[]): string[] {
+  const apps = [...new Set(activities.map((a) => a.appName).filter((name) => name !== ''))]
+  const nonBrowser = apps.filter((name) => !isBrowserApp({ processName: name }))
+  return nonBrowser.length > 0 ? nonBrowser : apps
+}
+
 export function isTransientApp(app: { bundleId?: string; processName: string }): boolean {
   if (app.bundleId && TRANSIENT_APP_BUNDLE_IDS.has(app.bundleId)) return true
   return TRANSIENT_PROCESS_NAMES.has(app.processName)

@@ -10,8 +10,10 @@ import log from '@main/utils/logger'
  * average-linkage grouping. Version 3 = recipe columns (steps, variables).
  * Version 4 = "App (domain): action" recipe step format; the wipe forces a
  * relabel so clusters labeled before recipes existed finally get steps.
+ * Version 5 = identity apps in the review input (sighting-only, no activity
+ * join) and recipes required on every label; the wipe forces a full relabel.
  */
-export const CLUSTER_SCHEMA_VERSION = 4
+export const CLUSTER_SCHEMA_VERSION = 5
 
 export function ensureClusterSchema(db: Database.Database): void {
   db.exec(`

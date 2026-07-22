@@ -14,8 +14,6 @@ export interface ActivitiesData {
   setQuery: (q: string) => void
   appFilter: string | null
   setAppFilter: (app: string | null) => void
-  tldFilter: string | null
-  setTldFilter: (tld: string | null) => void
   loadMore: () => Promise<void>
   refresh: () => Promise<void>
   ensureLoaded: () => void
@@ -39,9 +37,7 @@ function sameDigest(a: ActivityDigest | null, b: ActivityDigest | null): boolean
     a.topApps.length === b.topApps.length &&
     a.topApps.every(
       (row, i) => row.appName === b.topApps[i].appName && row.count === b.topApps[i].count,
-    ) &&
-    a.topTlds.length === b.topTlds.length &&
-    a.topTlds.every((row, i) => row.tld === b.topTlds[i].tld && row.count === b.topTlds[i].count)
+    )
   )
 }
 
@@ -53,7 +49,6 @@ export function useActivitiesData(api: MainWindowAPI): ActivitiesData {
   const [hasMore, setHasMore] = useState(true)
   const [query, setQuery] = useState('')
   const [appFilter, setAppFilter] = useState<string | null>(null)
-  const [tldFilter, setTldFilter] = useState<string | null>(null)
 
   const loadedRef = useRef(false)
   const lastRefreshRef = useRef(0)
@@ -138,8 +133,6 @@ export function useActivitiesData(api: MainWindowAPI): ActivitiesData {
     setQuery,
     appFilter,
     setAppFilter,
-    tldFilter,
-    setTldFilter,
     loadMore,
     refresh,
     ensureLoaded,

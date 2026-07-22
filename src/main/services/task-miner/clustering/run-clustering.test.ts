@@ -201,6 +201,48 @@ describe('runClustering', () => {
     expect(seenInput!.clusters.map((c) => c.label)).toContain('Thing')
   })
 
+  it('re-reviews a labeled cluster whose recipe is still missing', async () => {
+    storage.sightings.add(createSighting({ id: 's1', title: 'alpha task' }))
+    storage.sightings.add(createSighting({ id: 's2', title: 'alpha task' }))
+
+    // First review labels and classifies but returns no steps.
+    await cluster({
+      provider: {} as InferenceProvider,
+      now: 10_000,
+      review: async (input) => ({
+        output: {
+          clusters: input.clusters.map((c) => ({
+            id: c.id,
+            label: 'Thing',
+            description: '',
+            kind: 'monitoring',
+          })),
+        },
+        tokenUsage: { input: 0, output: 0 },
+      }),
+    })
+    const labeled = storage.clusters.getAll().find((c) => c.label === 'Thing')!
+    expect(labeled.kind).toBe('monitoring')
+    expect(labeled.steps).toEqual([])
+
+    // A later run re-shows it (steps empty) even though nothing else changed.
+    storage.sightings.add(createSighting({ id: 's9', title: 'beta chore' }))
+    let seenInput: ReviewInput | null = null
+    await cluster({
+      provider: {} as InferenceProvider,
+      now: 20_000,
+      review: async (input) => {
+        seenInput = input
+        return { output: {}, tokenUsage: { input: 0, output: 0 } }
+      },
+    })
+    expect(seenInput!.clusters.map((c) => c.label)).toContain('Thing')
+    // Review input is sighting-only: apps come off the sighting, no domains.
+    const member = seenInput!.clusters[0].members[0]
+    expect(member.apps).toEqual(['TestApp'])
+    expect(member).not.toHaveProperty('domains')
+  })
+
   it('survives a throwing review step without losing deterministic progress', async () => {
     storage.sightings.add(createSighting({ id: 's1', title: 'alpha task' }))
     storage.sightings.add(createSighting({ id: 's2', title: 'alpha task' }))

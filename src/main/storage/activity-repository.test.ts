@@ -170,6 +170,21 @@ describe('ActivityRepository', () => {
       expect(results[0]).not.toHaveProperty('ocrText')
       expect(results[0]).not.toHaveProperty('vector')
     })
+
+    it('returns the app identity for web activities', () => {
+      storage.activities.add(
+        createStoredActivity({
+          id: 'fts-web',
+          appName: 'Google Chrome',
+          tld: 'www.notion.so',
+          summary: 'Drafting the launch checklist',
+        }),
+      )
+
+      const results = storage.activities.searchFTS('checklist', 10)
+
+      expect(results[0].appName).toBe('notion.so')
+    })
   })
 
   describe('searchVectors', () => {
@@ -217,6 +232,22 @@ describe('ActivityRepository', () => {
 
       expect(results.length).toBe(1)
       expect(results[0].id).toBe('vec-vs')
+    })
+
+    it('returns the app identity with and without filters', () => {
+      storage.activities.add(
+        createStoredActivity({
+          id: 'vec-web',
+          appName: 'Google Chrome',
+          tld: 'dashboard.stripe.com',
+          vector: v(1.0),
+        }),
+      )
+
+      expect(storage.activities.searchVectors(v(1.0), 10)[0].appName).toBe('dashboard.stripe.com')
+      expect(storage.activities.searchVectors(v(1.0), 10, { appName: 'stripe' })[0].appName).toBe(
+        'dashboard.stripe.com',
+      )
     })
 
     it('should filter by time range', () => {
@@ -420,6 +451,60 @@ describe('ActivityRepository', () => {
 
       expect(results.length).toBe(1)
       expect(results[0].id).toBe('app-1')
+    })
+
+    it('matches the appName filter against desktop app and website host alike', () => {
+      storage.activities.add(
+        createStoredActivity({ id: 'idn-1', appName: 'Notion', startTimestamp: 1000 }),
+      )
+      storage.activities.add(
+        createStoredActivity({
+          id: 'idn-2',
+          appName: 'Google Chrome',
+          tld: 'www.notion.so',
+          startTimestamp: 2000,
+        }),
+      )
+      storage.activities.add(
+        createStoredActivity({ id: 'idn-3', appName: 'Ghostty', startTimestamp: 3000 }),
+      )
+
+      const results = storage.activities.getByTimeRange(null, null, { appName: 'notion' })
+
+      expect(results.map((r) => r.id)).toEqual(['idn-1', 'idn-2'])
+    })
+
+    it('returns the app identity in appName: host for web work, app name otherwise', () => {
+      storage.activities.add(
+        createStoredActivity({
+          id: 'idn-web',
+          appName: 'Google Chrome',
+          tld: 'dashboard.stripe.com',
+          startTimestamp: 1000,
+        }),
+      )
+      storage.activities.add(
+        createStoredActivity({ id: 'idn-app', appName: 'Ghostty', startTimestamp: 2000 }),
+      )
+
+      const results = storage.activities.getByTimeRange(null, null)
+
+      expect(results.map((r) => r.appName)).toEqual(['dashboard.stripe.com', 'Ghostty'])
+    })
+
+    it('aggregates top apps by identity', () => {
+      storage.activities.add(
+        createStoredActivity({ id: 'top-1', appName: 'Google Chrome', tld: 'www.notion.so' }),
+      )
+      storage.activities.add(
+        createStoredActivity({ id: 'top-2', appName: 'Safari', tld: 'notion.so' }),
+      )
+      storage.activities.add(createStoredActivity({ id: 'top-3', appName: 'Ghostty' }))
+
+      expect(storage.activities.getTopApps()).toEqual([
+        { appName: 'notion.so', count: 2 },
+        { appName: 'Ghostty', count: 1 },
+      ])
     })
 
     it('should return lightweight ActivitySummary without ocrText or vector', () => {

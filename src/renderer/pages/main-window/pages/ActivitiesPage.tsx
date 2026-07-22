@@ -26,9 +26,7 @@ export function ActivitiesPage({
         loading={activities.loading}
         onOpenPrivacy={onOpenPrivacy}
         onSelectApp={activities.setAppFilter}
-        onSelectTld={activities.setTldFilter}
         activeApp={activities.appFilter}
-        activeTld={activities.tldFilter}
       />
       <AuditLog activities={activities} />
     </PageLayout>

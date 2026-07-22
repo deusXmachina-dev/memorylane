@@ -318,8 +318,14 @@ async function buildReviewInput(
     const count = memberCount.get(c.id) ?? 0
     if (count < 2) return false
     // Relabel once a cluster doubles since its last labeling (semantic drift);
-    // kind === '' means the classify verdict is still missing.
-    return c.label === '' || c.kind === '' || count >= 2 * Math.max(1, c.labeledSize)
+    // kind === '' means the classify verdict is still missing, empty steps
+    // mean the recipe is — either way the review is incomplete, retry.
+    return (
+      c.label === '' ||
+      c.kind === '' ||
+      c.steps.length === 0 ||
+      count >= 2 * Math.max(1, c.labeledSize)
+    )
   }
 
   const belowFloor: { id: string; coherence: number }[] = []
@@ -412,9 +418,6 @@ export function toReviewCluster(
   const sample = members.slice(
     -(splittable ? CLUSTERING_CONFIG.MAX_SPLITTABLE_MEMBERS : CLUSTERING_CONFIG.MAX_SAMPLE_MEMBERS),
   )
-  // Domains per sampled member let the LLM name web steps by domain.
-  const sampleActivityIds = [...new Set(sample.flatMap((s) => s.activityIds))]
-  const tldById = new Map(storage.activities.getByIds(sampleActivityIds).map((a) => [a.id, a.tld]))
   const spanMs =
     members.length > 0 ? members[members.length - 1].startedAt - members[0].startedAt : 0
   return {
@@ -426,21 +429,15 @@ export function toReviewCluster(
       span_days: Math.floor(spanMs / DAY_MS) + 1,
       median_active_min: median(members.map((m) => m.interactionMin)),
     },
-    members: sample.map((s) => {
-      const domains = [
-        ...new Set(s.activityIds.map((id) => tldById.get(id)).filter((t): t is string => !!t)),
-      ]
-      return {
-        sighting_id: s.id,
-        title: s.title,
-        subject: s.subject,
-        description: s.description,
-        apps: s.apps,
-        domains: domains.length > 0 ? domains : undefined,
-        interaction_min: s.interactionMin,
-        date: new Date(s.startedAt).toISOString().slice(0, 10),
-      }
-    }),
+    members: sample.map((s) => ({
+      sighting_id: s.id,
+      title: s.title,
+      subject: s.subject,
+      description: s.description,
+      apps: s.apps,
+      interaction_min: s.interactionMin,
+      date: new Date(s.startedAt).toISOString().slice(0, 10),
+    })),
   }
 }
 

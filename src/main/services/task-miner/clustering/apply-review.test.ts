@@ -393,6 +393,34 @@ describe('validateAndApply', () => {
     expect(storage.clusters.getMemberCount('tight')).toBe(2)
   })
 
+  it('drops a label verdict on a single-member cluster', () => {
+    seedCluster('solo', 100, ['s1'])
+
+    const result = validateAndApply(
+      storage,
+      {
+        clusters: [
+          {
+            id: 'solo',
+            label: 'One-off thing',
+            description: 'x',
+            kind: 'monitoring',
+            steps: ['App: do the thing', 'App: confirm'],
+          },
+        ],
+      },
+      guards({ reviewableIds: new Set(['solo']) }),
+      'test-model',
+      5000,
+    )
+
+    expect(result.labeled).toBe(0)
+    const cluster = storage.clusters.getById('solo')!
+    expect(cluster.label).toBe('')
+    expect(cluster.kind).toBe('')
+    expect(cluster.steps).toEqual([])
+  })
+
   it('applies labels with the member count as labeledSize', () => {
     seedCluster('c1', 100, ['s1', 's2', 's3'])
 
