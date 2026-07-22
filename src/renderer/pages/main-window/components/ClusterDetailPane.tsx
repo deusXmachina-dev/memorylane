@@ -251,7 +251,7 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
               </Button>
               <Button size="sm" variant="secondary" onClick={handleCopyPrompt} disabled={!detail}>
                 <Copy className="w-3.5 h-3.5 mr-1.5" />
-                Analyze with
+                Open in
                 <ClaudeWordmark />
               </Button>
             </div>
