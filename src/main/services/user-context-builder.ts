@@ -135,7 +135,7 @@ ${existing.detailedSummary}`
 
   return `Describe the user(s) of a computer based on the aggregated activity stats below.
 
-You will receive: app usage ranked by time, top websites, and a sample of activity summaries.
+You will receive: app usage ranked by time — websites and desktop apps alike — and a sample of activity summaries.
 
 Produce:
 

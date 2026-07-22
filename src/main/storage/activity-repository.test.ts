@@ -170,6 +170,21 @@ describe('ActivityRepository', () => {
       expect(results[0]).not.toHaveProperty('ocrText')
       expect(results[0]).not.toHaveProperty('vector')
     })
+
+    it('returns the app identity for web activities', () => {
+      storage.activities.add(
+        createStoredActivity({
+          id: 'fts-web',
+          appName: 'Google Chrome',
+          tld: 'www.notion.so',
+          summary: 'Drafting the launch checklist',
+        }),
+      )
+
+      const results = storage.activities.searchFTS('checklist', 10)
+
+      expect(results[0].appName).toBe('notion.so')
+    })
   })
 
   describe('searchVectors', () => {
@@ -217,6 +232,22 @@ describe('ActivityRepository', () => {
 
       expect(results.length).toBe(1)
       expect(results[0].id).toBe('vec-vs')
+    })
+
+    it('returns the app identity with and without filters', () => {
+      storage.activities.add(
+        createStoredActivity({
+          id: 'vec-web',
+          appName: 'Google Chrome',
+          tld: 'dashboard.stripe.com',
+          vector: v(1.0),
+        }),
+      )
+
+      expect(storage.activities.searchVectors(v(1.0), 10)[0].appName).toBe('dashboard.stripe.com')
+      expect(storage.activities.searchVectors(v(1.0), 10, { appName: 'stripe' })[0].appName).toBe(
+        'dashboard.stripe.com',
+      )
     })
 
     it('should filter by time range', () => {

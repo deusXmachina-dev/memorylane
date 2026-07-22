@@ -20,6 +20,7 @@ export function RecordGroup({ activities }: RecordGroupProps): React.JSX.Element
   const [expanded, setExpanded] = useState(false)
   const first = activities[0]
   const last = activities[activities.length - 1]
+  const title = groupLabel(first)
   const rangeLabel =
     activities.length === 1
       ? formatClock(first.startTimestamp)
@@ -45,11 +46,11 @@ export function RecordGroup({ activities }: RecordGroupProps): React.JSX.Element
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
-        aria-label={`${expanded ? 'Collapse' : 'Expand'} ${groupLabel(first)}`}
+        aria-label={`${expanded ? 'Collapse' : 'Expand'} ${title}`}
         className="w-full text-left px-3 py-2 hover:bg-muted/40 rounded-md"
       >
         <div className="flex items-baseline justify-between gap-3">
-          <div className="text-sm font-medium truncate">{groupLabel(first)}</div>
+          <div className="text-sm font-medium truncate">{title}</div>
           <div className="text-xs text-muted-foreground shrink-0 font-mono tabular-nums">
             {rangeLabel}
           </div>
@@ -63,7 +64,7 @@ export function RecordGroup({ activities }: RecordGroupProps): React.JSX.Element
             <span className="ml-2 inline-block w-3 text-center">{expanded ? '▾' : '▸'}</span>
           </div>
         </div>
-        {!expanded && headlineSummary && (
+        {!expanded && headlineSummary && headlineSummary !== title && (
           <div className="text-xs text-muted-foreground/90 mt-1 line-clamp-2">
             {headlineSummary}
           </div>

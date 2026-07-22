@@ -85,7 +85,7 @@ export class ActivityRepository {
       const effectiveLimit = Math.min(limit, SQLITE_VEC_KNN_MAX)
       const rows = this.db
         .prepare(
-          `SELECT a.id, a.start_timestamp, a.end_timestamp, a.app_name, a.window_title, a.summary
+          `SELECT a.id, a.start_timestamp, a.end_timestamp, a.app_name, a.window_title, a.tld, a.summary
          FROM (
            SELECT id, distance
            FROM activities_vec
