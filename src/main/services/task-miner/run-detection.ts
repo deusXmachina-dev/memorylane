@@ -21,7 +21,7 @@ import {
   extractJsonObject,
 } from './helpers'
 import { getDayBoundaries } from '@main/utils/day'
-import { deriveSightingApps } from '../../../shared/app-utils'
+import { deriveSightingApps } from '@/shared/app-utils'
 import { buildVerificationTools } from './tools'
 import { normalizeScanCandidates } from './candidate-normalizer'
 import { buildScanSystemPrompt, buildGroundingSystemPrompt } from './prompts'
