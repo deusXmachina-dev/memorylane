@@ -7,6 +7,7 @@ import type { MainWindowAPI, PatternInfo } from '@types'
 import { PatternFeedbackNudge } from './PatternFeedbackNudge'
 import { PatternListItem } from './PatternListItem'
 import { PatternDetailPane } from './PatternDetailPane'
+import { buildPatternAnalyzePrompt } from './claude-prompts'
 
 const SIGHTING_FILTERS = [
   { label: 'All', min: 1 },
@@ -19,38 +20,6 @@ interface PatternsSectionProps {
   api: MainWindowAPI
   patterns: PatternInfo[]
   onPatternsChange: () => void
-}
-
-function buildCopyPrompt(pattern: PatternInfo): string {
-  return [
-    `I want to automate this recurring workflow: "${pattern.name}".`,
-    ``,
-    `## Step 1 — Research`,
-    ``,
-    `Use the MemoryLane MCP tools to understand what this pattern really involves:`,
-    ``,
-    `1. Call get_pattern_details with pattern ID "${pattern.id}" to see all sightings.`,
-    `2. Pick 3-5 sightings with the highest confidence and call get_activity_details on their activity IDs to read the OCR evidence — this shows exactly what I was doing.`,
-    `3. For each of those sightings, call browse_timeline around the sighting timestamp (±15 minutes) to see what happened before and after. This gives you context about the full workflow — what triggers it and what follows.`,
-    ``,
-    `## Step 2 — Ask me questions`,
-    ``,
-    `Before building anything, ask me clarifying questions:`,
-    `- Which steps vary between occurrences?`,
-    `- What inputs or variables are needed?`,
-    `- What tools, APIs, or services do I have available?`,
-    `- Anything else you need to know to build a good automation.`,
-    ``,
-    `Wait for my answers before proceeding.`,
-    ``,
-    `## Step 3 — Create a Claude Code skill`,
-    ``,
-    `Based on your research and my answers, use /skill-creator to create a skill. Give it a brief that includes:`,
-    `- What triggers the workflow`,
-    `- Step-by-step actions the skill should perform`,
-    `- Apps involved: ${pattern.apps.join(', ')}`,
-    `- Variable inputs the skill needs to ask for`,
-  ].join('\n')
 }
 
 export function PatternsSection({
@@ -137,7 +106,7 @@ export function PatternsSection({
   const handleCopyPrompt = useCallback(
     (pattern: PatternInfo) => {
       navigator.clipboard
-        .writeText(buildCopyPrompt(pattern))
+        .writeText(buildPatternAnalyzePrompt(pattern))
         .then(() => {
           toast.success('Copied! Paste it into Claude Cowork')
         })
