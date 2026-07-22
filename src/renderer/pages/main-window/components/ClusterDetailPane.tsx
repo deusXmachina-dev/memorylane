@@ -30,6 +30,7 @@ function formatSightingTime(timestamp: number): string {
 function buildCopyPrompt(cluster: ClusterInfo, sightings: ClusterSightingInfo[]): string {
   const recent = sightings.slice(0, 5)
   const sampleActivityIds = recent.flatMap((s) => s.activityIds).slice(0, 20)
+  const hasIds = sampleActivityIds.length > 0
   const lines = [
     `Here's a recurring task I'd like to explore: "${cluster.title}".`,
     ``,
@@ -39,16 +40,13 @@ function buildCopyPrompt(cluster: ClusterInfo, sightings: ClusterSightingInfo[])
       ? `I do this about ${formatFrequency(cluster.timesPerWeek)} (${cluster.timesSeen} runs over ${cluster.observedDays} active days); a run takes ~${Math.round(cluster.avgActiveMin)} min of hands-on work.`
       : `I've done this ${cluster.timesSeen} time${cluster.timesSeen === 1 ? '' : 's'}; a run takes ~${Math.round(cluster.avgActiveMin)} min of hands-on work.`,
     ``,
-    sampleActivityIds.length > 0
-      ? `Activity IDs for research: ${sampleActivityIds.join(', ')}.`
-      : null,
-    ``,
+    ...(hasIds ? [`Activity IDs for research: ${sampleActivityIds.join(', ')}.`, ``] : []),
     `Recent occurrences:`,
     ...recent.map(
       (s) => `- ${formatSightingTime(s.startedAt)}: ${s.title}${s.subject ? `, ${s.subject}` : ''}`,
     ),
     ``,
-    `## Step 1: What would you like to do?`,
+    `## Choose a path`,
     ``,
     `Use AskUserQuestion to ask me:`,
     `1. **Build a Claude Skill** to automate this task`,
@@ -60,10 +58,14 @@ function buildCopyPrompt(cluster: ClusterInfo, sightings: ClusterSightingInfo[])
     ``,
     `### Research`,
     `Use the MemoryLane MCP tools to understand what this task really involves:`,
-    sampleActivityIds.length > 0
-      ? `1. Call get_activity_details on the activity IDs above to read the OCR evidence of what I actually did.`
-      : `1. Call browse_timeline around the occurrences above to see what I was doing.`,
-    `2. Call browse_timeline around those timestamps (±15 minutes) to see the full workflow.`,
+    ...(hasIds
+      ? [
+          `1. Call get_activity_details on the activity IDs above to read the OCR evidence of what I actually did.`,
+          `2. Call browse_timeline around those timestamps (±15 minutes) to see the full workflow.`,
+        ]
+      : [
+          `1. Call browse_timeline around the occurrences above (±15 minutes) to see the full workflow.`,
+        ]),
     ``,
     `### Ask me questions`,
     `Before building, ask me:`,
@@ -71,7 +73,7 @@ function buildCopyPrompt(cluster: ClusterInfo, sightings: ClusterSightingInfo[])
     `- What inputs or variables are needed?`,
     `- What tools, APIs, or services do I have available?`,
     ``,
-    `Wait for my answers, then create a Claude Code skill (a SKILL.md file with YAML frontmatter: name, description, allowed-tools, and step-by-step instructions). Save it and tell me where it was saved.`,
+    `Wait for my answers, then create a Claude skill (a SKILL.md file with YAML frontmatter: name, description, allowed-tools, and step-by-step instructions). Save it and tell me where it was saved.`,
     ``,
     `---`,
     ``,
@@ -79,10 +81,12 @@ function buildCopyPrompt(cluster: ClusterInfo, sightings: ClusterSightingInfo[])
     ``,
     `### Quick analysis`,
     `Use the MemoryLane MCP tools:`,
-    sampleActivityIds.length > 0
-      ? `1. Call get_activity_details on the activity IDs above.`
-      : `1. Call browse_timeline around the occurrences above.`,
-    `2. Call browse_timeline around those timestamps (±15 minutes).`,
+    ...(hasIds
+      ? [
+          `1. Call get_activity_details on the activity IDs above.`,
+          `2. Call browse_timeline around those timestamps (±15 minutes).`,
+        ]
+      : [`1. Call browse_timeline around the occurrences above (±15 minutes).`]),
     ``,
     `Then summarize:`,
     `- Step-by-step workflow (activity level, not click level)`,
@@ -251,7 +255,7 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
               </Button>
               <Button size="sm" variant="secondary" onClick={handleCopyPrompt} disabled={!detail}>
                 <Copy className="w-3.5 h-3.5 mr-1.5" />
-                Open in
+                Analyze with
                 <ClaudeWordmark />
               </Button>
             </div>
