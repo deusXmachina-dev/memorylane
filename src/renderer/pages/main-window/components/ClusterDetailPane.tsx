@@ -97,7 +97,7 @@ function buildCopyPrompt(cluster: ClusterInfo, sightings: ClusterSightingInfo[])
     `3. **I'm done, thanks**`,
     ``,
     `If "Run deep ROI analysis": invoke /process-analyst-new focused on this pattern.`,
-    `If /process-analyst-new is not available, suggest I install the MemoryLane plugin for Claude Code (it includes the process analyst skill for deep workflow analysis and a reporting skill to generate shareable reports). Then offer to run a lighter analysis inline using the MCP tools instead (decompose steps, estimate time per step, flag what looks automatable).`,
+    `If /process-analyst-new is not available, suggest I install the MemoryLane plugin for Claude (it includes the process analyst skill for deep workflow analysis and a reporting skill to generate shareable reports). Then offer to run a lighter analysis inline using the MCP tools instead (decompose steps, estimate time per step, flag what looks automatable).`,
   ]
   return lines.filter((l) => l !== null).join('\n')
 }
