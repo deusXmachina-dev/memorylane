@@ -13,7 +13,7 @@ function groupLabel(first: ActivityDetail): string {
 }
 
 function groupSubtitle(first: ActivityDetail): string {
-  return first.tld ? `${first.appName} · ${first.tld}` : first.appName
+  return first.appName
 }
 
 export function RecordGroup({ activities }: RecordGroupProps): React.JSX.Element {

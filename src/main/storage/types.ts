@@ -18,8 +18,6 @@ export interface ActivitySummary {
   endTimestamp: number
   appName: string
   windowTitle: string
-  /** Computed at read (`tld || app_name`): website host for web work, app name otherwise. Never stored. */
-  identity: string
   summary: string
 }
 

@@ -9,9 +9,7 @@ interface DigestProps {
   loading: boolean
   onOpenPrivacy?: () => void
   onSelectApp?: (app: string | null) => void
-  onSelectTld?: (tld: string | null) => void
   activeApp?: string | null
-  activeTld?: string | null
 }
 
 function spanDays(oldest: number | null, newest: number | null): number | null {
@@ -51,9 +49,7 @@ export function Digest({
   loading,
   onOpenPrivacy,
   onSelectApp,
-  onSelectTld,
   activeApp,
-  activeTld,
 }: DigestProps): React.JSX.Element {
   return (
     <Card size="sm" className="px-4">
@@ -72,20 +68,13 @@ export function Digest({
       </div>
 
       {digest && digest.totalCount > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+        <div className="mt-2">
           <DigestList
             label="Top apps captured"
             rows={digest.topApps.map((a) => ({ key: a.appName, label: a.appName, count: a.count }))}
             emptyHint="No apps recorded yet."
             activeKey={activeApp ?? null}
             onSelect={onSelectApp}
-          />
-          <DigestList
-            label="Top sites captured"
-            rows={digest.topTlds.map((t) => ({ key: t.tld, label: t.tld, count: t.count }))}
-            emptyHint="No web activity recorded yet."
-            activeKey={activeTld ?? null}
-            onSelect={onSelectTld}
           />
         </div>
       )}

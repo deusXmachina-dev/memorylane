@@ -443,7 +443,7 @@ describe('ActivityRepository', () => {
       expect(results.map((r) => r.id)).toEqual(['idn-1', 'idn-2'])
     })
 
-    it('exposes the identity on results: host for web work, app name otherwise', () => {
+    it('returns the app identity in appName: host for web work, app name otherwise', () => {
       storage.activities.add(
         createStoredActivity({
           id: 'idn-web',
@@ -458,7 +458,22 @@ describe('ActivityRepository', () => {
 
       const results = storage.activities.getByTimeRange(null, null)
 
-      expect(results.map((r) => r.identity)).toEqual(['dashboard.stripe.com', 'Ghostty'])
+      expect(results.map((r) => r.appName)).toEqual(['dashboard.stripe.com', 'Ghostty'])
+    })
+
+    it('aggregates top apps by identity', () => {
+      storage.activities.add(
+        createStoredActivity({ id: 'top-1', appName: 'Google Chrome', tld: 'www.notion.so' }),
+      )
+      storage.activities.add(
+        createStoredActivity({ id: 'top-2', appName: 'Safari', tld: 'notion.so' }),
+      )
+      storage.activities.add(createStoredActivity({ id: 'top-3', appName: 'Ghostty' }))
+
+      expect(storage.activities.getTopApps()).toEqual([
+        { appName: 'notion.so', count: 2 },
+        { appName: 'Ghostty', count: 1 },
+      ])
     })
 
     it('should return lightweight ActivitySummary without ocrText or vector', () => {

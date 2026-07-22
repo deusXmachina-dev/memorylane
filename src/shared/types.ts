@@ -208,9 +208,6 @@ export interface ActivityDetail {
   endTimestamp: number
   appName: string
   windowTitle: string
-  tld: string | null
-  /** Computed at read (`tld || app_name`): website host for web work, app name otherwise. Never stored. */
-  identity: string
   summary: string
 }
 
@@ -218,7 +215,6 @@ export interface ActivityDigest {
   totalCount: number
   dateRange: { oldest: number | null; newest: number | null }
   topApps: { appName: string; count: number }[]
-  topTlds: { tld: string; count: number; lastSeenAt: number }[]
 }
 
 export interface MainWindowStats {

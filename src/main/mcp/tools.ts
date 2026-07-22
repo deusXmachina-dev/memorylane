@@ -24,7 +24,6 @@ import {
   MISSING_TABLES_TEXT,
 } from '@main/ui/cluster-view'
 import { CLUSTER_VIEW_CONFIG } from '@/shared/constants'
-import { activityAppIdentity } from '@/shared/app-utils'
 import type { ClusterInfo } from '../../shared/types'
 import log from '@main/utils/logger'
 
@@ -883,8 +882,7 @@ async function handleGetActivityDetails(services: MCPServices | null, { ids }: {
       .map((a) => {
         const timeStr = new Date(a.startTimestamp).toLocaleString()
         const endTimeStr = new Date(a.endTimestamp).toLocaleString()
-        const identity = activityAppIdentity(a)
-        const appInfo = identity ? ` [${identity}]` : ''
+        const appInfo = a.appName ? ` [${a.appName}]` : ''
         const summaryLine = a.summary ? `\nSummary: ${a.summary}` : ''
         return `ID: ${a.id}\n[${timeStr} → ${endTimeStr}]${appInfo}${summaryLine}\nOCR: ${a.ocrText}`
       })

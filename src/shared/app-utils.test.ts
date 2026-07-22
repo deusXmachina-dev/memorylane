@@ -22,33 +22,25 @@ describe('activityAppIdentity', () => {
 })
 
 describe('deriveSightingApps', () => {
-  it('derives web and desktop identities, deduped in first-appearance order', () => {
+  it('dedupes apps in first-appearance order', () => {
     expect(
       deriveSightingApps([
-        { appName: 'Google Chrome', tld: 'dashboard.stripe.com' },
-        { appName: 'Ghostty', tld: null },
-        { appName: 'Google Chrome', tld: 'dashboard.stripe.com' },
-        { appName: 'Google Chrome', tld: 'mail.google.com' },
+        { appName: 'dashboard.stripe.com' },
+        { appName: 'Ghostty' },
+        { appName: 'dashboard.stripe.com' },
+        { appName: 'mail.google.com' },
       ]),
     ).toEqual(['dashboard.stripe.com', 'Ghostty', 'mail.google.com'])
   })
 
-  it('drops bare browser names when the run has another identity', () => {
+  it('drops browser names when the run has another app', () => {
     expect(
-      deriveSightingApps([
-        { appName: 'Google Chrome', tld: 'newtab' },
-        { appName: 'Google Chrome', tld: 'app.signnow.com' },
-      ]),
+      deriveSightingApps([{ appName: 'Google Chrome' }, { appName: 'app.signnow.com' }]),
     ).toEqual(['app.signnow.com'])
   })
 
   it('keeps the browser name when the run has nothing else', () => {
-    expect(
-      deriveSightingApps([
-        { appName: 'Google Chrome', tld: 'newtab' },
-        { appName: 'Google Chrome', tld: null },
-      ]),
-    ).toEqual(['Google Chrome'])
+    expect(deriveSightingApps([{ appName: 'Google Chrome' }])).toEqual(['Google Chrome'])
   })
 
   it('returns an empty list for no activities', () => {
