@@ -30,8 +30,9 @@ function formatSightingTime(timestamp: number): string {
 function buildCopyPrompt(cluster: ClusterInfo, sightings: ClusterSightingInfo[]): string {
   const recent = sightings.slice(0, 5)
   const sampleActivityIds = recent.flatMap((s) => s.activityIds).slice(0, 20)
+  const hasIds = sampleActivityIds.length > 0
   const lines = [
-    `I want to automate this recurring task: "${cluster.title}".`,
+    `Here's a recurring task I'd like to explore: "${cluster.title}".`,
     ``,
     cluster.description ? `Context: ${cluster.description}` : null,
     `Apps involved: ${cluster.apps.join(', ') || 'unknown'}.`,
@@ -39,32 +40,68 @@ function buildCopyPrompt(cluster: ClusterInfo, sightings: ClusterSightingInfo[])
       ? `I do this about ${formatFrequency(cluster.timesPerWeek)} (${cluster.timesSeen} runs over ${cluster.observedDays} active days); a run takes ~${Math.round(cluster.avgActiveMin)} min of hands-on work.`
       : `I've done this ${cluster.timesSeen} time${cluster.timesSeen === 1 ? '' : 's'}; a run takes ~${Math.round(cluster.avgActiveMin)} min of hands-on work.`,
     ``,
-    `## Step 1: Research`,
-    ``,
-    `Use the MemoryLane MCP tools to understand what this task really involves:`,
-    ``,
-    sampleActivityIds.length > 0
-      ? `1. Call get_activity_details on these activity IDs to read the OCR evidence of what I actually did: ${sampleActivityIds.join(', ')}.`
-      : `1. Call browse_timeline around the occurrences below to see what I was doing.`,
-    `2. Call browse_timeline around those timestamps (±15 minutes) to see the full workflow: what triggers this task and what follows.`,
-    ``,
+    ...(hasIds ? [`Activity IDs for research: ${sampleActivityIds.join(', ')}.`, ``] : []),
     `Recent occurrences:`,
     ...recent.map(
       (s) => `- ${formatSightingTime(s.startedAt)}: ${s.title}${s.subject ? `, ${s.subject}` : ''}`,
     ),
     ``,
-    `## Step 2: Ask me questions`,
+    `## Choose a path`,
     ``,
-    `Before building anything, ask me clarifying questions:`,
+    `Use AskUserQuestion to ask me:`,
+    `1. **Build a Claude Skill** to automate this task`,
+    `2. **Analyze this pattern** to understand the workflow in detail`,
+    ``,
+    `---`,
+    ``,
+    `## Path 1: Build a Claude Skill`,
+    ``,
+    `### Research`,
+    `Use the MemoryLane MCP tools to understand what this task really involves:`,
+    ...(hasIds
+      ? [
+          `1. Call get_activity_details on the activity IDs above to read the OCR evidence of what I actually did.`,
+          `2. Call browse_timeline around those timestamps (±15 minutes) to see the full workflow.`,
+        ]
+      : [
+          `1. Call browse_timeline around the occurrences above (±15 minutes) to see the full workflow.`,
+        ]),
+    ``,
+    `### Ask me questions`,
+    `Before building, ask me:`,
     `- Which steps vary between occurrences?`,
     `- What inputs or variables are needed?`,
     `- What tools, APIs, or services do I have available?`,
     ``,
-    `Wait for my answers before proceeding.`,
+    `Wait for my answers, then create a Claude skill (a SKILL.md file with YAML frontmatter: name, description, allowed-tools, and step-by-step instructions). Save it and tell me where it was saved.`,
     ``,
-    `## Step 3: Create a Claude Code skill`,
+    `---`,
     ``,
-    `Based on your research and my answers, use /skill-creator to create a skill that automates this task.`,
+    `## Path 2: Analyze this pattern`,
+    ``,
+    `### Quick analysis`,
+    `Use the MemoryLane MCP tools:`,
+    ...(hasIds
+      ? [
+          `1. Call get_activity_details on the activity IDs above.`,
+          `2. Call browse_timeline around those timestamps (±15 minutes).`,
+        ]
+      : [`1. Call browse_timeline around the occurrences above (±15 minutes).`]),
+    ``,
+    `Then summarize:`,
+    `- Step-by-step workflow (activity level, not click level)`,
+    `- Time per app per run`,
+    `- What varies vs what stays constant across runs`,
+    `- Rough automatable rating: low / medium / high`,
+    ``,
+    `### What next?`,
+    `After the summary, use AskUserQuestion:`,
+    `1. **Build a Claude Skill** (skip research since you already did it, go straight to asking me questions from Path 1, then create the SKILL.md)`,
+    `2. **Run deep ROI analysis** (deep dive with time/cost quantification and automation recommendations)`,
+    `3. **I'm done, thanks**`,
+    ``,
+    `If "Run deep ROI analysis": invoke /process-analyst-new focused on this pattern.`,
+    `If /process-analyst-new is not available, suggest I install the MemoryLane plugin for Claude (it includes the process analyst skill for deep workflow analysis and a reporting skill to generate shareable reports). Then offer to run a lighter analysis inline using the MCP tools instead (decompose steps, estimate time per step, flag what looks automatable).`,
   ]
   return lines.filter((l) => l !== null).join('\n')
 }
