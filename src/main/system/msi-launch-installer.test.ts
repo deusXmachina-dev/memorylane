@@ -116,13 +116,30 @@ describe('MSI launch installer contract', () => {
     expect(injected).toContain('Property="rollbackLaunchTask"')
     expect(injected).toContain('Property="deleteLaunchTask"')
     // Each quiet action needs its command set earlier in the same sequence.
-    for (const setter of [
-      'setKillAppProcesses',
-      'setRegisterLaunchTask',
-      'setRollbackLaunchTask',
-      'setDeleteLaunchTask',
+    expect(injected).toMatch(/Custom Action="setKillAppProcesses" Before="killAppProcesses"/)
+    expect(injected).toMatch(/Custom Action="setRegisterLaunchTask" Before="setRollbackLaunchTask"/)
+    expect(injected).toMatch(/Custom Action="setRollbackLaunchTask" Before="rollbackLaunchTask"/)
+    expect(injected).toMatch(/Custom Action="setDeleteLaunchTask" After="InstallInitialize"/)
+  })
+
+  it('setter conditions match their actions', () => {
+    // A drifted condition leaves the action with an empty command line, and
+    // Return="ignore" hides the failure.
+    const conditions = new Map(
+      [...injected.matchAll(/<Custom Action="(\w+)"[^>]*>([^<]*)<\/Custom>/g)].map((m) => [
+        m[1],
+        m[2],
+      ]),
+    )
+    for (const action of [
+      'killAppProcesses',
+      'registerLaunchTask',
+      'rollbackLaunchTask',
+      'deleteLaunchTask',
     ]) {
-      expect(injected).toMatch(new RegExp(`Custom Action="${setter}"`))
+      const setter = `set${action[0].toUpperCase()}${action.slice(1)}`
+      expect(conditions.get(setter), setter).toBeTruthy()
+      expect(conditions.get(setter), setter).toBe(conditions.get(action))
     }
   })
 

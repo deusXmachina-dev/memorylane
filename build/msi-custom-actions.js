@@ -36,6 +36,10 @@ function buildCustomActionsXml(productName) {
   const killCmd = `"[System64Folder]WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -ExecutionPolicy Bypass -Command "$d = \\"[APPLICATIONFOLDER] \\".TrimEnd(); if ($d.Length -gt 3) { Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($d, &apos;OrdinalIgnoreCase&apos;) } | Stop-Process -Force -ErrorAction SilentlyContinue }"`
   const registerCmd = `"[System64Folder]WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "[APPLICATIONFOLDER]resources\\assets\\msi-launch-task.ps1" -ProductName "${productName}"`
   const deleteCmd = `"[System64Folder]schtasks.exe" /Delete /F /TN "${productName} Launcher"`
+  // A setter must share its action's condition — if they drift, the action
+  // runs with an empty command and Return="ignore" hides the failure.
+  const installCond = 'NOT (REMOVE~="ALL")'
+  const uninstallCond = 'REMOVE~="ALL" AND NOT UPGRADINGPRODUCTCODE'
   return [
     `    <CustomAction Id="setKillAppProcesses" Property="WixQuietExec64CmdLine" Value='${killCmd}'/>`,
     `    <CustomAction Id="killAppProcesses" BinaryKey="WixCA" DllEntry="WixQuietExec64" Execute="immediate" Return="ignore"/>`,
@@ -48,12 +52,12 @@ function buildCustomActionsXml(productName) {
     '    <InstallExecuteSequence>',
     '      <Custom Action="setKillAppProcesses" Before="killAppProcesses">1</Custom>',
     '      <Custom Action="killAppProcesses" Before="InstallValidate">1</Custom>',
-    '      <Custom Action="setDeleteLaunchTask" After="InstallInitialize">REMOVE~="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>',
-    '      <Custom Action="deleteLaunchTask" After="setDeleteLaunchTask">REMOVE~="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>',
-    '      <Custom Action="setRegisterLaunchTask" Before="setRollbackLaunchTask">NOT (REMOVE~="ALL")</Custom>',
-    '      <Custom Action="setRollbackLaunchTask" Before="rollbackLaunchTask">NOT (REMOVE~="ALL")</Custom>',
-    '      <Custom Action="rollbackLaunchTask" Before="registerLaunchTask">NOT (REMOVE~="ALL")</Custom>',
-    '      <Custom Action="registerLaunchTask" Before="InstallFinalize">NOT (REMOVE~="ALL")</Custom>',
+    `      <Custom Action="setDeleteLaunchTask" After="InstallInitialize">${uninstallCond}</Custom>`,
+    `      <Custom Action="deleteLaunchTask" After="setDeleteLaunchTask">${uninstallCond}</Custom>`,
+    `      <Custom Action="setRegisterLaunchTask" Before="setRollbackLaunchTask">${installCond}</Custom>`,
+    `      <Custom Action="setRollbackLaunchTask" Before="rollbackLaunchTask">${installCond}</Custom>`,
+    `      <Custom Action="rollbackLaunchTask" Before="registerLaunchTask">${installCond}</Custom>`,
+    `      <Custom Action="registerLaunchTask" Before="InstallFinalize">${installCond}</Custom>`,
     '    </InstallExecuteSequence>',
     '',
   ].join('\n')
