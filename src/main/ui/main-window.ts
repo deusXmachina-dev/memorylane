@@ -9,6 +9,7 @@ import { app, BrowserWindow, ipcMain, IpcMainInvokeEvent, nativeTheme, shell } f
 import { showOpenDialog, showSaveDialog } from '@main/ui/dialogs'
 import path from 'node:path'
 import { syncAutoStartSetting } from '@main/system/auto-start'
+import { isLaunchdManaged } from '@main/system/launchd-mac'
 import { DEFAULT_EDITION, type AppEditionConfig } from '../../shared/edition'
 import { PURGE_CONFIRMATION_PHRASE } from '../../shared/constants'
 import log from '@main/utils/logger'
@@ -1123,7 +1124,12 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   })
   ipcMain.handle('main-window:restartApp', () => {
     log.info('[App] Restart requested from renderer')
-    app.relaunch()
+    // Under launchd supervision KeepAlive relaunches us after the quit;
+    // app.relaunch() would additionally spawn an unsupervised copy that
+    // carries the launchd marker arg and races the supervised respawn.
+    if (!isLaunchdManaged()) {
+      app.relaunch()
+    }
     app.quit()
   })
   ipcMain.handle('main-window:getUpdateInfo', () => getUpdateInfo())

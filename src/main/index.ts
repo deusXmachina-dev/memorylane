@@ -20,6 +20,7 @@ import {
   syncAutoStartSetting,
 } from '@main/system/auto-start'
 import { ensureWatchdogTask } from '@main/system/watchdog-win'
+import { handoffToLaunchd } from '@main/system/launchd-mac'
 import { createCaptureCoordinator } from '@main/capture/capture-orchestrator'
 import { createCaptureHotkeyManager } from '@main/capture/capture-hotkey-manager'
 import log from '@main/utils/logger'
@@ -60,6 +61,10 @@ import { ENTERPRISE_BACKEND_CONFIG, MANAGED_KEY_CONFIG } from '../shared/constan
 // alongside production for local debugging.
 if (app.isPackaged && !app.requestSingleInstanceLock()) {
   app.quit()
+} else {
+  // Mac enterprise: a manual launch that won the lock yields to the
+  // supervised LaunchAgent instance (may exit here). No-op elsewhere.
+  handoffToLaunchd()
 }
 
 // Privileged scheme for streaming eval review videos — must be registered

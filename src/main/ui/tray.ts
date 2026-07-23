@@ -10,6 +10,7 @@ import type { StorageService } from '../storage'
 import { openMainWindow } from './main-window'
 import { getUpdateState, quitAndInstall } from '@main/system/updater'
 import { disableWatchdogTask } from '@main/system/watchdog-win'
+import { disableLaunchdSupervision } from '@main/system/launchd-mac'
 import { createTrayPrivacyState } from './tray-privacy-state'
 import { CAPTURE_PAUSE_CONFIG, formatPauseDuration } from '../../shared/constants'
 
@@ -234,8 +235,12 @@ export const updateTrayMenu = async (): Promise<void> => {
       click: () => {
         void deps!.capture.forceClose()
         deps!.capture.stopCaptureForShutdown()
-        // Explicit quit must hold: stop the relaunch task before quitting.
-        void disableWatchdogTask().finally(() => app.quit())
+        // Explicit quit must hold: stop the platform relaunch mechanism first.
+        // Each is a fast no-op off its platform; the mac bootout may SIGTERM
+        // us into the quit path before app.quit() runs, which is equivalent.
+        void Promise.allSettled([disableWatchdogTask(), disableLaunchdSupervision()]).then(() =>
+          app.quit(),
+        )
       },
     },
   ])
