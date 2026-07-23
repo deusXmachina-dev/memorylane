@@ -10,24 +10,15 @@ import { ClusterDetailPane } from './ClusterDetailPane'
 function MiningProgressBanner({ status }: { status: MiningStatus }): React.JSX.Element {
   const done = status.completedDays + status.failedDays
   const mining = status.state === 'mining'
-  const pct = Math.max(1.5, (done / status.totalDays) * 100)
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between gap-4 text-xs">
-        <span className="flex min-w-0 items-center gap-2 font-medium text-foreground/85">
-          <PingDot active={mining} />
-          <span className="truncate">{mining ? 'Analyzing your history' : 'Analysis paused'}</span>
-        </span>
-        <span className="shrink-0 tabular-nums text-muted-foreground">
-          {done} of {status.totalDays} days
-        </span>
-      </div>
-      <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
-        <div
-          className="h-full rounded-full bg-primary transition-[width] duration-700 ease-out"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
+    <div className="flex items-center justify-between gap-4 text-xs">
+      <span className="flex min-w-0 items-center gap-2 font-medium text-foreground/85">
+        <PingDot active={mining} />
+        <span className="truncate">{mining ? 'Analyzing your history' : 'Analysis paused'}</span>
+      </span>
+      <span className="shrink-0 tabular-nums text-muted-foreground">
+        {done} of {status.totalDays} days
+      </span>
     </div>
   )
 }
