@@ -1,15 +1,14 @@
-# MemoryLane v1.5.0
+# MemoryLane v1.5.1-alpha.1
 
-Stable release. The task miner replaces the legacy pattern detector as the only analysis engine, patterns get a redesigned UI with step-by-step recipes, and managed installs receive model updates remotely.
+Alpha prerelease. Enterprise installs survive silent MDM/RMM update pushes on both platforms, and one app identity (site domain or app name) is used across the UI.
 
 ## What's Changed
 
-- **Task miner is now the only analyzer**: the legacy pattern detector is fully removed. Installs that still ran the old detector start a fresh ~60-day backfill on first launch (existing data is kept). Mining runs on a per-day ledger with a unified sweep and progress banner (#221).
-- **Patterns-first UI**: redesigned patterns view with honest metrics and a weekly trend, refreshed with the shadcn design preset (#227, #229).
-- **Recipe steps everywhere**: every pattern carries LLM-generated, sanitized step-by-step recipe lines (app, domain, intent) in the Build AI agent prompt (#228, #235).
-- **Remote model config**: managed installs poll the backend for model picks, so degraded or repriced models can be swapped without an app update. BYOK and custom-endpoint installs keep full model control (#233).
-- **MCP serves clusters**: the pattern tools (`list_patterns`, `get_pattern_details`) now read task-mining clusters (#226).
-- **Fixes**: actionable messages for network failures during activation (#222), recorder no longer crashes on daemon stdin write errors (#220), frame/video deletes retry on transient Windows file locks (#219).
+- **macOS enterprise pkg self-heals**: preinstall quits the running app before the bundle swap; postinstall installs a machine-level LaunchAgent that relaunches the app at login and after unclean exits, so MDM-pushed updates no longer leave the app stopped.
+- **Windows installer pushes no longer break the install**: the app-watcher sidecar exits when the main process dies, so RMM/MSI pushes can replace files immediately instead of deferring to reboot and leaving a broken install.
+- **One app identity**: patterns and activities use the site domain (or app name) as a single app concept across the UI, digest, and prompts (#239).
+- **Open in Claude**: the "Analyze with Claude" button is now "Open in Claude" with two paths — build a MemoryLane plugin skill or run an analysis (#240, #242).
+- **Fix**: LLM requests that hang without a response are aborted instead of stalling the pipeline (#238).
 
 ## Known Issues & Limitations
 
@@ -27,4 +26,4 @@ Stable release. The task miner replaces the legacy pattern detector as the only 
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.4.0...v1.5.0
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.0...v1.5.1-alpha.1
