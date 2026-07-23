@@ -1,21 +1,23 @@
-# Run by the MSI as SYSTEM (see patches/app-builder-lib+*.patch) to manage the
-# per-machine relaunch watchdog task. schtasks /Create cannot express the
+# Run by the MSI as SYSTEM (see patches/app-builder-lib+*.patch) to register
+# the per-machine relaunch watchdog task. schtasks /Create cannot express the
 # settings that matter here: no battery restriction (laptops would never
 # relaunch on battery) and no execution time limit (the default 72h limit
-# kills whatever the task started). -Force also overwrites the per-user task
-# that pre-1.5.2 app builds registered under the same name.
+# kills whatever the task started).
 param(
-  [switch]$Register,
-  [switch]$Remove
+  [switch]$Register
 )
 
-$ErrorActionPreference = 'SilentlyContinue'
+$ErrorActionPreference = 'Stop'
 $taskName = 'MemoryLane Enterprise Watchdog'
+$logFile = Join-Path $env:ProgramData 'MemoryLane Enterprise\watchdog-task.log'
 
-if ($Remove) {
-  Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
-  exit 0
+function Write-Log([string]$message) {
+  try {
+    New-Item -ItemType Directory -Force -Path (Split-Path $logFile) | Out-Null
+    Add-Content -Path $logFile -Value "$((Get-Date).ToString('s')) $message"
+  } catch {}
 }
+
 if (-not $Register) {
   exit 0
 }
@@ -69,8 +71,19 @@ $xml = @"
 </Task>
 "@
 
-Register-ScheduledTask -TaskName $taskName -Xml $xml -Force | Out-Null
-# Bring the app back seconds after a silent push instead of within 5 minutes;
-# fails harmlessly when no user is logged on.
-Start-ScheduledTask -TaskName $taskName
+# -Force overwrites the task left by a previous install (repair/upgrade).
+try {
+  Register-ScheduledTask -TaskName $taskName -Xml $xml -Force | Out-Null
+  Write-Log 'registered'
+} catch {
+  Write-Log "register failed: $_"
+  exit 0
+}
+# Bring the app back right after a silent push (the relaunch script waits out
+# msiexec); fails when no user is logged on, which the next trigger covers.
+try {
+  Start-ScheduledTask -TaskName $taskName
+} catch {
+  Write-Log "start skipped: $_"
+}
 exit 0

@@ -1,8 +1,8 @@
 diff --git a/node_modules/app-builder-lib/templates/msi/template.xml b/node_modules/app-builder-lib/templates/msi/template.xml
-index 2d5cd3c..63bcf65 100644
+index 2d5cd3c..01fec37 100644
 --- a/node_modules/app-builder-lib/templates/msi/template.xml
 +++ b/node_modules/app-builder-lib/templates/msi/template.xml
-@@ -16,6 +16,27 @@
+@@ -16,6 +16,37 @@
      <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage='A newer version of "[ProductName]" is already installed.'/>
      <MediaTemplate CompressionLevel="${compressionLevel}" EmbedCab="yes"/>
  
@@ -11,19 +11,29 @@ index 2d5cd3c..63bcf65 100644
 +         the install dir; without this kill before files-in-use validation, a
 +         silent upgrade defers file replacement to reboot (3010) and leaves a
 +         half-applied install. Runs on install, upgrade, repair and uninstall.
++         The path-length guard keeps a hypothetically unresolved
++         APPLICATIONFOLDER from matching every process on the machine.
 +         registerWatchdogTask/deleteWatchdogTask: the per-machine relaunch
 +         task (assets/watchdog-task.ps1) is installer-owned so a silent push
 +         starts the app without waiting for a login; the app itself cannot
-+         manage a per-machine task unelevated. -->
++         manage a per-machine task unelevated. Each has a rollback twin so a
++         failed install leaves no orphan task and a failed uninstall leaves
++         the restored app supervised. -->
 +    <Property Id="KillAppPs" Value="powershell.exe"/>
-+    <CustomAction Id="killAppProcesses" Property="KillAppPs" ExeCommand='-NoProfile -ExecutionPolicy Bypass -Command "Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -like &apos;[APPLICATIONFOLDER]*&apos; } | Stop-Process -Force -ErrorAction SilentlyContinue"' Execute="immediate" Return="ignore"/>
++    <CustomAction Id="killAppProcesses" Property="KillAppPs" ExeCommand='-NoProfile -ExecutionPolicy Bypass -Command "$d = &apos;[APPLICATIONFOLDER]&apos;; if ($d.Length -gt 3) { Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -like ($d + &apos;*&apos;) } | Stop-Process -Force -ErrorAction SilentlyContinue }"' Execute="immediate" Return="ignore"/>
 +    <Property Id="WatchdogPs" Value="powershell.exe"/>
 +    <CustomAction Id="registerWatchdogTask" Property="WatchdogPs" ExeCommand='-NoProfile -ExecutionPolicy Bypass -File "[APPLICATIONFOLDER]resources\assets\watchdog-task.ps1" -Register' Execute="deferred" Impersonate="no" Return="ignore"/>
++    <Property Id="RollbackWatchdogSchtasks" Value="schtasks.exe"/>
++    <CustomAction Id="rollbackWatchdogTask" Property="RollbackWatchdogSchtasks" ExeCommand='/Delete /F /TN "${productName} Watchdog"' Execute="rollback" Impersonate="no" Return="ignore"/>
 +    <Property Id="DeleteWatchdogSchtasks" Value="schtasks.exe"/>
 +    <CustomAction Id="deleteWatchdogTask" Property="DeleteWatchdogSchtasks" ExeCommand='/Delete /F /TN "${productName} Watchdog"' Execute="deferred" Impersonate="no" Return="ignore"/>
++    <Property Id="RestoreWatchdogPs" Value="powershell.exe"/>
++    <CustomAction Id="restoreWatchdogTask" Property="RestoreWatchdogPs" ExeCommand='-NoProfile -ExecutionPolicy Bypass -File "[APPLICATIONFOLDER]resources\assets\watchdog-task.ps1" -Register' Execute="rollback" Impersonate="no" Return="ignore"/>
 +    <InstallExecuteSequence>
 +      <Custom Action="killAppProcesses" Before="InstallValidate">1</Custom>
-+      <Custom Action="deleteWatchdogTask" After="InstallInitialize">REMOVE~="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>
++      <Custom Action="restoreWatchdogTask" After="InstallInitialize">REMOVE~="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>
++      <Custom Action="deleteWatchdogTask" After="restoreWatchdogTask">REMOVE~="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>
++      <Custom Action="rollbackWatchdogTask" Before="registerWatchdogTask">NOT (REMOVE~="ALL")</Custom>
 +      <Custom Action="registerWatchdogTask" Before="InstallFinalize">NOT (REMOVE~="ALL")</Custom>
 +    </InstallExecuteSequence>
 +

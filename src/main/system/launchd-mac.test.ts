@@ -20,7 +20,7 @@ describe('launchd-mac / pkg postinstall contract', () => {
     expect(postinstall).toContain('PLIST="/Library/LaunchAgents/$LABEL.plist"')
   })
 
-  it('keeps the app alive unconditionally (tray Quit holds via bootout)', () => {
+  it('keeps the app alive unconditionally', () => {
     expect(postinstall).toMatch(/<key>KeepAlive<\/key>\s*<true\/>/)
   })
 })

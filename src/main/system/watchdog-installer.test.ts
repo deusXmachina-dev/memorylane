@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -21,6 +22,10 @@ describe('Windows watchdog installer contract', () => {
     expect(vbs).not.toContain('shell.Run "')
   })
 
+  it('relaunch script waits out an active installer instead of skipping', () => {
+    expect(vbs).toContain('WScript.Sleep')
+  })
+
   it('registration script configures the task to actually fire', () => {
     expect(ps1).toContain("$taskName = 'MemoryLane Enterprise Watchdog'")
     expect(ps1).toContain('watchdog-relaunch.vbs')
@@ -34,5 +39,20 @@ describe('Windows watchdog installer contract', () => {
     expect(template).toContain('killAppProcesses')
     expect(template).toContain('watchdog-task.ps1')
     expect(template).toContain('/Delete /F /TN "${productName} Watchdog"')
+  })
+
+  it('register and delete both have rollback twins', () => {
+    expect(template).toContain('Id="rollbackWatchdogTask"')
+    expect(template).toContain('Id="restoreWatchdogTask"')
+    expect(template).toMatch(/Custom Action="rollbackWatchdogTask" Before="registerWatchdogTask"/)
+    expect(template).toMatch(/Custom Action="deleteWatchdogTask" After="restoreWatchdogTask"/)
+  })
+
+  it('task name matches the enterprise product name the MSI expands', () => {
+    process.env.EDITION = 'enterprise'
+    const builderConfig = createRequire(import.meta.url)(
+      path.join(process.cwd(), 'electron-builder.config.js'),
+    ) as { productName: string }
+    expect(ps1).toContain(`$taskName = '${builderConfig.productName} Watchdog'`)
   })
 })
