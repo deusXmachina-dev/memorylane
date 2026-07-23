@@ -1,6 +1,6 @@
-# MemoryLane v1.5.1-alpha.2
+# MemoryLane v1.5.1
 
-Alpha prerelease. Enterprise installs survive silent MDM/RMM update pushes on both platforms, and one app identity (site domain or app name) is used across the UI.
+Enterprise installs survive silent MDM/RMM update pushes on both platforms, and one app identity (site domain or app name) is used across the UI.
 
 ## What's Changed
 
@@ -8,6 +8,7 @@ Alpha prerelease. Enterprise installs survive silent MDM/RMM update pushes on bo
 - **macOS enterprise**: the app starts at login and relaunches after crashes or external kills; a tray Quit stays quit.
 - Helper processes exit with the app, so installer pushes no longer defer file replacement to reboot.
 - **One app identity**: patterns and activities use the site domain (or app name) as a single app concept across the UI, digest, and prompts (#239).
+- **Tasks always show steps**: each sighting stores its own happy-path steps, so every cluster — including one-off tasks — shows a recipe (#243).
 - **Open in Claude**: the "Analyze with Claude" button is now "Open in Claude" with two paths — build a MemoryLane plugin skill or run an analysis (#240, #242).
 - **Fix**: LLM requests that hang without a response are aborted instead of stalling the pipeline (#238).
 
@@ -27,4 +28,4 @@ Alpha prerelease. Enterprise installs survive silent MDM/RMM update pushes on bo
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.0...v1.5.1-alpha.2
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.0...v1.5.1
