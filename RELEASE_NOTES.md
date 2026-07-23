@@ -1,4 +1,4 @@
-# MemoryLane v1.5.2-alpha.1
+# MemoryLane v1.5.2
 
 Windows MSI installs and upgrades run without flashing console windows.
 
@@ -23,4 +23,4 @@ Windows MSI installs and upgrades run without flashing console windows.
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.1...v1.5.2-alpha.1
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.1...v1.5.2
