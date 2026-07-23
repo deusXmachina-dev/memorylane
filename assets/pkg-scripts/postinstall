@@ -22,6 +22,8 @@ cat > "$PLIST" <<EOF
   </array>
   <key>RunAtLoad</key>
   <true/>
+  <key>AssociatedBundleIdentifiers</key>
+  <string>com.memorylane.enterprise</string>
   <key>KeepAlive</key>
   <dict>
     <key>SuccessfulExit</key>

@@ -88,3 +88,10 @@ export function loadAppEditionConfig(): AppEditionConfig {
     return { edition: DEFAULT_EDITION }
   }
 }
+
+let cachedConfig: AppEditionConfig | null = null
+
+export function getAppEditionConfig(): AppEditionConfig {
+  cachedConfig ??= loadAppEditionConfig()
+  return cachedConfig
+}

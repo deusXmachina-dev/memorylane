@@ -16,6 +16,7 @@ import { config as loadEnv } from 'dotenv'
 import {
   AUTO_START_HIDDEN_ARG,
   canSyncAutoStartSetting,
+  launchAgentOwnsAutoStart,
   shouldStartHiddenOnLaunch,
   syncAutoStartSetting,
 } from '@main/system/auto-start'
@@ -53,7 +54,7 @@ import {
   type ObservationController,
 } from '@main/capture/observation-controller'
 import { getAppDirectoryName } from '@main/utils/paths'
-import { loadAppEditionConfig } from '@main/system/edition'
+import { getAppEditionConfig } from '@main/system/edition'
 import { ENTERPRISE_BACKEND_CONFIG, MANAGED_KEY_CONFIG } from '../shared/constants'
 
 // Keep single-instance behavior in packaged app, but allow dev to run
@@ -154,10 +155,15 @@ let observation: ObservationController | null = null
 // sync native call is blocking the event loop — only an external kill ends
 // that state.
 const SHUTDOWN_TIMEOUT_MS = 5_000
+let shutdownStarted = false
 let shutdownCompleted = false
 app.on('before-quit', (event) => {
   if (shutdownCompleted) return
   event.preventDefault()
+  // A repeated quit (double tray click) must not re-run dispose steps or arm
+  // a second force-exit timer; the in-flight shutdown re-issues app.quit().
+  if (shutdownStarted) return
+  shutdownStarted = true
 
   runtime?.accessProvider.stopPeriodicRefresh()
   remoteBlacklist?.stop()
@@ -206,7 +212,7 @@ app.on('second-instance', (_event, argv) => {
 
 app.on('ready', async () => {
   const startHidden = shouldStartHiddenOnLaunch()
-  const editionConfig = loadAppEditionConfig()
+  const editionConfig = getAppEditionConfig()
 
   // Permissions are no longer blocking at startup. The renderer drives the
   // permission grant flow as part of onboarding (PermissionsStep).
@@ -242,7 +248,12 @@ app.on('ready', async () => {
   captureSettingsManager.applyToConstants()
   const initialCaptureSettings = captureSettingsManager.get()
 
-  if (!captureStateManager.isAutoStartInitialized() && canSyncAutoStartSetting()) {
+  // The one-time gate must not skip mac enterprise: installs upgraded from
+  // pre-LaunchAgent builds need their stale login item removed on startup.
+  if (
+    canSyncAutoStartSetting() &&
+    (!captureStateManager.isAutoStartInitialized() || launchAgentOwnsAutoStart())
+  ) {
     syncAutoStartSetting(initialCaptureSettings.autoStartEnabled)
     captureStateManager.setAutoStartInitialized(true)
   }

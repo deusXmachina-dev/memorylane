@@ -11,7 +11,9 @@ const execFileAsync = promisify(execFile)
 // scheduled task relaunches it within minutes instead. When the app is already
 // running the relaunch loses the single-instance lock and exits immediately.
 // An explicit tray Quit disables the task so the user's choice holds until the
-// next launch (the login item re-registers it).
+// next launch (the login item re-registers it). Registration deliberately
+// ignores the auto-start setting: that setting governs login behavior, while
+// enterprise devices must recover from mid-session kills regardless.
 const TASK_NAME = 'MemoryLane Enterprise Watchdog'
 const RELAUNCH_INTERVAL_MINUTES = 5
 const SCHTASKS_TIMEOUT_MS = 5_000
