@@ -1,16 +1,11 @@
-# MemoryLane v1.5.1
+# MemoryLane v1.5.2-alpha.1
 
-Enterprise installs survive silent MDM/RMM update pushes on both platforms, and one app identity (site domain or app name) is used across the UI.
+Windows MSI installs and upgrades run without flashing console windows.
 
 ## What's Changed
 
-- **Windows enterprise MSI upgrades**: silent installer pushes stop the running app before replacing files and relaunch it in the user's session when the install finishes — no watchdog, and quitting from the tray keeps the app stopped (#247).
-- **macOS enterprise**: the app starts at login and relaunches after crashes or external kills; a tray Quit stays quit.
-- Helper processes exit with the app, so installer pushes no longer defer file replacement to reboot.
-- **One app identity**: patterns and activities use the site domain (or app name) as a single app concept across the UI, digest, and prompts (#239).
-- **Tasks always show steps**: each sighting stores its own happy-path steps, so every cluster — including one-off tasks — shows a recipe (#243).
-- **Open in Claude**: the "Analyze with Claude" button is now "Open in Claude" with two paths — build a MemoryLane plugin skill or run an analysis (#240, #242).
-- **Fix**: LLM requests that hang without a response are aborted instead of stalling the pipeline (#238).
+- **Windows enterprise MSI**: the installer's custom actions run hidden, so interactive installs, upgrades, and reinstalls no longer flash terminal windows; their output goes to the MSI log instead (#249).
+- Mining status banner shows the dot and day count without a progress bar (#248).
 
 ## Known Issues & Limitations
 
@@ -28,4 +23,4 @@ Enterprise installs survive silent MDM/RMM update pushes on both platforms, and 
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.0...v1.5.1
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.1...v1.5.2-alpha.1
