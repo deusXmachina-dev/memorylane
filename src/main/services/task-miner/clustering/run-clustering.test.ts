@@ -16,6 +16,7 @@ const createSighting = (overrides: Partial<Sighting> & { id: string }): Sighting
   title: overrides.title ?? 'Test sighting',
   subject: overrides.subject ?? '',
   description: overrides.description ?? 'Did the thing',
+  steps: overrides.steps ?? [],
   apps: overrides.apps ?? ['TestApp'],
   activityIds: overrides.activityIds ?? [],
   startedAt: overrides.startedAt ?? 1000,
@@ -168,6 +169,39 @@ describe('runClustering', () => {
     expect(labeled.labeledSize).toBe(2)
     expect(labeled.kind).toBe('procedure')
     expect(labeled.mechanism).toBe('A nightly cron script that does the thing.')
+  })
+
+  it('shows member steps to the review only on the most recent sample members', async () => {
+    // 7 same-task sightings, each with its own run steps; the review sample
+    // should carry steps only on the MAX_STEPPED_SAMPLE_MEMBERS most recent.
+    for (let i = 1; i <= 7; i++) {
+      storage.sightings.add(
+        createSighting({
+          id: `s${i}`,
+          title: 'alpha task',
+          startedAt: i * 1000,
+          endedAt: i * 1000 + 500,
+          steps: [`TestApp: step of run ${i}`],
+        }),
+      )
+    }
+
+    let seenInput: ReviewInput | null = null
+    await cluster({
+      provider: {} as InferenceProvider,
+      now: 10_000,
+      review: async (input) => {
+        seenInput = input
+        return { output: {}, tokenUsage: { input: 0, output: 0 } }
+      },
+    })
+
+    const members = seenInput!.clusters[0].members
+    expect(members).toHaveLength(7)
+    expect(members.slice(0, 2).every((m) => m.steps === undefined)).toBe(true)
+    expect(members.slice(2).map((m) => m.steps)).toEqual(
+      [3, 4, 5, 6, 7].map((i) => [`TestApp: step of run ${i}`]),
+    )
   })
 
   it('re-reviews a labeled cluster whose kind verdict is still missing', async () => {

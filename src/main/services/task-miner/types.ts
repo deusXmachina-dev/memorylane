@@ -61,6 +61,8 @@ export interface Candidate {
   /** The specific object this run acted on — defines the instance (one per object). */
   subject: string
   description: string
+  /** This run's happy-path steps in "App identity: action" format; [] when omitted. */
+  steps: string[]
   activity_ids: string[]
 }
 

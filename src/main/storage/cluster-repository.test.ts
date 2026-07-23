@@ -12,6 +12,7 @@ const createSighting = (overrides: Partial<Sighting> & { id: string }): Sighting
   title: overrides.title ?? 'Test sighting',
   subject: overrides.subject ?? '',
   description: overrides.description ?? 'Did the thing',
+  steps: overrides.steps ?? [],
   apps: overrides.apps ?? ['TestApp'],
   activityIds: overrides.activityIds ?? ['act-1'],
   startedAt: overrides.startedAt ?? 1000,
@@ -117,6 +118,20 @@ describe('ClusterRepository', () => {
     const digest = storage.clusters.getMemberDigest()
     expect(digest.map((d) => d.interactionMin)).toEqual([4, 8])
     expect(digest.map((d) => d.clusterId)).toEqual(['c1', 'c1'])
+  })
+
+  it('getMemberDigest returns member steps, tolerating corrupt JSON', () => {
+    storage.sightings.add(
+      createSighting({ id: 's1', startedAt: 1000, steps: ['TestApp: do the thing'] }),
+    )
+    storage.sightings.add(createSighting({ id: 's2', startedAt: 2000 }))
+    storage.getDatabase().prepare(`UPDATE sightings SET steps = 'not json' WHERE id = 's2'`).run()
+    storage.clusters.create(createCluster({ id: 'c1' }))
+    storage.clusters.addMembership('c1', 's1', 100)
+    storage.clusters.addMembership('c1', 's2', 100)
+
+    const digest = storage.clusters.getMemberDigest()
+    expect(digest.map((d) => d.steps)).toEqual([['TestApp: do the thing'], []])
   })
 
   it('moves memberships between clusters', () => {

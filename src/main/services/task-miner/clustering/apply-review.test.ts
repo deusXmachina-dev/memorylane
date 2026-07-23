@@ -13,6 +13,7 @@ const createSighting = (overrides: Partial<Sighting> & { id: string }): Sighting
   title: overrides.title ?? 'Test sighting',
   subject: overrides.subject ?? '',
   description: overrides.description ?? '',
+  steps: overrides.steps ?? [],
   apps: overrides.apps ?? [],
   activityIds: overrides.activityIds ?? [],
   startedAt: overrides.startedAt ?? 1000,

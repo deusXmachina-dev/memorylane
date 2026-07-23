@@ -429,7 +429,7 @@ export function toReviewCluster(
       span_days: Math.floor(spanMs / DAY_MS) + 1,
       median_active_min: median(members.map((m) => m.interactionMin)),
     },
-    members: sample.map((s) => ({
+    members: sample.map((s, i) => ({
       sighting_id: s.id,
       title: s.title,
       subject: s.subject,
@@ -437,6 +437,10 @@ export function toReviewCluster(
       apps: s.apps,
       interaction_min: s.interactionMin,
       date: new Date(s.startedAt).toISOString().slice(0, 10),
+      steps:
+        s.steps.length > 0 && i >= sample.length - CLUSTERING_CONFIG.MAX_STEPPED_SAMPLE_MEMBERS
+          ? s.steps
+          : undefined,
     })),
   }
 }

@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { parseJsonStringArray } from './utils'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -16,6 +17,11 @@ export interface Sighting {
   /** The instance-specific object this run acted on. Empty when the scan named none. */
   subject: string
   description: string
+  /**
+   * This run's happy-path steps in "App identity: action" format; [] when the
+   * scan omitted them. Raw, NOT PII-scrubbed — scrub at egress.
+   */
+  steps: string[]
   apps: string[]
   activityIds: string[]
   startedAt: number
@@ -33,14 +39,15 @@ export class SightingRepository {
     this.db
       .prepare(
         `INSERT INTO sightings
-           (id, title, subject, description, apps, activity_ids, started_at, ended_at, interaction_min, run_id, detected_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, title, subject, description, steps, apps, activity_ids, started_at, ended_at, interaction_min, run_id, detected_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         sighting.id,
         sighting.title,
         sighting.subject,
         sighting.description,
+        JSON.stringify(sighting.steps),
         JSON.stringify(sighting.apps),
         JSON.stringify(sighting.activityIds),
         sighting.startedAt,
@@ -137,6 +144,7 @@ export class SightingRepository {
       title: row.title as string,
       subject: (row.subject as string) ?? '',
       description: row.description as string,
+      steps: parseJsonStringArray(row.steps),
       apps: JSON.parse((row.apps as string) || '[]') as string[],
       activityIds: JSON.parse((row.activity_ids as string) || '[]') as string[],
       startedAt: row.started_at as number,

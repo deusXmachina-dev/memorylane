@@ -156,6 +156,7 @@ describe('TaskMiner sweep', () => {
       title: 't',
       subject: 's',
       description: 'd',
+      steps: [],
       apps: [],
       activityIds: ['act-2'],
       startedAt: dayStart(2) + 1000,

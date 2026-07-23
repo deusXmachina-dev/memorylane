@@ -112,6 +112,7 @@ export interface ClusterMember {
   interactionMin: number
   title: string
   apps: string[]
+  steps: string[]
 }
 
 /**
@@ -158,7 +159,7 @@ export function buildClusterInfo(
     totalActiveMin: activeMins.reduce((sum, v) => sum + v, 0),
     kind: cluster.kind,
     mechanism: cluster.mechanism,
-    steps: cluster.steps ?? [],
+    steps: resolveSteps(cluster.steps ?? [], members),
     variables: cluster.variables ?? [],
     firstSeenAt: members.length > 0 ? Math.min(...startedAts) : null,
     lastSeenAt: members.length > 0 ? Math.max(...members.map((m) => m.endedAt)) : null,
@@ -242,15 +243,10 @@ export function computeClustersView(
   return { clusters: visible, hiddenCount: infos.length - visible.length, observedDays }
 }
 
-/**
- * A cluster's display title: its LLM label if set, otherwise the most common
- * member sighting title (ties broken by earliest occurrence).
- */
-export function resolveTitle(label: string, memberTitles: string[]): string {
-  const trimmed = label.trim()
-  if (trimmed) return trimmed
+/** The most common non-empty title (ties broken by earliest occurrence); '' when none. */
+function modalTitle(titles: string[]): string {
   const freq = new Map<string, number>()
-  for (const t of memberTitles) {
+  for (const t of titles) {
     const key = t.trim()
     if (!key) continue
     freq.set(key, (freq.get(key) ?? 0) + 1)
@@ -263,5 +259,32 @@ export function resolveTitle(label: string, memberTitles: string[]): string {
       bestCount = count
     }
   }
-  return best || 'Untitled task'
+  return best
+}
+
+/**
+ * A cluster's display title: its LLM label if set, otherwise the most common
+ * member sighting title (ties broken by earliest occurrence).
+ */
+export function resolveTitle(label: string, memberTitles: string[]): string {
+  const trimmed = label.trim()
+  if (trimmed) return trimmed
+  return modalTitle(memberTitles) || 'Untitled task'
+}
+
+/**
+ * A cluster's display steps: the LLM's consolidated recipe if set, otherwise
+ * the steps of the most recent member run matching the modal title (any most
+ * recent run with steps when none match) — so a cluster shows a happy path
+ * from its first sighting, before any review labeled it.
+ */
+export function resolveSteps(clusterSteps: string[], members: ClusterMember[]): string[] {
+  if (clusterSteps.length > 0) return clusterSteps
+  const withSteps = members.filter((m) => m.steps.length > 0)
+  if (withSteps.length === 0) return []
+  const modal = modalTitle(members.map((m) => m.title))
+  const matching = withSteps.filter((m) => m.title.trim() === modal)
+  const pool = matching.length > 0 ? matching : withSteps
+  // Members arrive started_at ASC — the last entry is the most recent run.
+  return pool[pool.length - 1].steps
 }

@@ -11,6 +11,7 @@ const createSighting = (overrides: Partial<Sighting> & { id: string }): Sighting
   title: overrides.title ?? 'Test sighting',
   subject: overrides.subject ?? '',
   description: overrides.description ?? 'Did the thing',
+  steps: overrides.steps ?? [],
   apps: overrides.apps ?? ['TestApp'],
   activityIds: overrides.activityIds ?? ['act-1'],
   startedAt: overrides.startedAt ?? 1000,
@@ -56,6 +57,30 @@ describe('SightingRepository', () => {
       expect(storage.sightings.hasInWindow(start - 1000, start - 1)).toBe(false)
       // A window starting just after the latest sighting matches nothing.
       expect(storage.sightings.hasInWindow(end + 1, end + 1000)).toBe(false)
+    })
+  })
+
+  describe('steps', () => {
+    it('round-trips steps through add/getById', () => {
+      storage.sightings.add(
+        createSighting({ id: 's1', steps: ['TestApp: open the export', 'notion.so: paste'] }),
+      )
+      expect(storage.sightings.getById('s1')?.steps).toEqual([
+        'TestApp: open the export',
+        'notion.so: paste',
+      ])
+    })
+
+    it('reads [] from rows inserted without the steps column (pre-steps writers)', () => {
+      storage
+        .getDatabase()
+        .prepare(
+          `INSERT INTO sightings
+             (id, title, subject, description, apps, activity_ids, started_at, ended_at, interaction_min, run_id, detected_at)
+           VALUES ('legacy', 't', '', 'd', '[]', '[]', 1, 2, 1, 'r', 2)`,
+        )
+        .run()
+      expect(storage.sightings.getById('legacy')?.steps).toEqual([])
     })
   })
 

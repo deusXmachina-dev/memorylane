@@ -96,6 +96,7 @@ describe('pattern tools (task clusters)', () => {
     title: overrides.title ?? 'Test sighting',
     subject: overrides.subject ?? '',
     description: overrides.description ?? 'Did the thing',
+    steps: overrides.steps ?? [],
     apps: overrides.apps ?? ['TestApp'],
     activityIds: overrides.activityIds ?? ['act-1'],
     startedAt: overrides.startedAt ?? now - 2 * HOUR_MS,
@@ -293,6 +294,23 @@ describe('pattern tools (task clusters)', () => {
       expect(text.indexOf('s-new')).toBeLessThan(text.indexOf('s-old'))
       expect(text).toContain('Test sighting — sprint 12')
       expect(text).toContain('Activity IDs: act-a, act-b')
+    })
+
+    it('never prints raw member step text (steps are not scrubbed for egress)', async () => {
+      addClusterWithMembers(createCluster({ id: 'c1', label: 'Daily standup notes' }), [
+        createSighting({
+          id: 's1',
+          startedAt: now - 5 * HOUR_MS,
+          steps: ['mail.acme.com: email John Smith the report'],
+        }),
+        createSighting({ id: 's2', steps: ['mail.acme.com: email John Smith the report'] }),
+      ])
+
+      const list = (await handlers.get('list_patterns')!({})).content[0].text
+      const details = (await handlers.get('get_pattern_details')!({ patternId: 'c1' })).content[0]
+        .text
+      expect(list).not.toContain('John Smith')
+      expect(details).not.toContain('John Smith')
     })
 
     it('truncates runs to the limit, newest first', async () => {

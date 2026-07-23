@@ -117,6 +117,7 @@ function collectDetected(storage: StorageService, runId: string): DetectedSighti
     title: s.title,
     subject: s.subject,
     description: s.description,
+    steps: s.steps,
     apps: s.apps,
     activityIds: s.activityIds,
     interactionMin: s.interactionMin,

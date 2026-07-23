@@ -23,7 +23,7 @@ import {
 import { getDayBoundaries } from '@main/utils/day'
 import { deriveSightingApps } from '@/shared/app-utils'
 import { buildVerificationTools } from './tools'
-import { normalizeScanCandidates } from './candidate-normalizer'
+import { normalizeScanCandidates, normalizeSteps } from './candidate-normalizer'
 import { buildScanSystemPrompt, buildGroundingSystemPrompt } from './prompts'
 import { getKnownProcedureTitles } from './known-procedures'
 
@@ -276,6 +276,7 @@ export async function runDetection(
             title: candidate.title,
             subject: candidate.subject,
             description: candidate.description,
+            steps: candidate.steps,
             activities: enrichedActivities,
           },
           null,
@@ -334,6 +335,8 @@ export async function runDetection(
       const title = (parsed.title as string) || candidate.title
       const subject = ((parsed.subject as string) || candidate.subject || '').trim()
       const description = (parsed.description as string) || candidate.description
+      const groundedSteps = normalizeSteps(parsed.steps)
+      const steps = groundedSteps.length > 0 ? groundedSteps : candidate.steps
       const apps = deriveSightingApps(resolved)
 
       // One candidate = one run on one object = one sighting. The scan separates
@@ -352,6 +355,7 @@ export async function runDetection(
         title,
         subject,
         description,
+        steps,
         apps,
         activityIds: resolved.map((a) => a.id),
         startedAt,

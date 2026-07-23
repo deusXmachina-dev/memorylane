@@ -48,6 +48,7 @@ A run of a repeatable multi-step procedure that CHANGES something — creates, p
 - Leave unrelated interruptions (a mid-run Slack ping) out of a run's activity_ids.
 - Cite only real activity ids from the list below; findings with no ids are discarded. Do NOT estimate durations — they are computed from the activities.
 - Every description ENDS with exactly one sentence naming the mechanism: "Replace with: <the concrete script, integration, alert, or platform feature>." If you cannot write that sentence concretely, the finding does not exist.
+- \`steps\` describe only actions the cited activities evidence, one action per line, each starting with that activity's \`app\` — never a browser name.
 - Titles name the procedure, subjects name the object: title "Process invoice", subject "Customer ABC" — never title "Process invoice for Customer ABC". The title is worded so every run of the procedure gets it identically; the specific object goes in \`subject\`. Two runs of the same procedure on different objects share one title and differ only in subject. \`subject\` is optional — leave it empty when the run acted on no single nameable object.
 ${knownProceduresSection}
 ## Output
@@ -58,6 +59,7 @@ ${knownProceduresSection}
     "title": "Canonical name of the procedure — what it does, never when, and never to which object (that goes in subject). Word it so every future run of this same procedure would get this exact title.",
     "subject": "Optional. The specific object this run acted on (e.g. Invoice #4471, Customer: Acme onboarding, Q3 board report); empty string if the run acted on no single nameable object",
     "description": "What this run did, step by step, ending with: Replace with: <the concrete script, integration, alert, or platform feature>.",
+    "steps": ["This run's happy path: 3-10 ordered lines, each '<app>: <imperative action>' with the app exactly as listed on the run's activities, e.g. 'mail.google.com: open the client thread', 'Ghostty: run the deploy command'"],
     "activity_ids": ["ids of the activities in this run"]
   }
 ]
@@ -102,6 +104,7 @@ If this is a real, grounded run:
   "title": "Refined title",
   "subject": "The specific object this run acted on — corrected from the evidence if the scan got it wrong",
   "description": "What this run did, step by step — informed by the OCR and timeline — ENDING with exactly one sentence: Replace with: <the concrete script, integration, alert, or platform feature>.",
+  "steps": ["This run's happy path corrected from the evidence: 3-10 ordered lines, each '<app>: <imperative action>' with the app the activity ran in"],
   "activity_ids": ["the exact, finalized set of supporting activity IDs"]
 }
 \`\`\`

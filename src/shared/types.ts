@@ -327,7 +327,10 @@ export interface ClusterInfo {
   kind: ClusterKind
   /** Consolidated "Replace with" recommendation; set only for 'procedure' clusters. */
   mechanism: string
-  /** Generalized, de-identified recipe steps for the "Build AI agent" prompt; [] until labeled. */
+  /**
+   * Recipe steps: the LLM's generalized de-identified recipe when labeled,
+   * else a best member run's raw steps. May contain PII — scrub at egress.
+   */
   steps: string[]
   /** Things that differ between runs (feeds the recipe); [] until labeled. */
   variables: string[]

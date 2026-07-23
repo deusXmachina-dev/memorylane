@@ -11,6 +11,17 @@ export function sanitizeFtsQuery(query: string): string {
   return tokens.map((t) => `"${t.replace(/"/g, '""')}"`).join(' ')
 }
 
+/** Parse a JSON string-array column, tolerating null/legacy/corrupt values. */
+export function parseJsonStringArray(value: unknown): string[] {
+  if (typeof value !== 'string' || value.length === 0) return []
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === 'string') : []
+  } catch {
+    return []
+  }
+}
+
 export function vectorToBlob(vector: number[]): Buffer {
   const float32 = new Float32Array(vector)
   return Buffer.from(float32.buffer, float32.byteOffset, float32.byteLength)

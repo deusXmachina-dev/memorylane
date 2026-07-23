@@ -12,6 +12,7 @@ import type { MinerEmbedder } from './types'
 vi.mock('ai', () => ({
   generateText: vi.fn(),
   stepCountIs: vi.fn(),
+  tool: vi.fn((def) => def),
 }))
 
 const mockedGenerateText = vi.mocked(generateText)
@@ -105,7 +106,67 @@ describe('runDetection day commit', () => {
     expect(result.candidatesKept).toBe(1)
     expect(storage.sightings.hasInWindow(dayStart(1), dayStart(0) - 1)).toBe(true)
     expect(storage.sightings.getAll()[0].apps).toEqual(['TestApp', 'notion.so'])
+    expect(storage.sightings.getAll()[0].steps).toEqual([])
     expect(onCommit).toHaveBeenCalledWith(expect.objectContaining({ candidatesKept: 1 }))
+  })
+
+  it('persists scan steps on the sighting (scan-only default)', async () => {
+    mockedGenerateText.mockResolvedValue(
+      scanResponse(
+        `\`\`\`json
+[{"title":"Do the thing","subject":"thing","description":"d","steps":["TestApp: open the export","notion.so: paste the rows"],"activity_ids":["a1","a2"]}]
+\`\`\``,
+      ),
+    )
+
+    await runDetection(provider, storage, embedder, { lookbackDays: 1 })
+
+    expect(storage.sightings.getAll()[0].steps).toEqual([
+      'TestApp: open the export',
+      'notion.so: paste the rows',
+    ])
+  })
+
+  it('grounding keep-verdict steps override the scan steps', async () => {
+    mockedGenerateText
+      .mockResolvedValueOnce(
+        scanResponse(
+          `\`\`\`json
+[{"title":"Do the thing","subject":"thing","description":"d","steps":["TestApp: scan-guessed step"],"activity_ids":["a1","a2"]}]
+\`\`\``,
+        ),
+      )
+      .mockResolvedValueOnce(
+        scanResponse(
+          `\`\`\`json
+{"verdict":"keep","title":"Do the thing","description":"d","steps":["notion.so: corrected step"]}
+\`\`\``,
+        ),
+      )
+
+    await runDetection(provider, storage, embedder, { lookbackDays: 1, scanOnly: false })
+
+    expect(storage.sightings.getAll()[0].steps).toEqual(['notion.so: corrected step'])
+  })
+
+  it('keeps the scan steps when the keep-verdict omits them', async () => {
+    mockedGenerateText
+      .mockResolvedValueOnce(
+        scanResponse(
+          `\`\`\`json
+[{"title":"Do the thing","subject":"thing","description":"d","steps":["TestApp: scan step"],"activity_ids":["a1","a2"]}]
+\`\`\``,
+        ),
+      )
+      .mockResolvedValueOnce(
+        scanResponse(`\`\`\`json
+{"verdict":"keep","title":"Do the thing","description":"d"}
+\`\`\``),
+      )
+
+    await runDetection(provider, storage, embedder, { lookbackDays: 1, scanOnly: false })
+
+    expect(storage.sightings.getAll()[0].steps).toEqual(['TestApp: scan step'])
   })
 
   it('persists no sightings when the commit callback throws (atomic day)', async () => {

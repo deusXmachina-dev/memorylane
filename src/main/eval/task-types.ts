@@ -92,6 +92,8 @@ export interface DetectedSighting {
   /** The instance-specific object this run acted on; empty when the scan named none. */
   subject: string
   description: string
+  /** This run's happy-path steps as mined; [] when the model omitted them. */
+  steps: string[]
   apps: string[]
   activityIds: string[]
   interactionMin: number
