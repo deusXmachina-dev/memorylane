@@ -10,6 +10,7 @@ import { SettingsSection } from './SettingsSection'
 interface CapturePrivacySectionProps {
   form: CaptureSettings
   hotkeyPlatform: HotkeyPlatform
+  showAutoStart: boolean
   onToggleRecordingHotkey: () => void
   onAutoStartEnabledChange: (enabled: boolean) => void
   onExcludePrivateBrowsingChange: (enabled: boolean) => void
@@ -20,6 +21,7 @@ interface CapturePrivacySectionProps {
 export function CapturePrivacySection({
   form,
   hotkeyPlatform,
+  showAutoStart,
   onToggleRecordingHotkey,
   onAutoStartEnabledChange,
   onExcludePrivateBrowsingChange,
@@ -65,17 +67,19 @@ export function CapturePrivacySection({
           }
         />
 
-        <SettingsRow
-          label="Launch at login"
-          description="Start MemoryLane quietly when your Mac boots."
-          control={
-            <Switch
-              checked={form.autoStartEnabled}
-              onCheckedChange={onAutoStartEnabledChange}
-              aria-label="Launch at login"
-            />
-          }
-        />
+        {showAutoStart && (
+          <SettingsRow
+            label="Launch at login"
+            description="Start MemoryLane quietly when your Mac boots."
+            control={
+              <Switch
+                checked={form.autoStartEnabled}
+                onCheckedChange={onAutoStartEnabledChange}
+                aria-label="Launch at login"
+              />
+            }
+          />
+        )}
       </SettingsSection>
 
       <SettingsSection title="Shortcut" icon={<Keyboard className="h-4 w-4" />}>

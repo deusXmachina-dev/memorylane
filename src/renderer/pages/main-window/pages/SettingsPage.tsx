@@ -289,6 +289,9 @@ export function SettingsPage({
             <CapturePrivacySection
               form={form}
               hotkeyPlatform={hotkeyPlatform}
+              // Enterprise autostart is externally managed (mac LaunchAgent /
+              // Windows watchdog task); the toggle would be a silent no-op.
+              showAutoStart={editionConfig?.edition !== 'enterprise'}
               onToggleRecordingHotkey={() => setRecordingHotkey((current) => !current)}
               onAutoStartEnabledChange={setAutoStartEnabled}
               onExcludePrivateBrowsingChange={commitExcludePrivateBrowsing}

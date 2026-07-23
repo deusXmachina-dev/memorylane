@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { buildCreateTaskArgs, buildDisableTaskArgs } from './watchdog-win'
 
 describe('watchdog-win schtasks arguments', () => {
-  it('creates a repeating task that relaunches the app hidden', () => {
+  it('creates a repeating task that relaunches the app hidden via the script', () => {
     const args = buildCreateTaskArgs(
+      'C:\\Program Files\\MemoryLane Enterprise\\resources\\assets\\watchdog-relaunch.vbs',
       'C:\\Program Files\\MemoryLane Enterprise\\MemoryLane Enterprise.exe',
     )
 
@@ -17,7 +18,7 @@ describe('watchdog-win schtasks arguments', () => {
       '/MO',
       '5',
       '/TR',
-      'cmd.exe /c start "" "C:\\Program Files\\MemoryLane Enterprise\\MemoryLane Enterprise.exe" --memorylane-hidden',
+      'wscript.exe //B "C:\\Program Files\\MemoryLane Enterprise\\resources\\assets\\watchdog-relaunch.vbs" "C:\\Program Files\\MemoryLane Enterprise\\MemoryLane Enterprise.exe" --memorylane-hidden',
     ])
   })
 

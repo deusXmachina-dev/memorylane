@@ -13,12 +13,15 @@ if [ "$CONSOLE_UID" -gt 0 ]; then
 fi
 
 # SIGTERM triggers Electron's graceful quit (helpers included); escalate only
-# if the app is still around after 10s.
-pkill -TERM -f "$BUNDLE/Contents/" 2>/dev/null || true
+# if the app is still around after 10s. Anchored to argv[0] so an unrelated
+# process merely mentioning the bundle path (e.g. tail -f on a log inside it)
+# is not killed; app and helper binaries all live under the bundle.
+PATTERN="^$BUNDLE/Contents/"
+pkill -TERM -f "$PATTERN" 2>/dev/null || true
 for _ in 1 2 3 4 5 6 7 8 9 10; do
-  pgrep -f "$BUNDLE/Contents/" >/dev/null 2>&1 || break
+  pgrep -f "$PATTERN" >/dev/null 2>&1 || break
   sleep 1
 done
-pkill -KILL -f "$BUNDLE/Contents/" 2>/dev/null || true
+pkill -KILL -f "$PATTERN" 2>/dev/null || true
 
 exit 0

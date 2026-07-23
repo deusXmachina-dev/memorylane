@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import path from 'node:path'
 import { promisify } from 'node:util'
 import { AUTO_START_HIDDEN_ARG } from '@main/system/auto-start'
 import { isPackagedElectronExecutable } from '@main/utils/paths'
@@ -14,13 +15,18 @@ const execFileAsync = promisify(execFile)
 // next launch (the login item re-registers it). Registration deliberately
 // ignores the auto-start setting: that setting governs login behavior, while
 // enterprise devices must recover from mid-session kills regardless.
-const TASK_NAME = 'MemoryLane Enterprise Watchdog'
+//
+// MDM removal scripts should run
+//   schtasks /Delete /F /TN "MemoryLane Enterprise Watchdog"
+// — an enabled task deletes itself once the exe is gone, but a task disabled
+// by tray Quit never runs again and would otherwise linger after uninstall.
+const TASK_NAME = 'MemoryLane Enterprise Watchdog' // duplicated in assets/watchdog-relaunch.vbs
 const RELAUNCH_INTERVAL_MINUTES = 5
 const SCHTASKS_TIMEOUT_MS = 5_000
 
 let taskExpected = false
 
-export function buildCreateTaskArgs(executablePath: string): string[] {
+export function buildCreateTaskArgs(scriptPath: string, executablePath: string): string[] {
   return [
     '/Create',
     '/F',
@@ -30,11 +36,13 @@ export function buildCreateTaskArgs(executablePath: string): string[] {
     'MINUTE',
     '/MO',
     String(RELAUNCH_INTERVAL_MINUTES),
-    // Launch detached via `start` so the task exits immediately instead of
-    // owning the app process — Task Scheduler force-stops task processes at
-    // its default 72h execution limit.
+    // The task runs the VBS relaunch script rather than the exe directly: the
+    // script launches detached so the task exits immediately (Task Scheduler
+    // force-stops task processes at its default 72h execution limit), skips
+    // the relaunch while msiexec is active, and deletes the task after an
+    // uninstall. wscript //B keeps the 5-min cadence from flashing a window.
     '/TR',
-    `cmd.exe /c start "" "${executablePath}" ${AUTO_START_HIDDEN_ARG}`,
+    `wscript.exe //B "${scriptPath}" "${executablePath}" ${AUTO_START_HIDDEN_ARG}`,
   ]
 }
 
@@ -59,7 +67,8 @@ export async function ensureWatchdogTask(): Promise<void> {
   taskExpected = true
 
   try {
-    await runSchtasks(buildCreateTaskArgs(process.execPath))
+    const scriptPath = path.join(process.resourcesPath, 'assets', 'watchdog-relaunch.vbs')
+    await runSchtasks(buildCreateTaskArgs(scriptPath, process.execPath))
     log.info(`[Watchdog] Relaunch task registered (every ${RELAUNCH_INTERVAL_MINUTES} min)`)
   } catch (error) {
     log.warn('[Watchdog] Failed to register relaunch task:', error)
