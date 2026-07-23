@@ -72,6 +72,8 @@ describe('app-watcher-win backend', () => {
     const callback = vi.fn()
     mod.startAppWatcherWin(callback)
 
+    expect(vi.mocked(childProcess.spawn).mock.calls[0][1]).toContain(`--parent-pid=${process.pid}`)
+
     child.stdout.write('{"type":"ready","timestamp":1}\n')
     child.stdout.write(
       '{"type":"app_change","timestamp":2,"app":"chrome","hwnd":"0x3A0F2","pid":101,"title":"Google","url":"https://example.com"}\n',

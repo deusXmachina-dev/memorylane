@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import log from '@main/utils/logger'
 
-const AUTO_START_HIDDEN_ARG = '--memorylane-hidden'
+export const AUTO_START_HIDDEN_ARG = '--memorylane-hidden'
 const WINDOWS_LOGIN_ITEM_ARGS = [AUTO_START_HIDDEN_ARG]
 
 function isSupportedPlatform(): boolean {

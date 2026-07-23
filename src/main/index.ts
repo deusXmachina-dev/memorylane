@@ -14,10 +14,12 @@ import { app, globalShortcut } from 'electron'
 import path from 'node:path'
 import { config as loadEnv } from 'dotenv'
 import {
+  AUTO_START_HIDDEN_ARG,
   canSyncAutoStartSetting,
   shouldStartHiddenOnLaunch,
   syncAutoStartSetting,
 } from '@main/system/auto-start'
+import { ensureWatchdogTask } from '@main/system/watchdog-win'
 import { createCaptureCoordinator } from '@main/capture/capture-orchestrator'
 import { createCaptureHotkeyManager } from '@main/capture/capture-hotkey-manager'
 import log from '@main/utils/logger'
@@ -143,6 +145,15 @@ let observation: ObservationController | null = null
 // release their app-watcher subscriptions, the helper outlives the main
 // process, keeps an open handle on resources\rust\app-watcher-windows.exe,
 // and MSI has to defer replacement to a reboot (return code 3010).
+//
+// A dispose step that never settles must not strand a half-shut-down process
+// ("not quit, not running"), so a watchdog force-exits after 5s and logs which
+// steps were still pending. It stays ahead of the mac preinstall's 10s SIGKILL
+// escalation, and is never cleared so it also covers stray handles keeping the
+// process alive after the graceful quit is re-issued. It can't fire while a
+// sync native call is blocking the event loop — only an external kill ends
+// that state.
+const SHUTDOWN_TIMEOUT_MS = 5_000
 let shutdownCompleted = false
 app.on('before-quit', (event) => {
   if (shutdownCompleted) return
@@ -154,12 +165,26 @@ app.on('before-quit', (event) => {
   deviceReportSync?.stop()
   observation?.dispose()
 
-  void Promise.allSettled([
-    runtime?.dispose(),
-    rawDatabaseExportSync?.stop(),
-    databaseUploadSync?.stop(),
-    logUploadSync?.stop(),
-  ]).finally(() => {
+  const steps: Array<[name: string, step: Promise<unknown> | undefined]> = [
+    ['runtime.dispose', runtime?.dispose()],
+    ['rawDatabaseExportSync.stop', rawDatabaseExportSync?.stop()],
+    ['databaseUploadSync.stop', databaseUploadSync?.stop()],
+    ['logUploadSync.stop', logUploadSync?.stop()],
+  ]
+  const pendingSteps = new Set(steps.filter(([, step]) => step).map(([name]) => name))
+
+  setTimeout(() => {
+    const pending = pendingSteps.size ? [...pendingSteps].join(', ') : 'none'
+    log.error(
+      `[Shutdown] Not exited after ${SHUTDOWN_TIMEOUT_MS}ms (pending: ${pending}) — forcing exit`,
+    )
+    shutdownCompleted = true
+    app.exit(0)
+  }, SHUTDOWN_TIMEOUT_MS).unref()
+
+  void Promise.allSettled(
+    steps.map(([name, step]) => step?.finally(() => pendingSteps.delete(name))),
+  ).finally(() => {
     shutdownCompleted = true
     app.quit()
   })
@@ -169,7 +194,11 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll()
 })
 
-app.on('second-instance', () => {
+app.on('second-instance', (_event, argv) => {
+  // Background relaunches (login item, watchdog task, LaunchAgent) that lose
+  // the single-instance race pass --memorylane-hidden; only a real user launch
+  // should surface the window.
+  if (argv.includes(AUTO_START_HIDDEN_ARG)) return
   void import('./ui/main-window').then(({ openMainWindow }) => {
     openMainWindow()
   })
@@ -295,6 +324,9 @@ app.on('ready', async () => {
   deviceReportSync.start()
 
   if (editionConfig.edition === 'enterprise') {
+    // Windows counterpart of the mac LaunchAgent's KeepAlive.
+    void ensureWatchdogTask()
+
     databaseUploadSync = new DatabaseUploadSync({
       storage: runtime.storage,
       getDeviceId: () => deviceIdentity.getDeviceId(),
