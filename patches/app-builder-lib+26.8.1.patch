@@ -1,8 +1,8 @@
 diff --git a/node_modules/app-builder-lib/templates/msi/template.xml b/node_modules/app-builder-lib/templates/msi/template.xml
-index 2d5cd3c..e45c294 100644
+index 2d5cd3c..4c42d0f 100644
 --- a/node_modules/app-builder-lib/templates/msi/template.xml
 +++ b/node_modules/app-builder-lib/templates/msi/template.xml
-@@ -16,6 +16,38 @@
+@@ -16,6 +16,37 @@
      <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage='A newer version of "[ProductName]" is already installed.'/>
      <MediaTemplate CompressionLevel="${compressionLevel}" EmbedCab="yes"/>
  
@@ -22,15 +22,14 @@ index 2d5cd3c..e45c294 100644
 +         via a trigger-less scheduled task (assets/msi-launch-task.ps1) — a
 +         SYSTEM custom action cannot spawn into the user session directly. The
 +         task never fires on its own; rollback and uninstall delete it so no
-+         orphan is left behind. -->
-+    <Property Id="KillAppPs" Value="powershell.exe"/>
-+    <CustomAction Id="killAppProcesses" Property="KillAppPs" ExeCommand='-NoProfile -ExecutionPolicy Bypass -Command "$d = \"[APPLICATIONFOLDER] \".TrimEnd(); if ($d.Length -gt 3) { Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($d, &apos;OrdinalIgnoreCase&apos;) } | Stop-Process -Force -ErrorAction SilentlyContinue }"' Execute="immediate" Return="ignore"/>
-+    <Property Id="LaunchTaskPs" Value="powershell.exe"/>
-+    <CustomAction Id="registerLaunchTask" Property="LaunchTaskPs" ExeCommand='-NoProfile -ExecutionPolicy Bypass -File "[APPLICATIONFOLDER]resources\assets\msi-launch-task.ps1" -Register -ProductName "${productName}"' Execute="deferred" Impersonate="no" Return="ignore"/>
-+    <Property Id="RollbackLaunchSchtasks" Value="schtasks.exe"/>
-+    <CustomAction Id="rollbackLaunchTask" Property="RollbackLaunchSchtasks" ExeCommand='/Delete /F /TN "${productName} Launcher"' Execute="rollback" Impersonate="no" Return="ignore"/>
-+    <Property Id="DeleteLaunchSchtasks" Value="schtasks.exe"/>
-+    <CustomAction Id="deleteLaunchTask" Property="DeleteLaunchSchtasks" ExeCommand='/Delete /F /TN "${productName} Launcher"' Execute="deferred" Impersonate="no" Return="ignore"/>
++         orphan is left behind.
++         Directory-type actions with [System64Folder]-qualified executables:
++         the ExeCommand is formatted (a static Property value is not), and the
++         Installer service must not depend on PATH. -->
++    <CustomAction Id="killAppProcesses" Directory="TARGETDIR" ExeCommand='"[System64Folder]WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -Command "$d = \"[APPLICATIONFOLDER] \".TrimEnd(); if ($d.Length -gt 3) { Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($d, &apos;OrdinalIgnoreCase&apos;) } | Stop-Process -Force -ErrorAction SilentlyContinue }"' Execute="immediate" Return="ignore"/>
++    <CustomAction Id="registerLaunchTask" Directory="TARGETDIR" ExeCommand='"[System64Folder]WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "[APPLICATIONFOLDER]resources\assets\msi-launch-task.ps1" -ProductName "${productName}"' Execute="deferred" Impersonate="no" Return="ignore"/>
++    <CustomAction Id="rollbackLaunchTask" Directory="TARGETDIR" ExeCommand='"[System64Folder]schtasks.exe" /Delete /F /TN "${productName} Launcher"' Execute="rollback" Impersonate="no" Return="ignore"/>
++    <CustomAction Id="deleteLaunchTask" Directory="TARGETDIR" ExeCommand='"[System64Folder]schtasks.exe" /Delete /F /TN "${productName} Launcher"' Execute="deferred" Impersonate="no" Return="ignore"/>
 +    <InstallExecuteSequence>
 +      <Custom Action="killAppProcesses" Before="InstallValidate">1</Custom>
 +      <Custom Action="deleteLaunchTask" After="InstallInitialize">REMOVE~="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>

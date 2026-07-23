@@ -40,6 +40,8 @@ describe('MSI launch installer contract', () => {
     expect(ps1).toContain('$taskName = "$ProductName Launcher"')
     expect(ps1).toContain('msi-launch-app.vbs')
     expect(ps1).toContain('--memorylane-hidden')
+    // Install paths land inside the task XML; & in a path must not break it.
+    expect(ps1).toContain('SecurityElement]::Escape')
     expect(ps1).toContain('<Triggers/>')
     expect(ps1).toContain('<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>')
     expect(ps1).toContain('<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>')
@@ -49,8 +51,15 @@ describe('MSI launch installer contract', () => {
   it('MSI template patch is applied and wired to the scripts', () => {
     expect(template).toContain('killAppProcesses')
     expect(template).toContain('msi-launch-task.ps1')
-    expect(template).toContain('-Register -ProductName "${productName}"')
+    expect(template).toContain('-ProductName "${productName}"')
     expect(template).toContain('/Delete /F /TN "${productName} Launcher"')
+  })
+
+  it('custom actions use fully qualified executables, not PATH lookup', () => {
+    expect(template).toContain('"[System64Folder]WindowsPowerShell\\v1.0\\powershell.exe"')
+    expect(template).toContain('"[System64Folder]schtasks.exe"')
+    expect(template).not.toContain('Value="powershell.exe"')
+    expect(template).not.toContain('Value="schtasks.exe"')
   })
 
   it('kill action matches paths literally, not as wildcards', () => {

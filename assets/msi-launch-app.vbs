@@ -16,9 +16,17 @@ hiddenArg = WScript.Arguments(1)
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set wmi = GetObject("winmgmts:\\.\root\cimv2")
 
+' A query error counts as zero matches: every query gates a wait or a skip,
+' and on any doubt the script must fall through to the launch.
+Function ProcessCount(wql)
+  On Error Resume Next
+  ProcessCount = 0
+  ProcessCount = wmi.ExecQuery(wql).Count
+End Function
+
 waits = 0
-Do While waits < 20 And wmi.ExecQuery( _
-  "SELECT ProcessId FROM Win32_Process WHERE Name = 'msiexec.exe'").Count > 0
+Do While waits < 20 And ProcessCount( _
+  "SELECT ProcessId FROM Win32_Process WHERE Name = 'msiexec.exe'") > 0
   WScript.Sleep 15000
   waits = waits + 1
 Loop
@@ -26,16 +34,15 @@ Loop
 If Not fso.FileExists(appExe) Then WScript.Quit 0
 
 ' Skip the Electron cold start in the common already-running case; the
-' single-instance lock still covers the race, and a query error falls
-' through to launching.
-On Error Resume Next
+' single-instance lock still covers the race.
 appExeWql = Replace(Replace(appExe, "\", "\\"), "'", "\'")
-If wmi.ExecQuery( _
-  "SELECT ProcessId FROM Win32_Process WHERE ExecutablePath = '" & appExeWql & "'").Count > 0 Then
+If ProcessCount( _
+  "SELECT ProcessId FROM Win32_Process WHERE ExecutablePath = '" & appExeWql & "'") > 0 Then
   WScript.Quit 0
 End If
 
 ' Win32_Process.Create spawns from the WMI provider host, outside the Task
 ' Scheduler job for this task instance. A shell.Run child stays in that job
 ' and is terminated (0x40010004) when the task instance completes.
+On Error Resume Next
 wmi.Get("Win32_Process").Create """" & appExe & """ " & hiddenArg, Null, Null, pid

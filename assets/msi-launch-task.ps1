@@ -10,7 +10,6 @@
 # $ProductName comes from the MSI — the same value its delete/rollback custom
 # actions expand into "<product> Launcher", so the names cannot drift apart.
 param(
-  [switch]$Register,
   [string]$ProductName = 'MemoryLane Enterprise'
 )
 
@@ -25,15 +24,14 @@ function Write-Log([string]$message) {
   } catch {}
 }
 
-if (-not $Register) {
-  exit 0
-}
-
 $assetsDir = $PSScriptRoot
 $appDir = [System.IO.Path]::GetFullPath((Join-Path $assetsDir '..\..'))
 $vbsPath = Join-Path $assetsDir 'msi-launch-app.vbs'
 $exePath = Join-Path $appDir "$ProductName.exe"
-$taskArguments = '//B //NoLogo "' + $vbsPath + '" "' + $exePath + '" --memorylane-hidden'
+# The paths are spliced into task XML; an install dir containing & or similar
+# must not produce an invalid document.
+$taskArguments = [System.Security.SecurityElement]::Escape(
+  '//B //NoLogo "' + $vbsPath + '" "' + $exePath + '" --memorylane-hidden')
 
 $xml = @"
 <?xml version="1.0" encoding="UTF-16"?>
