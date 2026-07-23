@@ -76,15 +76,19 @@ function resolveEditionConfig(): LoadedEditionConfig {
   }
 }
 
+let cachedConfig: AppEditionConfig | null = null
+
 export function loadAppEditionConfig(): AppEditionConfig {
+  if (cachedConfig) return cachedConfig
   try {
     const loadedConfig = resolveEditionConfig()
     log.info(
       `[Edition] Loaded ${loadedConfig.config.edition} edition from ${loadedConfig.source} config at ${loadedConfig.path}`,
     )
-    return loadedConfig.config
+    cachedConfig = loadedConfig.config
   } catch (error) {
     log.warn(`[Edition] Failed to load edition config, falling back to ${DEFAULT_EDITION}`, error)
-    return { edition: DEFAULT_EDITION }
+    cachedConfig = { edition: DEFAULT_EDITION }
   }
+  return cachedConfig
 }

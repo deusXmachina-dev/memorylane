@@ -14,10 +14,12 @@ import { app, globalShortcut } from 'electron'
 import path from 'node:path'
 import { config as loadEnv } from 'dotenv'
 import {
-  canSyncAutoStartSetting,
+  AUTO_START_HIDDEN_ARG,
   shouldStartHiddenOnLaunch,
+  shouldSyncAutoStartOnStartup,
   syncAutoStartSetting,
 } from '@main/system/auto-start'
+import { ensureWatchdogTask } from '@main/system/watchdog-win'
 import { createCaptureCoordinator } from '@main/capture/capture-orchestrator'
 import { createCaptureHotkeyManager } from '@main/capture/capture-hotkey-manager'
 import log from '@main/utils/logger'
@@ -143,10 +145,21 @@ let observation: ObservationController | null = null
 // release their app-watcher subscriptions, the helper outlives the main
 // process, keeps an open handle on resources\rust\app-watcher-windows.exe,
 // and MSI has to defer replacement to a reboot (return code 3010).
+//
+// A force-exit timer bounds shutdown at 5s (ahead of the mac preinstall's 10s
+// SIGKILL) and logs which dispose steps were still pending. It is never
+// cleared, so it also covers stray handles that outlive the graceful quit; a
+// sync native call blocking the event loop still defeats it.
+const SHUTDOWN_TIMEOUT_MS = 5_000
+let shutdownStarted = false
 let shutdownCompleted = false
 app.on('before-quit', (event) => {
   if (shutdownCompleted) return
   event.preventDefault()
+  // A repeated quit must not re-run dispose steps or arm a second timer; the
+  // in-flight shutdown re-issues app.quit().
+  if (shutdownStarted) return
+  shutdownStarted = true
 
   runtime?.accessProvider.stopPeriodicRefresh()
   remoteBlacklist?.stop()
@@ -154,12 +167,26 @@ app.on('before-quit', (event) => {
   deviceReportSync?.stop()
   observation?.dispose()
 
-  void Promise.allSettled([
-    runtime?.dispose(),
-    rawDatabaseExportSync?.stop(),
-    databaseUploadSync?.stop(),
-    logUploadSync?.stop(),
-  ]).finally(() => {
+  const steps: Array<[name: string, step: Promise<unknown> | undefined]> = [
+    ['runtime.dispose', runtime?.dispose()],
+    ['rawDatabaseExportSync.stop', rawDatabaseExportSync?.stop()],
+    ['databaseUploadSync.stop', databaseUploadSync?.stop()],
+    ['logUploadSync.stop', logUploadSync?.stop()],
+  ]
+  const pendingSteps = new Set(steps.filter(([, step]) => step).map(([name]) => name))
+
+  setTimeout(() => {
+    const pending = pendingSteps.size ? [...pendingSteps].join(', ') : 'none'
+    log.error(
+      `[Shutdown] Not exited after ${SHUTDOWN_TIMEOUT_MS}ms (pending: ${pending}) — forcing exit`,
+    )
+    shutdownCompleted = true
+    app.exit(0)
+  }, SHUTDOWN_TIMEOUT_MS).unref()
+
+  void Promise.allSettled(
+    steps.map(([name, step]) => step?.finally(() => pendingSteps.delete(name))),
+  ).finally(() => {
     shutdownCompleted = true
     app.quit()
   })
@@ -169,7 +196,11 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll()
 })
 
-app.on('second-instance', () => {
+app.on('second-instance', (_event, argv) => {
+  // Background relaunches (login item, watchdog task, LaunchAgent) that lose
+  // the single-instance race pass --memorylane-hidden; only a real user launch
+  // should surface the window.
+  if (argv.includes(AUTO_START_HIDDEN_ARG)) return
   void import('./ui/main-window').then(({ openMainWindow }) => {
     openMainWindow()
   })
@@ -213,7 +244,7 @@ app.on('ready', async () => {
   captureSettingsManager.applyToConstants()
   const initialCaptureSettings = captureSettingsManager.get()
 
-  if (!captureStateManager.isAutoStartInitialized() && canSyncAutoStartSetting()) {
+  if (shouldSyncAutoStartOnStartup(captureStateManager.isAutoStartInitialized())) {
     syncAutoStartSetting(initialCaptureSettings.autoStartEnabled)
     captureStateManager.setAutoStartInitialized(true)
   }
@@ -295,6 +326,9 @@ app.on('ready', async () => {
   deviceReportSync.start()
 
   if (editionConfig.edition === 'enterprise') {
+    // Windows counterpart of the mac LaunchAgent's KeepAlive.
+    void ensureWatchdogTask()
+
     databaseUploadSync = new DatabaseUploadSync({
       storage: runtime.storage,
       getDeviceId: () => deviceIdentity.getDeviceId(),

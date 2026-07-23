@@ -122,4 +122,3 @@ export function buildClusterAgentPrompt(cluster: ClusterInfo): string {
   )
   return scrubPII(lines.join('\n'))
 }
-

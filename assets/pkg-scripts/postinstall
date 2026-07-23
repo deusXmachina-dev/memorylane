@@ -1,0 +1,51 @@
+#!/bin/sh
+# Enterprise pkg postinstall: install a machine-level LaunchAgent so the app
+# starts at every login and is relaunched if it dies without a clean quit,
+# then start it for the current console user so no logout is needed.
+set -u
+
+APP_BIN="/Applications/MemoryLane Enterprise.app/Contents/MacOS/MemoryLane Enterprise"
+LABEL="com.memorylane.enterprise.launcher"
+PLIST="/Library/LaunchAgents/$LABEL.plist"
+
+cat > "$PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>$LABEL</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$APP_BIN</string>
+    <string>--memorylane-hidden</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>AssociatedBundleIdentifiers</key>
+  <string>com.memorylane.enterprise</string>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>LimitLoadToSessionType</key>
+  <string>Aqua</string>
+  <key>ProcessType</key>
+  <string>Interactive</string>
+</dict>
+</plist>
+EOF
+chown root:wheel "$PLIST"
+chmod 644 "$PLIST"
+
+# Only the console user's session can be bootstrapped here; other logged-in
+# users (fast user switching) pick the agent up at their next login via
+# RunAtLoad.
+CONSOLE_UID=$(stat -f %u /dev/console 2>/dev/null || echo 0)
+if [ "$CONSOLE_UID" -gt 0 ]; then
+  launchctl bootstrap "gui/$CONSOLE_UID" "$PLIST" 2>/dev/null || true
+  launchctl kickstart "gui/$CONSOLE_UID/$LABEL" 2>/dev/null || true
+fi
+
+exit 0

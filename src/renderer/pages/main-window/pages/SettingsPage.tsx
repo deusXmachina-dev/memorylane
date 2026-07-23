@@ -289,6 +289,8 @@ export function SettingsPage({
             <CapturePrivacySection
               form={form}
               hotkeyPlatform={hotkeyPlatform}
+              // Enterprise autostart is installer-managed, not user-togglable.
+              showAutoStart={editionConfig?.edition !== 'enterprise'}
               onToggleRecordingHotkey={() => setRecordingHotkey((current) => !current)}
               onAutoStartEnabledChange={setAutoStartEnabled}
               onExcludePrivateBrowsingChange={commitExcludePrivateBrowsing}
