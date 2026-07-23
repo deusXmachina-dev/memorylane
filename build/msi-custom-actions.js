@@ -23,20 +23,41 @@ const fs = require('fs')
 // action cannot spawn into the user session directly. The task never fires on
 // its own; rollback and uninstall delete it so no orphan is left behind.
 //
-// Directory-type actions with [System64Folder]-qualified executables: the
-// ExeCommand is formatted (a static Property value is not), and the Installer
-// service must not depend on PATH.
+// All actions run through WixQuietExec64 (WixUtilExtension, linked via
+// additionalWixArgs) instead of ExeCommand: a plain EXE custom action pops a
+// visible console window for every console binary, so an interactive
+// install/reinstall flashed one terminal per action. QuietExec captures the
+// output into the MSI log instead. Each action reads its command line from a
+// property — WixQuietExec64CmdLine for the immediate kill, the action's own
+// name (CustomActionData) for the deferred/rollback ones — set by a type-51
+// action sequenced just before it, which also formats [APPLICATIONFOLDER] and
+// [System64Folder] (the Installer service must not depend on PATH).
 function buildCustomActionsXml(productName) {
+  const killCmd = `"[System64Folder]WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -ExecutionPolicy Bypass -Command "$d = \\"[APPLICATIONFOLDER] \\".TrimEnd(); if ($d.Length -gt 3) { Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($d, &apos;OrdinalIgnoreCase&apos;) } | Stop-Process -Force -ErrorAction SilentlyContinue }"`
+  const registerCmd = `"[System64Folder]WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "[APPLICATIONFOLDER]resources\\assets\\msi-launch-task.ps1" -ProductName "${productName}"`
+  const deleteCmd = `"[System64Folder]schtasks.exe" /Delete /F /TN "${productName} Launcher"`
+  // A setter must share its action's condition — if they drift, the action
+  // runs with an empty command and Return="ignore" hides the failure.
+  const installCond = 'NOT (REMOVE~="ALL")'
+  const uninstallCond = 'REMOVE~="ALL" AND NOT UPGRADINGPRODUCTCODE'
   return [
-    `    <CustomAction Id="killAppProcesses" Directory="TARGETDIR" ExeCommand='"[System64Folder]WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -ExecutionPolicy Bypass -Command "$d = \\"[APPLICATIONFOLDER] \\".TrimEnd(); if ($d.Length -gt 3) { Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($d, &apos;OrdinalIgnoreCase&apos;) } | Stop-Process -Force -ErrorAction SilentlyContinue }"' Execute="immediate" Return="ignore"/>`,
-    `    <CustomAction Id="registerLaunchTask" Directory="TARGETDIR" ExeCommand='"[System64Folder]WindowsPowerShell\\v1.0\\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "[APPLICATIONFOLDER]resources\\assets\\msi-launch-task.ps1" -ProductName "${productName}"' Execute="deferred" Impersonate="no" Return="ignore"/>`,
-    `    <CustomAction Id="rollbackLaunchTask" Directory="TARGETDIR" ExeCommand='"[System64Folder]schtasks.exe" /Delete /F /TN "${productName} Launcher"' Execute="rollback" Impersonate="no" Return="ignore"/>`,
-    `    <CustomAction Id="deleteLaunchTask" Directory="TARGETDIR" ExeCommand='"[System64Folder]schtasks.exe" /Delete /F /TN "${productName} Launcher"' Execute="deferred" Impersonate="no" Return="ignore"/>`,
+    `    <CustomAction Id="setKillAppProcesses" Property="WixQuietExec64CmdLine" Value='${killCmd}'/>`,
+    `    <CustomAction Id="killAppProcesses" BinaryKey="WixCA" DllEntry="WixQuietExec64" Execute="immediate" Return="ignore"/>`,
+    `    <CustomAction Id="setRegisterLaunchTask" Property="registerLaunchTask" Value='${registerCmd}'/>`,
+    `    <CustomAction Id="registerLaunchTask" BinaryKey="WixCA" DllEntry="WixQuietExec64" Execute="deferred" Impersonate="no" Return="ignore"/>`,
+    `    <CustomAction Id="setRollbackLaunchTask" Property="rollbackLaunchTask" Value='${deleteCmd}'/>`,
+    `    <CustomAction Id="rollbackLaunchTask" BinaryKey="WixCA" DllEntry="WixQuietExec64" Execute="rollback" Impersonate="no" Return="ignore"/>`,
+    `    <CustomAction Id="setDeleteLaunchTask" Property="deleteLaunchTask" Value='${deleteCmd}'/>`,
+    `    <CustomAction Id="deleteLaunchTask" BinaryKey="WixCA" DllEntry="WixQuietExec64" Execute="deferred" Impersonate="no" Return="ignore"/>`,
     '    <InstallExecuteSequence>',
+    '      <Custom Action="setKillAppProcesses" Before="killAppProcesses">1</Custom>',
     '      <Custom Action="killAppProcesses" Before="InstallValidate">1</Custom>',
-    '      <Custom Action="deleteLaunchTask" After="InstallInitialize">REMOVE~="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>',
-    '      <Custom Action="rollbackLaunchTask" Before="registerLaunchTask">NOT (REMOVE~="ALL")</Custom>',
-    '      <Custom Action="registerLaunchTask" Before="InstallFinalize">NOT (REMOVE~="ALL")</Custom>',
+    `      <Custom Action="setDeleteLaunchTask" After="InstallInitialize">${uninstallCond}</Custom>`,
+    `      <Custom Action="deleteLaunchTask" After="setDeleteLaunchTask">${uninstallCond}</Custom>`,
+    `      <Custom Action="setRegisterLaunchTask" Before="setRollbackLaunchTask">${installCond}</Custom>`,
+    `      <Custom Action="setRollbackLaunchTask" Before="rollbackLaunchTask">${installCond}</Custom>`,
+    `      <Custom Action="rollbackLaunchTask" Before="registerLaunchTask">${installCond}</Custom>`,
+    `      <Custom Action="registerLaunchTask" Before="InstallFinalize">${installCond}</Custom>`,
     '    </InstallExecuteSequence>',
     '',
   ].join('\n')

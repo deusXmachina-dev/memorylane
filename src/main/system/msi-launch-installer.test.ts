@@ -67,8 +67,11 @@ describe('MSI launch installer contract', () => {
     vi.stubEnv('EDITION', 'enterprise')
     const builderConfig = require(path.join(process.cwd(), 'electron-builder.config.js')) as {
       msiProjectCreated: string
+      msi: { additionalWixArgs: string[] }
     }
     expect(builderConfig.msiProjectCreated).toBe('build/msi-custom-actions.js')
+    // WixQuietExec64 lives in WixUtilExtension; without it light fails on WixCA.
+    expect(builderConfig.msi.additionalWixArgs).toEqual(['-ext', 'WixUtilExtension'])
   })
 
   it('injection expands the product name from the wxs and wires the scripts', () => {
@@ -92,6 +95,54 @@ describe('MSI launch installer contract', () => {
     expect(injected).toContain('"[System64Folder]schtasks.exe"')
   })
 
+  it('actions run through WixQuietExec so no console window flashes', () => {
+    // A plain EXE custom action pops a terminal per console binary during
+    // interactive installs.
+    expect(injected).not.toContain('ExeCommand')
+    for (const action of [
+      'killAppProcesses',
+      'registerLaunchTask',
+      'rollbackLaunchTask',
+      'deleteLaunchTask',
+    ]) {
+      expect(injected).toMatch(
+        new RegExp(`Id="${action}" BinaryKey="WixCA" DllEntry="WixQuietExec64"`),
+      )
+    }
+    // The immediate action reads WixQuietExec64CmdLine; deferred/rollback ones
+    // read CustomActionData, so the type-51 property must equal the action id.
+    expect(injected).toContain('Property="WixQuietExec64CmdLine"')
+    expect(injected).toContain('Property="registerLaunchTask"')
+    expect(injected).toContain('Property="rollbackLaunchTask"')
+    expect(injected).toContain('Property="deleteLaunchTask"')
+    // Each quiet action needs its command set earlier in the same sequence.
+    expect(injected).toMatch(/Custom Action="setKillAppProcesses" Before="killAppProcesses"/)
+    expect(injected).toMatch(/Custom Action="setRegisterLaunchTask" Before="setRollbackLaunchTask"/)
+    expect(injected).toMatch(/Custom Action="setRollbackLaunchTask" Before="rollbackLaunchTask"/)
+    expect(injected).toMatch(/Custom Action="setDeleteLaunchTask" After="InstallInitialize"/)
+  })
+
+  it('setter conditions match their actions', () => {
+    // A drifted condition leaves the action with an empty command line, and
+    // Return="ignore" hides the failure.
+    const conditions = new Map(
+      [...injected.matchAll(/<Custom Action="(\w+)"[^>]*>([^<]*)<\/Custom>/g)].map((m) => [
+        m[1],
+        m[2],
+      ]),
+    )
+    for (const action of [
+      'killAppProcesses',
+      'registerLaunchTask',
+      'rollbackLaunchTask',
+      'deleteLaunchTask',
+    ]) {
+      const setter = `set${action[0].toUpperCase()}${action.slice(1)}`
+      expect(conditions.get(setter), setter).toBeTruthy()
+      expect(conditions.get(setter), setter).toBe(conditions.get(action))
+    }
+  })
+
   it('kill action matches paths literally, not as wildcards', () => {
     expect(injected).toContain('.StartsWith($d, &apos;OrdinalIgnoreCase&apos;)')
     expect(injected).not.toContain('$_.Path -like')
@@ -101,7 +152,7 @@ describe('MSI launch installer contract', () => {
     expect(injected).toContain('Id="rollbackLaunchTask"')
     expect(injected).toContain('Id="deleteLaunchTask"')
     expect(injected).toMatch(/Custom Action="rollbackLaunchTask" Before="registerLaunchTask"/)
-    expect(injected).toMatch(/Custom Action="deleteLaunchTask" After="InstallInitialize"/)
+    expect(injected).toMatch(/Custom Action="deleteLaunchTask" After="setDeleteLaunchTask"/)
   })
 
   it('default product name matches the enterprise product the MSI expands', () => {
