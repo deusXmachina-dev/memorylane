@@ -1,8 +1,8 @@
 diff --git a/node_modules/app-builder-lib/templates/msi/template.xml b/node_modules/app-builder-lib/templates/msi/template.xml
-index 2d5cd3c..01fec37 100644
+index 2d5cd3c..928bf55 100644
 --- a/node_modules/app-builder-lib/templates/msi/template.xml
 +++ b/node_modules/app-builder-lib/templates/msi/template.xml
-@@ -16,6 +16,37 @@
+@@ -16,6 +16,33 @@
      <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage='A newer version of "[ProductName]" is already installed.'/>
      <MediaTemplate CompressionLevel="${compressionLevel}" EmbedCab="yes"/>
  
@@ -13,28 +13,24 @@ index 2d5cd3c..01fec37 100644
 +         half-applied install. Runs on install, upgrade, repair and uninstall.
 +         The path-length guard keeps a hypothetically unresolved
 +         APPLICATIONFOLDER from matching every process on the machine.
-+         registerWatchdogTask/deleteWatchdogTask: the per-machine relaunch
-+         task (assets/watchdog-task.ps1) is installer-owned so a silent push
-+         starts the app without waiting for a login; the app itself cannot
-+         manage a per-machine task unelevated. Each has a rollback twin so a
-+         failed install leaves no orphan task and a failed uninstall leaves
-+         the restored app supervised. -->
++         registerLaunchTask: starts the app once after install/upgrade/repair
++         via a trigger-less scheduled task (assets/msi-launch-task.ps1) — a
++         SYSTEM custom action cannot spawn into the user session directly. The
++         task never fires on its own; rollback and uninstall delete it so no
++         orphan is left behind. -->
 +    <Property Id="KillAppPs" Value="powershell.exe"/>
 +    <CustomAction Id="killAppProcesses" Property="KillAppPs" ExeCommand='-NoProfile -ExecutionPolicy Bypass -Command "$d = &apos;[APPLICATIONFOLDER]&apos;; if ($d.Length -gt 3) { Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -like ($d + &apos;*&apos;) } | Stop-Process -Force -ErrorAction SilentlyContinue }"' Execute="immediate" Return="ignore"/>
-+    <Property Id="WatchdogPs" Value="powershell.exe"/>
-+    <CustomAction Id="registerWatchdogTask" Property="WatchdogPs" ExeCommand='-NoProfile -ExecutionPolicy Bypass -File "[APPLICATIONFOLDER]resources\assets\watchdog-task.ps1" -Register' Execute="deferred" Impersonate="no" Return="ignore"/>
-+    <Property Id="RollbackWatchdogSchtasks" Value="schtasks.exe"/>
-+    <CustomAction Id="rollbackWatchdogTask" Property="RollbackWatchdogSchtasks" ExeCommand='/Delete /F /TN "${productName} Watchdog"' Execute="rollback" Impersonate="no" Return="ignore"/>
-+    <Property Id="DeleteWatchdogSchtasks" Value="schtasks.exe"/>
-+    <CustomAction Id="deleteWatchdogTask" Property="DeleteWatchdogSchtasks" ExeCommand='/Delete /F /TN "${productName} Watchdog"' Execute="deferred" Impersonate="no" Return="ignore"/>
-+    <Property Id="RestoreWatchdogPs" Value="powershell.exe"/>
-+    <CustomAction Id="restoreWatchdogTask" Property="RestoreWatchdogPs" ExeCommand='-NoProfile -ExecutionPolicy Bypass -File "[APPLICATIONFOLDER]resources\assets\watchdog-task.ps1" -Register' Execute="rollback" Impersonate="no" Return="ignore"/>
++    <Property Id="LaunchTaskPs" Value="powershell.exe"/>
++    <CustomAction Id="registerLaunchTask" Property="LaunchTaskPs" ExeCommand='-NoProfile -ExecutionPolicy Bypass -File "[APPLICATIONFOLDER]resources\assets\msi-launch-task.ps1" -Register' Execute="deferred" Impersonate="no" Return="ignore"/>
++    <Property Id="RollbackLaunchSchtasks" Value="schtasks.exe"/>
++    <CustomAction Id="rollbackLaunchTask" Property="RollbackLaunchSchtasks" ExeCommand='/Delete /F /TN "${productName} Launcher"' Execute="rollback" Impersonate="no" Return="ignore"/>
++    <Property Id="DeleteLaunchSchtasks" Value="schtasks.exe"/>
++    <CustomAction Id="deleteLaunchTask" Property="DeleteLaunchSchtasks" ExeCommand='/Delete /F /TN "${productName} Launcher"' Execute="deferred" Impersonate="no" Return="ignore"/>
 +    <InstallExecuteSequence>
 +      <Custom Action="killAppProcesses" Before="InstallValidate">1</Custom>
-+      <Custom Action="restoreWatchdogTask" After="InstallInitialize">REMOVE~="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>
-+      <Custom Action="deleteWatchdogTask" After="restoreWatchdogTask">REMOVE~="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>
-+      <Custom Action="rollbackWatchdogTask" Before="registerWatchdogTask">NOT (REMOVE~="ALL")</Custom>
-+      <Custom Action="registerWatchdogTask" Before="InstallFinalize">NOT (REMOVE~="ALL")</Custom>
++      <Custom Action="deleteLaunchTask" After="InstallInitialize">REMOVE~="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>
++      <Custom Action="rollbackLaunchTask" Before="registerLaunchTask">NOT (REMOVE~="ALL")</Custom>
++      <Custom Action="registerLaunchTask" Before="InstallFinalize">NOT (REMOVE~="ALL")</Custom>
 +    </InstallExecuteSequence>
 +
      <Property Id="WIXUI_INSTALLDIR" Value="APPLICATIONFOLDER"/>

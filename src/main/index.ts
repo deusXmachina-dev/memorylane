@@ -196,7 +196,7 @@ app.on('will-quit', () => {
 })
 
 app.on('second-instance', (_event, argv) => {
-  // Background relaunches (login item, watchdog task, LaunchAgent) that lose
+  // Background relaunches (login item, MSI launch task, LaunchAgent) that lose
   // the single-instance race pass --memorylane-hidden; only a real user launch
   // should surface the window.
   if (argv.includes(AUTO_START_HIDDEN_ARG)) return

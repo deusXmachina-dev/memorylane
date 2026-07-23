@@ -9,7 +9,6 @@ import { formatBytes, formatNumber } from '../utils/formatters'
 import type { StorageService } from '../storage'
 import { openMainWindow } from './main-window'
 import { getUpdateState, quitAndInstall } from '@main/system/updater'
-import { loadAppEditionConfig } from '@main/system/edition'
 import { createTrayPrivacyState } from './tray-privacy-state'
 import { CAPTURE_PAUSE_CONFIG, formatPauseDuration } from '../../shared/constants'
 
@@ -228,22 +227,15 @@ export const updateTrayMenu = async (): Promise<void> => {
         openMainWindow()
       },
     },
-    // Packaged enterprise is always-running: the MSI watchdog task /
-    // LaunchAgent would revive a quit within minutes, so offering Quit would
-    // be a lie. Capture on/off above is the user-level stop.
-    ...(app.isPackaged && loadAppEditionConfig().edition === 'enterprise'
-      ? []
-      : [
-          { type: 'separator' as const },
-          {
-            label: 'Quit',
-            click: () => {
-              void deps!.capture.forceClose()
-              deps!.capture.stopCaptureForShutdown()
-              app.quit()
-            },
-          },
-        ]),
+    { type: 'separator' },
+    {
+      label: 'Quit',
+      click: () => {
+        void deps!.capture.forceClose()
+        deps!.capture.stopCaptureForShutdown()
+        app.quit()
+      },
+    },
   ])
 
   tray.setContextMenu(contextMenu)

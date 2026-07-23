@@ -1,15 +1,19 @@
-# Run by the MSI as SYSTEM (see patches/app-builder-lib+*.patch) to register
-# the per-machine relaunch watchdog task. schtasks /Create cannot express the
-# settings that matter here: no battery restriction (laptops would never
-# relaunch on battery) and no execution time limit (the default 72h limit
-# kills whatever the task started).
+# Run by the MSI as SYSTEM (see patches/app-builder-lib+*.patch) to start the
+# app after an install/upgrade/repair. A SYSTEM custom action cannot spawn into
+# the logged-on user's interactive session directly, so it registers a
+# trigger-less scheduled task under the Users group and starts it once. The
+# task never fires on its own — no auto-respawn; quitting the app holds.
+# Task Scheduler XML instead of schtasks /Create because /Create cannot express
+# the settings that matter: no battery restriction (the start would silently
+# fail on laptops) and no execution time limit (the launch script waits out
+# msiexec for up to 10 minutes).
 param(
   [switch]$Register
 )
 
 $ErrorActionPreference = 'Stop'
-$taskName = 'MemoryLane Enterprise Watchdog'
-$logFile = Join-Path $env:ProgramData 'MemoryLane Enterprise\watchdog-task.log'
+$taskName = 'MemoryLane Enterprise Launcher'
+$logFile = Join-Path $env:ProgramData 'MemoryLane Enterprise\msi-launch-task.log'
 
 function Write-Log([string]$message) {
   try {
@@ -24,28 +28,14 @@ if (-not $Register) {
 
 $assetsDir = $PSScriptRoot
 $appDir = [System.IO.Path]::GetFullPath((Join-Path $assetsDir '..\..'))
-$vbsPath = Join-Path $assetsDir 'watchdog-relaunch.vbs'
+$vbsPath = Join-Path $assetsDir 'msi-launch-app.vbs'
 $exePath = Join-Path $appDir 'MemoryLane Enterprise.exe'
 $taskArguments = '//B //NoLogo "' + $vbsPath + '" "' + $exePath + '" --memorylane-hidden'
 
-# TimeTrigger with an already-past StartBoundary + indefinite 5-minute
-# repetition arms immediately (a LogonTrigger would stay dormant until the
-# next logon when installing mid-session). The Users group principal runs the
-# script in the logged-on user's interactive session.
-$startBoundary = (Get-Date).AddMinutes(-1).ToString('yyyy-MM-dd\THH:mm:ss')
 $xml = @"
 <?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <Triggers>
-    <TimeTrigger>
-      <StartBoundary>$startBoundary</StartBoundary>
-      <Repetition>
-        <Interval>PT5M</Interval>
-        <StopAtDurationEnd>false</StopAtDurationEnd>
-      </Repetition>
-      <Enabled>true</Enabled>
-    </TimeTrigger>
-  </Triggers>
+  <Triggers/>
   <Principals>
     <Principal id="Author">
       <GroupId>S-1-5-32-545</GroupId>
@@ -57,7 +47,6 @@ $xml = @"
     <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
     <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
     <AllowHardTerminate>true</AllowHardTerminate>
-    <StartWhenAvailable>true</StartWhenAvailable>
     <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
     <Enabled>true</Enabled>
     <Hidden>false</Hidden>
@@ -79,8 +68,8 @@ try {
   Write-Log "register failed: $_"
   exit 0
 }
-# Bring the app back right after a silent push (the relaunch script waits out
-# msiexec); fails when no user is logged on, which the next trigger covers.
+# Bring the app up right after a silent push (the launch script waits out
+# msiexec); fails when no user is logged on — the login autostart covers that.
 try {
   Start-ScheduledTask -TaskName $taskName
 } catch {

@@ -1,10 +1,8 @@
-' Runs from the per-machine scheduled task registered by the MSI via
-' assets/watchdog-task.ps1. Enterprise is always-running (capture on/off is
-' the user control), so a trigger only gives up when the app already runs or
-' the exe is gone (mid-uninstall). While a Windows Installer is active it
-' waits instead of skipping, so the task start fired at the end of an MSI
-' push brings the app back seconds after the installer exits — without a
-' freshly launched app holding handles in the install directory mid-push.
+' Runs once per install from the trigger-less scheduled task registered by
+' assets/msi-launch-task.ps1. While a Windows Installer is active it waits, so
+' the task start fired at the end of an MSI push brings the app up seconds
+' after the installer exits — without a freshly launched app holding handles
+' in the install directory mid-push.
 Option Explicit
 
 Dim appExe, hiddenArg, fso, wmi, appExeWql, pid, waits
@@ -23,8 +21,6 @@ Do While wmi.ExecQuery( _
   waits = waits + 1
 Loop
 
-' The MSI deletes the task on uninstall (with a rollback re-register); a
-' trigger racing that just exits.
 If Not fso.FileExists(appExe) Then WScript.Quit 0
 
 ' Skip the Electron cold start in the common already-running case; the

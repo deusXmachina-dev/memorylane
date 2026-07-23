@@ -1,10 +1,7 @@
 #!/bin/sh
 # Enterprise pkg postinstall: install a machine-level LaunchAgent so the app
-# starts at every login and is relaunched after any exit (external SIGTERM
-# included) — enterprise is always-running; capture on/off is the user
-# control. Then start it for the current console user so no logout is needed.
-# --memorylane-launchd marks the instance as launchd-supervised;
-# src/main/system/launchd-mac.ts depends on the label, plist path and arg.
+# starts at every login and is relaunched if it dies without a clean quit,
+# then start it for the current console user so no logout is needed.
 set -u
 
 APP_BIN="/Applications/MemoryLane Enterprise.app/Contents/MacOS/MemoryLane Enterprise"
@@ -22,14 +19,16 @@ cat > "$PLIST" <<EOF
   <array>
     <string>$APP_BIN</string>
     <string>--memorylane-hidden</string>
-    <string>--memorylane-launchd</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
   <key>AssociatedBundleIdentifiers</key>
   <string>com.memorylane.enterprise</string>
   <key>KeepAlive</key>
-  <true/>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
   <key>LimitLoadToSessionType</key>
   <string>Aqua</string>
   <key>ProcessType</key>
