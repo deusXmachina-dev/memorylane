@@ -19,7 +19,6 @@ import {
   shouldSyncAutoStartOnStartup,
   syncAutoStartSetting,
 } from '@main/system/auto-start'
-import { ensureWatchdogTask } from '@main/system/watchdog-win'
 import { createCaptureCoordinator } from '@main/capture/capture-orchestrator'
 import { createCaptureHotkeyManager } from '@main/capture/capture-hotkey-manager'
 import log from '@main/utils/logger'
@@ -197,7 +196,7 @@ app.on('will-quit', () => {
 })
 
 app.on('second-instance', (_event, argv) => {
-  // Background relaunches (login item, watchdog task, LaunchAgent) that lose
+  // Background relaunches (login item, MSI launch task, LaunchAgent) that lose
   // the single-instance race pass --memorylane-hidden; only a real user launch
   // should surface the window.
   if (argv.includes(AUTO_START_HIDDEN_ARG)) return
@@ -326,9 +325,6 @@ app.on('ready', async () => {
   deviceReportSync.start()
 
   if (editionConfig.edition === 'enterprise') {
-    // Windows counterpart of the mac LaunchAgent's KeepAlive.
-    void ensureWatchdogTask()
-
     databaseUploadSync = new DatabaseUploadSync({
       storage: runtime.storage,
       getDeviceId: () => deviceIdentity.getDeviceId(),

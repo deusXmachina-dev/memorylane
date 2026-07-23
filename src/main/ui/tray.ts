@@ -9,7 +9,6 @@ import { formatBytes, formatNumber } from '../utils/formatters'
 import type { StorageService } from '../storage'
 import { openMainWindow } from './main-window'
 import { getUpdateState, quitAndInstall } from '@main/system/updater'
-import { disableWatchdogTask } from '@main/system/watchdog-win'
 import { createTrayPrivacyState } from './tray-privacy-state'
 import { CAPTURE_PAUSE_CONFIG, formatPauseDuration } from '../../shared/constants'
 
@@ -234,8 +233,7 @@ export const updateTrayMenu = async (): Promise<void> => {
       click: () => {
         void deps!.capture.forceClose()
         deps!.capture.stopCaptureForShutdown()
-        // Explicit quit must hold: stop the relaunch task before quitting.
-        void disableWatchdogTask().finally(() => app.quit())
+        app.quit()
       },
     },
   ])

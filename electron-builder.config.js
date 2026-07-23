@@ -98,6 +98,7 @@ module.exports = {
     '**/*.node',
   ],
   afterPack: 'build/bundle-win-runtime.js',
+  msiProjectCreated: 'build/msi-custom-actions.js',
   afterSign: 'build/notarize.js',
   afterAllArtifactBuild: 'build/notarize-pkg.js',
   mac: macConfig,
