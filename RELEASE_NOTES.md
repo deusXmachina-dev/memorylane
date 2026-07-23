@@ -4,8 +4,8 @@ Alpha prerelease. Enterprise installs survive silent MDM/RMM update pushes on bo
 
 ## What's Changed
 
-- **macOS enterprise pkg self-heals**: preinstall quits the running app before the bundle swap; postinstall installs a machine-level LaunchAgent that relaunches the app at login and after unclean exits, so MDM-pushed updates no longer leave the app stopped.
-- **Windows installer pushes no longer break the install**: the app-watcher sidecar exits when the main process dies, so RMM/MSI pushes can replace files immediately instead of deferring to reboot and leaving a broken install.
+- **macOS enterprise self-heals**: the app relaunches at login and after unclean exits, so MDM update pushes no longer leave it stopped.
+- **Windows enterprise self-heals**: a watchdog task relaunches the app after an external kill, and helper processes exit with the app so installer pushes no longer defer file replacement to reboot.
 - **One app identity**: patterns and activities use the site domain (or app name) as a single app concept across the UI, digest, and prompts (#239).
 - **Open in Claude**: the "Analyze with Claude" button is now "Open in Claude" with two paths — build a MemoryLane plugin skill or run an analysis (#240, #242).
 - **Fix**: LLM requests that hang without a response are aborted instead of stalling the pipeline (#238).

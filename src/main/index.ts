@@ -15,9 +15,8 @@ import path from 'node:path'
 import { config as loadEnv } from 'dotenv'
 import {
   AUTO_START_HIDDEN_ARG,
-  canSyncAutoStartSetting,
-  launchAgentOwnsAutoStart,
   shouldStartHiddenOnLaunch,
+  shouldSyncAutoStartOnStartup,
   syncAutoStartSetting,
 } from '@main/system/auto-start'
 import { ensureWatchdogTask } from '@main/system/watchdog-win'
@@ -54,7 +53,7 @@ import {
   type ObservationController,
 } from '@main/capture/observation-controller'
 import { getAppDirectoryName } from '@main/utils/paths'
-import { getAppEditionConfig } from '@main/system/edition'
+import { loadAppEditionConfig } from '@main/system/edition'
 import { ENTERPRISE_BACKEND_CONFIG, MANAGED_KEY_CONFIG } from '../shared/constants'
 
 // Keep single-instance behavior in packaged app, but allow dev to run
@@ -147,21 +146,18 @@ let observation: ObservationController | null = null
 // process, keeps an open handle on resources\rust\app-watcher-windows.exe,
 // and MSI has to defer replacement to a reboot (return code 3010).
 //
-// A dispose step that never settles must not strand a half-shut-down process
-// ("not quit, not running"), so a watchdog force-exits after 5s and logs which
-// steps were still pending. It stays ahead of the mac preinstall's 10s SIGKILL
-// escalation, and is never cleared so it also covers stray handles keeping the
-// process alive after the graceful quit is re-issued. It can't fire while a
-// sync native call is blocking the event loop — only an external kill ends
-// that state.
+// A force-exit timer bounds shutdown at 5s (ahead of the mac preinstall's 10s
+// SIGKILL) and logs which dispose steps were still pending. It is never
+// cleared, so it also covers stray handles that outlive the graceful quit; a
+// sync native call blocking the event loop still defeats it.
 const SHUTDOWN_TIMEOUT_MS = 5_000
 let shutdownStarted = false
 let shutdownCompleted = false
 app.on('before-quit', (event) => {
   if (shutdownCompleted) return
   event.preventDefault()
-  // A repeated quit (double tray click) must not re-run dispose steps or arm
-  // a second force-exit timer; the in-flight shutdown re-issues app.quit().
+  // A repeated quit must not re-run dispose steps or arm a second timer; the
+  // in-flight shutdown re-issues app.quit().
   if (shutdownStarted) return
   shutdownStarted = true
 
@@ -212,7 +208,7 @@ app.on('second-instance', (_event, argv) => {
 
 app.on('ready', async () => {
   const startHidden = shouldStartHiddenOnLaunch()
-  const editionConfig = getAppEditionConfig()
+  const editionConfig = loadAppEditionConfig()
 
   // Permissions are no longer blocking at startup. The renderer drives the
   // permission grant flow as part of onboarding (PermissionsStep).
@@ -248,12 +244,7 @@ app.on('ready', async () => {
   captureSettingsManager.applyToConstants()
   const initialCaptureSettings = captureSettingsManager.get()
 
-  // The one-time gate must not skip mac enterprise: installs upgraded from
-  // pre-LaunchAgent builds need their stale login item removed on startup.
-  if (
-    canSyncAutoStartSetting() &&
-    (!captureStateManager.isAutoStartInitialized() || launchAgentOwnsAutoStart())
-  ) {
+  if (shouldSyncAutoStartOnStartup(captureStateManager.isAutoStartInitialized())) {
     syncAutoStartSetting(initialCaptureSettings.autoStartEnabled)
     captureStateManager.setAutoStartInitialized(true)
   }

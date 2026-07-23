@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { getAppEditionConfig } from '@main/system/edition'
+import { loadAppEditionConfig } from '@main/system/edition'
 import log from '@main/utils/logger'
 
 export const AUTO_START_HIDDEN_ARG = '--memorylane-hidden'
@@ -9,17 +9,21 @@ function isSupportedPlatform(): boolean {
   return process.platform === 'darwin' || process.platform === 'win32'
 }
 
-export function canSyncAutoStartSetting(): boolean {
-  return isSupportedPlatform() && app.isPackaged
-}
-
 // Enterprise autostart on macOS is owned by the pkg-installed LaunchAgent. A
 // login item would race it at login (mac login items can't pass argv, so the
 // losing instance pops the main window) and, when it wins the race, steal the
 // app from launchd's KeepAlive supervision.
-export function launchAgentOwnsAutoStart(): boolean {
-  return process.platform === 'darwin' && getAppEditionConfig().edition === 'enterprise'
+function launchAgentOwnsAutoStart(): boolean {
+  return process.platform === 'darwin' && loadAppEditionConfig().edition === 'enterprise'
 }
+
+// Mac enterprise re-syncs every startup, not just once: installs upgraded from
+// pre-LaunchAgent builds carry a stale login item that sync removes.
+export function shouldSyncAutoStartOnStartup(isInitialized: boolean): boolean {
+  if (!isSupportedPlatform() || !app.isPackaged) return false
+  return !isInitialized || launchAgentOwnsAutoStart()
+}
+
 export function shouldStartHiddenOnLaunch(): boolean {
   if (process.argv.includes(AUTO_START_HIDDEN_ARG)) {
     return true
