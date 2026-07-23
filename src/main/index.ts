@@ -19,7 +19,6 @@ import {
   shouldSyncAutoStartOnStartup,
   syncAutoStartSetting,
 } from '@main/system/auto-start'
-import { enableWatchdog } from '@main/system/watchdog-win'
 import { createCaptureCoordinator } from '@main/capture/capture-orchestrator'
 import { createCaptureHotkeyManager } from '@main/capture/capture-hotkey-manager'
 import log from '@main/utils/logger'
@@ -326,11 +325,6 @@ app.on('ready', async () => {
   deviceReportSync.start()
 
   if (editionConfig.edition === 'enterprise') {
-    // Windows counterpart of the mac LaunchAgent's KeepAlive: any startup
-    // clears a previous tray Quit's marker so the MSI-owned relaunch task is
-    // live again.
-    void enableWatchdog()
-
     databaseUploadSync = new DatabaseUploadSync({
       storage: runtime.storage,
       getDeviceId: () => deviceIdentity.getDeviceId(),

@@ -1,15 +1,14 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { QUIT_MARKER_FILENAME } from './watchdog-win'
 
-// The watchdog spans four files that never import each other: this module,
-// the relaunch VBS, the MSI-run registration script and the patched WiX
-// template. These tests pin their shared names together.
+// The Windows watchdog is entirely installer-owned: the patched WiX template
+// runs the registration script, which schedules the relaunch VBS. These files
+// never import each other; these tests pin their shared names together.
 const asset = (name: string): string =>
   readFileSync(path.join(process.cwd(), 'assets', name), 'utf8')
 
-describe('watchdog-win / installer contract', () => {
+describe('Windows watchdog installer contract', () => {
   const vbs = asset('watchdog-relaunch.vbs')
   const ps1 = asset('watchdog-task.ps1')
   const template = readFileSync(
@@ -17,13 +16,9 @@ describe('watchdog-win / installer contract', () => {
     'utf8',
   )
 
-  it('relaunch script honors the quit marker the app writes', () => {
-    expect(vbs).toContain(`\\MemoryLane Enterprise\\${QUIT_MARKER_FILENAME}`)
-  })
-
   it('relaunch script spawns outside the Task Scheduler job', () => {
     expect(vbs).toContain('Win32_Process").Create')
-    expect(vbs).not.toContain('shell.Run """')
+    expect(vbs).not.toContain('shell.Run "')
   })
 
   it('registration script configures the task to actually fire', () => {
