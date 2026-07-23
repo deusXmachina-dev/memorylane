@@ -9,6 +9,7 @@ import { averageLinkageGroups } from './attach'
 import { recomputeCentroid } from './signatures'
 import type { ReviewClusterVerdict, ReviewOutput } from './types'
 import { CLUSTERING_CONFIG } from './types'
+import { normalizeSteps } from '../candidate-normalizer'
 import type { ProgressCallback } from '../types'
 
 export { mergePairKey }
@@ -41,22 +42,14 @@ export function sanitizeVerdict(raw: ReviewClusterVerdict): ClusterVerdict {
   return { kind, mechanism }
 }
 
-const MAX_RECIPE_STEPS = 15
 const MAX_RECIPE_VARIABLES = 10
-const MAX_RECIPE_ENTRY_LEN = 200
 
 /** Whitelist the LLM's recipe (shape, count/length caps) and scrub PII — the
  * recipe is copied out to external tools. */
 export function sanitizeRecipe(raw: ReviewClusterVerdict): ClusterRecipe {
-  const clean = (value: unknown, cap: number): string[] =>
-    (Array.isArray(value) ? value : [])
-      .filter((s): s is string => typeof s === 'string')
-      .map((s) => scrubPII(s.trim()).slice(0, MAX_RECIPE_ENTRY_LEN))
-      .filter((s) => s.length > 0)
-      .slice(0, cap)
   return {
-    steps: clean(raw.steps, MAX_RECIPE_STEPS),
-    variables: clean(raw.variables, MAX_RECIPE_VARIABLES),
+    steps: normalizeSteps(raw.steps, { transform: scrubPII }),
+    variables: normalizeSteps(raw.variables, { cap: MAX_RECIPE_VARIABLES, transform: scrubPII }),
   }
 }
 

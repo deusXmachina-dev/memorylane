@@ -5,16 +5,21 @@ const MAX_STEPS = 15
 const MAX_STEP_LEN = 200
 
 /**
- * Whitelist a candidate's happy-path steps (shape, count/length caps). Steps
- * are progressive enhancement: anything unusable normalizes to [] and never
- * fails the candidate. Stored raw — PII scrubbing happens at egress.
+ * Whitelist an LLM-emitted step/variable list (shape, count/length caps),
+ * optionally transforming entries (e.g. PII scrub) before the length cap.
+ * Anything unusable normalizes to [] and never fails the candidate — steps
+ * are progressive enhancement. Scan steps are stored raw; scrub at egress.
  */
-export function normalizeSteps(value: unknown): string[] {
+export function normalizeSteps(
+  value: unknown,
+  opts: { cap?: number; transform?: (entry: string) => string } = {},
+): string[] {
+  const { cap = MAX_STEPS, transform } = opts
   return (Array.isArray(value) ? value : [])
     .filter((s): s is string => typeof s === 'string')
-    .map((s) => s.trim().slice(0, MAX_STEP_LEN))
+    .map((s) => (transform ? transform(s.trim()) : s.trim()).slice(0, MAX_STEP_LEN))
     .filter((s) => s.length > 0)
-    .slice(0, MAX_STEPS)
+    .slice(0, cap)
 }
 
 const scanCandidateSchema = z.object({
@@ -32,7 +37,7 @@ const scanCandidateSchema = z.object({
     (value) => (typeof value === 'string' ? value.trim() : ''),
     z.string().min(1),
   ),
-  steps: z.preprocess(normalizeSteps, z.array(z.string())).default([]),
+  steps: z.preprocess((value) => normalizeSteps(value), z.array(z.string())).default([]),
   activity_ids: z
     .preprocess(
       (value) =>

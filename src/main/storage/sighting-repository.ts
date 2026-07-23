@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { parseJsonStringArray } from './utils'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -143,7 +144,7 @@ export class SightingRepository {
       title: row.title as string,
       subject: (row.subject as string) ?? '',
       description: row.description as string,
-      steps: JSON.parse((row.steps as string) || '[]') as string[],
+      steps: parseJsonStringArray(row.steps),
       apps: JSON.parse((row.apps as string) || '[]') as string[],
       activityIds: JSON.parse((row.activity_ids as string) || '[]') as string[],
       startedAt: row.started_at as number,

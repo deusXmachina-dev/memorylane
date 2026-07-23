@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3'
 import type { ClusterKind } from '../../shared/types'
 import type { Sighting } from './sighting-repository'
-import { vectorToBlob, blobToVector } from './utils'
+import { parseJsonStringArray, vectorToBlob, blobToVector } from './utils'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -43,17 +43,6 @@ export interface ClusterVerdict {
 export interface ClusterRecipe {
   steps: string[]
   variables: string[]
-}
-
-/** Parse a JSON string-array column, tolerating null/legacy/corrupt values. */
-function parseJsonStringArray(value: unknown): string[] {
-  if (typeof value !== 'string' || value.length === 0) return []
-  try {
-    const parsed: unknown = JSON.parse(value)
-    return Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === 'string') : []
-  } catch {
-    return []
-  }
 }
 
 /** Canonical key for an unordered cluster pair — the one format shared by

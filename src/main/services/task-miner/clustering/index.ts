@@ -29,7 +29,7 @@ import {
   type SignatureEmbedder,
 } from './signatures'
 import { attachToCentroids, averageLinkageGroups, type SightingSignature } from './attach'
-import type { ClusteringRunSummary, ReviewCluster, ReviewInput, ReviewSighting } from './types'
+import type { ClusteringRunSummary, ReviewCluster, ReviewInput } from './types'
 import { CLUSTERING_CONFIG, emptyClusteringSummary } from './types'
 import { runLlmReview, type ReviewCallResult } from './llm-review'
 import { validateAndApply, mergePairKey, type ReviewGuards } from './apply-review'
@@ -429,21 +429,19 @@ export function toReviewCluster(
       span_days: Math.floor(spanMs / DAY_MS) + 1,
       median_active_min: median(members.map((m) => m.interactionMin)),
     },
-    members: sample.map((s, i) => {
-      const member: ReviewSighting = {
-        sighting_id: s.id,
-        title: s.title,
-        subject: s.subject,
-        description: s.description,
-        apps: s.apps,
-        interaction_min: s.interactionMin,
-        date: new Date(s.startedAt).toISOString().slice(0, 10),
-      }
-      if (s.steps.length > 0 && i >= sample.length - CLUSTERING_CONFIG.MAX_STEPPED_SAMPLE_MEMBERS) {
-        member.steps = s.steps
-      }
-      return member
-    }),
+    members: sample.map((s, i) => ({
+      sighting_id: s.id,
+      title: s.title,
+      subject: s.subject,
+      description: s.description,
+      apps: s.apps,
+      interaction_min: s.interactionMin,
+      date: new Date(s.startedAt).toISOString().slice(0, 10),
+      steps:
+        s.steps.length > 0 && i >= sample.length - CLUSTERING_CONFIG.MAX_STEPPED_SAMPLE_MEMBERS
+          ? s.steps
+          : undefined,
+    })),
   }
 }
 

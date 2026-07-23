@@ -90,16 +90,16 @@ describe('resolveTitle', () => {
   })
 })
 
-describe('resolveSteps', () => {
-  const member = (startedAt: number, title: string, steps: string[]): ClusterMember => ({
-    startedAt,
-    endedAt: startedAt + 1000,
-    interactionMin: 1,
-    title,
-    apps: [],
-    steps,
-  })
+const member = (startedAt: number, title: string, steps: string[]): ClusterMember => ({
+  startedAt,
+  endedAt: startedAt + 1000,
+  interactionMin: 1,
+  title,
+  apps: [],
+  steps,
+})
 
+describe('resolveSteps', () => {
   it('prefers the cluster recipe over member steps', () => {
     expect(resolveSteps(['App: generalized step'], [member(1, 'Run', ['App: raw step'])])).toEqual([
       'App: generalized step',
@@ -253,20 +253,12 @@ describe('buildClusterInfo', () => {
   })
 
   it('falls back to in-window member steps when the cluster has no recipe', () => {
-    const stepped = (startedAt: number, steps: string[]): ClusterMember => ({
-      startedAt,
-      endedAt: startedAt + 1000,
-      interactionMin: 1,
-      title: 'Run',
-      apps: [],
-      steps,
-    })
     const info = buildClusterInfo(
       head,
       [
-        stepped(NOW - 100 * DAY_MS, ['App: out of window']),
-        stepped(NOW - 2 * DAY_MS, ['App: older']),
-        stepped(NOW - DAY_MS, ['App: newest']),
+        member(NOW - 100 * DAY_MS, 'Run', ['App: out of window']),
+        member(NOW - 2 * DAY_MS, 'Run', ['App: older']),
+        member(NOW - DAY_MS, 'Run', ['App: newest']),
       ],
       10,
       NOW,
