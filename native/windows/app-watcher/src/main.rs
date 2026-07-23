@@ -1,6 +1,7 @@
 mod browser_url;
 mod hooks;
 mod output;
+mod parent_watch;
 mod snapshot;
 mod state;
 mod time;
@@ -18,6 +19,8 @@ use crate::time::now_ms;
 use crate::win32_window::hwnd_is_valid;
 
 fn main() {
+    parent_watch::spawn_parent_watchdog();
+
     let com_init_result = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
     let com_needs_uninit = com_init_result.is_ok();
     let _com_available = com_needs_uninit || com_init_result == RPC_E_CHANGED_MODE;

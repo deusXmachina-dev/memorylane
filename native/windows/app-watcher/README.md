@@ -38,6 +38,11 @@ Optional override in development:
 
 - `MEMORYLANE_APP_WATCHER_WIN_EXECUTABLE=<absolute path to exe>`
 
+## Arguments
+
+- `--parent-pid=<pid>` (optional): exit when this process dies. Passed by the
+  Electron main process so the watcher never outlives it.
+
 ## Test
 
 From repo root:

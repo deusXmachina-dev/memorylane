@@ -101,7 +101,9 @@ function spawnWatcher(): void {
   }
 
   log.debug(`[AppWatcher:win] Spawning: ${executable.command} ${executable.args.join(' ')}`)
-  const child = spawn(executable.command, [...executable.args], {
+  // The watcher waits on this PID and exits when we die, so an installer's
+  // hard kill of the main process can't leave it holding the install dir open.
+  const child = spawn(executable.command, [...executable.args, `--parent-pid=${process.pid}`], {
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   })
