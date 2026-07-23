@@ -17,7 +17,7 @@ describe('watchdog-win schtasks arguments', () => {
       '/MO',
       '5',
       '/TR',
-      '"C:\\Program Files\\MemoryLane Enterprise\\MemoryLane Enterprise.exe" --memorylane-hidden',
+      'cmd.exe /c start "" "C:\\Program Files\\MemoryLane Enterprise\\MemoryLane Enterprise.exe" --memorylane-hidden',
     ])
   })
 

@@ -89,8 +89,9 @@ export function buildClusterAnalyzePrompt(
   return lines.filter((l) => l !== null).join('\n')
 }
 
-/** Tool-agnostic prompt built from the stored, de-identified recipe;
- * scrubPII runs over the final string as a last-mile net. */
+/** Tool-agnostic prompt; scrubPII runs over the final string. For labeled
+ * clusters that backstops the recipe's LLM de-identification; for fallback
+ * member steps it is the only scrub, and it does not catch names. */
 export function buildClusterAgentPrompt(cluster: ClusterInfo): string {
   const lines: string[] = [
     `Build an AI agent that automates this task.`,
