@@ -1,26 +1,18 @@
-import { execFile } from 'node:child_process'
+import { unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { promisify } from 'node:util'
 import { app } from 'electron'
-import { AUTO_START_HIDDEN_ARG } from '@main/system/auto-start'
 import { loadAppEditionConfig } from '@main/system/edition'
 import log from '@main/utils/logger'
 
-const execFileAsync = promisify(execFile)
-
-// The HKCU Run autostart only fires at login, so an external kill mid-session
-// (RMM/AV/MDM) leaves the app dead until the user next logs in. This per-user
-// scheduled task relaunches it within minutes instead. An explicit tray Quit
-// disables the task so the user's choice holds until the next launch (the
-// login item re-registers it). Registration deliberately ignores the
-// auto-start setting: that setting governs login behavior, while enterprise
-// devices must recover from mid-session kills regardless.
-//
-// MDM removal scripts should `schtasks /Delete /F /TN "<TASK_NAME>"` — a task
-// disabled by tray Quit never runs again and would linger after uninstall.
-const TASK_NAME = 'MemoryLane Enterprise Watchdog'
-const RELAUNCH_INTERVAL_MINUTES = 5
-const SCHTASKS_TIMEOUT_MS = 5_000
+// The relaunch watchdog is a per-machine scheduled task owned by the MSI
+// (registered by assets/watchdog-task.ps1, deleted on uninstall); the app
+// cannot create or delete it unelevated. The app's lever is a per-user quit
+// marker: the task's script (assets/watchdog-relaunch.vbs) skips the relaunch
+// while the marker exists, so an explicit tray Quit holds until the next
+// launch — login autostart or manual — clears it. The marker deliberately
+// ignores the auto-start setting: that setting governs login behavior, while
+// enterprise devices must recover from mid-session kills regardless.
+export const QUIT_MARKER_FILENAME = 'watchdog-quit.marker'
 
 function watchdogSupported(): boolean {
   return (
@@ -30,53 +22,34 @@ function watchdogSupported(): boolean {
   )
 }
 
-export function buildCreateTaskArgs(scriptPath: string, executablePath: string): string[] {
-  return [
-    '/Create',
-    '/F',
-    '/TN',
-    TASK_NAME,
-    '/SC',
-    'MINUTE',
-    '/MO',
-    String(RELAUNCH_INTERVAL_MINUTES),
-    // Runs the VBS script rather than the exe directly — see
-    // assets/watchdog-relaunch.vbs for why.
-    '/TR',
-    `wscript.exe //B "${scriptPath}" "${executablePath}" ${AUTO_START_HIDDEN_ARG} "${TASK_NAME}"`,
-  ]
+function quitMarkerPath(): string {
+  return path.join(app.getPath('userData'), QUIT_MARKER_FILENAME)
 }
 
-async function runSchtasks(args: string[]): Promise<void> {
-  await execFileAsync('schtasks.exe', args, {
-    windowsHide: true,
-    timeout: SCHTASKS_TIMEOUT_MS,
-  })
-}
-
-export async function ensureWatchdogTask(): Promise<void> {
+export async function enableWatchdog(): Promise<void> {
   if (!watchdogSupported()) {
     return
   }
 
   try {
-    const scriptPath = path.join(process.resourcesPath, 'assets', 'watchdog-relaunch.vbs')
-    await runSchtasks(buildCreateTaskArgs(scriptPath, process.execPath))
-    log.info(`[Watchdog] Relaunch task registered (every ${RELAUNCH_INTERVAL_MINUTES} min)`)
+    await unlink(quitMarkerPath())
+    log.info('[Watchdog] Quit marker cleared — relaunch watchdog active')
   } catch (error) {
-    log.warn('[Watchdog] Failed to register relaunch task:', error)
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      log.warn('[Watchdog] Failed to clear quit marker:', error)
+    }
   }
 }
 
-export async function disableWatchdogTask(): Promise<void> {
+export async function disableWatchdog(): Promise<void> {
   if (!watchdogSupported()) {
     return
   }
 
   try {
-    await runSchtasks(['/Change', '/TN', TASK_NAME, '/DISABLE'])
-    log.info('[Watchdog] Relaunch task disabled')
+    await writeFile(quitMarkerPath(), '')
+    log.info('[Watchdog] Quit marker written — relaunch watchdog disabled')
   } catch (error) {
-    log.warn('[Watchdog] Failed to disable relaunch task:', error)
+    log.warn('[Watchdog] Failed to write quit marker:', error)
   }
 }

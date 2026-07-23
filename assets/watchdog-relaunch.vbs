@@ -1,23 +1,25 @@
-' Runs from the scheduled task registered by src/main/system/watchdog-win.ts
-' instead of launching the exe directly: no console window flashes, the task
-' deletes itself once the app is uninstalled, and the relaunch is skipped
-' while the app is already running or a Windows Installer is active (so a
-' freshly launched app cannot hold handles in the install directory mid-push).
+' Runs from the per-machine scheduled task registered by the MSI via
+' assets/watchdog-task.ps1. Skips the relaunch while the app is running, a
+' Windows Installer is active (so a freshly launched app cannot hold handles
+' in the install directory mid-push), or the user explicitly quit (the app
+' writes the quit marker on tray Quit and clears it on every startup).
 Option Explicit
 
-Dim appExe, hiddenArg, taskName, fso, shell, wmi, appExeWql
-If WScript.Arguments.Count < 3 Then WScript.Quit 0
+Dim appExe, hiddenArg, fso, shell, wmi, appExeWql, markerPath, pid
+If WScript.Arguments.Count < 2 Then WScript.Quit 0
 appExe = WScript.Arguments(0)
 hiddenArg = WScript.Arguments(1)
-taskName = WScript.Arguments(2)
 
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set shell = CreateObject("WScript.Shell")
 
-If Not fso.FileExists(appExe) Then
-  shell.Run "schtasks.exe /Delete /F /TN """ & taskName & """", 0, True
-  WScript.Quit 0
-End If
+' The MSI deletes the task on uninstall; a trigger racing that just exits.
+If Not fso.FileExists(appExe) Then WScript.Quit 0
+
+' Must match QUIT_MARKER_FILENAME in src/main/system/watchdog-win.ts.
+markerPath = shell.ExpandEnvironmentStrings("%APPDATA%") & _
+  "\MemoryLane Enterprise\watchdog-quit.marker"
+If fso.FileExists(markerPath) Then WScript.Quit 0
 
 Set wmi = GetObject("winmgmts:\\.\root\cimv2")
 If wmi.ExecQuery( _
@@ -33,4 +35,7 @@ If wmi.ExecQuery( _
   WScript.Quit 0
 End If
 
-shell.Run """" & appExe & """ " & hiddenArg, 0, False
+' Win32_Process.Create spawns from the WMI provider host, outside the Task
+' Scheduler job for this task instance. A shell.Run child stays in that job
+' and is terminated (0x40010004) when the task instance completes.
+wmi.Get("Win32_Process").Create """" & appExe & """ " & hiddenArg, Null, Null, pid

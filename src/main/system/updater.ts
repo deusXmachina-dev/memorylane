@@ -2,7 +2,7 @@ import { app } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import log from '@main/utils/logger'
 import { confirmWindowsUpdateInstall } from './windows-update-install'
-import { disableWatchdogTask } from './watchdog-win'
+import { disableWatchdog } from './watchdog-win'
 import type { UpdateInfo, UpdateState } from '@/shared/types'
 
 let state: UpdateState = 'idle'
@@ -26,8 +26,8 @@ export const quitAndInstall = async (): Promise<void> => {
   }
 
   // The relaunch task must not fire mid-install and hold the install dir open;
-  // the updated app re-registers it on startup.
-  await disableWatchdogTask()
+  // the updated app clears the marker on startup.
+  await disableWatchdog()
 
   log.info('[Updater] Requesting quit-and-install')
   // isForceRunAfter=true is required for tray apps that have no main window,
