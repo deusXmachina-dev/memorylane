@@ -1,8 +1,8 @@
 diff --git a/node_modules/app-builder-lib/templates/msi/template.xml b/node_modules/app-builder-lib/templates/msi/template.xml
-index 2d5cd3c..928bf55 100644
+index 2d5cd3c..e45c294 100644
 --- a/node_modules/app-builder-lib/templates/msi/template.xml
 +++ b/node_modules/app-builder-lib/templates/msi/template.xml
-@@ -16,6 +16,33 @@
+@@ -16,6 +16,38 @@
      <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage='A newer version of "[ProductName]" is already installed.'/>
      <MediaTemplate CompressionLevel="${compressionLevel}" EmbedCab="yes"/>
  
@@ -12,16 +12,21 @@ index 2d5cd3c..928bf55 100644
 +         silent upgrade defers file replacement to reboot (3010) and leaves a
 +         half-applied install. Runs on install, upgrade, repair and uninstall.
 +         The path-length guard keeps a hypothetically unresolved
-+         APPLICATIONFOLDER from matching every process on the machine.
++         APPLICATIONFOLDER from matching every process on the machine. The
++         dir is spliced into a PS double-quoted string (an apostrophe in the
++         path would end a single-quoted one), padded with a space so its
++         trailing backslash cannot escape the closing \" (TrimEnd removes
++         it), and matched with StartsWith because -like treats [ ] in the
++         path as wildcards.
 +         registerLaunchTask: starts the app once after install/upgrade/repair
 +         via a trigger-less scheduled task (assets/msi-launch-task.ps1) — a
 +         SYSTEM custom action cannot spawn into the user session directly. The
 +         task never fires on its own; rollback and uninstall delete it so no
 +         orphan is left behind. -->
 +    <Property Id="KillAppPs" Value="powershell.exe"/>
-+    <CustomAction Id="killAppProcesses" Property="KillAppPs" ExeCommand='-NoProfile -ExecutionPolicy Bypass -Command "$d = &apos;[APPLICATIONFOLDER]&apos;; if ($d.Length -gt 3) { Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -like ($d + &apos;*&apos;) } | Stop-Process -Force -ErrorAction SilentlyContinue }"' Execute="immediate" Return="ignore"/>
++    <CustomAction Id="killAppProcesses" Property="KillAppPs" ExeCommand='-NoProfile -ExecutionPolicy Bypass -Command "$d = \"[APPLICATIONFOLDER] \".TrimEnd(); if ($d.Length -gt 3) { Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.StartsWith($d, &apos;OrdinalIgnoreCase&apos;) } | Stop-Process -Force -ErrorAction SilentlyContinue }"' Execute="immediate" Return="ignore"/>
 +    <Property Id="LaunchTaskPs" Value="powershell.exe"/>
-+    <CustomAction Id="registerLaunchTask" Property="LaunchTaskPs" ExeCommand='-NoProfile -ExecutionPolicy Bypass -File "[APPLICATIONFOLDER]resources\assets\msi-launch-task.ps1" -Register' Execute="deferred" Impersonate="no" Return="ignore"/>
++    <CustomAction Id="registerLaunchTask" Property="LaunchTaskPs" ExeCommand='-NoProfile -ExecutionPolicy Bypass -File "[APPLICATIONFOLDER]resources\assets\msi-launch-task.ps1" -Register -ProductName "${productName}"' Execute="deferred" Impersonate="no" Return="ignore"/>
 +    <Property Id="RollbackLaunchSchtasks" Value="schtasks.exe"/>
 +    <CustomAction Id="rollbackLaunchTask" Property="RollbackLaunchSchtasks" ExeCommand='/Delete /F /TN "${productName} Launcher"' Execute="rollback" Impersonate="no" Return="ignore"/>
 +    <Property Id="DeleteLaunchSchtasks" Value="schtasks.exe"/>

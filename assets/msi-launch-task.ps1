@@ -6,14 +6,17 @@
 # Task Scheduler XML instead of schtasks /Create because /Create cannot express
 # the settings that matter: no battery restriction (the start would silently
 # fail on laptops) and no execution time limit (the launch script waits out
-# msiexec for up to 10 minutes).
+# msiexec for up to 5 minutes).
+# $ProductName comes from the MSI — the same value its delete/rollback custom
+# actions expand into "<product> Launcher", so the names cannot drift apart.
 param(
-  [switch]$Register
+  [switch]$Register,
+  [string]$ProductName = 'MemoryLane Enterprise'
 )
 
 $ErrorActionPreference = 'Stop'
-$taskName = 'MemoryLane Enterprise Launcher'
-$logFile = Join-Path $env:ProgramData 'MemoryLane Enterprise\msi-launch-task.log'
+$taskName = "$ProductName Launcher"
+$logFile = Join-Path $env:ProgramData "$ProductName\msi-launch-task.log"
 
 function Write-Log([string]$message) {
   try {
@@ -29,7 +32,7 @@ if (-not $Register) {
 $assetsDir = $PSScriptRoot
 $appDir = [System.IO.Path]::GetFullPath((Join-Path $assetsDir '..\..'))
 $vbsPath = Join-Path $assetsDir 'msi-launch-app.vbs'
-$exePath = Join-Path $appDir 'MemoryLane Enterprise.exe'
+$exePath = Join-Path $appDir "$ProductName.exe"
 $taskArguments = '//B //NoLogo "' + $vbsPath + '" "' + $exePath + '" --memorylane-hidden'
 
 $xml = @"
