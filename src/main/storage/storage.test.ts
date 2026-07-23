@@ -109,6 +109,7 @@ describe('StorageService', () => {
           title: 'Sighting A',
           subject: '',
           description: 'evidence',
+          steps: [],
           apps: ['Editor'],
           activityIds: ['act-1'],
           startedAt: 1000,

@@ -238,12 +238,13 @@ export class ClusterRepository {
     interactionMin: number
     title: string
     apps: string[]
+    steps: string[]
   }[] {
     const rows = this.db
       .prepare(
         `SELECT cs.cluster_id AS clusterId, s.started_at AS startedAt,
                 s.ended_at AS endedAt, s.interaction_min AS interactionMin,
-                s.title AS title, s.apps AS apps
+                s.title AS title, s.apps AS apps, s.steps AS steps
          FROM cluster_sightings cs
          JOIN sightings s ON s.id = cs.sighting_id
          ORDER BY s.started_at ASC`,
@@ -255,8 +256,13 @@ export class ClusterRepository {
       interactionMin: number
       title: string
       apps: string
+      steps: string
     }[]
-    return rows.map((r) => ({ ...r, apps: JSON.parse(r.apps || '[]') as string[] }))
+    return rows.map((r) => ({
+      ...r,
+      apps: JSON.parse(r.apps || '[]') as string[],
+      steps: parseJsonStringArray(r.steps),
+    }))
   }
 
   addMembership(clusterId: string, sightingId: string, addedAt: number): void {
@@ -470,6 +476,7 @@ export class ClusterRepository {
       title: row.title as string,
       subject: (row.subject as string) ?? '',
       description: row.description as string,
+      steps: parseJsonStringArray(row.steps),
       apps: JSON.parse((row.apps as string) || '[]') as string[],
       activityIds: JSON.parse((row.activity_ids as string) || '[]') as string[],
       startedAt: row.started_at as number,

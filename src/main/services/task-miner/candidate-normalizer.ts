@@ -1,6 +1,22 @@
 import { z } from 'zod'
 import type { Candidate } from './types'
 
+const MAX_STEPS = 15
+const MAX_STEP_LEN = 200
+
+/**
+ * Whitelist a candidate's happy-path steps (shape, count/length caps). Steps
+ * are progressive enhancement: anything unusable normalizes to [] and never
+ * fails the candidate. Stored raw — PII scrubbing happens at egress.
+ */
+export function normalizeSteps(value: unknown): string[] {
+  return (Array.isArray(value) ? value : [])
+    .filter((s): s is string => typeof s === 'string')
+    .map((s) => s.trim().slice(0, MAX_STEP_LEN))
+    .filter((s) => s.length > 0)
+    .slice(0, MAX_STEPS)
+}
+
 const scanCandidateSchema = z.object({
   title: z.preprocess(
     (value) => (typeof value === 'string' ? value.trim() : ''),
@@ -16,6 +32,7 @@ const scanCandidateSchema = z.object({
     (value) => (typeof value === 'string' ? value.trim() : ''),
     z.string().min(1),
   ),
+  steps: z.preprocess(normalizeSteps, z.array(z.string())).default([]),
   activity_ids: z
     .preprocess(
       (value) =>

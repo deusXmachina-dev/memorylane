@@ -4,8 +4,10 @@ import {
   computeRecurrence,
   isBelowNoiseFloor,
   mean,
+  resolveSteps,
   resolveTitle,
   timesPerWeek,
+  type ClusterMember,
 } from './cluster-view'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -88,6 +90,46 @@ describe('resolveTitle', () => {
   })
 })
 
+describe('resolveSteps', () => {
+  const member = (startedAt: number, title: string, steps: string[]): ClusterMember => ({
+    startedAt,
+    endedAt: startedAt + 1000,
+    interactionMin: 1,
+    title,
+    apps: [],
+    steps,
+  })
+
+  it('prefers the cluster recipe over member steps', () => {
+    expect(resolveSteps(['App: generalized step'], [member(1, 'Run', ['App: raw step'])])).toEqual([
+      'App: generalized step',
+    ])
+  })
+
+  it('falls back to the most recent member matching the modal title', () => {
+    const members = [
+      member(1, 'Pay bills', ['App: old way']),
+      member(2, 'Other', ['App: outlier way']),
+      member(3, 'Pay bills', ['App: new way']),
+    ]
+    expect(resolveSteps([], members)).toEqual(['App: new way'])
+  })
+
+  it('uses the most recent stepped member when no modal-title member has steps', () => {
+    const members = [
+      member(1, 'Pay bills', []),
+      member(2, 'Pay bills', []),
+      member(3, 'Other', ['App: only steps around']),
+    ]
+    expect(resolveSteps([], members)).toEqual(['App: only steps around'])
+  })
+
+  it('returns [] when neither recipe nor members carry steps', () => {
+    expect(resolveSteps([], [member(1, 'Run', [])])).toEqual([])
+    expect(resolveSteps([], [])).toEqual([])
+  })
+})
+
 describe('mean', () => {
   it('returns 0 for an empty list', () => {
     expect(mean([])).toBe(0)
@@ -143,6 +185,7 @@ describe('buildClusterInfo', () => {
           interactionMin: 4,
           title: 'Run A',
           apps: ['Excel'],
+          steps: [],
         },
         // 2-min span, 2 active
         {
@@ -151,6 +194,7 @@ describe('buildClusterInfo', () => {
           interactionMin: 2,
           title: 'Run B',
           apps: ['Excel', 'Mail'],
+          steps: [],
         },
       ],
       10,
@@ -180,6 +224,7 @@ describe('buildClusterInfo', () => {
           interactionMin: 4,
           title: 'Old run',
           apps: ['Excel'],
+          steps: [],
         },
         {
           startedAt: NOW - DAY_MS,
@@ -187,6 +232,7 @@ describe('buildClusterInfo', () => {
           interactionMin: 4,
           title: 'Recent run',
           apps: ['Mail'],
+          steps: [],
         },
       ],
       10,
@@ -204,5 +250,27 @@ describe('buildClusterInfo', () => {
     expect(info.firstSeenAt).toBeNull()
     expect(info.lastSeenAt).toBeNull()
     expect(info.recurrence).toEqual([])
+  })
+
+  it('falls back to in-window member steps when the cluster has no recipe', () => {
+    const stepped = (startedAt: number, steps: string[]): ClusterMember => ({
+      startedAt,
+      endedAt: startedAt + 1000,
+      interactionMin: 1,
+      title: 'Run',
+      apps: [],
+      steps,
+    })
+    const info = buildClusterInfo(
+      head,
+      [
+        stepped(NOW - 100 * DAY_MS, ['App: out of window']),
+        stepped(NOW - 2 * DAY_MS, ['App: older']),
+        stepped(NOW - DAY_MS, ['App: newest']),
+      ],
+      10,
+      NOW,
+    )
+    expect(info.steps).toEqual(['App: newest'])
   })
 })

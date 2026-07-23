@@ -14,6 +14,7 @@ const createSighting = (id: string): Sighting => ({
   title: 'Test sighting',
   subject: '',
   description: 'Did the thing',
+  steps: [],
   apps: ['TestApp'],
   activityIds: ['act-1'],
   startedAt: 1000,

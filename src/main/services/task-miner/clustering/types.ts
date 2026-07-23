@@ -33,6 +33,8 @@ export const CLUSTERING_CONFIG = {
   MERGE_DECLINE_TTL_MS: 30 * 24 * 60 * 60 * 1000,
   /** Most-recent member sightings shown to the LLM per non-splittable cluster. */
   MAX_SAMPLE_MEMBERS: 15,
+  /** Most-recent sample members that carry their run's steps (bounds prompt growth). */
+  MAX_STEPPED_SAMPLE_MEMBERS: 5,
   /**
    * Cap on clusters sent for (re)label/classify per run, so a backlog (e.g.
    * every cluster needing a kind after a rebuild) drains over several runs
@@ -82,6 +84,8 @@ export interface ReviewSighting {
   title: string
   subject: string
   description: string
+  /** This run's observed happy-path steps; only on the most recent sample members. */
+  steps?: string[]
   /** App identities off the sighting: website host for web work, app name otherwise. */
   apps: string[]
   interaction_min: number
