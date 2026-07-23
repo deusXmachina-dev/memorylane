@@ -1,4 +1,4 @@
-# Run by the MSI as SYSTEM (see patches/app-builder-lib+*.patch) to start the
+# Run by the MSI as SYSTEM (see build/msi-custom-actions.js) to start the
 # app after an install/upgrade/repair. A SYSTEM custom action cannot spawn into
 # the logged-on user's interactive session directly, so it registers a
 # trigger-less scheduled task under the Users group and starts it once. The

@@ -127,6 +127,8 @@ module.exports = {
     perMachine: true,
     oneClick: true,
     artifactName: '${productName}-Setup.${ext}',
+    // WixCA/WixQuietExec64 for the injected custom actions (build/msi-custom-actions.js)
+    additionalWixArgs: ['-ext', 'WixUtilExtension'],
   },
   pkg: {
     artifactName: '${productName}-${arch}-mac.${ext}',
