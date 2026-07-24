@@ -28,8 +28,6 @@ import { listInstalledApps } from '../apps/installed-apps'
 import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
 import { VENDORS } from '../../shared/types'
 import { computeClustersView } from './cluster-view'
-import { getEffectivePresets } from '@main/settings/effective-model-presets'
-import { getPresetDefaults } from '../../shared/vendor-defaults'
 import type { RemoteModelConfig } from '../../shared/remote-model-config'
 import { applyVendorSwitch } from './vendor-switch'
 import { applyModelSettings } from './model-settings'
@@ -114,9 +112,8 @@ interface MainWindowDependencies {
   captureSettingsManager: CaptureSettingsManager
   userContextBuilder?: UserContextBuilderService
   taskMiner?: TaskMinerService
-  /** Latest remote model config (cached or synced); null when the OpenRouter
-   * key isn't managed or none is known. */
   getRemoteModelConfig?: () => RemoteModelConfig | null
+  isManaged?: () => boolean
   getCaptureHotkeyLabel: () => string
   reconfigureCaptureHotkey: (accelerator: string) => { success: boolean; error?: string }
   updateExclusions: (exclusions: {
@@ -159,52 +156,6 @@ let isQuitting = false
 app.on('before-quit', () => {
   isQuitting = true
 })
-
-/**
- * In managed mode the renderer only exposes the vendor's preset grid, so a
- * non-preset model id lingering in the remembered selection is stale and
- * unreachable from the UI. Reset such slots to the vendor's preset default.
- * Returns true if any field was rewritten.
- */
-function reconcileManagedModelSelections(
-  captureSettings: CaptureSettingsManager,
-  vendor: Vendor,
-  remote: RemoteModelConfig | null,
-): boolean {
-  // Validate against the effective (remote-aware) presets — the baked lists
-  // would flag remote-applied models as stale and reset them.
-  const presets = getEffectivePresets(vendor, remote)
-  const settings = captureSettings.get()
-  const defaults = getPresetDefaults(presets)
-  const updates: Partial<{
-    semanticVideoModel: string
-    semanticSnapshotModel: string
-    patternDetectionModel: string
-  }> = {}
-  const isValid = (id: string, list: { id: string }[]): boolean =>
-    list.length === 0 || list.some((p) => p.id === id)
-  if (settings.semanticVideoModel && !isValid(settings.semanticVideoModel, presets.semanticVideo)) {
-    updates.semanticVideoModel = defaults.semanticVideoModel
-  }
-  if (
-    settings.semanticSnapshotModel &&
-    !isValid(settings.semanticSnapshotModel, presets.semanticSnapshot)
-  ) {
-    updates.semanticSnapshotModel = defaults.semanticSnapshotModel
-  }
-  if (
-    settings.patternDetectionModel &&
-    !isValid(settings.patternDetectionModel, presets.patternDetection)
-  ) {
-    updates.patternDetectionModel = defaults.patternDetectionModel
-  }
-  if (Object.keys(updates).length === 0) return false
-  log.info(
-    `[MainWindow] Reconciling stale managed-mode model picks for ${vendor}: ${Object.keys(updates).join(', ')}`,
-  )
-  captureSettings.save(updates)
-  return true
-}
 
 function buildStatus(): MainWindowStatus {
   return {
@@ -683,6 +634,18 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         lastAttemptAt: null,
       }
     }
+    if (deps.isManaged?.()) {
+      const models = deps.getRemoteModelConfig?.()?.models
+      if (!models?.semanticVideo?.length && !models?.semanticSnapshot?.length) {
+        return {
+          configured: true,
+          state: 'waiting_for_config',
+          consecutiveFailures: 0,
+          lastError: null,
+          lastAttemptAt: null,
+        }
+      }
+    }
     return deps.semanticService.getLlmHealthStatus()
   })
 
@@ -711,17 +674,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         log.info(`[MainWindow] Switching active vendor to ${vendor} (managed)`)
         deps.captureSettingsManager.setActiveVendor(vendor)
       }
-      // In managed mode the UI only offers the vendor's preset grid, so any
-      // non-preset model lingering in the remembered selection (e.g. from a
-      // prior BYOK session with a freetext model id) is unreachable and stale.
-      // Reset such slots to the vendor's preset default; valid preset picks
-      // are preserved.
-      const reconciled = reconcileManagedModelSelections(
-        deps.captureSettingsManager,
-        vendor,
-        deps.getRemoteModelConfig?.() ?? null,
-      )
-      if (switching || reconciled) {
+      if (switching) {
         applyVendorSwitch(deps, deps.captureSettingsManager.get())
       } else if (changed) {
         // Genuine key rotation with no vendor/model change: refresh the SDK and

@@ -9,13 +9,14 @@ export const REMOTE_MODEL_SLOTS = [
 export type RemoteModelSlot = (typeof REMOTE_MODEL_SLOTS)[number]
 
 /**
- * Backend-published model pipeline config (`GET api/config/models`). One global
- * config; applies only to installs running a managed OpenRouter key — BYOK and
- * custom endpoints keep full model control.
+ * Backend-published model pipeline config (`GET api/config/models`). Managed
+ * installs take their model chains strictly and exclusively from here — the
+ * backend is responsible for serving ids valid for the provider it assigned.
+ * BYOK and custom endpoints keep full model control and never consult it.
  */
 export interface RemoteModelConfig {
-  /** Monotonic; 0 = no remote opinion. The backend bumps it on ANY change to `models`. */
+  /** Config revision; informational only — the latest fetched config always applies. */
   version: number
-  /** Ordered fallback chains of OpenRouter model ids. Empty/missing slot → baked VENDOR_PRESETS. */
+  /** Ordered fallback chains of model ids. Empty/missing slot → that consumer idles. */
   models: Partial<Record<RemoteModelSlot, string[]>>
 }

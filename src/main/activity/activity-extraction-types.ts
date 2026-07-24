@@ -36,6 +36,8 @@ export interface ActivityExtractorConfig {
   maxRetries: number
   retryBackoffMs: number
   onTaskComplete?: (activity: Activity, outcome: 'succeeded' | 'dead-lettered') => void
+  /** When false, dispatch is held: tasks queue unprocessed and unacked until kick(). */
+  isReady?: () => boolean
 }
 
 export interface ActivityExtractorStats {

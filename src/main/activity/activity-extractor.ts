@@ -95,6 +95,7 @@ export class ActivityExtractor {
     await this.waitForIdle()
     await this.ackChain
 
+    this.pending = []
     this.started = false
   }
 
@@ -123,8 +124,17 @@ export class ActivityExtractor {
     this.tryDispatch()
   }
 
+  kick(): void {
+    this.tryDispatch()
+  }
+
+  private isGated(): boolean {
+    return this.config.isReady?.() === false
+  }
+
   private tryDispatch(): void {
     if (!this.started) return
+    if (this.isGated()) return
 
     while (this.inFlight < this.config.maxConcurrent && this.pending.length > 0) {
       const task = this.pending.shift()!
@@ -257,7 +267,7 @@ export class ActivityExtractor {
    * has seen so far — callers can rely on that to drain before snapshotting.
    */
   async waitForIdle(): Promise<void> {
-    if (this.inFlight === 0 && this.pending.length === 0) {
+    if (this.inFlight === 0 && (this.pending.length === 0 || this.isGated())) {
       return
     }
 
@@ -267,7 +277,7 @@ export class ActivityExtractor {
   }
 
   private resolveIdleIfNeeded(): void {
-    if (this.inFlight !== 0 || this.pending.length !== 0) return
+    if (this.inFlight !== 0 || (this.pending.length !== 0 && !this.isGated())) return
     if (this.idleWaiters.length === 0) return
 
     const waiters = this.idleWaiters.splice(0)

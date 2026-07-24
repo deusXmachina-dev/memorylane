@@ -91,29 +91,34 @@ describe('applyModelSettings', () => {
     expect(semanticService.updateModels).not.toHaveBeenCalled()
   })
 
-  it('uses remote chains for the tail and diverges the user-context model', () => {
+  it('managed: pushes remote chains verbatim and ignores stored picks', () => {
     const { deps, semanticService, taskMiner, userContextBuilder } = makeDeps()
+    deps.isManaged = () => true
     deps.getRemoteModelConfig = () => ({
       version: 2,
       models: {
         semanticVideo: ['remote/video-a', 'remote/video-b'],
+        taskMining: ['remote/miner'],
         userContext: ['remote/context-model'],
+        clusterReview: ['remote/cluster'],
       },
     })
-    const previous = makeSettings({
-      semanticVideoModel: 'remote/video-a',
-      patternDetectionModel: 'old/model',
-    })
+    const previous = makeSettings({ patternDetectionModel: 'old/model' })
     const updated = makeSettings({
-      semanticVideoModel: 'remote/video-b',
+      semanticVideoModel: 'ignored/pick',
       patternDetectionModel: 'new/model',
     })
 
     applyModelSettings(deps, updated, previous)
 
-    const [videoModels] = semanticService.updateModels.mock.calls[0] as [string[], string[]]
-    expect(videoModels).toEqual(['remote/video-b', 'remote/video-a'])
-    expect(taskMiner.updateModel).toHaveBeenCalledWith('new/model')
+    const [videoModels, snapshotModels] = semanticService.updateModels.mock.calls[0] as [
+      string[],
+      string[],
+    ]
+    expect(videoModels).toEqual(['remote/video-a', 'remote/video-b'])
+    expect(snapshotModels).toEqual([])
+    expect(taskMiner.updateModel).toHaveBeenCalledWith('remote/miner')
+    expect(taskMiner.updateClusterModel).toHaveBeenCalledWith('remote/cluster')
     expect(userContextBuilder.updateModel).toHaveBeenCalledWith('remote/context-model')
   })
 })

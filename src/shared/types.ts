@@ -97,7 +97,12 @@ export interface VendorStatus {
   baseURL: string | null
 }
 
-export type LlmHealthState = 'not_configured' | 'unknown' | 'active' | 'failing'
+export type LlmHealthState =
+  | 'not_configured'
+  | 'waiting_for_config'
+  | 'unknown'
+  | 'active'
+  | 'failing'
 
 export interface LlmHealthStatus {
   configured: boolean
@@ -243,8 +248,6 @@ export interface CaptureSettings {
   urlMatchSchemaVersion?: number
   appMatchSchemaVersion?: number
   modelDefaultsVersion?: number
-  /** Version of the last-applied remote model config; 0 = never applied. */
-  remoteModelConfigVersion?: number
   activeVendor: Vendor
   semanticVideoModel: string
   semanticSnapshotModel: string

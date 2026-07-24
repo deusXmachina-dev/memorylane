@@ -222,7 +222,7 @@ function extractContextFromResponse(content: string): ParsedContext | null {
 export class UserContextBuilder {
   private running = false
   private settleTimer: ReturnType<typeof setTimeout> | null = null
-  private model: string = DEFAULT_BUILDER_CONFIG.model
+  private model = ''
 
   constructor(
     private readonly storage: StorageService,
@@ -230,8 +230,8 @@ export class UserContextBuilder {
   ) {}
 
   updateModel(model: string): void {
-    this.model = model && model.trim().length > 0 ? model.trim() : DEFAULT_BUILDER_CONFIG.model
-    log.info(`[UserContextBuilder] Model updated to: ${this.model}`)
+    this.model = model.trim()
+    log.info(`[UserContextBuilder] Model updated to: ${this.model || '(none — builder idle)'}`)
   }
 
   /**
@@ -243,6 +243,11 @@ export class UserContextBuilder {
 
     if (!this.provider || !this.provider.isConfigured()) {
       log.info('[UserContextBuilder] No inference provider configured, skipping')
+      return
+    }
+
+    if (!this.model) {
+      log.info('[UserContextBuilder] No model configured, skipping')
       return
     }
 
@@ -313,6 +318,9 @@ async function runUserContextUpdate(
   onProgress?: ProgressCallback,
 ): Promise<UserContextResult> {
   const cfg = { ...DEFAULT_BUILDER_CONFIG, ...config }
+  if (!cfg.model) {
+    throw new Error('No model configured for user-context update')
+  }
 
   const progress = (msg: string) => {
     log.info(`[UserContextBuilder] ${msg}`)

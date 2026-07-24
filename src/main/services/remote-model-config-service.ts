@@ -10,8 +10,8 @@ const DEFAULT_SYNC_INTERVAL_MS = 5 * 60 * 1000
 
 /**
  * Polls the backend's model pipeline config (`GET api/config/models`). The
- * apply layer decides what to overwrite based on the config's version.
- * `isActivated` gates syncing entirely: it requires a managed OpenRouter key
+ * latest fetched config is pushed into the live services as-is. `isActivated`
+ * gates syncing entirely: it requires a managed key for the active vendor
  * (plus enterprise activation in that edition) — BYOK/custom installs never
  * poll.
  */
