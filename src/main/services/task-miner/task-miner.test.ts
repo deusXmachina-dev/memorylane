@@ -23,8 +23,8 @@ const embedder: MinerEmbedder = {
   embedBatch: async (texts) => texts.map(() => [0.1, 0.2, 0.3]),
 }
 
-// scheduleRun() only arms the settle timer once the DB has at least this many
-// activities, so seed that many to reach the timer branch.
+// scheduleRun() only sweeps once the DB has at least this many activities,
+// so seed that many to reach the sweep branch.
 const seedActivities = (storage: StorageService, count: number): void => {
   for (let i = 0; i < count; i++) {
     storage.activities.add({
@@ -63,17 +63,17 @@ describe('TaskMiner.isBusy', () => {
     expect(miner.isBusy()).toBe(false)
   })
 
-  it('is true once a run is armed (settle timer set), before it fires', () => {
-    vi.useFakeTimers()
+  it('is true while a sweep is in flight', async () => {
     seedActivities(storage, PATTERN_DETECTION_CONFIG.MIN_ACTIVITIES)
     const miner = new TaskMiner(storage, configuredProvider, embedder)
     miner.updateModel('test/model')
 
     expect(miner.isBusy()).toBe(false)
     miner.scheduleRun()
-    // The settle timer is armed but has not fired — this is exactly the
-    // in-flight state a wipe must not slip past.
+    // The sweep started synchronously — this is exactly the in-flight state a
+    // wipe must not slip past.
     expect(miner.isBusy()).toBe(true)
+    while (miner.isBusy()) await Promise.resolve()
   })
 })
 
@@ -111,6 +111,25 @@ describe('TaskMiner sweep', () => {
     }
   }
 
+  // Enough activities to pass the MIN_ACTIVITIES guard, all inside already-seeded
+  // days, so scheduleRun can reach the sweep branch.
+  const seedFiller = (): void => {
+    for (let i = 0; i < PATTERN_DETECTION_CONFIG.MIN_ACTIVITIES; i++) {
+      storage.activities.add({
+        id: `filler-${i}`,
+        appName: 'TestApp',
+        windowTitle: 'w',
+        tld: null,
+        startTimestamp: dayStart(1) + 3000 + i,
+        endTimestamp: dayStart(1) + 4000 + i,
+        summary: 's',
+        summaryModel: '',
+        ocrText: '',
+        vector: v(0.1),
+      })
+    }
+  }
+
   beforeEach(() => {
     deleteDbFiles(TEST_DB_PATH)
     storage = new StorageService(TEST_DB_PATH)
@@ -133,6 +152,7 @@ describe('TaskMiner sweep', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     storage.close()
     deleteDbFiles(TEST_DB_PATH)
   })
@@ -245,24 +265,13 @@ describe('TaskMiner sweep', () => {
     )
   })
 
-  it('scheduleRun arms nothing when every day is already settled', async () => {
+  const drain = async (): Promise<void> => {
+    while (miner.isBusy()) await Promise.resolve()
+  }
+
+  it('scheduleRun stands down when every day is already settled', async () => {
     seedDays(2)
-    // Enough activities to pass the MIN_ACTIVITIES guard, all inside days the
-    // sweep below settles — the pending check must be what stands down.
-    for (let i = 0; i < PATTERN_DETECTION_CONFIG.MIN_ACTIVITIES; i++) {
-      storage.activities.add({
-        id: `filler-${i}`,
-        appName: 'TestApp',
-        windowTitle: 'w',
-        tld: null,
-        startTimestamp: dayStart(1) + 3000 + i,
-        endTimestamp: dayStart(1) + 4000 + i,
-        summary: 's',
-        summaryModel: '',
-        ocrText: '',
-        vector: v(0.1),
-      })
-    }
+    seedFiller()
     await miner.sweepNow(configuredProvider)
 
     miner.scheduleRun()
@@ -270,7 +279,84 @@ describe('TaskMiner sweep', () => {
     expect(miner.isBusy()).toBe(false)
   })
 
+  it('the poll started by startup() triggers a sweep', async () => {
+    vi.useFakeTimers()
+    seedDays(2)
+    seedFiller()
+
+    miner.startup()
+    expect(miner.isBusy()).toBe(false)
+
+    vi.advanceTimersByTime(TASK_BACKFILL.POLL_INTERVAL_MS)
+    expect(miner.isBusy()).toBe(true)
+    await drain()
+    expect(storage.miningDays.getAll().every((d) => d.status === 'completed')).toBe(true)
+  })
+
+  it('backoff-gates scheduleRun after a failed sweep', async () => {
+    vi.useFakeTimers()
+    seedDays(2)
+    seedFiller()
+    mockedRunDetection.mockRejectedValueOnce(new Error('blip'))
+    await miner.sweepNow(configuredProvider)
+
+    miner.scheduleRun()
+    expect(miner.isBusy()).toBe(false)
+
+    vi.advanceTimersByTime(TASK_BACKFILL.RETRY_INITIAL_MS)
+    miner.scheduleRun()
+    expect(miner.isBusy()).toBe(true)
+    await drain()
+    expect(storage.miningDays.getAll().every((d) => d.status === 'completed')).toBe(true)
+  })
+
+  it('doubles the backoff after consecutive failed sweeps', async () => {
+    vi.useFakeTimers()
+    seedDays(2)
+    seedFiller()
+    mockedRunDetection.mockRejectedValue(new Error('down'))
+
+    await miner.sweepNow(configuredProvider)
+    vi.advanceTimersByTime(TASK_BACKFILL.RETRY_INITIAL_MS)
+    miner.scheduleRun()
+    await drain()
+
+    vi.advanceTimersByTime(TASK_BACKFILL.RETRY_INITIAL_MS)
+    miner.scheduleRun()
+    expect(miner.isBusy()).toBe(false)
+
+    vi.advanceTimersByTime(TASK_BACKFILL.RETRY_INITIAL_MS)
+    miner.scheduleRun()
+    expect(miner.isBusy()).toBe(true)
+    await drain()
+  })
+
+  it('resets the backoff after a clean sweep', async () => {
+    vi.useFakeTimers()
+    seedDays(2)
+    seedFiller()
+    mockedRunDetection
+      .mockRejectedValueOnce(new Error('blip'))
+      .mockRejectedValueOnce(new Error('blip'))
+
+    await miner.sweepNow(configuredProvider)
+    await miner.sweepNow(configuredProvider)
+    const clean = await miner.sweepNow(configuredProvider)
+    expect(clean).toMatchObject({ daysMined: 2, daysFailed: 0 })
+
+    storage.wipeTasks()
+    mockedRunDetection.mockRejectedValueOnce(new Error('blip'))
+    await miner.sweepNow(configuredProvider)
+
+    // An un-reset backoff would gate this attempt for 8 minutes, not 2.
+    vi.advanceTimersByTime(TASK_BACKFILL.RETRY_INITIAL_MS)
+    miner.scheduleRun()
+    expect(miner.isBusy()).toBe(true)
+    await drain()
+  })
+
   it('startup resets a stale running day so the sweep can retry it', async () => {
+    vi.useFakeTimers()
     seedDays(1)
     storage.miningDays.enqueueMissing([localLabel(1)])
     storage.miningDays.claimOldestPending() // simulate a crash mid-mine

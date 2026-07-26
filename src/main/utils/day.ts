@@ -16,7 +16,7 @@ export function getDayBoundaries(daysBack: number): {
   const now = new Date()
   const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysBack)
   const start = day.getTime()
-  const end = start + 24 * 60 * 60 * 1000 - 1
+  const end = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1).getTime() - 1
   const label = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
   return { start, end, label }
 }
