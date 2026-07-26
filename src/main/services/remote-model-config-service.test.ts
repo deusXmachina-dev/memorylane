@@ -39,7 +39,6 @@ describe('RemoteModelConfigService', () => {
   afterEach(() => {
     globalThis.fetch = originalFetch
     vi.restoreAllMocks()
-    vi.useRealTimers()
   })
 
   it('fetches with the device bearer and exposes the synced config', async () => {
@@ -118,58 +117,6 @@ describe('RemoteModelConfigService', () => {
     // Applied and broadcast synchronously, before the async first sync resolves.
     expect(service.getConfig()).toEqual(CONFIG_V1)
     expect(onChange).toHaveBeenCalledWith(CONFIG_V1)
-  })
-
-  it('retries on a short backoff until the first config arrives', async () => {
-    vi.useFakeTimers()
-    const responses: Response[] = [jsonResponse({}, false, 500), jsonResponse(CONFIG_V1)]
-    const fetchMock = vi.fn<typeof fetch>(async () => responses.shift() ?? jsonResponse(CONFIG_V1))
-    globalThis.fetch = fetchMock
-
-    const { service, onChange } = makeService()
-    service.start()
-    await vi.advanceTimersByTimeAsync(0)
-    expect(service.getConfig()).toBeNull()
-
-    await vi.advanceTimersByTimeAsync(15_000)
-    expect(service.getConfig()).toEqual(CONFIG_V1)
-    expect(onChange).toHaveBeenCalledTimes(1)
-
-    await vi.advanceTimersByTimeAsync(60_000)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    service.stop()
-  })
-
-  it('does not fast-retry once a config is held', async () => {
-    vi.useFakeTimers()
-    const responses: Response[] = [jsonResponse(CONFIG_V1)]
-    const fetchMock = vi.fn<typeof fetch>(
-      async () => responses.shift() ?? jsonResponse({}, false, 500),
-    )
-    globalThis.fetch = fetchMock
-
-    const { service } = makeService()
-    service.start()
-    await vi.advanceTimersByTimeAsync(0)
-    expect(service.getConfig()).toEqual(CONFIG_V1)
-
-    await vi.advanceTimersByTimeAsync(60_000)
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    service.stop()
-  })
-
-  it('stop() cancels a pending first-value retry', async () => {
-    vi.useFakeTimers()
-    const fetchMock = vi.fn<typeof fetch>(async () => jsonResponse({}, false, 500))
-    globalThis.fetch = fetchMock
-
-    const { service } = makeService()
-    service.start()
-    await vi.advanceTimersByTimeAsync(0)
-    service.stop()
-
-    await vi.advanceTimersByTimeAsync(120_000)
-    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('treats a missing cache on start() as a no-op', async () => {

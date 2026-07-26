@@ -1,8 +1,5 @@
 import log from '@main/utils/logger'
 
-const FIRST_VALUE_RETRY_BASE_MS = 15 * 1000
-const FIRST_VALUE_RETRY_MAX_MS = 60 * 1000
-
 export interface RemoteSyncServiceParams<T> {
   getDeviceId: () => string
   /** Gates syncing entirely; polling is skipped while it returns false. */
@@ -27,18 +24,12 @@ export interface RemoteSyncServiceParams<T> {
  * Any failure (4xx/5xx, network error, malformed JSON) is logged and keeps the
  * cache. Change detection is by serialized comparison, so onChange fires only
  * on a real change.
- *
- * While no value is held yet, a failed sync retries on a short backoff so a
- * just-activated device doesn't wait out the full poll interval for its first
- * value.
  */
 export abstract class RemoteSyncService<T> {
   private value: T | null = null
   private serialized = ''
   private cachePending = false
   private timer: ReturnType<typeof setInterval> | null = null
-  private retryTimer: ReturnType<typeof setTimeout> | null = null
-  private retryDelayMs = FIRST_VALUE_RETRY_BASE_MS
   private syncing = false
   private readonly intervalMs: number
 
@@ -88,24 +79,6 @@ export abstract class RemoteSyncService<T> {
       clearInterval(this.timer)
       this.timer = null
     }
-    this.clearRetry()
-  }
-
-  private clearRetry(): void {
-    if (this.retryTimer !== null) {
-      clearTimeout(this.retryTimer)
-      this.retryTimer = null
-    }
-  }
-
-  private scheduleRetryIfEmpty(): void {
-    if (this.value !== null || this.timer === null || this.retryTimer !== null) return
-    this.retryTimer = setTimeout(() => {
-      this.retryTimer = null
-      void this.sync()
-    }, this.retryDelayMs)
-    this.retryTimer.unref?.()
-    this.retryDelayMs = Math.min(this.retryDelayMs * 2, FIRST_VALUE_RETRY_MAX_MS)
   }
 
   /** One sync pass. Skips while a prior pass is in flight or the device isn't
@@ -114,7 +87,6 @@ export abstract class RemoteSyncService<T> {
     if (this.syncing || !this.params.isActivated()) return
     const base = this.params.getBackendUrl()
     if (!base) return
-    this.clearRetry()
     this.syncing = true
     try {
       const next = await this.fetchRemote(base)
@@ -129,7 +101,6 @@ export abstract class RemoteSyncService<T> {
       log.warn(`[${this.tag}] Sync failed:`, error)
     } finally {
       this.syncing = false
-      this.scheduleRetryIfEmpty()
     }
   }
 
