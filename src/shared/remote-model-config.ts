@@ -17,6 +17,6 @@ export type RemoteModelSlot = (typeof REMOTE_MODEL_SLOTS)[number]
 export interface RemoteModelConfig {
   /** Config revision; informational only — the latest fetched config always applies. */
   version: number
-  /** Ordered fallback chains of model ids. Empty/missing slot → that consumer idles. */
+  /** Ordered fallback chains of model ids. Empty/missing slot → baked VENDOR_PRESETS. */
   models: Partial<Record<RemoteModelSlot, string[]>>
 }

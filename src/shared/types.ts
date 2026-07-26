@@ -97,12 +97,7 @@ export interface VendorStatus {
   baseURL: string | null
 }
 
-export type LlmHealthState =
-  | 'not_configured'
-  | 'waiting_for_config'
-  | 'unknown'
-  | 'active'
-  | 'failing'
+export type LlmHealthState = 'not_configured' | 'unknown' | 'active' | 'failing'
 
 export interface LlmHealthStatus {
   configured: boolean

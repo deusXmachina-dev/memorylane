@@ -57,7 +57,6 @@ export interface MainRuntime {
     excludePrivateBrowsing: boolean
   }): void
   setManagedExclusions(managed: { apps: string[]; urlPatterns: string[] }): void
-  kickActivityProcessing(): void
   purgeAll(): Promise<void>
   dispose(): Promise<void>
 }
@@ -74,7 +73,6 @@ export async function createMainRuntime(params: {
   edition: AppEdition
   vendorCredentials: VendorCredentialsManager
   getActiveVendor: () => Vendor
-  isProcessingReady?: () => boolean
   initialVideoModels?: string[]
   initialSnapshotModels?: string[]
 }): Promise<MainRuntime> {
@@ -174,7 +172,6 @@ export async function createMainRuntime(params: {
     outputDir,
     extractorTransformer: transformer,
     extractorSink: sink,
-    activityExtractorConfig: { isReady: params.isProcessingReady },
     retainScreenshots,
   })
 
@@ -257,9 +254,6 @@ export async function createMainRuntime(params: {
     },
     setManagedExclusions(managed): void {
       blacklistCoordinator.setManagedExclusions(managed)
-    },
-    kickActivityProcessing(): void {
-      harness.activityExtractor?.kick()
     },
     async purgeAll(): Promise<void> {
       const wasCapturing = capture.isCapturingNow()

@@ -108,7 +108,7 @@ export interface SemanticDebugDumper {
 
 export interface LlmHealthStatus {
   configured: boolean
-  state: 'not_configured' | 'waiting_for_config' | 'unknown' | 'active' | 'failing'
+  state: 'not_configured' | 'unknown' | 'active' | 'failing'
   consecutiveFailures: number
   lastError: string | null
   lastAttemptAt: number | null

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { resolveModelPush, pushModelSelections, hasRequiredSemanticModels } from './apply-models'
+import { resolveModelPush, pushModelSelections } from './apply-models'
 import { VENDOR_PRESETS, buildModelChain } from '../../shared/vendor-defaults'
 import { makeCaptureSettings } from '@main/utils/test-utils'
 import type { RemoteModelConfig } from '../../shared/remote-model-config'
@@ -52,15 +52,25 @@ describe('resolveModelPush', () => {
     expect(r.videoModels).toEqual(VENDOR_PRESETS.google.semanticVideo.map((p) => p.id))
   })
 
-  it('managed: a fetched config with empty slots idles, never falls back to defaults', () => {
+  it('managed: empty slots fall back to the baked defaults per slot', () => {
     const settings = makeCaptureSettings()
 
-    const emptySlots = resolveModelPush(settings, { version: 1, models: {} }, true)
-    expect(emptySlots.videoModels).toEqual([])
-    expect(emptySlots.snapshotModels).toEqual([])
-    expect(emptySlots.minerModel).toBe('')
-    expect(emptySlots.clusterModel).toBeNull()
-    expect(emptySlots.userContextModel).toBe('')
+    const partial = resolveModelPush(
+      settings,
+      { version: 1, models: { semanticVideo: ['remote/video'] } },
+      true,
+    )
+    expect(partial.videoModels).toEqual(['remote/video'])
+    expect(partial.snapshotModels).toEqual(
+      VENDOR_PRESETS.openrouter.semanticSnapshot.map((p) => p.id),
+    )
+    expect(partial.minerModel).toBe(VENDOR_PRESETS.openrouter.patternDetection[0].id)
+    expect(partial.clusterModel).toBeNull()
+    expect(partial.userContextModel).toBe(partial.minerModel)
+
+    expect(resolveModelPush(settings, { version: 1, models: {} }, true)).toEqual(
+      resolveModelPush(settings, null, true),
+    )
   })
 
   it('byok: builds pick-headed chains from the baked presets', () => {
@@ -119,31 +129,5 @@ describe('pushModelSelections', () => {
     expect(taskMiner.updateModel).toHaveBeenCalledWith('remote/miner')
     expect(taskMiner.updateClusterModel).toHaveBeenCalledWith('remote/cluster')
     expect(userContextBuilder.updateModel).toHaveBeenCalledWith('remote/context')
-  })
-})
-
-describe('hasRequiredSemanticModels', () => {
-  const settings = makeCaptureSettings()
-  const resolve = (models: RemoteModelConfig['models']) =>
-    resolveModelPush(settings, { version: 1, models }, true)
-  const videoOnly = resolve({ semanticVideo: ['remote/video'] })
-  const snapshotOnly = resolve({ semanticSnapshot: ['remote/snapshot'] })
-
-  it('auto and image require the snapshot chain', () => {
-    expect(hasRequiredSemanticModels(snapshotOnly, 'auto')).toBe(true)
-    expect(hasRequiredSemanticModels(snapshotOnly, 'image')).toBe(true)
-    expect(hasRequiredSemanticModels(videoOnly, 'auto')).toBe(false)
-    expect(hasRequiredSemanticModels(videoOnly, 'image')).toBe(false)
-  })
-
-  it('video mode requires the video chain', () => {
-    expect(hasRequiredSemanticModels(videoOnly, 'video')).toBe(true)
-    expect(hasRequiredSemanticModels(snapshotOnly, 'video')).toBe(false)
-  })
-
-  it('empty slots are never ready, but a missing config resolves to ready defaults', () => {
-    expect(hasRequiredSemanticModels(resolve({}), 'auto')).toBe(false)
-    expect(hasRequiredSemanticModels(resolve({}), 'video')).toBe(false)
-    expect(hasRequiredSemanticModels(resolveModelPush(settings, null, true), 'auto')).toBe(true)
   })
 })

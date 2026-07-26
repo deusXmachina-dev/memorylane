@@ -184,7 +184,7 @@ describe('applyVendorSwitch', () => {
       string[],
     ]
     expect(videoModels).toEqual(['remote/video-model'])
-    expect(snapshotModels).toEqual([])
+    expect(snapshotModels).toEqual(VENDOR_PRESETS.openrouter.semanticSnapshot.map((p) => p.id))
     expect(taskMiner.updateModel).toHaveBeenCalledWith('remote/miner-model')
     expect(userContextBuilder.updateModel).toHaveBeenCalledWith('remote/context-model')
   })

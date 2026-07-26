@@ -41,7 +41,7 @@ import { readRemoteBlacklist, writeRemoteBlacklist } from './services/remote-bla
 import { RemoteModelConfigService } from './services/remote-model-config-service'
 import { readRemoteModelConfig, writeRemoteModelConfig } from './services/remote-model-config-store'
 import type { RemoteModelConfig } from '../shared/remote-model-config'
-import { hasRequiredSemanticModels, pushModelSelections, resolveModelPush } from './ui/apply-models'
+import { pushModelSelections, resolveModelPush } from './ui/apply-models'
 import { DeviceReportSync } from './services/device-report-sync'
 import { readDeviceReportState, writeDeviceReportState } from './services/device-report-store'
 import { createMainRuntime, type MainRuntime } from './runtime'
@@ -280,15 +280,6 @@ app.on('ready', async () => {
   })
   const getRemoteModelConfig = (): RemoteModelConfig | null =>
     isManagedInstall() ? (remoteModelConfig?.getConfig() ?? null) : null
-  const isProcessingReady = (): boolean => {
-    if (!isManagedInstall()) return true
-    const settings = captureSettingsManager.get()
-    return hasRequiredSemanticModels(
-      resolveModelPush(settings, getRemoteModelConfig(), true),
-      settings.semanticPipelineMode,
-    )
-  }
-
   const initialModels = resolveModelPush(
     initialCaptureSettings,
     getRemoteModelConfig(),
@@ -309,7 +300,6 @@ app.on('ready', async () => {
     deviceIdentity,
     vendorCredentials: vendorCredentialsManager,
     getActiveVendor: () => captureSettingsManager.get().activeVendor,
-    isProcessingReady,
     initialVideoModels: initialModels.videoModels,
     initialSnapshotModels: initialModels.snapshotModels,
   })
@@ -408,9 +398,6 @@ app.on('ready', async () => {
       config,
       true,
     )
-    taskMiner?.scheduleRun()
-    userContextBuilder?.scheduleRun()
-    runtime.kickActivityProcessing()
   }
   remoteModelConfig.start()
 
@@ -520,7 +507,6 @@ app.on('ready', async () => {
     taskMiner: taskMiner ?? undefined,
     getRemoteModelConfig,
     isManaged: isManagedInstall,
-    isProcessingReady,
     syncRemoteModelConfig: () => void remoteModelConfig?.sync(),
     getCaptureHotkeyLabel: hotkeyManager.getLabel,
     reconfigureCaptureHotkey,

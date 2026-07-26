@@ -21,14 +21,12 @@ interface LlmStatusPanelProps {
 // is green (DEU-176).
 function dotClass(configured: boolean, llmHealth: LlmHealthStatus | null): string {
   if (!configured || llmHealth?.state === 'not_configured') return 'bg-muted-foreground/40'
-  if (llmHealth?.state === 'waiting_for_config') return 'bg-muted-foreground/40'
   if (llmHealth?.state === 'failing') return 'bg-destructive'
   return 'bg-emerald-500'
 }
 
 function stateLabel(configured: boolean, llmHealth: LlmHealthStatus | null): string {
   if (!configured || llmHealth?.state === 'not_configured') return 'Not configured'
-  if (llmHealth?.state === 'waiting_for_config') return 'Waiting for model config'
   if (llmHealth?.state === 'failing') return 'Failing'
   return 'Connected'
 }

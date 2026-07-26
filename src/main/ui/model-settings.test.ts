@@ -116,7 +116,7 @@ describe('applyModelSettings', () => {
       string[],
     ]
     expect(videoModels).toEqual(['remote/video-a', 'remote/video-b'])
-    expect(snapshotModels).toEqual([])
+    expect(snapshotModels).toEqual(VENDOR_PRESETS.openrouter.semanticSnapshot.map((p) => p.id))
     expect(taskMiner.updateModel).toHaveBeenCalledWith('remote/miner')
     expect(taskMiner.updateClusterModel).toHaveBeenCalledWith('remote/cluster')
     expect(userContextBuilder.updateModel).toHaveBeenCalledWith('remote/context-model')

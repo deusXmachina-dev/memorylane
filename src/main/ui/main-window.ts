@@ -114,7 +114,6 @@ interface MainWindowDependencies {
   taskMiner?: TaskMinerService
   getRemoteModelConfig?: () => RemoteModelConfig | null
   isManaged?: () => boolean
-  isProcessingReady?: () => boolean
   syncRemoteModelConfig?: () => void
   getCaptureHotkeyLabel: () => string
   reconfigureCaptureHotkey: (accelerator: string) => { success: boolean; error?: string }
@@ -631,15 +630,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return {
         configured: false,
         state: 'not_configured',
-        consecutiveFailures: 0,
-        lastError: null,
-        lastAttemptAt: null,
-      }
-    }
-    if (deps.isManaged?.() && deps.isProcessingReady?.() === false) {
-      return {
-        configured: true,
-        state: 'waiting_for_config',
         consecutiveFailures: 0,
         lastError: null,
         lastAttemptAt: null,

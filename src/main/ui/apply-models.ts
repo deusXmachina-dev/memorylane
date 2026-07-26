@@ -1,5 +1,5 @@
 import type { RemoteModelConfig } from '../../shared/remote-model-config'
-import type { CaptureSettings, SemanticPipelineMode, Vendor } from '../../shared/types'
+import type { CaptureSettings, Vendor } from '../../shared/types'
 import { VENDOR_PRESETS, buildModelChain } from '../../shared/vendor-defaults'
 
 /** Structural shape of every live service that consumes a model selection. */
@@ -45,16 +45,18 @@ export function resolveModelPush(
   managed: boolean,
 ): ResolvedModelPush {
   if (managed) {
-    // No config fetched yet (first minutes of a fresh install) → baked
-    // defaults so the pipeline runs immediately. A fetched config — including
-    // one with empty slots (kill switch) — applies verbatim.
-    if (remote === null) return bakedDefaults(s.activeVendor)
+    // Remote chains win slot by slot; empty/missing slots fall back to the
+    // baked defaults so a model is always available.
+    const baked = bakedDefaults(s.activeVendor)
+    const models = remote?.models
     return {
-      videoModels: remote.models.semanticVideo ?? [],
-      snapshotModels: remote.models.semanticSnapshot ?? [],
-      minerModel: remote.models.taskMining?.[0] ?? '',
-      clusterModel: remote.models.clusterReview?.[0] ?? null,
-      userContextModel: remote.models.userContext?.[0] ?? '',
+      videoModels: models?.semanticVideo?.length ? models.semanticVideo : baked.videoModels,
+      snapshotModels: models?.semanticSnapshot?.length
+        ? models.semanticSnapshot
+        : baked.snapshotModels,
+      minerModel: models?.taskMining?.[0] ?? baked.minerModel,
+      clusterModel: models?.clusterReview?.[0] ?? null,
+      userContextModel: models?.userContext?.[0] ?? baked.userContextModel,
     }
   }
   const presets = VENDOR_PRESETS[s.activeVendor]
@@ -65,19 +67,6 @@ export function resolveModelPush(
     clusterModel: null,
     userContextModel: s.patternDetectionModel,
   }
-}
-
-/**
- * Whether the resolved push carries a model for the pipeline stage that
- * terminates summarization under the given mode: `video` ends on the video
- * chain, `auto` and `image` end on the snapshot chain.
- */
-export function hasRequiredSemanticModels(
-  resolved: ResolvedModelPush,
-  mode: SemanticPipelineMode,
-): boolean {
-  if (mode === 'video') return resolved.videoModels.length > 0
-  return resolved.snapshotModels.length > 0
 }
 
 /**
