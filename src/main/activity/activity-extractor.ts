@@ -265,6 +265,8 @@ export class ActivityExtractor {
    * `sink.persist` and the persisted listeners before decrementing `inFlight`,
    * an idle extractor has finished persisting (and notifying) every activity it
    * has seen so far — callers can rely on that to drain before snapshotting.
+   * While dispatch is gated by `isReady`, queued tasks are excluded: idle then
+   * means only that nothing is in flight.
    */
   async waitForIdle(): Promise<void> {
     if (this.inFlight === 0 && (this.pending.length === 0 || this.isGated())) {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { resolveModelPush, pushModelSelections } from './apply-models'
+import { resolveModelPush, pushModelSelections, hasRequiredSemanticModels } from './apply-models'
 import { VENDOR_PRESETS, buildModelChain } from '../../shared/vendor-defaults'
 import { makeCaptureSettings } from '@main/utils/test-utils'
 import type { RemoteModelConfig } from '../../shared/remote-model-config'
@@ -103,5 +103,33 @@ describe('pushModelSelections', () => {
     expect(taskMiner.updateModel).toHaveBeenCalledWith('remote/miner')
     expect(taskMiner.updateClusterModel).toHaveBeenCalledWith('remote/cluster')
     expect(userContextBuilder.updateModel).toHaveBeenCalledWith('remote/context')
+  })
+})
+
+describe('hasRequiredSemanticModels', () => {
+  const videoOnly: RemoteModelConfig = {
+    version: 1,
+    models: { semanticVideo: ['remote/video'] },
+  }
+  const snapshotOnly: RemoteModelConfig = {
+    version: 1,
+    models: { semanticSnapshot: ['remote/snapshot'] },
+  }
+
+  it('auto and image require the snapshot chain', () => {
+    expect(hasRequiredSemanticModels(snapshotOnly, 'auto')).toBe(true)
+    expect(hasRequiredSemanticModels(snapshotOnly, 'image')).toBe(true)
+    expect(hasRequiredSemanticModels(videoOnly, 'auto')).toBe(false)
+    expect(hasRequiredSemanticModels(videoOnly, 'image')).toBe(false)
+  })
+
+  it('video mode requires the video chain', () => {
+    expect(hasRequiredSemanticModels(videoOnly, 'video')).toBe(true)
+    expect(hasRequiredSemanticModels(snapshotOnly, 'video')).toBe(false)
+  })
+
+  it('a null config or empty slots are never ready', () => {
+    expect(hasRequiredSemanticModels(null, 'auto')).toBe(false)
+    expect(hasRequiredSemanticModels({ version: 1, models: {} }, 'video')).toBe(false)
   })
 })

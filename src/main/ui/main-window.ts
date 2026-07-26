@@ -114,6 +114,8 @@ interface MainWindowDependencies {
   taskMiner?: TaskMinerService
   getRemoteModelConfig?: () => RemoteModelConfig | null
   isManaged?: () => boolean
+  isProcessingReady?: () => boolean
+  syncRemoteModelConfig?: () => void
   getCaptureHotkeyLabel: () => string
   reconfigureCaptureHotkey: (accelerator: string) => { success: boolean; error?: string }
   updateExclusions: (exclusions: {
@@ -634,16 +636,13 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         lastAttemptAt: null,
       }
     }
-    if (deps.isManaged?.()) {
-      const models = deps.getRemoteModelConfig?.()?.models
-      if (!models?.semanticVideo?.length && !models?.semanticSnapshot?.length) {
-        return {
-          configured: true,
-          state: 'waiting_for_config',
-          consecutiveFailures: 0,
-          lastError: null,
-          lastAttemptAt: null,
-        }
+    if (deps.isManaged?.() && deps.isProcessingReady?.() === false) {
+      return {
+        configured: true,
+        state: 'waiting_for_config',
+        consecutiveFailures: 0,
+        lastError: null,
+        lastAttemptAt: null,
       }
     }
     return deps.semanticService.getLlmHealthStatus()
@@ -674,13 +673,9 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         log.info(`[MainWindow] Switching active vendor to ${vendor} (managed)`)
         deps.captureSettingsManager.setActiveVendor(vendor)
       }
-      if (switching) {
+      if (switching || changed) {
         applyVendorSwitch(deps, deps.captureSettingsManager.get())
-      } else if (changed) {
-        // Genuine key rotation with no vendor/model change: refresh the SDK and
-        // probe once to confirm the new key works.
-        deps.inferenceProvider.notifyConfigChanged()
-        void deps.semanticService.testConnection()
+        deps.syncRemoteModelConfig?.()
       }
     }
     if (payload?.invalidate && deps) {

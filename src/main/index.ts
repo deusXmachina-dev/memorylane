@@ -41,7 +41,7 @@ import { readRemoteBlacklist, writeRemoteBlacklist } from './services/remote-bla
 import { RemoteModelConfigService } from './services/remote-model-config-service'
 import { readRemoteModelConfig, writeRemoteModelConfig } from './services/remote-model-config-store'
 import type { RemoteModelConfig } from '../shared/remote-model-config'
-import { pushModelSelections, resolveModelPush } from './ui/apply-models'
+import { hasRequiredSemanticModels, pushModelSelections, resolveModelPush } from './ui/apply-models'
 import { DeviceReportSync } from './services/device-report-sync'
 import { readDeviceReportState, writeDeviceReportState } from './services/device-report-store'
 import { createMainRuntime, type MainRuntime } from './runtime'
@@ -282,8 +282,10 @@ app.on('ready', async () => {
     isManagedInstall() ? (remoteModelConfig?.getConfig() ?? null) : null
   const isProcessingReady = (): boolean => {
     if (!isManagedInstall()) return true
-    const models = getRemoteModelConfig()?.models
-    return Boolean(models?.semanticVideo?.length || models?.semanticSnapshot?.length)
+    return hasRequiredSemanticModels(
+      getRemoteModelConfig(),
+      captureSettingsManager.get().semanticPipelineMode,
+    )
   }
 
   const initialModels = resolveModelPush(
@@ -517,6 +519,8 @@ app.on('ready', async () => {
     taskMiner: taskMiner ?? undefined,
     getRemoteModelConfig,
     isManaged: isManagedInstall,
+    isProcessingReady,
+    syncRemoteModelConfig: () => void remoteModelConfig?.sync(),
     getCaptureHotkeyLabel: hotkeyManager.getLabel,
     reconfigureCaptureHotkey,
     updateExclusions: (exclusions) => runtime?.updateExclusions(exclusions),

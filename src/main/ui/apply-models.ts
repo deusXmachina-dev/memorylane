@@ -1,5 +1,5 @@
 import type { RemoteModelConfig } from '../../shared/remote-model-config'
-import type { CaptureSettings } from '../../shared/types'
+import type { CaptureSettings, SemanticPipelineMode } from '../../shared/types'
 import { VENDOR_PRESETS, buildModelChain } from '../../shared/vendor-defaults'
 
 /** Structural shape of every live service that consumes a model selection. */
@@ -49,6 +49,20 @@ export function resolveModelPush(
     clusterModel: null,
     userContextModel: s.patternDetectionModel,
   }
+}
+
+/**
+ * Whether the remote config carries a model for the pipeline stage that
+ * terminates summarization under the given mode: `video` ends on the video
+ * chain, `auto` and `image` end on the snapshot chain.
+ */
+export function hasRequiredSemanticModels(
+  remote: RemoteModelConfig | null,
+  mode: SemanticPipelineMode,
+): boolean {
+  const models = remote?.models
+  if (mode === 'video') return Boolean(models?.semanticVideo?.length)
+  return Boolean(models?.semanticSnapshot?.length)
 }
 
 /**
