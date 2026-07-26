@@ -102,6 +102,28 @@ describe('renderMarkdown', () => {
     expect(md).toContain('noRawInteractionVocab')
   })
 
+  it('renders a heuristic summary without a deterministic verdict', () => {
+    const md = renderMarkdown(
+      report({
+        fixtures: [
+          fixtureScore({
+            detPassRate: null,
+            summaries: [
+              summary({
+                summaryModel: 'heuristic:viewed',
+                summary: 'Viewed MemoryLane',
+                deterministic: null,
+              }),
+            ],
+          }),
+        ],
+      }),
+    )
+    expect(md).toContain('Viewed MemoryLane')
+    expect(md).toContain('| — | 0 |') // Det pass% — hard fails 0
+    expect(md).not.toContain('hard-fail(s)')
+  })
+
   it('renders segmentation coverage and golden equivalence', () => {
     const md = renderMarkdown(
       report({

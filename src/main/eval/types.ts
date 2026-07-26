@@ -132,7 +132,8 @@ export interface ScoredSummary {
   summary: string
   summaryModel: string
   ocrText: string
-  deterministic: DeterministicResult
+  /** Prompt-rule checks; null for heuristic (non-LLM) output, which the rules don't govern. */
+  deterministic: DeterministicResult | null
   /** Present when the fixture has a golden.md and this activity matched a block. */
   golden: GoldenMatch | null
   /** Summarizer (production) token usage for this activity, summed over attempts. */
@@ -175,8 +176,8 @@ export interface FixtureScore {
   model: string
   summaries: ScoredSummary[]
   producerStats: ProducerStats
-  /** Mean deterministic pass rate, 0..1. */
-  detPassRate: number
+  /** Mean deterministic pass rate over LLM-produced summaries, 0..1; null when none. */
+  detPassRate: number | null
   hardFails: number
   /** Segmentation vs golden.md, or null when the fixture has no golden. */
   segmentation: SegmentationScore | null

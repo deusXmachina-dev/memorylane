@@ -38,6 +38,7 @@ import { priceUsd, sumCosts } from '../src/main/eval/cost'
 import { renderMarkdown, writeReport } from '../src/main/eval/report'
 import { loadGoldenMd, matchSegments, type GoldenActivity } from '../src/main/eval/golden-md'
 import type {
+  DeterministicResult,
   EvalReport,
   FixtureScore,
   GoldenMatch,
@@ -211,10 +212,14 @@ async function main() {
     const eqVals = summaries
       .map((s) => s.golden?.equivalence)
       .filter((n): n is number => typeof n === 'number')
+    const detVals = summaries
+      .map((s) => s.deterministic)
+      .filter((d): d is DeterministicResult => d !== null)
+    const hardFails = detVals.reduce((n, d) => n + d.hardFails, 0)
 
     console.log(
       `  [done] ${cell.fixtureName} | ${cell.model} -> ${activities.length} acts, ` +
-        `${summaries.reduce((n, s) => n + s.deterministic.hardFails, 0)} hard-fails` +
+        `${hardFails} hard-fails` +
         (segmentation ? `, seg ${Math.round(segmentation.coverage * 100)}%` : ''),
     )
 
@@ -223,10 +228,10 @@ async function main() {
       model: cell.model,
       summaries,
       producerStats,
-      detPassRate: summaries.length
-        ? Math.round(mean(summaries.map((s) => s.deterministic.passRate)) * 1000) / 1000
-        : 0,
-      hardFails: summaries.reduce((n, s) => n + s.deterministic.hardFails, 0),
+      detPassRate: detVals.length
+        ? Math.round(mean(detVals.map((d) => d.passRate)) * 1000) / 1000
+        : null,
+      hardFails,
       segmentation,
       avgEquivalence: eqVals.length ? Math.round(mean(eqVals) * 1000) / 1000 : null,
       costUsd: sumCosts(summaries.map((s) => s.summaryCostUsd)),
@@ -370,7 +375,9 @@ async function scoreActivities(params: {
       summary: act.summary,
       summaryModel: act.summaryModel,
       ocrText: act.ocrText,
-      deterministic: scoreDeterministic(act.summary),
+      deterministic: act.summaryModel.startsWith('heuristic:')
+        ? null
+        : scoreDeterministic(act.summary),
       golden,
       summaryTokensIn,
       summaryTokensOut,

@@ -78,13 +78,13 @@ export function renderMarkdown(report: EvalReport): string {
     for (const s of f.summaries) {
       const dur = (s.durationMs / 1000).toFixed(0)
       const eq = s.golden?.equivalence != null ? `equiv ${fmt(s.golden.equivalence, 2)}` : 'equiv —'
-      const det = s.deterministic.hardFails ? `, ${s.deterministic.hardFails} hard-fail(s)` : ''
+      const det = s.deterministic?.hardFails ? `, ${s.deterministic.hardFails} hard-fail(s)` : ''
       lines.push(`- **[${dur}s ${s.appName}]** ${eq}${det}`)
       lines.push(`  - ${s.summary || '_(empty)_'}`)
       if (s.golden) {
         lines.push(`  - golden #${s.golden.index}: ${s.golden.summary || '_(empty)_'}`)
       }
-      const failed = s.deterministic.checks.filter((ch) => !ch.passed && ch.detail)
+      const failed = s.deterministic?.checks.filter((ch) => !ch.passed && ch.detail) ?? []
       if (failed.length) {
         lines.push(`  - checks: ${failed.map((ch) => `${ch.id} (${ch.detail})`).join('; ')}`)
       }
@@ -190,7 +190,7 @@ export function renderComparisonMarkdown(report: EvalReport): string | null {
         const parts = [
           sum.golden?.equivalence != null ? `equiv ${fmt(sum.golden.equivalence, 2)}` : 'equiv —',
         ]
-        if (sum.deterministic.hardFails) parts.push(`${sum.deterministic.hardFails} hard-fail(s)`)
+        if (sum.deterministic?.hardFails) parts.push(`${sum.deterministic.hardFails} hard-fail(s)`)
         // Note the model that actually ran if it differs from the requested one.
         const ran = sum.summaryModel && sum.summaryModel !== s.model ? ` → ${sum.summaryModel}` : ''
         return `**${parts.join(' · ')}${ran}**<br>${cell(sum.summary || '_(empty)_')}`
