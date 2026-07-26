@@ -49,7 +49,7 @@ export interface InferenceProviderOptions {
  * the gateway keeps the connection alive, so an explicit deadline is the only
  * thing that ever fails the call. Normal completions finish well under this.
  */
-export const DEFAULT_REQUEST_TIMEOUT_MS = 5 * 60 * 1000
+export const DEFAULT_REQUEST_TIMEOUT_MS = 10 * 60 * 1000
 
 export function withRequestTimeout(
   fetchImpl: typeof globalThis.fetch,
