@@ -1,11 +1,11 @@
-# MemoryLane v1.5.2
+# MemoryLane v1.5.3-alpha.1
 
-Windows MSI installs and upgrades run without flashing console windows.
+Managed model configuration is now strict and deterministic; task miner sweeps run on a stable poll interval.
 
 ## What's Changed
 
-- **Windows enterprise MSI**: the installer's custom actions run hidden, so interactive installs, upgrades, and reinstalls no longer flash terminal windows; their output goes to the MSI log instead (#249).
-- Mining status banner shows the dot and day count without a progress bar (#248).
+- **Managed model config**: Managed slots now fall back to baked vendor presets and take models strictly from remote config. Deterministic startup without idle machinery or first-fetch retry backoff (#250).
+- **Task miner sweep polling**: Mining sweeps run on a configurable poll interval instead of being driven by capture triggers. Retry failed sweeps on an internal backoff timer (#251).
 
 ## Known Issues & Limitations
 
