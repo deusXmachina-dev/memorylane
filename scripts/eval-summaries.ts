@@ -2,10 +2,10 @@
 /**
  * Replays committed activity-summary fixtures through the REAL pipeline
  * (ActivityProducer -> transformer -> OCR/ffmpeg -> LLM summarizer) and scores
- * every summary: deterministic rule checks (free) + an optional holistic LLM
- * judge. When a fixture has a hand-edited `golden.md`, also scores segmentation
- * (do the boundaries match?) and per-block equivalence (does each summary mean
- * the same as the target?). Writes a findings-style Markdown scorecard + JSON.
+ * every summary with deterministic rule checks (free). When a fixture has a
+ * hand-edited `golden.md`, also scores segmentation (do the boundaries match?)
+ * and — with `--judge` — per-block LLM equivalence (does each summary mean the
+ * same as the target?). Writes a findings-style Markdown scorecard + JSON.
  *
  * Deterministic upstream of the LLM (see replay-harness.ts); only the model and
  * pipeline are variables — everything else runs against code defaults. Reads the
@@ -21,6 +21,7 @@
  *   npm run eval-summaries                                  (all fixtures, default model, no judge)
  *   npm run eval-summaries -- --fixture vscode-debug
  *   npm run eval-summaries -- --model google/gemini-2.5-flash --judge
+ *   npm run eval-summaries -- --judge-model moonshotai/kimi-k3   (implies --judge)
  *   npm run eval-summaries -- --pipeline image              (benchmark snapshot models)
  */
 
@@ -32,11 +33,12 @@ import * as path from 'path'
 import { VENDOR_PRESETS } from '../src/shared/vendor-defaults'
 import type { SemanticPipelinePreference } from '../src/main/semantic/activity-semantic-service'
 import { scoreDeterministic } from '../src/main/eval/deterministic'
-import { judgeSummary, judgeEquivalence } from '../src/main/eval/judge'
+import { judgeEquivalence } from '../src/main/eval/judge'
 import { priceUsd, sumCosts } from '../src/main/eval/cost'
 import { renderMarkdown, writeReport } from '../src/main/eval/report'
 import { loadGoldenMd, matchSegments, type GoldenActivity } from '../src/main/eval/golden-md'
 import type {
+  DeterministicResult,
   EvalReport,
   FixtureScore,
   GoldenMatch,
@@ -57,12 +59,13 @@ interface CliArgs {
   models: string[]
   pipeline: SemanticPipelinePreference
   judge: boolean
+  judgeModel: string | null
 }
 
 function parseArgs(): CliArgs {
   const args = process.argv.slice(2)
   // Video is the production default pipeline, so benchmark there by default.
-  const a: CliArgs = { fixtures: [], models: [], pipeline: 'video', judge: false }
+  const a: CliArgs = { fixtures: [], models: [], pipeline: 'video', judge: false, judgeModel: null }
   const list = (s: string): string[] =>
     s
       .split(',')
@@ -93,6 +96,12 @@ function parseArgs(): CliArgs {
         break
       case '--judge':
         a.judge = true
+        break
+      case '--judge-model':
+        i = take((v) => {
+          a.judgeModel = v
+          a.judge = true
+        }, i)
         break
     }
   }
@@ -157,7 +166,7 @@ async function main() {
   const fixtureDirs = resolveFixtureDirs(a)
   const handle = loadCliInferenceProvider()
   const presets = VENDOR_PRESETS[handle.vendor]
-  const judgeModel = a.judge ? defaultJudgeModel(handle) : null
+  const judgeModel = a.judge ? (a.judgeModel ?? defaultJudgeModel(handle)) : null
 
   // Default model matches the pipeline: the video model for video/auto, the
   // snapshot model for image — so `--model` can be omitted for a quick run.
@@ -200,16 +209,17 @@ async function main() {
       goldenByActivity,
     })
 
-    const judgeVals = summaries
-      .map((s) => s.judge?.score10)
-      .filter((n): n is number => typeof n === 'number')
     const eqVals = summaries
       .map((s) => s.golden?.equivalence)
       .filter((n): n is number => typeof n === 'number')
+    const detVals = summaries
+      .map((s) => s.deterministic)
+      .filter((d): d is DeterministicResult => d !== null)
+    const hardFails = detVals.reduce((n, d) => n + d.hardFails, 0)
 
     console.log(
       `  [done] ${cell.fixtureName} | ${cell.model} -> ${activities.length} acts, ` +
-        `${summaries.reduce((n, s) => n + s.deterministic.hardFails, 0)} hard-fails` +
+        `${hardFails} hard-fails` +
         (segmentation ? `, seg ${Math.round(segmentation.coverage * 100)}%` : ''),
     )
 
@@ -218,11 +228,10 @@ async function main() {
       model: cell.model,
       summaries,
       producerStats,
-      detPassRate: summaries.length
-        ? Math.round(mean(summaries.map((s) => s.deterministic.passRate)) * 1000) / 1000
-        : 0,
-      hardFails: summaries.reduce((n, s) => n + s.deterministic.hardFails, 0),
-      avgJudge10: judgeVals.length ? Math.round(mean(judgeVals) * 100) / 100 : null,
+      detPassRate: detVals.length
+        ? Math.round(mean(detVals.map((d) => d.passRate)) * 1000) / 1000
+        : null,
+      hardFails,
       segmentation,
       avgEquivalence: eqVals.length ? Math.round(mean(eqVals) * 1000) / 1000 : null,
       costUsd: sumCosts(summaries.map((s) => s.summaryCostUsd)),
@@ -237,13 +246,13 @@ async function main() {
     fixtures,
   }
 
-  // The judge was requested but produced no score anywhere — every call failed or
-  // didn't parse (e.g. the default judge model can't accept images). Surface it
-  // loudly; otherwise the report silently shows "judge —" and looks like a no-op.
-  if (judgeModel && fixtures.every((f) => f.avgJudge10 === null)) {
+  // The judge was requested but produced no score anywhere — every call failed,
+  // didn't parse, or no activity matched a golden block. Surface it loudly;
+  // otherwise the report silently shows "equiv —" and looks like a no-op.
+  if (judgeModel && fixtures.every((f) => f.avgEquivalence === null)) {
     console.warn(
-      `⚠  Judge "${judgeModel}" returned no scores for any summary — it likely can't ` +
-        `accept images, or every call failed. Drop --judge to skip the judge.`,
+      `⚠  Judge "${judgeModel}" returned no equivalence scores — every call failed ` +
+        `or nothing matched a golden. Drop --judge to skip the judge.`,
     )
   }
 
@@ -322,26 +331,7 @@ async function scoreActivities(params: {
   const summaries: ScoredSummary[] = []
 
   for (const act of activities) {
-    const judge = judgeModel
-      ? await judgeSummary({
-          provider: handle.provider,
-          judgeModel,
-          summary: act.summary,
-          ocrText: act.ocrText,
-          metadata: {
-            appName: act.appName,
-            windowTitle: act.windowTitle,
-            tld: act.tld,
-            durationMs: act.durationMs,
-          },
-          imagePaths: act.selectedSnapshotPaths.length ? act.selectedSnapshotPaths : act.frameRefs,
-        })
-      : null
-
-    // Eval-time cost: the judge call + (when golden-matched) the equivalence call.
-    const judgeCosts: (number | null)[] = judge
-      ? [priceUsd(judge.judgeModel, judge.tokensIn, judge.tokensOut)]
-      : []
+    const judgeCosts: (number | null)[] = []
 
     let golden: GoldenMatch | null = null
     const matched = goldenByActivity.get(act.activityId)
@@ -385,13 +375,14 @@ async function scoreActivities(params: {
       summary: act.summary,
       summaryModel: act.summaryModel,
       ocrText: act.ocrText,
-      deterministic: scoreDeterministic(act.summary),
-      judge,
+      deterministic: act.summaryModel.startsWith('heuristic:')
+        ? null
+        : scoreDeterministic(act.summary),
       golden,
       summaryTokensIn,
       summaryTokensOut,
       summaryCostUsd,
-      judgeCostUsd: judge ? sumCosts(judgeCosts) : null,
+      judgeCostUsd: judgeCosts.length ? sumCosts(judgeCosts) : null,
     })
   }
   return summaries

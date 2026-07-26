@@ -11,9 +11,11 @@ import type { DeterministicCheck, DeterministicResult } from './types'
  * grades the nuance.
  */
 
-// "NEVER mention raw interactions (clicks, scrolling, key counts)."
+// "NEVER mention raw interactions (clicks, scrolling, key counts)." Scroll words
+// are exempt: goldens use them to describe reading, so only event-log vocabulary
+// hard-fails.
 export const RAW_INTERACTION_RE =
-  /\b(click(?:ed|ing|s)?|scroll(?:ed|ing|s)?|typed|typing|keystrokes?|keypress(?:es)?|key\s?counts?|keys?\s+(?:pressed|typed)|pressed\s+(?:a\s+)?key|mouse|cursor|double-click)\b/i
+  /\b(click(?:ed|ing|s)?|typed|typing|keystrokes?|keypress(?:es)?|key\s?counts?|keys?\s+(?:pressed|typed)|pressed\s+(?:a\s+)?key|mouse|cursor|double-click)\b/i
 
 // "NEVER start with 'During this session', 'In this session', 'The user', ..."
 export const META_OPENER_RE = /^\s*(during|in)\s+this\s+session\b|^\s*the\s+user\b/i

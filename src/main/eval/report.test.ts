@@ -14,14 +14,6 @@ function summary(over: Partial<ScoredSummary> = {}): ScoredSummary {
     summaryModel: 'google/gemini-2.5-flash',
     ocrText: '',
     deterministic: { checks: [], hardFails: 0, softWarns: 0, passRate: 1 },
-    judge: {
-      score10: 8,
-      notes: '',
-      flaggedClaims: [],
-      judgeModel: 'judge',
-      tokensIn: 10,
-      tokensOut: 5,
-    },
     golden: null,
     summaryTokensIn: 1000,
     summaryTokensOut: 50,
@@ -44,7 +36,6 @@ function fixtureScore(over: Partial<FixtureScore> = {}): FixtureScore {
     },
     detPassRate: 1,
     hardFails: 0,
-    avgJudge10: 8,
     segmentation: null,
     avgEquivalence: null,
     costUsd: 0.0004,
@@ -70,22 +61,17 @@ describe('renderMarkdown', () => {
     expect(md).toContain('## Scorecard')
     expect(md).toContain('vscode')
     expect(md).toContain('Implemented the token-refresh guard.')
-    expect(md).toContain('judge 8.00')
+    expect(md).toContain('equiv —')
   })
 
   it('handles a deterministic-only run (no judge)', () => {
-    const md = renderMarkdown(
-      report({
-        judgeModel: null,
-        fixtures: [fixtureScore({ avgJudge10: null, summaries: [summary({ judge: null })] })],
-      }),
-    )
+    const md = renderMarkdown(report({ judgeModel: null }))
     expect(md).toContain('(none — deterministic only)')
     expect(md).toContain('## Scorecard')
-    expect(md).toContain('judge —')
+    expect(md).toContain('equiv —')
   })
 
-  it('surfaces hard fails and flagged claims', () => {
+  it('surfaces hard fails', () => {
     const md = renderMarkdown(
       report({
         fixtures: [
@@ -106,14 +92,6 @@ describe('renderMarkdown', () => {
                   softWarns: 0,
                   passRate: 0,
                 },
-                judge: {
-                  score10: 3,
-                  notes: '',
-                  flaggedClaims: ['claims a PR was merged'],
-                  judgeModel: 'judge',
-                  tokensIn: 1,
-                  tokensOut: 1,
-                },
               }),
             ],
           }),
@@ -122,7 +100,28 @@ describe('renderMarkdown', () => {
     )
     expect(md).toContain('1 hard-fail(s)')
     expect(md).toContain('noRawInteractionVocab')
-    expect(md).toContain('flagged: claims a PR was merged')
+  })
+
+  it('renders a heuristic summary without a deterministic verdict', () => {
+    const md = renderMarkdown(
+      report({
+        fixtures: [
+          fixtureScore({
+            detPassRate: null,
+            summaries: [
+              summary({
+                summaryModel: 'heuristic:viewed',
+                summary: 'Viewed MemoryLane',
+                deterministic: null,
+              }),
+            ],
+          }),
+        ],
+      }),
+    )
+    expect(md).toContain('Viewed MemoryLane')
+    expect(md).toContain('| — | 0 |') // Det pass% — hard fails 0
+    expect(md).not.toContain('hard-fail(s)')
   })
 
   it('renders segmentation coverage and golden equivalence', () => {
@@ -196,7 +195,7 @@ describe('renderComparisonMarkdown', () => {
     )!
     expect(cmp).toContain('| Activity | golden | model-a |')
     expect(cmp).toContain('**#1**<br>Debugged the auth middleware.')
-    expect(cmp).toContain('**judge 8.00 · equiv 0.80**<br>A summary from model A.')
+    expect(cmp).toContain('**equiv 0.80**<br>A summary from model A.')
   })
 
   it('pivots two models of the same fixture side by side, keyed by golden block', () => {
@@ -236,8 +235,8 @@ describe('renderComparisonMarkdown', () => {
     // A columnar table: golden + each variant are columns on one activity row.
     expect(cmp).toContain('| Activity | golden | model-a | model-b |')
     expect(cmp).toContain('**#1**<br>Debugged the auth middleware.')
-    expect(cmp).toContain('**judge 8.00 · equiv 0.80**<br>A summary from model A.')
-    expect(cmp).toContain('**judge 8.00 · equiv 0.40**<br>A summary from model B.')
+    expect(cmp).toContain('**equiv 0.80**<br>A summary from model A.')
+    expect(cmp).toContain('**equiv 0.40**<br>A summary from model B.')
   })
 
   it('surfaces model-chain fallback (requested → actual) when the model differs', () => {

@@ -29,11 +29,14 @@ describe('scoreDeterministic', () => {
       check('Clicked the submit button repeatedly to test the flow.', 'noRawInteractionVocab')
         .passed,
     ).toBe(false)
+    expect(check(GOOD, 'noRawInteractionVocab').passed).toBe(true)
+  })
+
+  it('allows scroll words as reading description', () => {
     expect(
       check('Scrolled through the changelog looking for the regression.', 'noRawInteractionVocab')
         .passed,
-    ).toBe(false)
-    expect(check(GOOD, 'noRawInteractionVocab').passed).toBe(true)
+    ).toBe(true)
   })
 
   it('hard-fails meta openers', () => {

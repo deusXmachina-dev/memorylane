@@ -35,15 +35,13 @@ export function renderMarkdown(report: EvalReport): string {
   // Scorecard
   lines.push('## Scorecard')
   lines.push('')
-  lines.push(
-    '| Fixture | Model | Acts | Det pass% | Hard fails | Judge/10 | Seg% | Equiv | Cost (USD) |',
-  )
-  lines.push('|---|---|--:|--:|--:|--:|--:|--:|--:|')
+  lines.push('| Fixture | Model | Acts | Det pass% | Hard fails | Seg% | Equiv | Cost (USD) |')
+  lines.push('|---|---|--:|--:|--:|--:|--:|--:|')
   for (const f of report.fixtures) {
     const seg = f.segmentation ? pct(f.segmentation.coverage) : '—'
     lines.push(
       `| ${f.fixture} | ${modelLabel(f)} | ${f.summaries.length} | ` +
-        `${pct(f.detPassRate)} | ${f.hardFails} | ${fmt(f.avgJudge10)} | ` +
+        `${pct(f.detPassRate)} | ${f.hardFails} | ` +
         `${seg} | ${fmt(f.avgEquivalence, 2)} | ${usd(f.costUsd)} |`,
     )
   }
@@ -79,20 +77,16 @@ export function renderMarkdown(report: EvalReport): string {
     lines.push('')
     for (const s of f.summaries) {
       const dur = (s.durationMs / 1000).toFixed(0)
-      const j = s.judge ? `judge ${fmt(s.judge.score10)}` : 'judge —'
-      const eq = s.golden?.equivalence != null ? `, equiv ${fmt(s.golden.equivalence, 2)}` : ''
-      const det = s.deterministic.hardFails ? `, ${s.deterministic.hardFails} hard-fail(s)` : ''
-      lines.push(`- **[${dur}s ${s.appName}]** ${j}${eq}${det}`)
+      const eq = s.golden?.equivalence != null ? `equiv ${fmt(s.golden.equivalence, 2)}` : 'equiv —'
+      const det = s.deterministic?.hardFails ? `, ${s.deterministic.hardFails} hard-fail(s)` : ''
+      lines.push(`- **[${dur}s ${s.appName}]** ${eq}${det}`)
       lines.push(`  - ${s.summary || '_(empty)_'}`)
       if (s.golden) {
         lines.push(`  - golden #${s.golden.index}: ${s.golden.summary || '_(empty)_'}`)
       }
-      const failed = s.deterministic.checks.filter((ch) => !ch.passed && ch.detail)
+      const failed = s.deterministic?.checks.filter((ch) => !ch.passed && ch.detail) ?? []
       if (failed.length) {
         lines.push(`  - checks: ${failed.map((ch) => `${ch.id} (${ch.detail})`).join('; ')}`)
-      }
-      if (s.judge?.flaggedClaims.length) {
-        lines.push(`  - flagged: ${s.judge.flaggedClaims.join('; ')}`)
       }
     }
     lines.push('')
@@ -133,13 +127,13 @@ export function renderComparisonMarkdown(report: EvalReport): string | null {
     lines.push('')
 
     // Per-variant rollup.
-    lines.push('| Variant | Acts | Det pass% | Hard fails | Judge/10 | Seg% | Equiv | Cost (USD) |')
-    lines.push('|---|--:|--:|--:|--:|--:|--:|--:|')
+    lines.push('| Variant | Acts | Det pass% | Hard fails | Seg% | Equiv | Cost (USD) |')
+    lines.push('|---|--:|--:|--:|--:|--:|--:|')
     for (const s of scores) {
       const seg = s.segmentation ? pct(s.segmentation.coverage) : '—'
       lines.push(
         `| ${modelLabel(s)} | ${s.summaries.length} | ${pct(s.detPassRate)} | ` +
-          `${s.hardFails} | ${fmt(s.avgJudge10)} | ${seg} | ${fmt(s.avgEquivalence, 2)} | ` +
+          `${s.hardFails} | ${seg} | ${fmt(s.avgEquivalence, 2)} | ` +
           `${usd(s.costUsd)} |`,
       )
     }
@@ -193,9 +187,10 @@ export function renderComparisonMarkdown(report: EvalReport): string | null {
       const variantCells = scores.map((s) => {
         const sum = slot.byVariant.get(s.model)
         if (!sum) return '_(none)_'
-        const parts = [sum.judge ? `judge ${fmt(sum.judge.score10)}` : 'judge —']
-        if (sum.golden?.equivalence != null) parts.push(`equiv ${fmt(sum.golden.equivalence, 2)}`)
-        if (sum.deterministic.hardFails) parts.push(`${sum.deterministic.hardFails} hard-fail(s)`)
+        const parts = [
+          sum.golden?.equivalence != null ? `equiv ${fmt(sum.golden.equivalence, 2)}` : 'equiv —',
+        ]
+        if (sum.deterministic?.hardFails) parts.push(`${sum.deterministic.hardFails} hard-fail(s)`)
         // Note the model that actually ran if it differs from the requested one.
         const ran = sum.summaryModel && sum.summaryModel !== s.model ? ` → ${sum.summaryModel}` : ''
         return `**${parts.join(' · ')}${ran}**<br>${cell(sum.summary || '_(empty)_')}`

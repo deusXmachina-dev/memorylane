@@ -8,7 +8,7 @@ import type { ActivityProducerStats } from '@main/activity/activity-producer'
  * Pipeline: a captured session (frames + event windows) is promoted into a
  * committed fixture, replayed through the real ActivityProducer + summarizer to
  * produce ReplayActivity[], then scored (deterministic rule checks + an optional
- * LLM judge) into a Markdown scorecard.
+ * LLM golden-equivalence judge) into a Markdown scorecard.
  */
 
 export const FIXTURE_SCHEMA_VERSION = 1
@@ -111,19 +111,6 @@ export interface DeterministicResult {
   passRate: number
 }
 
-/** One holistic LLM-judge verdict for a summary. */
-export interface JudgeResult {
-  /** Overall quality, 0..10. */
-  score10: number
-  /** Short free-text rationale. */
-  notes: string
-  /** Specific claims not supported by the evidence. */
-  flaggedClaims: string[]
-  judgeModel: string
-  tokensIn: number
-  tokensOut: number
-}
-
 /** A summary's match against its golden block (segmentation + equivalence). */
 export interface GoldenMatch {
   /** 1-based golden block index. */
@@ -145,8 +132,8 @@ export interface ScoredSummary {
   summary: string
   summaryModel: string
   ocrText: string
-  deterministic: DeterministicResult
-  judge: JudgeResult | null
+  /** Prompt-rule checks; null for heuristic (non-LLM) output, which the rules don't govern. */
+  deterministic: DeterministicResult | null
   /** Present when the fixture has a golden.md and this activity matched a block. */
   golden: GoldenMatch | null
   /** Summarizer (production) token usage for this activity, summed over attempts. */
@@ -154,7 +141,7 @@ export interface ScoredSummary {
   summaryTokensOut: number
   /** Summarizer cost in USD, or null when the model isn't in the pricing table. */
   summaryCostUsd: number | null
-  /** Eval-time judge + equivalence cost in USD, or null when unpriced. */
+  /** Eval-time equivalence-judge cost in USD, or null when unpriced. */
   judgeCostUsd: number | null
 }
 
@@ -189,18 +176,16 @@ export interface FixtureScore {
   model: string
   summaries: ScoredSummary[]
   producerStats: ProducerStats
-  /** Mean deterministic pass rate, 0..1. */
-  detPassRate: number
+  /** Mean deterministic pass rate over LLM-produced summaries, 0..1; null when none. */
+  detPassRate: number | null
   hardFails: number
-  /** Mean judge score, 0..10, or null when the judge was disabled. */
-  avgJudge10: number | null
   /** Segmentation vs golden.md, or null when the fixture has no golden. */
   segmentation: SegmentationScore | null
   /** Mean golden equivalence over matched blocks, 0..1, or null. */
   avgEquivalence: number | null
   /** Total summarizer (production) cost in USD over all activities, or null if unpriced. */
   costUsd: number | null
-  /** Total eval-time judge + equivalence cost in USD, or null if unpriced. */
+  /** Total eval-time equivalence-judge cost in USD, or null if unpriced. */
   judgeCostUsd: number | null
 }
 
