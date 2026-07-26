@@ -53,6 +53,7 @@ export class TaskMiner {
   /** Remote override for the clustering (label/merge/split) passes; null = follow `model`. */
   private clusterModel: string | null = null
   private enabled = true
+  private lastSkipKey: string | null = null
   private statusListener?: () => void
 
   // The app injects the MlWorkerClient; enode scripts pass an in-process
@@ -129,30 +130,38 @@ export class TaskMiner {
     if (Date.now() < this.nextAttemptAt) return
 
     if (!this.provider || !this.provider.isConfigured()) {
-      log.debug('[TaskMiner] No inference provider configured, skipping')
+      this.logSkip('no-provider', 'No inference provider configured, skipping')
       return
     }
 
     if (!this.model) {
-      log.debug('[TaskMiner] No model configured, skipping')
+      this.logSkip('no-model', 'No model configured, skipping')
       return
     }
 
     const activityCount = this.storage.activities.count()
     if (activityCount < PATTERN_DETECTION_CONFIG.MIN_ACTIVITIES) {
-      log.debug(
-        `[TaskMiner] Only ${activityCount} activities (need ${PATTERN_DETECTION_CONFIG.MIN_ACTIVITIES}), skipping`,
+      this.logSkip(
+        'few-activities',
+        `Only ${activityCount} activities (need ${PATTERN_DETECTION_CONFIG.MIN_ACTIVITIES}), skipping`,
       )
       return
     }
 
     this.ensureEnqueued()
     if (!this.storage.miningDays.hasPending()) {
-      log.debug('[TaskMiner] No days pending, skipping')
+      this.logSkip('no-pending', 'No days pending, skipping')
       return
     }
 
+    this.lastSkipKey = null
     void this.sweep(this.provider)
+  }
+
+  private logSkip(key: string, message: string): void {
+    if (this.lastSkipKey === key) return
+    this.lastSkipKey = key
+    log.info(`[TaskMiner] ${message}`)
   }
 
   /**
