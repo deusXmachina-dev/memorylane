@@ -1,11 +1,12 @@
-# MemoryLane v1.5.3-alpha.1
+# MemoryLane v1.5.3
 
-Managed model configuration is now strict and deterministic; task miner sweeps run on a stable poll interval.
+Managed model configuration is now strict and deterministic, and task miner sweeps run on a stable poll interval with clearer diagnostics.
 
 ## What's Changed
 
 - **Managed model config**: Managed slots now fall back to baked vendor presets and take models strictly from remote config. Deterministic startup without idle machinery or first-fetch retry backoff (#250).
-- **Task miner sweep polling**: Mining sweeps run on a configurable poll interval instead of being driven by capture triggers. Retry failed sweeps on an internal backoff timer (#251).
+- **Task miner sweep polling**: Mining sweeps run on a configurable poll interval instead of being driven by capture triggers. Failed sweeps retry on an internal backoff timer (#251).
+- **Task miner diagnostics**: Idle reasons now appear in packaged logs, making stalled mining easier to diagnose (#253).
 
 ## Known Issues & Limitations
 
@@ -23,4 +24,4 @@ Managed model configuration is now strict and deterministic; task miner sweeps r
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.1...v1.5.2
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.2...v1.5.3
