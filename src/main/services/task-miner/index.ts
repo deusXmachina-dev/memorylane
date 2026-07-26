@@ -15,8 +15,9 @@
  * After mining, a clustering pass (see ./clustering) groups sightings into
  * persistent recurring-process clusters with stable ids.
  *
- * Includes built-in scheduling: call scheduleRun() on screen unlock and the
- * service handles interval guards, settle delays, and error isolation.
+ * Includes built-in scheduling: startup() arms a poll interval that sweeps
+ * whenever the ledger has pending days, paced by a doubling backoff after a
+ * failed sweep.
  */
 
 import type { StorageService } from '../../storage'
@@ -45,9 +46,9 @@ export class TaskMiner {
   private running = false
   /** Settled counts snapshotted at sweep start; null outside a sweep. */
   private sweepBaseline: { completed: number; failed: number } | null = null
-  private settleTimer: ReturnType<typeof setTimeout> | null = null
-  private retryTimer: ReturnType<typeof setTimeout> | null = null
+  private pollTimer: ReturnType<typeof setInterval> | null = null
   private retryDelayMs = TASK_BACKFILL.RETRY_INITIAL_MS
+  private nextAttemptAt = 0
   private model = ''
   /** Remote override for the clustering (label/merge/split) passes; null = follow `model`. */
   private clusterModel: string | null = null
@@ -66,26 +67,13 @@ export class TaskMiner {
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled
-    if (!enabled) this.clearRetry()
     log.info(`[TaskMiner] ${enabled ? 'Enabled' : 'Disabled'}`)
   }
 
-  private clearRetry(): void {
-    if (this.retryTimer) {
-      clearTimeout(this.retryTimer)
-      this.retryTimer = null
-    }
-  }
-
-  private scheduleRetry(): void {
-    if (this.retryTimer) return
-    const delay = this.retryDelayMs
-    this.retryDelayMs = Math.min(this.retryDelayMs * 2, TASK_BACKFILL.RETRY_MAX_MS)
-    this.retryTimer = setTimeout(() => {
-      this.retryTimer = null
-      this.scheduleRun()
-    }, delay)
-    log.info(`[TaskMiner] Retry sweep in ${Math.round(delay / 60_000)}m`)
+  /** Clears the failure backoff so the next scheduleRun() may sweep immediately. */
+  resetBackoff(): void {
+    this.nextAttemptAt = 0
+    this.retryDelayMs = TASK_BACKFILL.RETRY_INITIAL_MS
   }
 
   updateModel(model: string): void {
@@ -98,9 +86,9 @@ export class TaskMiner {
     log.info(`[TaskMiner] Cluster model updated to: ${this.clusterModel ?? '(follow miner model)'}`)
   }
 
-  /** True while a run is executing or its settle timer is armed. */
+  /** True while a run is executing. */
   isBusy(): boolean {
-    return this.running || this.settleTimer !== null
+    return this.running
   }
 
   /** Settled counts at the current sweep's start, for per-run progress; null outside a sweep. */
@@ -118,36 +106,41 @@ export class TaskMiner {
   }
 
   /**
-   * Startup entry point: recover days left `running` by a crash, then try to
-   * schedule a sweep (the settle timer keeps the launch path calm and a fresh
-   * DB starts its 60-day seed without waiting for the first unlock).
+   * Startup entry point: recover days left `running` by a crash, then start
+   * the poll that drives every sweep. The first tick — not launch itself —
+   * starts the first sweep, so the launch path stays calm and a fresh DB
+   * begins its 60-day seed a few minutes in without any external trigger.
    */
   startup(): void {
     const recovered = this.storage.miningDays.resetStaleRunning(TASK_BACKFILL.MAX_DAY_ATTEMPTS)
     if (recovered) log.info(`[TaskMiner] Recovered ${recovered} interrupted mining day(s)`)
-    this.scheduleRun()
+    if (!this.pollTimer) {
+      this.pollTimer = setInterval(() => this.scheduleRun(), TASK_BACKFILL.POLL_INTERVAL_MS)
+    }
   }
 
   /**
-   * Try to schedule a mining sweep. Call this on screen unlock / wake.
+   * Start a sweep now if the guards and the failure backoff allow it. Runs on
+   * every poll tick; safe to call from anywhere.
    */
   scheduleRun(): void {
     if (!this.enabled) return
-    if (this.running || this.settleTimer) return
+    if (this.running) return
+    if (Date.now() < this.nextAttemptAt) return
 
     if (!this.provider || !this.provider.isConfigured()) {
-      log.info('[TaskMiner] No inference provider configured, skipping')
+      log.debug('[TaskMiner] No inference provider configured, skipping')
       return
     }
 
     if (!this.model) {
-      log.info('[TaskMiner] No model configured, skipping')
+      log.debug('[TaskMiner] No model configured, skipping')
       return
     }
 
     const activityCount = this.storage.activities.count()
     if (activityCount < PATTERN_DETECTION_CONFIG.MIN_ACTIVITIES) {
-      log.info(
+      log.debug(
         `[TaskMiner] Only ${activityCount} activities (need ${PATTERN_DETECTION_CONFIG.MIN_ACTIVITIES}), skipping`,
       )
       return
@@ -155,18 +148,11 @@ export class TaskMiner {
 
     this.ensureEnqueued()
     if (!this.storage.miningDays.hasPending()) {
-      log.info('[TaskMiner] No days pending, skipping')
+      log.debug('[TaskMiner] No days pending, skipping')
       return
     }
 
-    log.info(`[TaskMiner] Scheduling sweep in ${PATTERN_DETECTION_CONFIG.SETTLE_DELAY_MS / 1000}s`)
-    const provider = this.provider
-    this.settleTimer = setTimeout(() => {
-      this.settleTimer = null
-      void this.sweep(provider)
-    }, PATTERN_DETECTION_CONFIG.SETTLE_DELAY_MS)
-    // An armed timer counts as busy — push so an open window flips to "Analyzing" now.
-    this.emitStatus()
+    void this.sweep(this.provider)
   }
 
   /**
@@ -204,9 +190,9 @@ export class TaskMiner {
    * labels feed the known-procedure vocabulary later days scan against) and
    * mine each one. A day's sightings and its `completed` status commit in one
    * transaction (see runDetection.onCommit), so a crash retries cleanly. A
-   * failed day records the attempt and stops the sweep — a backoff retry timer
-   * (or any earlier trigger) retries it, and once its attempts are exhausted
-   * the claim skips past it.
+   * failed day records the attempt and stops the sweep — the next poll tick
+   * retries it (paced by a doubling backoff), and once its attempts are
+   * exhausted the claim skips past it.
    * Clusters at the CLUSTER_EVERY_DAYS barrier and once at the end.
    */
   private async sweep(provider: InferenceProvider): Promise<BackfillSummary> {
@@ -215,7 +201,6 @@ export class TaskMiner {
       return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'busy' }
     }
     this.running = true
-    this.clearRetry()
     const settled = this.storage.miningDays.countByStatus()
     this.sweepBaseline = { completed: settled.completed, failed: settled.failed }
     this.emitStatus()
@@ -307,8 +292,13 @@ export class TaskMiner {
             `${daysSkipped} already present, ${daysFailed} failed`,
         )
       }
-      if (daysFailed > 0 && this.storage.miningDays.hasPending()) this.scheduleRetry()
-      else if (daysFailed === 0) this.retryDelayMs = TASK_BACKFILL.RETRY_INITIAL_MS
+      if (daysFailed > 0 && this.storage.miningDays.hasPending()) {
+        this.nextAttemptAt = Date.now() + this.retryDelayMs
+        log.info(`[TaskMiner] Retry sweep in ${Math.round(this.retryDelayMs / 60_000)}m`)
+        this.retryDelayMs = Math.min(this.retryDelayMs * 2, TASK_BACKFILL.RETRY_MAX_MS)
+      } else {
+        this.resetBackoff()
+      }
       return { daysMined, daysSkipped, daysFailed, clustering }
     } finally {
       this.running = false
@@ -415,7 +405,7 @@ export class TaskMiner {
       log.info('[TaskMiner] Backfill skipped: no inference provider configured')
       return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'no-provider' }
     }
-    if (this.running || this.settleTimer) {
+    if (this.running) {
       log.info('[TaskMiner] Backfill skipped: a mining run is already in progress')
       return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'busy' }
     }

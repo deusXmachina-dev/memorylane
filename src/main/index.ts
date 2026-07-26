@@ -406,7 +406,6 @@ app.on('ready', async () => {
     captureStateManager,
     isPaused: shouldPause,
     userContextBuilder,
-    taskMiner,
     onStateChanged: () => {
       void updateTrayMenu()
       void sendStatusToRenderer()
@@ -535,7 +534,11 @@ app.on('ready', async () => {
     retryFailedMiningDays: () => {
       if (!runtime || !taskMiner) return 0
       const retried = runtime.storage.miningDays.retryFailed()
-      if (retried > 0) taskMiner.scheduleRun()
+      if (retried > 0) {
+        // Manual retry: don't make the user wait out an active failure backoff.
+        taskMiner.resetBackoff()
+        taskMiner.scheduleRun()
+      }
       return retried
     },
     observation,
@@ -546,8 +549,8 @@ app.on('ready', async () => {
 
   runtime.accessProvider.startPeriodicRefresh()
 
-  // Recover interrupted mining days and kick the ledger sweep. A fresh DB
-  // enqueues its 60-day seed here; a mined DB just picks up any gap days.
+  // Recover interrupted mining days and start the sweep poll. A fresh DB
+  // enqueues its 60-day seed on the first tick; a mined DB picks up gap days.
   if (taskMiner) {
     const miner = taskMiner
     // After a derived-data wipe (CLUSTER_SCHEMA_VERSION bump) the DB is still

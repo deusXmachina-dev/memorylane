@@ -113,7 +113,7 @@ export const USER_CONTEXT_CONFIG = {
   MODEL: 'minimax/minimax-m3',
   LOOKBACK_DAYS: 7, // Analyze past week of activities
   MIN_ACTIVITIES: 50, // Minimum total activities in DB before first run
-  SETTLE_DELAY_MS: 30 * 1000, // 30s after unlock — runs before pattern detection (60s)
+  SETTLE_DELAY_MS: 30 * 1000, // 30s after unlock
 }
 
 // Pattern Detection Configuration
@@ -121,7 +121,6 @@ export const PATTERN_DETECTION_CONFIG = {
   MODEL: 'minimax/minimax-m3',
   LOOKBACK_DAYS: 1, // Days back from today to analyze (1 = yesterday)
   MIN_ACTIVITIES: 200, // Minimum total activities in DB before first run
-  SETTLE_DELAY_MS: 60 * 1000, // 1 min after unlock before running
 }
 
 // Sightings older than this are pruned on every mining run; cluster stats use
@@ -150,6 +149,7 @@ export const TASK_BACKFILL = {
   CLUSTER_EVERY_DAYS: 5,
   // Mining attempts per calendar day before the ledger marks it failed.
   MAX_DAY_ATTEMPTS: 3,
+  POLL_INTERVAL_MS: 5 * 60_000,
   RETRY_INITIAL_MS: 2 * 60_000,
   RETRY_MAX_MS: 30 * 60_000,
 }
