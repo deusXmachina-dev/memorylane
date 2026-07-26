@@ -150,6 +150,8 @@ export const TASK_BACKFILL = {
   CLUSTER_EVERY_DAYS: 5,
   // Mining attempts per calendar day before the ledger marks it failed.
   MAX_DAY_ATTEMPTS: 3,
+  RETRY_INITIAL_MS: 2 * 60_000,
+  RETRY_MAX_MS: 30 * 60_000,
 }
 
 // User-initiated timed capture pause (auto-resumes when the timer elapses).

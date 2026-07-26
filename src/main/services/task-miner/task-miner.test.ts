@@ -111,6 +111,25 @@ describe('TaskMiner sweep', () => {
     }
   }
 
+  // Enough activities to pass the MIN_ACTIVITIES guard, all inside already-seeded
+  // days, so a fired retry timer can reach the settle-timer branch.
+  const seedFiller = (): void => {
+    for (let i = 0; i < PATTERN_DETECTION_CONFIG.MIN_ACTIVITIES; i++) {
+      storage.activities.add({
+        id: `filler-${i}`,
+        appName: 'TestApp',
+        windowTitle: 'w',
+        tld: null,
+        startTimestamp: dayStart(1) + 3000 + i,
+        endTimestamp: dayStart(1) + 4000 + i,
+        summary: 's',
+        summaryModel: '',
+        ocrText: '',
+        vector: v(0.1),
+      })
+    }
+  }
+
   beforeEach(() => {
     deleteDbFiles(TEST_DB_PATH)
     storage = new StorageService(TEST_DB_PATH)
@@ -133,6 +152,7 @@ describe('TaskMiner sweep', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     storage.close()
     deleteDbFiles(TEST_DB_PATH)
   })
@@ -247,27 +267,55 @@ describe('TaskMiner sweep', () => {
 
   it('scheduleRun arms nothing when every day is already settled', async () => {
     seedDays(2)
-    // Enough activities to pass the MIN_ACTIVITIES guard, all inside days the
-    // sweep below settles — the pending check must be what stands down.
-    for (let i = 0; i < PATTERN_DETECTION_CONFIG.MIN_ACTIVITIES; i++) {
-      storage.activities.add({
-        id: `filler-${i}`,
-        appName: 'TestApp',
-        windowTitle: 'w',
-        tld: null,
-        startTimestamp: dayStart(1) + 3000 + i,
-        endTimestamp: dayStart(1) + 4000 + i,
-        summary: 's',
-        summaryModel: '',
-        ocrText: '',
-        vector: v(0.1),
-      })
-    }
+    seedFiller()
     await miner.sweepNow(configuredProvider)
 
     miner.scheduleRun()
 
     expect(miner.isBusy()).toBe(false)
+  })
+
+  it('retries a failed sweep on an internal timer', async () => {
+    vi.useFakeTimers()
+    seedDays(2)
+    seedFiller()
+    mockedRunDetection.mockRejectedValueOnce(new Error('blip'))
+
+    await miner.sweepNow(configuredProvider)
+    expect(miner.isBusy()).toBe(false)
+
+    vi.advanceTimersByTime(TASK_BACKFILL.RETRY_INITIAL_MS)
+    expect(miner.isBusy()).toBe(true)
+  })
+
+  it('doubles the retry delay after consecutive failed sweeps', async () => {
+    vi.useFakeTimers()
+    seedDays(2)
+    seedFiller()
+    mockedRunDetection.mockRejectedValue(new Error('down'))
+
+    await miner.sweepNow(configuredProvider)
+    await miner.sweepNow(configuredProvider)
+
+    vi.advanceTimersByTime(TASK_BACKFILL.RETRY_INITIAL_MS)
+    expect(miner.isBusy()).toBe(false)
+    vi.advanceTimersByTime(TASK_BACKFILL.RETRY_INITIAL_MS)
+    expect(miner.isBusy()).toBe(true)
+  })
+
+  it('clears the armed retry after a clean sweep', async () => {
+    vi.useFakeTimers()
+    seedDays(2)
+    seedFiller()
+    mockedRunDetection.mockRejectedValueOnce(new Error('blip'))
+
+    await miner.sweepNow(configuredProvider)
+    const second = await miner.sweepNow(configuredProvider)
+    expect(second).toMatchObject({ daysMined: 2, daysFailed: 0 })
+
+    await vi.advanceTimersByTimeAsync(TASK_BACKFILL.RETRY_MAX_MS)
+    expect(miner.isBusy()).toBe(false)
+    expect(mockedRunDetection).toHaveBeenCalledTimes(3)
   })
 
   it('startup resets a stale running day so the sweep can retry it', async () => {

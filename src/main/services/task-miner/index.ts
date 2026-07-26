@@ -46,6 +46,8 @@ export class TaskMiner {
   /** Settled counts snapshotted at sweep start; null outside a sweep. */
   private sweepBaseline: { completed: number; failed: number } | null = null
   private settleTimer: ReturnType<typeof setTimeout> | null = null
+  private retryTimer: ReturnType<typeof setTimeout> | null = null
+  private retryDelayMs = TASK_BACKFILL.RETRY_INITIAL_MS
   private model = ''
   /** Remote override for the clustering (label/merge/split) passes; null = follow `model`. */
   private clusterModel: string | null = null
@@ -64,7 +66,26 @@ export class TaskMiner {
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled
+    if (!enabled) this.clearRetry()
     log.info(`[TaskMiner] ${enabled ? 'Enabled' : 'Disabled'}`)
+  }
+
+  private clearRetry(): void {
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer)
+      this.retryTimer = null
+    }
+  }
+
+  private scheduleRetry(): void {
+    if (this.retryTimer) return
+    const delay = this.retryDelayMs
+    this.retryDelayMs = Math.min(this.retryDelayMs * 2, TASK_BACKFILL.RETRY_MAX_MS)
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null
+      this.scheduleRun()
+    }, delay)
+    log.info(`[TaskMiner] Retry sweep in ${Math.round(delay / 60_000)}m`)
   }
 
   updateModel(model: string): void {
@@ -183,8 +204,9 @@ export class TaskMiner {
    * labels feed the known-procedure vocabulary later days scan against) and
    * mine each one. A day's sightings and its `completed` status commit in one
    * transaction (see runDetection.onCommit), so a crash retries cleanly. A
-   * failed day records the attempt and stops the sweep — the next trigger
-   * retries it, and once its attempts are exhausted the claim skips past it.
+   * failed day records the attempt and stops the sweep — a backoff retry timer
+   * (or any earlier trigger) retries it, and once its attempts are exhausted
+   * the claim skips past it.
    * Clusters at the CLUSTER_EVERY_DAYS barrier and once at the end.
    */
   private async sweep(provider: InferenceProvider): Promise<BackfillSummary> {
@@ -193,6 +215,7 @@ export class TaskMiner {
       return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'busy' }
     }
     this.running = true
+    this.clearRetry()
     const settled = this.storage.miningDays.countByStatus()
     this.sweepBaseline = { completed: settled.completed, failed: settled.failed }
     this.emitStatus()
@@ -284,6 +307,8 @@ export class TaskMiner {
             `${daysSkipped} already present, ${daysFailed} failed`,
         )
       }
+      if (daysFailed > 0 && this.storage.miningDays.hasPending()) this.scheduleRetry()
+      else if (daysFailed === 0) this.retryDelayMs = TASK_BACKFILL.RETRY_INITIAL_MS
       return { daysMined, daysSkipped, daysFailed, clustering }
     } finally {
       this.running = false
