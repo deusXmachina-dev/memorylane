@@ -24,9 +24,6 @@ import type { SemanticPipelinePreference } from '@main/semantic/activity-semanti
 import { InteractionEventDebugDumper } from '@main/debug/interaction-event-debug-dump'
 import { InferenceProviderImpl, type InferenceProvider } from './llm'
 import type { Vendor } from '../shared/types'
-import type { RemoteModelConfig } from '../shared/remote-model-config'
-import { buildModelChain } from '../shared/vendor-defaults'
-import { getEffectivePresets } from '@main/settings/effective-model-presets'
 import { createCaptureBlacklistCoordinator } from '@main/capture/capture-blacklist-coordinator'
 import {
   createCaptureController,
@@ -76,9 +73,8 @@ export async function createMainRuntime(params: {
   edition: AppEdition
   vendorCredentials: VendorCredentialsManager
   getActiveVendor: () => Vendor
-  getRemoteModelConfig?: () => RemoteModelConfig | null
-  initialVideoModel?: string
-  initialSnapshotModel?: string
+  initialVideoModels?: string[]
+  initialSnapshotModels?: string[]
 }): Promise<MainRuntime> {
   const onCaptureStateChanged = params.onCaptureStateChanged ?? (() => undefined)
 
@@ -124,23 +120,14 @@ export async function createMainRuntime(params: {
     )
   }
 
-  const presets = getEffectivePresets(
-    params.getActiveVendor(),
-    params.getRemoteModelConfig?.() ?? null,
-  )
-  const initialVideoModels = buildModelChain(params.initialVideoModel ?? '', presets.semanticVideo)
-  const initialSnapshotModels = buildModelChain(
-    params.initialSnapshotModel ?? '',
-    presets.semanticSnapshot,
-  )
   const semanticService = new ActivitySemanticService(inferenceProvider, {
     usageTracker,
     summaryModeTracker,
     debugDumper,
     pipelinePreference: params.semanticPipelinePreference,
     requestTimeoutMs: params.semanticRequestTimeoutMs,
-    videoModels: initialVideoModels,
-    snapshotModels: initialSnapshotModels,
+    videoModels: params.initialVideoModels ?? [],
+    snapshotModels: params.initialSnapshotModels ?? [],
     healthStatePath: path.join(userDataPath, 'llm-health.json'),
   })
 

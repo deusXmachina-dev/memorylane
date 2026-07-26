@@ -407,22 +407,7 @@ describe('CaptureSettingsManager', () => {
       expect(manager.get().patternDetectionModel).toBe(expected)
     })
 
-    it('resets the remote config stamp on a defaults version bump', () => {
-      fs.writeFileSync(
-        configPath,
-        JSON.stringify({
-          activeVendor: 'openrouter',
-          modelDefaultsVersion: MODEL_DEFAULTS_VERSION - 1,
-          remoteModelConfigVersion: 7,
-        }),
-      )
-      const manager = new CaptureSettingsManager(configPath)
-      // The wipe clears the stamp so the next remote sync re-applies on top of
-      // the fresh defaults.
-      expect(manager.get().remoteModelConfigVersion).toBe(0)
-    })
-
-    it('preserves the remote config stamp when defaults version is current', () => {
+    it('strips the retired remote config stamp from stored files', () => {
       fs.writeFileSync(
         configPath,
         JSON.stringify({
@@ -432,7 +417,10 @@ describe('CaptureSettingsManager', () => {
         }),
       )
       const manager = new CaptureSettingsManager(configPath)
-      expect(manager.get().remoteModelConfigVersion).toBe(7)
+      expect('remoteModelConfigVersion' in manager.get()).toBe(false)
+      manager.save({})
+      const stored = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+      expect('remoteModelConfigVersion' in stored).toBe(false)
     })
 
     it('persists the version bump so the override runs only once', () => {

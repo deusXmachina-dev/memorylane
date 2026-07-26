@@ -46,7 +46,7 @@ export class TaskMiner {
   /** Settled counts snapshotted at sweep start; null outside a sweep. */
   private sweepBaseline: { completed: number; failed: number } | null = null
   private settleTimer: ReturnType<typeof setTimeout> | null = null
-  private model: string = DEFAULT_MINER_CONFIG.model
+  private model = ''
   /** Remote override for the clustering (label/merge/split) passes; null = follow `model`. */
   private clusterModel: string | null = null
   private enabled = true
@@ -68,8 +68,8 @@ export class TaskMiner {
   }
 
   updateModel(model: string): void {
-    this.model = model && model.trim().length > 0 ? model.trim() : DEFAULT_MINER_CONFIG.model
-    log.info(`[TaskMiner] Model updated to: ${this.model}`)
+    this.model = model.trim()
+    log.info(`[TaskMiner] Model updated to: ${this.model || '(none — mining idle)'}`)
   }
 
   updateClusterModel(model: string | null): void {
@@ -116,6 +116,11 @@ export class TaskMiner {
 
     if (!this.provider || !this.provider.isConfigured()) {
       log.info('[TaskMiner] No inference provider configured, skipping')
+      return
+    }
+
+    if (!this.model) {
+      log.info('[TaskMiner] No model configured, skipping')
       return
     }
 
@@ -295,6 +300,9 @@ export class TaskMiner {
     if (!provider.isConfigured()) {
       return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'no-provider' }
     }
+    if (!this.model) {
+      return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'no-model' }
+    }
     this.ensureEnqueued()
     return this.sweep(provider)
   }
@@ -319,12 +327,14 @@ export class TaskMiner {
       return
     this.running = true
     try {
+      const model = this.clusterModel ?? this.model
       await runClustering({
         storage: this.storage,
         embedder: this.embedder,
         clusterVectors: this.embedder.clusterVectors?.bind(this.embedder),
-        provider: this.enabled && this.provider?.isConfigured() ? this.provider : undefined,
-        model: this.clusterModel ?? this.model,
+        provider:
+          this.enabled && model && this.provider?.isConfigured() ? this.provider : undefined,
+        model,
       })
     } catch (error) {
       log.error('[TaskMiner] Cluster rebuild failed:', formatApiError(error))

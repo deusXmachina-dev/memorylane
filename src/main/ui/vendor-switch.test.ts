@@ -159,41 +159,49 @@ describe('applyVendorSwitch', () => {
     expect(semanticService.testConnection).toHaveBeenCalledTimes(1)
   })
 
-  it('builds chains from the remote config and diverges the user-context model', () => {
+  it('managed: takes chains strictly from the remote config, ignoring stored picks', () => {
     const { deps, semanticService, taskMiner, userContextBuilder } = makeDeps()
+    deps.isManaged = () => true
     deps.getRemoteModelConfig = () => ({
       version: 2,
       models: {
         semanticVideo: ['remote/video-model'],
+        taskMining: ['remote/miner-model'],
         userContext: ['remote/context-model'],
       },
     })
     const next = makeSettings({
       activeVendor: 'openrouter',
-      semanticVideoModel: 'remote/video-model',
-      patternDetectionModel: 'minimax/minimax-m3',
+      semanticVideoModel: 'stored/pick-ignored',
+      patternDetectionModel: 'stored/pick-ignored',
       semanticPipelineMode: 'auto',
     })
 
     applyVendorSwitch(deps, next)
 
-    const [videoModels] = semanticService.updateModels.mock.calls[0] as [string[], string[]]
+    const [videoModels, snapshotModels] = semanticService.updateModels.mock.calls[0] as [
+      string[],
+      string[],
+    ]
     expect(videoModels).toEqual(['remote/video-model'])
-    expect(taskMiner.updateModel).toHaveBeenCalledWith('minimax/minimax-m3')
+    expect(snapshotModels).toEqual(VENDOR_PRESETS.openrouter.semanticSnapshot.map((p) => p.id))
+    expect(taskMiner.updateModel).toHaveBeenCalledWith('remote/miner-model')
     expect(userContextBuilder.updateModel).toHaveBeenCalledWith('remote/context-model')
   })
 
-  it('sets the cluster override on openrouter and clears it on other vendors', () => {
+  it('sets the cluster override when managed and clears it for BYOK', () => {
     const { deps, taskMiner } = makeDeps()
     deps.getRemoteModelConfig = () => ({
       version: 2,
       models: { clusterReview: ['remote/cluster-model'] },
     })
 
+    deps.isManaged = () => true
     applyVendorSwitch(deps, makeSettings({ activeVendor: 'openrouter' }))
     expect(taskMiner.updateClusterModel).toHaveBeenLastCalledWith('remote/cluster-model')
 
-    applyVendorSwitch(deps, makeSettings({ activeVendor: 'openai-compatible' }))
+    deps.isManaged = () => false
+    applyVendorSwitch(deps, makeSettings({ activeVendor: 'openrouter' }))
     expect(taskMiner.updateClusterModel).toHaveBeenLastCalledWith(null)
   })
 })

@@ -14,6 +14,7 @@ export interface VendorSwitchDeps extends ModelPushDeps {
   }
   inferenceProvider: { notifyConfigChanged(): void }
   getRemoteModelConfig?: () => RemoteModelConfig | null
+  isManaged?: () => boolean
 }
 
 /**
@@ -26,7 +27,7 @@ export interface VendorSwitchDeps extends ModelPushDeps {
  * with.
  */
 export function applyVendorSwitch(d: VendorSwitchDeps, next: CaptureSettings): void {
-  pushModelSelections(d, next, d.getRemoteModelConfig?.() ?? null)
+  pushModelSelections(d, next, d.getRemoteModelConfig?.() ?? null, d.isManaged?.() ?? false)
   d.semanticService.updatePipelinePreference(next.semanticPipelineMode)
   d.inferenceProvider.notifyConfigChanged()
   void d.semanticService.testConnection()

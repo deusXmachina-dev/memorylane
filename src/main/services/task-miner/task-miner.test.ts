@@ -67,6 +67,7 @@ describe('TaskMiner.isBusy', () => {
     vi.useFakeTimers()
     seedActivities(storage, PATTERN_DETECTION_CONFIG.MIN_ACTIVITIES)
     const miner = new TaskMiner(storage, configuredProvider, embedder)
+    miner.updateModel('test/model')
 
     expect(miner.isBusy()).toBe(false)
     miner.scheduleRun()
@@ -115,6 +116,7 @@ describe('TaskMiner sweep', () => {
     storage = new StorageService(TEST_DB_PATH)
     applyMigrations(storage.getDatabase())
     miner = new TaskMiner(storage, configuredProvider, embedder)
+    miner.updateModel('test/model')
     mockedRunDetection.mockReset()
     mockedRunClustering.mockClear()
     // Default: a successful mine that commits the day like the real one does.
@@ -279,5 +281,23 @@ describe('TaskMiner sweep', () => {
     const row = storage.miningDays.getAll()[0]
     expect(row.status).toBe('pending')
     expect(row.lastError).toBe('interrupted')
+  })
+
+  it('idles without a model: no ledger claim, and resumes once a model arrives', async () => {
+    seedDays(2)
+    miner.updateModel('')
+
+    const summary = await miner.sweepNow(configuredProvider)
+    expect(summary).toMatchObject({ daysMined: 0, skipped: 'no-model' })
+    expect(storage.miningDays.getAll()).toEqual([])
+    expect(mockedRunDetection).not.toHaveBeenCalled()
+
+    miner.scheduleRun()
+    expect(miner.isBusy()).toBe(false)
+    expect(storage.miningDays.getAll()).toEqual([])
+
+    miner.updateModel('test/model')
+    const resumed = await miner.sweepNow(configuredProvider)
+    expect(resumed.daysMined).toBe(2)
   })
 })

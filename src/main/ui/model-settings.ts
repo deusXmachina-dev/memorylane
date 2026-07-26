@@ -14,6 +14,7 @@ export interface ModelSettingsDeps extends ModelPushDeps {
     setEnabled(enabled: boolean): void
   }
   getRemoteModelConfig?: () => RemoteModelConfig | null
+  isManaged?: () => boolean
 }
 
 /**
@@ -31,7 +32,7 @@ export function applyModelSettings(
     updated.semanticSnapshotModel !== previous.semanticSnapshotModel ||
     updated.patternDetectionModel !== previous.patternDetectionModel
   ) {
-    pushModelSelections(d, updated, d.getRemoteModelConfig?.() ?? null)
+    pushModelSelections(d, updated, d.getRemoteModelConfig?.() ?? null, d.isManaged?.() ?? false)
   }
   if (updated.patternDetectionEnabled !== previous.patternDetectionEnabled) {
     d.taskMiner?.setEnabled(updated.patternDetectionEnabled)

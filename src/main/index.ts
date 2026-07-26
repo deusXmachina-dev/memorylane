@@ -41,8 +41,7 @@ import { readRemoteBlacklist, writeRemoteBlacklist } from './services/remote-bla
 import { RemoteModelConfigService } from './services/remote-model-config-service'
 import { readRemoteModelConfig, writeRemoteModelConfig } from './services/remote-model-config-store'
 import type { RemoteModelConfig } from '../shared/remote-model-config'
-import { pushModelSelections } from './ui/apply-models'
-import { applyRemoteModelConfig } from './ui/remote-model-apply'
+import { pushModelSelections, resolveModelPush } from './ui/apply-models'
 import { DeviceReportSync } from './services/device-report-sync'
 import { readDeviceReportState, writeDeviceReportState } from './services/device-report-store'
 import { createMainRuntime, type MainRuntime } from './runtime'
@@ -266,21 +265,26 @@ app.on('ready', async () => {
   // onChange is late-bound below once the miners exist, and start() only runs
   // after that binding. Managed-key installs only — BYOK and custom endpoints
   // keep full model control.
-  const isOpenRouterManaged = (): boolean =>
-    vendorCredentialsManager.getStatus('openrouter').source === 'managed'
+  const isManagedInstall = (): boolean =>
+    vendorCredentialsManager.getStatus(captureSettingsManager.get().activeVendor).source ===
+    'managed'
   let applyRemoteModel: ((config: RemoteModelConfig) => void) | null = null
   remoteModelConfig = new RemoteModelConfigService({
     getDeviceId: () => deviceIdentity.getDeviceId(),
     isActivated: () =>
-      isOpenRouterManaged() && (editionConfig.edition !== 'enterprise' || isEnterpriseActivated()),
+      isManagedInstall() && (editionConfig.edition !== 'enterprise' || isEnterpriseActivated()),
     getBackendUrl: () => backendBaseUrl,
     onChange: (config) => applyRemoteModel?.(config),
     readStored: () => readRemoteModelConfig(),
     writeStored: (config) => writeRemoteModelConfig(config),
   })
   const getRemoteModelConfig = (): RemoteModelConfig | null =>
-    isOpenRouterManaged() ? (remoteModelConfig?.getConfig() ?? null) : null
-
+    isManagedInstall() ? (remoteModelConfig?.getConfig() ?? null) : null
+  const initialModels = resolveModelPush(
+    initialCaptureSettings,
+    getRemoteModelConfig(),
+    isManagedInstall(),
+  )
   runtime = await createMainRuntime({
     edition: editionConfig.edition,
     onCaptureStateChanged: () => {
@@ -296,9 +300,8 @@ app.on('ready', async () => {
     deviceIdentity,
     vendorCredentials: vendorCredentialsManager,
     getActiveVendor: () => captureSettingsManager.get().activeVendor,
-    getRemoteModelConfig,
-    initialVideoModel: initialCaptureSettings.semanticVideoModel,
-    initialSnapshotModel: initialCaptureSettings.semanticSnapshotModel,
+    initialVideoModels: initialModels.videoModels,
+    initialSnapshotModels: initialModels.snapshotModels,
   })
 
   // Serve eval review videos from the fixtures dir (Developer mode).
@@ -378,20 +381,22 @@ app.on('ready', async () => {
     },
     settings,
     getRemoteModelConfig(),
+    isManagedInstall(),
   )
 
   // Miners exist now — bind the apply step and start syncing. The cached-load
   // notification re-applies idempotently; the first network sync follows.
   applyRemoteModel = (config) => {
-    if (!runtime || !isOpenRouterManaged()) return
-    applyRemoteModelConfig(
+    if (!runtime || !isManagedInstall()) return
+    pushModelSelections(
       {
         semanticService: runtime.semanticService,
         userContextBuilder: userContextBuilder ?? undefined,
         taskMiner: taskMiner ?? undefined,
       },
-      captureSettingsManager,
+      captureSettingsManager.get(),
       config,
+      true,
     )
   }
   remoteModelConfig.start()
@@ -501,6 +506,8 @@ app.on('ready', async () => {
     userContextBuilder: userContextBuilder ?? undefined,
     taskMiner: taskMiner ?? undefined,
     getRemoteModelConfig,
+    isManaged: isManagedInstall,
+    syncRemoteModelConfig: () => void remoteModelConfig?.sync(),
     getCaptureHotkeyLabel: hotkeyManager.getLabel,
     reconfigureCaptureHotkey,
     updateExclusions: (exclusions) => runtime?.updateExclusions(exclusions),
