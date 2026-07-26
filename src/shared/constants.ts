@@ -150,7 +150,8 @@ export const TASK_BACKFILL = {
   // Mining attempts per calendar day before the ledger marks it failed.
   MAX_DAY_ATTEMPTS: 3,
   POLL_INTERVAL_MS: 5 * 60_000,
-  RETRY_INITIAL_MS: 2 * 60_000,
+  // Must exceed POLL_INTERVAL_MS, else an outage burns MAX_DAY_ATTEMPTS in minutes.
+  RETRY_INITIAL_MS: 10 * 60_000,
   RETRY_MAX_MS: 30 * 60_000,
 }
 
