@@ -32,19 +32,35 @@ describe('resolveModelPush', () => {
     expect(r.userContextModel).toBe('remote/context')
   })
 
-  it('managed: empty slots and a missing config resolve to idle values, never defaults', () => {
-    const settings = makeCaptureSettings()
+  it('managed: no config yet resolves to the baked vendor defaults, ignoring stored picks', () => {
+    const settings = makeCaptureSettings({ semanticVideoModel: 'stored/video' })
 
-    const noConfig = resolveModelPush(settings, null, true)
-    expect(noConfig.videoModels).toEqual([])
-    expect(noConfig.snapshotModels).toEqual([])
-    expect(noConfig.minerModel).toBe('')
-    expect(noConfig.clusterModel).toBeNull()
-    expect(noConfig.userContextModel).toBe('')
+    const r = resolveModelPush(settings, null, true)
+
+    expect(r.videoModels).toEqual(VENDOR_PRESETS.openrouter.semanticVideo.map((p) => p.id))
+    expect(r.snapshotModels).toEqual(VENDOR_PRESETS.openrouter.semanticSnapshot.map((p) => p.id))
+    expect(r.minerModel).toBe(VENDOR_PRESETS.openrouter.patternDetection[0].id)
+    expect(r.userContextModel).toBe(r.minerModel)
+    expect(r.clusterModel).toBeNull()
+  })
+
+  it('managed: baked defaults follow the active vendor', () => {
+    const settings = makeCaptureSettings({ activeVendor: 'google' })
+
+    const r = resolveModelPush(settings, null, true)
+
+    expect(r.videoModels).toEqual(VENDOR_PRESETS.google.semanticVideo.map((p) => p.id))
+  })
+
+  it('managed: a fetched config with empty slots idles, never falls back to defaults', () => {
+    const settings = makeCaptureSettings()
 
     const emptySlots = resolveModelPush(settings, { version: 1, models: {} }, true)
     expect(emptySlots.videoModels).toEqual([])
+    expect(emptySlots.snapshotModels).toEqual([])
     expect(emptySlots.minerModel).toBe('')
+    expect(emptySlots.clusterModel).toBeNull()
+    expect(emptySlots.userContextModel).toBe('')
   })
 
   it('byok: builds pick-headed chains from the baked presets', () => {
@@ -107,14 +123,11 @@ describe('pushModelSelections', () => {
 })
 
 describe('hasRequiredSemanticModels', () => {
-  const videoOnly: RemoteModelConfig = {
-    version: 1,
-    models: { semanticVideo: ['remote/video'] },
-  }
-  const snapshotOnly: RemoteModelConfig = {
-    version: 1,
-    models: { semanticSnapshot: ['remote/snapshot'] },
-  }
+  const settings = makeCaptureSettings()
+  const resolve = (models: RemoteModelConfig['models']) =>
+    resolveModelPush(settings, { version: 1, models }, true)
+  const videoOnly = resolve({ semanticVideo: ['remote/video'] })
+  const snapshotOnly = resolve({ semanticSnapshot: ['remote/snapshot'] })
 
   it('auto and image require the snapshot chain', () => {
     expect(hasRequiredSemanticModels(snapshotOnly, 'auto')).toBe(true)
@@ -128,8 +141,9 @@ describe('hasRequiredSemanticModels', () => {
     expect(hasRequiredSemanticModels(snapshotOnly, 'video')).toBe(false)
   })
 
-  it('a null config or empty slots are never ready', () => {
-    expect(hasRequiredSemanticModels(null, 'auto')).toBe(false)
-    expect(hasRequiredSemanticModels({ version: 1, models: {} }, 'video')).toBe(false)
+  it('empty slots are never ready, but a missing config resolves to ready defaults', () => {
+    expect(hasRequiredSemanticModels(resolve({}), 'auto')).toBe(false)
+    expect(hasRequiredSemanticModels(resolve({}), 'video')).toBe(false)
+    expect(hasRequiredSemanticModels(resolveModelPush(settings, null, true), 'auto')).toBe(true)
   })
 })

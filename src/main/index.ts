@@ -282,9 +282,10 @@ app.on('ready', async () => {
     isManagedInstall() ? (remoteModelConfig?.getConfig() ?? null) : null
   const isProcessingReady = (): boolean => {
     if (!isManagedInstall()) return true
+    const settings = captureSettingsManager.get()
     return hasRequiredSemanticModels(
-      getRemoteModelConfig(),
-      captureSettingsManager.get().semanticPipelineMode,
+      resolveModelPush(settings, getRemoteModelConfig(), true),
+      settings.semanticPipelineMode,
     )
   }
 

@@ -1,5 +1,5 @@
 import type { RemoteModelConfig } from '../../shared/remote-model-config'
-import type { CaptureSettings, SemanticPipelineMode } from '../../shared/types'
+import type { CaptureSettings, SemanticPipelineMode, Vendor } from '../../shared/types'
 import { VENDOR_PRESETS, buildModelChain } from '../../shared/vendor-defaults'
 
 /** Structural shape of every live service that consumes a model selection. */
@@ -27,18 +27,34 @@ export interface ResolvedModelPush {
   userContextModel: string
 }
 
+function bakedDefaults(vendor: Vendor): ResolvedModelPush {
+  const presets = VENDOR_PRESETS[vendor]
+  const miner = presets.patternDetection[0]?.id ?? ''
+  return {
+    videoModels: presets.semanticVideo.map((p) => p.id),
+    snapshotModels: presets.semanticSnapshot.map((p) => p.id),
+    minerModel: miner,
+    clusterModel: null,
+    userContextModel: miner,
+  }
+}
+
 export function resolveModelPush(
   s: ModelSelection,
   remote: RemoteModelConfig | null,
   managed: boolean,
 ): ResolvedModelPush {
   if (managed) {
+    // No config fetched yet (first minutes of a fresh install) → baked
+    // defaults so the pipeline runs immediately. A fetched config — including
+    // one with empty slots (kill switch) — applies verbatim.
+    if (remote === null) return bakedDefaults(s.activeVendor)
     return {
-      videoModels: remote?.models.semanticVideo ?? [],
-      snapshotModels: remote?.models.semanticSnapshot ?? [],
-      minerModel: remote?.models.taskMining?.[0] ?? '',
-      clusterModel: remote?.models.clusterReview?.[0] ?? null,
-      userContextModel: remote?.models.userContext?.[0] ?? '',
+      videoModels: remote.models.semanticVideo ?? [],
+      snapshotModels: remote.models.semanticSnapshot ?? [],
+      minerModel: remote.models.taskMining?.[0] ?? '',
+      clusterModel: remote.models.clusterReview?.[0] ?? null,
+      userContextModel: remote.models.userContext?.[0] ?? '',
     }
   }
   const presets = VENDOR_PRESETS[s.activeVendor]
@@ -52,17 +68,16 @@ export function resolveModelPush(
 }
 
 /**
- * Whether the remote config carries a model for the pipeline stage that
+ * Whether the resolved push carries a model for the pipeline stage that
  * terminates summarization under the given mode: `video` ends on the video
  * chain, `auto` and `image` end on the snapshot chain.
  */
 export function hasRequiredSemanticModels(
-  remote: RemoteModelConfig | null,
+  resolved: ResolvedModelPush,
   mode: SemanticPipelineMode,
 ): boolean {
-  const models = remote?.models
-  if (mode === 'video') return Boolean(models?.semanticVideo?.length)
-  return Boolean(models?.semanticSnapshot?.length)
+  if (mode === 'video') return resolved.videoModels.length > 0
+  return resolved.snapshotModels.length > 0
 }
 
 /**
