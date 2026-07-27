@@ -1,5 +1,6 @@
+import { generateText } from 'ai'
 import type { InferenceProvider } from '@main/llm'
-import { extractJsonObject, minerGenerateText } from '../helpers'
+import { extractJsonObject } from '../helpers'
 import type { ReviewInput, ReviewOutput } from './types'
 import { CLUSTERING_CONFIG } from './types'
 import { buildClusterReviewSystemPrompt, serializeReviewInput } from './prompts'
@@ -27,10 +28,11 @@ export async function runLlmReview(
         `${input.mergeCandidates.length} merge candidates with ${model}` +
         (attempt > 1 ? ` (attempt ${attempt}/${CLUSTERING_CONFIG.LLM_MAX_ATTEMPTS})` : ''),
     )
-    const result = await minerGenerateText({
+    const result = await generateText({
       model: provider.languageModel(model),
       system,
       prompt,
+      maxRetries: 0,
     })
     tokenUsage.input += result.usage.inputTokens ?? 0
     tokenUsage.output += result.usage.outputTokens ?? 0

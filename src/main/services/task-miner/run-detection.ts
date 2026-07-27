@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
-import { stepCountIs } from 'ai'
+import { generateText, stepCountIs } from 'ai'
 import { SIGHTING_RETENTION_DAYS } from '../../../shared/constants'
 import type { StorageService } from '../../storage'
 import type { Sighting } from '../../storage/sighting-repository'
@@ -19,7 +19,6 @@ import {
   serializeActivities,
   tryExtractJsonArray,
   extractJsonObject,
-  minerGenerateText,
 } from './helpers'
 import { getDayBoundaries } from '@main/utils/day'
 import { deriveSightingApps } from '@/shared/app-utils'
@@ -171,10 +170,11 @@ export async function runDetection(
       `[Phase 1] Sending ${activities.length} activities to ${cfg.model}...` +
         (attempt > 1 ? ` (attempt ${attempt}/${SCAN_MAX_ATTEMPTS})` : ''),
     )
-    const scanResult = await minerGenerateText({
+    const scanResult = await generateText({
       model: provider.languageModel(cfg.model),
       system: scanPrompt,
       prompt: scanUserMessage,
+      maxRetries: 0,
     })
 
     scanInputTokens += scanResult.usage.inputTokens ?? 0
@@ -284,12 +284,13 @@ export async function runDetection(
           2,
         )}\n\`\`\``
 
-        const verifyResult = await minerGenerateText({
+        const verifyResult = await generateText({
           model: provider.languageModel(cfg.model),
           system: groundPrompt,
           prompt: candidateInput,
           tools,
           stopWhen: stepCountIs(GROUNDING_MAX_STEPS),
+          maxRetries: 0,
         })
 
         verifyInputTokens += verifyResult.usage.inputTokens ?? 0
