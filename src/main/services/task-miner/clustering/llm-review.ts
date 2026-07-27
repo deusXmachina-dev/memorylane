@@ -32,6 +32,7 @@ export async function runLlmReview(
       model: provider.languageModel(model),
       system,
       prompt,
+      maxRetries: 0,
     })
     tokenUsage.input += result.usage.inputTokens ?? 0
     tokenUsage.output += result.usage.outputTokens ?? 0

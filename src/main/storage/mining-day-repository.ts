@@ -10,6 +10,7 @@ export interface MiningDay {
   enqueuedAt: number
   startedAt: number | null
   completedAt: number | null
+  nextAttemptAt: number | null
   stats: Record<string, unknown> | null
 }
 
@@ -21,6 +22,7 @@ interface MiningDayRow {
   enqueued_at: number
   started_at: number | null
   completed_at: number | null
+  next_attempt_at: number | null
   stats: string | null
 }
 
@@ -33,6 +35,7 @@ function toMiningDay(row: MiningDayRow): MiningDay {
     enqueuedAt: row.enqueued_at,
     startedAt: row.started_at,
     completedAt: row.completed_at,
+    nextAttemptAt: row.next_attempt_at,
     stats: row.stats ? (JSON.parse(row.stats) as Record<string, unknown>) : null,
   }
 }
@@ -63,19 +66,22 @@ export class MiningDayRepository {
   }
 
   /**
-   * Claim the oldest pending day: mark it running and count the attempt.
-   * Oldest-first is load-bearing — earlier days' cluster labels feed the
-   * known-procedure vocabulary that later days scan against.
+   * Claim the oldest pending day whose cooldown has elapsed: mark it running
+   * and count the attempt. Oldest-first is load-bearing — earlier days'
+   * cluster labels feed the known-procedure vocabulary that later days scan
+   * against.
    */
   claimOldestPending(now: number = Date.now()): { day: string; attempts: number } | null {
     const row = this.db
       .prepare(
         `UPDATE mining_days
          SET status = 'running', attempts = attempts + 1, started_at = ?
-         WHERE day = (SELECT day FROM mining_days WHERE status = 'pending' ORDER BY day ASC LIMIT 1)
+         WHERE day = (SELECT day FROM mining_days
+                      WHERE status = 'pending' AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+                      ORDER BY day ASC LIMIT 1)
          RETURNING day, attempts`,
       )
-      .get(now) as { day: string; attempts: number } | undefined
+      .get(now, now) as { day: string; attempts: number } | undefined
     return row ?? null
   }
 
@@ -83,22 +89,33 @@ export class MiningDayRepository {
     this.db
       .prepare(
         `UPDATE mining_days
-         SET status = 'completed', completed_at = ?, stats = ?, last_error = NULL
+         SET status = 'completed', completed_at = ?, stats = ?, last_error = NULL,
+             next_attempt_at = NULL
          WHERE day = ?`,
       )
       .run(now, JSON.stringify(stats), day)
   }
 
-  /** Record a failed attempt: back to pending while attempts remain, else failed. */
-  markAttemptFailed(day: string, error: string, maxAttempts: number): void {
+  /**
+   * Record a failed attempt: back to pending with a cooldown while attempts
+   * remain, else failed.
+   */
+  markAttemptFailed(
+    day: string,
+    error: string,
+    maxAttempts: number,
+    cooldownMs: number,
+    now: number = Date.now(),
+  ): void {
     this.db
       .prepare(
         `UPDATE mining_days
          SET status = CASE WHEN attempts < ? THEN 'pending' ELSE 'failed' END,
+             next_attempt_at = CASE WHEN attempts < ? THEN ? ELSE NULL END,
              last_error = ?
          WHERE day = ?`,
       )
-      .run(maxAttempts, error, day)
+      .run(maxAttempts, maxAttempts, now + cooldownMs, error, day)
   }
 
   /**
@@ -120,7 +137,10 @@ export class MiningDayRepository {
   /** Give exhausted days a fresh set of attempts (dev "retry failed days"). */
   retryFailed(): number {
     return this.db
-      .prepare(`UPDATE mining_days SET status = 'pending', attempts = 0 WHERE status = 'failed'`)
+      .prepare(
+        `UPDATE mining_days SET status = 'pending', attempts = 0, next_attempt_at = NULL
+         WHERE status = 'failed'`,
+      )
       .run().changes
   }
 
@@ -129,6 +149,28 @@ export class MiningDayRepository {
       this.db.prepare(`SELECT 1 FROM mining_days WHERE status = 'pending' LIMIT 1`).get() !==
       undefined
     )
+  }
+
+  hasClaimablePending(now: number = Date.now()): boolean {
+    return (
+      this.db
+        .prepare(
+          `SELECT 1 FROM mining_days
+           WHERE status = 'pending' AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+           LIMIT 1`,
+        )
+        .get(now) !== undefined
+    )
+  }
+
+  nextPendingAttemptAt(): number | null {
+    const row = this.db
+      .prepare(
+        `SELECT MIN(next_attempt_at) AS next FROM mining_days
+         WHERE status = 'pending' AND next_attempt_at IS NOT NULL`,
+      )
+      .get() as { next: number | null }
+    return row.next
   }
 
   getRunningDay(): string | null {

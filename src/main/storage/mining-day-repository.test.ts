@@ -58,19 +58,46 @@ describe('MiningDayRepository', () => {
     for (let attempt = 1; attempt <= 3; attempt++) {
       const claim = storage.miningDays.claimOldestPending()
       expect(claim).toEqual({ day: '2026-07-01', attempts: attempt })
-      storage.miningDays.markAttemptFailed('2026-07-01', `boom ${attempt}`, 3)
+      storage.miningDays.markAttemptFailed('2026-07-01', `boom ${attempt}`, 3, 0)
     }
 
     const row = storage.miningDays.getAll()[0]
     expect(row.status).toBe('failed')
     expect(row.lastError).toBe('boom 3')
+    expect(row.nextAttemptAt).toBeNull()
     expect(storage.miningDays.claimOldestPending()).toBeNull()
   })
 
-  it('completing a day clears its error and stores stats', () => {
+  it('a failed attempt sets a cooldown that gates the claim', () => {
+    storage.miningDays.enqueueMissing(['2026-07-01', '2026-07-02'])
+    storage.miningDays.claimOldestPending(1000)
+    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', 3, 500, 1000)
+
+    const row = storage.miningDays.getAll().find((d) => d.day === '2026-07-01')
+    expect(row?.status).toBe('pending')
+    expect(row?.nextAttemptAt).toBe(1500)
+
+    expect(storage.miningDays.claimOldestPending(1400)?.day).toBe('2026-07-02')
+    storage.miningDays.markCompleted('2026-07-02', {})
+    expect(storage.miningDays.claimOldestPending(1400)).toBeNull()
+    expect(storage.miningDays.claimOldestPending(1500)?.day).toBe('2026-07-01')
+  })
+
+  it('distinguishes pending from claimable and reports the next attempt time', () => {
+    storage.miningDays.enqueueMissing(['2026-07-01'])
+    storage.miningDays.claimOldestPending(1000)
+    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', 3, 500, 1000)
+
+    expect(storage.miningDays.hasPending()).toBe(true)
+    expect(storage.miningDays.hasClaimablePending(1400)).toBe(false)
+    expect(storage.miningDays.hasClaimablePending(1500)).toBe(true)
+    expect(storage.miningDays.nextPendingAttemptAt()).toBe(1500)
+  })
+
+  it('completing a day clears its error and cooldown and stores stats', () => {
     storage.miningDays.enqueueMissing(['2026-07-01'])
     storage.miningDays.claimOldestPending()
-    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', 3)
+    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', 3, 0)
     storage.miningDays.claimOldestPending()
 
     storage.miningDays.markCompleted('2026-07-01', { candidatesKept: 2 }, 9000)
@@ -78,6 +105,7 @@ describe('MiningDayRepository', () => {
     const row = storage.miningDays.getAll()[0]
     expect(row.status).toBe('completed')
     expect(row.lastError).toBeNull()
+    expect(row.nextAttemptAt).toBeNull()
     expect(row.completedAt).toBe(9000)
   })
 
@@ -89,7 +117,7 @@ describe('MiningDayRepository', () => {
 
     // Exhaust attempts, then crash mid-run: stale reset marks it failed.
     storage.miningDays.claimOldestPending() // 07-01, attempt 2
-    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', 3)
+    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', 3, 0)
     storage.miningDays.claimOldestPending() // 07-01, attempt 3
     expect(storage.miningDays.resetStaleRunning(3)).toBe(1)
     expect(storage.miningDays.getAll().find((d) => d.day === '2026-07-01')?.status).toBe('failed')
@@ -98,7 +126,7 @@ describe('MiningDayRepository', () => {
   it('retryFailed re-opens exhausted days with fresh attempts', () => {
     storage.miningDays.enqueueMissing(['2026-07-01'])
     storage.miningDays.claimOldestPending()
-    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', 1)
+    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', 1, 0)
     expect(storage.miningDays.getFailed()).toHaveLength(1)
 
     expect(storage.miningDays.retryFailed()).toBe(1)
@@ -152,5 +180,37 @@ describe('migration 0016_add_mining_days', () => {
       .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'mining_runs'`)
       .all()
     expect(tables).toHaveLength(0)
+  })
+})
+
+describe('migration 0018_mining_day_cooldown', () => {
+  const TEST_DB_PATH = path.join(os.tmpdir(), 'temp_migration_0018_test.db')
+  let storage: StorageService
+  let db: Database.Database
+
+  const idx0018 = migrations.findIndex((m) => m.name === '0018_mining_day_cooldown')
+
+  beforeEach(() => {
+    deleteDbFiles(TEST_DB_PATH)
+    storage = new StorageService(TEST_DB_PATH)
+    db = storage.getDatabase()
+    for (const m of migrations.slice(0, idx0018)) m.up(db)
+  })
+
+  afterEach(() => {
+    storage.close()
+    deleteDbFiles(TEST_DB_PATH)
+  })
+
+  it('adds next_attempt_at with NULL for existing rows', () => {
+    db.prepare(
+      `INSERT INTO mining_days (day, status, enqueued_at) VALUES ('2026-07-01', 'pending', 1)`,
+    ).run()
+
+    migrations[idx0018].up(db)
+
+    expect(
+      db.prepare(`SELECT next_attempt_at FROM mining_days WHERE day = '2026-07-01'`).get(),
+    ).toEqual({ next_attempt_at: null })
   })
 })

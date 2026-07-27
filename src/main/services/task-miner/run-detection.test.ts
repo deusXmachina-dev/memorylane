@@ -91,6 +91,14 @@ describe('runDetection day commit', () => {
     )
   })
 
+  it('disables SDK retries — the mining ledger owns retry pacing', async () => {
+    mockedGenerateText.mockResolvedValue(scanResponse('```json\n[]\n```'))
+
+    await runDetection(provider, storage, embedder, { lookbackDays: 1, onCommit: vi.fn() })
+
+    expect(mockedGenerateText).toHaveBeenCalledWith(expect.objectContaining({ maxRetries: 0 }))
+  })
+
   it('commits sightings and stats in one transaction', async () => {
     mockedGenerateText.mockResolvedValue(
       scanResponse(

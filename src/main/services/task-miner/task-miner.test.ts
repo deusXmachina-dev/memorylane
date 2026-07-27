@@ -197,27 +197,36 @@ describe('TaskMiner sweep', () => {
     expect(skipped?.stats).toEqual({ skippedReason: 'had-sightings' })
   })
 
-  it('records a failed attempt, stops the sweep, and retries on the next one', async () => {
+  it('skips past a failed day, keeps mining, and retries it after its cooldown', async () => {
+    vi.useFakeTimers()
     seedDays(3)
     mockedRunDetection.mockRejectedValueOnce(new Error('provider down'))
 
     const first = await miner.sweepNow(configuredProvider)
-    expect(first).toMatchObject({ daysMined: 0, daysFailed: 1 })
-    // Sweep stopped: the two newer days were never attempted.
-    expect(mockedRunDetection).toHaveBeenCalledTimes(1)
+    expect(first).toMatchObject({ daysMined: 2, daysFailed: 1, aborted: false })
+    // The failure did not stop the sweep: the two newer days were still mined.
+    expect(mockedRunDetection).toHaveBeenCalledTimes(3)
     const failedDay = storage.miningDays.getAll().find((d) => d.day === localLabel(3))
     expect(failedDay?.status).toBe('pending')
     expect(failedDay?.lastError).toBe('provider down')
+    expect(failedDay?.nextAttemptAt).toBe(Date.now() + TASK_BACKFILL.DAY_COOLDOWN_INITIAL_MS)
 
+    // Still cooling: the day is unclaimable.
+    const gated = await miner.sweepNow(configuredProvider)
+    expect(gated).toMatchObject({ daysMined: 0, daysFailed: 0 })
+
+    vi.advanceTimersByTime(TASK_BACKFILL.DAY_COOLDOWN_INITIAL_MS)
     const second = await miner.sweepNow(configuredProvider)
-    expect(second).toMatchObject({ daysMined: 3, daysFailed: 0 })
+    expect(second).toMatchObject({ daysMined: 1, daysFailed: 0 })
   })
 
   it('marks a day failed after exhausting attempts and sweeps past it', async () => {
+    vi.useFakeTimers()
     seedDays(2)
     for (let i = 0; i < TASK_BACKFILL.MAX_DAY_ATTEMPTS; i++) {
       mockedRunDetection.mockRejectedValueOnce(new Error(`boom ${i + 1}`))
       await miner.sweepNow(configuredProvider)
+      vi.advanceTimersByTime(TASK_BACKFILL.DAY_COOLDOWN_MAX_MS)
     }
 
     const failed = storage.miningDays.getFailed()
@@ -226,7 +235,7 @@ describe('TaskMiner sweep', () => {
 
     // The exhausted day is unclaimable, so the next sweep flows past it.
     const next = await miner.sweepNow(configuredProvider)
-    expect(next).toMatchObject({ daysMined: 1, daysFailed: 0 })
+    expect(next).toMatchObject({ daysMined: 0, daysFailed: 0 })
     const yesterday = storage.miningDays.getAll().find((d) => d.day === localLabel(1))
     expect(yesterday?.status).toBe('completed')
   })
@@ -293,66 +302,67 @@ describe('TaskMiner sweep', () => {
     expect(storage.miningDays.getAll().every((d) => d.status === 'completed')).toBe(true)
   })
 
-  it('backoff-gates scheduleRun after a failed sweep', async () => {
+  it('a single day failure gates only that day, not the next sweep', async () => {
     vi.useFakeTimers()
     seedDays(2)
     seedFiller()
     mockedRunDetection.mockRejectedValueOnce(new Error('blip'))
-    await miner.sweepNow(configuredProvider)
+    const first = await miner.sweepNow(configuredProvider)
+    expect(first).toMatchObject({ daysMined: 1, daysFailed: 1, aborted: false })
 
+    // Stands down only because the sole pending day is cooling, not a global gate.
     miner.scheduleRun()
     expect(miner.isBusy()).toBe(false)
 
-    vi.advanceTimersByTime(TASK_BACKFILL.RETRY_INITIAL_MS)
+    vi.advanceTimersByTime(TASK_BACKFILL.DAY_COOLDOWN_INITIAL_MS)
     miner.scheduleRun()
     expect(miner.isBusy()).toBe(true)
     await drain()
     expect(storage.miningDays.getAll().every((d) => d.status === 'completed')).toBe(true)
   })
 
-  it('doubles the backoff after consecutive failed sweeps', async () => {
+  it('aborts the sweep after consecutive failures and gates the next one', async () => {
     vi.useFakeTimers()
-    seedDays(2)
+    seedDays(5)
     seedFiller()
     mockedRunDetection.mockRejectedValue(new Error('down'))
 
-    await miner.sweepNow(configuredProvider)
-    vi.advanceTimersByTime(TASK_BACKFILL.RETRY_INITIAL_MS)
-    miner.scheduleRun()
-    await drain()
+    const summary = await miner.sweepNow(configuredProvider)
+    expect(summary).toMatchObject({
+      daysFailed: TASK_BACKFILL.SWEEP_MAX_CONSECUTIVE_FAILURES,
+      aborted: true,
+    })
+    expect(mockedRunDetection).toHaveBeenCalledTimes(TASK_BACKFILL.SWEEP_MAX_CONSECUTIVE_FAILURES)
+    expect(storage.miningDays.getAll().filter((d) => d.attempts === 0)).toHaveLength(2)
 
-    vi.advanceTimersByTime(TASK_BACKFILL.RETRY_INITIAL_MS)
     miner.scheduleRun()
     expect(miner.isBusy()).toBe(false)
 
-    vi.advanceTimersByTime(TASK_BACKFILL.RETRY_INITIAL_MS)
+    vi.advanceTimersByTime(TASK_BACKFILL.SWEEP_ABORT_BACKOFF_MS)
     miner.scheduleRun()
     expect(miner.isBusy()).toBe(true)
     await drain()
   })
 
-  it('resets the backoff after a clean sweep', async () => {
-    vi.useFakeTimers()
-    seedDays(2)
-    seedFiller()
-    mockedRunDetection
-      .mockRejectedValueOnce(new Error('blip'))
-      .mockRejectedValueOnce(new Error('blip'))
+  it('a success resets the consecutive-failure count', async () => {
+    seedDays(6)
+    let call = 0
+    mockedRunDetection.mockImplementation(async (_provider, _storage, _embedder, config) => {
+      call++
+      if (call % 2 === 1) throw new Error('flaky')
+      config?.onCommit?.({
+        candidatesFromScan: 1,
+        candidatesKept: 1,
+        candidatesRejected: 0,
+        tokensIn: 10,
+        tokensOut: 5,
+      })
+      return {} as never
+    })
 
-    await miner.sweepNow(configuredProvider)
-    await miner.sweepNow(configuredProvider)
-    const clean = await miner.sweepNow(configuredProvider)
-    expect(clean).toMatchObject({ daysMined: 2, daysFailed: 0 })
-
-    storage.wipeTasks()
-    mockedRunDetection.mockRejectedValueOnce(new Error('blip'))
-    await miner.sweepNow(configuredProvider)
-
-    // An un-reset backoff would gate this attempt for 8 minutes, not 2.
-    vi.advanceTimersByTime(TASK_BACKFILL.RETRY_INITIAL_MS)
-    miner.scheduleRun()
-    expect(miner.isBusy()).toBe(true)
-    await drain()
+    const summary = await miner.sweepNow(configuredProvider)
+    expect(summary).toMatchObject({ daysMined: 3, daysFailed: 3, aborted: false })
+    expect(mockedRunDetection).toHaveBeenCalledTimes(6)
   })
 
   it('startup resets a stale running day so the sweep can retry it', async () => {
