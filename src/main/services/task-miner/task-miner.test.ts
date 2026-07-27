@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { APICallError } from 'ai'
 import * as os from 'os'
 import * as path from 'path'
 import { StorageService } from '@main/storage'
@@ -268,7 +269,8 @@ describe('TaskMiner sweep', () => {
     const summary = await miner.sweepNow(configuredProvider)
 
     expect(summary.daysMined).toBe(TASK_BACKFILL.CLUSTER_EVERY_DAYS + 3)
-    expect(peak).toBe(TASK_BACKFILL.SWEEP_CONCURRENCY)
+    // A wave never claims past the barrier, so that caps the peak too.
+    expect(peak).toBe(Math.min(TASK_BACKFILL.SWEEP_CONCURRENCY, TASK_BACKFILL.CLUSTER_EVERY_DAYS))
   })
 
   it('mines one day at a time without a backlog', async () => {
@@ -299,6 +301,18 @@ describe('TaskMiner sweep', () => {
     await miner.sweepNow(configuredProvider)
 
     expect(clustersBefore).toEqual([0, 0, 0, 0, 0, 1, 1, 1])
+    expect(mockedRunClustering).toHaveBeenCalledTimes(2)
+  })
+
+  it('counts mined days, not claims, toward the clustering barrier', async () => {
+    seedDays(11)
+    for (const back of [11, 10, 9, 8]) seedSighting(back)
+
+    const summary = await miner.sweepNow(configuredProvider)
+
+    // The first wave claims 5 days but mines only one — four had-sightings
+    // skips must not buy a clustering pass. 7 mined → one barrier + one final.
+    expect(summary).toMatchObject({ daysMined: 7, daysSkipped: 4 })
     expect(mockedRunClustering).toHaveBeenCalledTimes(2)
   })
 
@@ -401,11 +415,60 @@ describe('TaskMiner sweep', () => {
 
     const summary = await miner.sweepNow(configuredProvider)
 
-    expect(summary.aborted).toBe(true)
+    expect(summary).toMatchObject({ aborted: true, abortReason: 'failures' })
     // Days already in flight when the signature lands still burn an attempt.
     expect(summary.daysFailed).toBeGreaterThanOrEqual(TASK_BACKFILL.SWEEP_MAX_CONSECUTIVE_FAILURES)
     expect(summary.daysFailed).toBeLessThanOrEqual(TASK_BACKFILL.SWEEP_CONCURRENCY)
     expect(mockedRunClustering).not.toHaveBeenCalled()
+    // Workers claim their own day, so an abort leaves nothing half-claimed for
+    // the startup crash recovery to unwind.
+    expect(storage.miningDays.countByStatus().running).toBe(0)
+  })
+
+  it('hands a throttled day back unspent and stops the sweep', async () => {
+    seedDays(TASK_BACKFILL.CLUSTER_EVERY_DAYS + 3)
+    seedFiller()
+    mockedRunDetection.mockRejectedValue(
+      new APICallError({
+        message: 'rate limited',
+        url: 'https://provider.test',
+        requestBodyValues: {},
+        statusCode: 429,
+      }),
+    )
+
+    const summary = await miner.sweepNow(configuredProvider)
+
+    expect(summary).toMatchObject({
+      daysMined: 0,
+      daysFailed: 0,
+      aborted: true,
+      abortReason: 'rate-limit',
+    })
+    // A rate limit is the sweep's own concurrency talking back, not a bad day:
+    // no attempt is spent, so a burst can't march days to terminal `failed`.
+    const all = storage.miningDays.getAll()
+    expect(all.every((d) => d.status === 'pending' && d.attempts === 0)).toBe(true)
+    expect(mockedRunClustering).not.toHaveBeenCalled()
+
+    // The days are claimable again immediately; the sweep-level backoff waits.
+    miner.scheduleRun()
+    expect(miner.isBusy()).toBe(false)
+  })
+
+  it('successes reset the shared failure count between waves', async () => {
+    seedDays(TASK_BACKFILL.CLUSTER_EVERY_DAYS + 3)
+    // Two failures per wave (days 8 and 6, then 3 and 2), successes in between.
+    mockedRunDetection.mockImplementation(async (...args) => {
+      if ([8, 6, 3, 2].includes(args[3]?.lookbackDays ?? 0)) throw new Error('flaky')
+      return commitDay(...args)
+    })
+
+    const summary = await miner.sweepNow(configuredProvider)
+
+    // Four failed days total, but never three without a success landing
+    // between them — the count is shared, so the reset has to cross workers.
+    expect(summary).toMatchObject({ daysMined: 4, daysFailed: 4, aborted: false })
   })
 
   it('a success resets the consecutive-failure count', async () => {

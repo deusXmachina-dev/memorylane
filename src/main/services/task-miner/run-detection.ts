@@ -67,12 +67,16 @@ export async function runDetection(
   let verifyInputTokens = 0
   let verifyOutputTokens = 0
 
+  // Days are mined concurrently, so every line has to name its day to be
+  // readable at all.
+  const { start, end, label } = getDayBoundaries(cfg.lookbackDays)
   const progress = (msg: string) => {
-    log.info(`[TaskMiner] ${msg}`)
-    onProgress?.(msg)
+    const line = `${label}: ${msg}`
+    log.info(`[TaskMiner] ${line}`)
+    onProgress?.(line)
   }
 
-  progress(`Starting run ${runId} (model=${cfg.model}, lookback=${cfg.lookbackDays}d)`)
+  progress(`Starting run ${runId} (model=${cfg.model})`)
 
   // The day's sightings and its ledger status commit in one transaction: a
   // crash mid-run persists nothing, so a retry can never duplicate sightings.
@@ -89,9 +93,8 @@ export async function runDetection(
     progress(`Pruned ${prunedSightings} sightings older than ${SIGHTING_RETENTION_DAYS}d`)
 
   // 1. Query activities for the target day
-  const { start, end, label } = getDayBoundaries(cfg.lookbackDays)
   const activities = storage.activities.getForDay(start, end)
-  progress(`Found ${activities.length} activities for ${label}`)
+  progress(`Found ${activities.length} activities`)
 
   if (activities.length === 0) {
     progress('No activities for this day, skipping')
@@ -324,7 +327,7 @@ export async function runDetection(
       const droppedOutOfWindow = requestedIds.length - finalIds.length
       if (droppedOutOfWindow > 0) {
         progress(
-          `[Phase 2] "${candidate.title}": dropped ${droppedOutOfWindow} activity id(s) outside ${label}`,
+          `[Phase 2] "${candidate.title}": dropped ${droppedOutOfWindow} activity id(s) outside the day`,
         )
       }
       const resolved = storage.activities.getByIds(finalIds)

@@ -76,6 +76,13 @@ function TaskMaintenanceSection({ api }: { api: MainWindowAPI }): React.JSX.Elem
       )
       return
     }
+    if (s?.abortReason === 'rate-limit') {
+      toast.warning(
+        `Re-mined ${s.daysMined} day(s), then stopped: provider rate limited. Mining resumes shortly.`,
+        { id: 'wipe-remine' },
+      )
+      return
+    }
     toast.success(
       `Re-mined ${s?.daysMined ?? 0} day(s)` + (s?.daysFailed ? ` (${s.daysFailed} failed)` : ''),
       { id: 'wipe-remine' },

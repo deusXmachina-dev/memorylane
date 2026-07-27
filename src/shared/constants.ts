@@ -156,8 +156,10 @@ export const TASK_BACKFILL = {
   SWEEP_MAX_CONSECUTIVE_FAILURES: 3,
   SWEEP_ABORT_BACKOFF_MS: 10 * 60_000,
   // Days scanned at once, only while more than CLUSTER_EVERY_DAYS days are
-  // pending (first launch, gap-fill). A daily sweep stays serial.
-  SWEEP_CONCURRENCY: 4,
+  // pending (first launch, gap-fill). A daily sweep stays serial. Matches
+  // CLUSTER_EVERY_DAYS so a wave is one round of scans, not a round plus a
+  // straggler waiting on the barrier.
+  SWEEP_CONCURRENCY: 5,
 }
 
 // User-initiated timed capture pause (auto-resumes when the timer elapses).

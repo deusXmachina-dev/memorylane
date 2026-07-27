@@ -47,9 +47,14 @@ export interface InferenceProviderOptions {
 /**
  * Upstream providers can accept a request and then stall indefinitely while
  * the gateway keeps the connection alive, so an explicit deadline is the only
- * thing that ever fails the call. Normal completions finish well under this.
+ * thing that ever fails the call.
+ *
+ * Sized off the slowest *completed* task-mining scan observed on OpenRouter —
+ * ~10k output tokens at 15 tok/s, about 11 minutes — since routing picks the
+ * backend and a slow one is not a stalled one. Live capture is unaffected:
+ * ActivitySemanticService applies its own, much shorter, per-request timeout.
  */
-export const DEFAULT_REQUEST_TIMEOUT_MS = 10 * 60 * 1000
+export const DEFAULT_REQUEST_TIMEOUT_MS = 20 * 60 * 1000
 
 export function withRequestTimeout(
   fetchImpl: typeof globalThis.fetch,

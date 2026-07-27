@@ -397,6 +397,8 @@ export interface WipeAndRemineResult {
     daysMined: number
     daysSkipped: number
     daysFailed: number
+    /** Why the re-mine stopped early, when it did. */
+    abortReason?: 'failures' | 'rate-limit'
     /** Set when the re-mine did not run (no provider configured, or busy). */
     skipped?: 'no-provider' | 'busy'
   }

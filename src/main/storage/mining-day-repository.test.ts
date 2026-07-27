@@ -57,6 +57,18 @@ describe('MiningDayRepository', () => {
     expect(storage.miningDays.getRunningDay()).toBe('2026-07-01')
   })
 
+  it('releaseClaim refunds the attempt and leaves the day immediately claimable', () => {
+    storage.miningDays.enqueueMissing(['2026-07-01'])
+    storage.miningDays.claimOldestPending()
+
+    storage.miningDays.releaseClaim('2026-07-01', '429 rate limited')
+
+    const row = storage.miningDays.getAll()[0]
+    expect(row).toMatchObject({ status: 'pending', attempts: 0, lastError: '429 rate limited' })
+    expect(row.startedAt).toBeNull()
+    expect(storage.miningDays.claimOldestPending()).toEqual({ day: '2026-07-01', attempts: 1 })
+  })
+
   it('returns null when nothing is pending', () => {
     expect(storage.miningDays.claimOldestPending()).toBeNull()
     expect(storage.miningDays.nextClaimableAt()).toBeNull()
