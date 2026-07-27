@@ -91,12 +91,31 @@ describe('runDetection day commit', () => {
     )
   })
 
-  it('disables SDK retries — the mining ledger owns retry pacing', async () => {
-    mockedGenerateText.mockResolvedValue(scanResponse('```json\n[]\n```'))
+  it('disables SDK retries on scan and grounding — the mining ledger owns retry pacing', async () => {
+    mockedGenerateText
+      .mockResolvedValueOnce(
+        scanResponse(
+          `\`\`\`json
+[{"title":"Do the thing","subject":"thing","description":"d","activity_ids":["a1","a2"]}]
+\`\`\``,
+        ),
+      )
+      .mockResolvedValueOnce(
+        scanResponse(`\`\`\`json
+{"verdict":"keep","title":"Do the thing","description":"d"}
+\`\`\``),
+      )
 
-    await runDetection(provider, storage, embedder, { lookbackDays: 1, onCommit: vi.fn() })
+    await runDetection(provider, storage, embedder, {
+      lookbackDays: 1,
+      scanOnly: false,
+      onCommit: vi.fn(),
+    })
 
-    expect(mockedGenerateText).toHaveBeenCalledWith(expect.objectContaining({ maxRetries: 0 }))
+    expect(mockedGenerateText).toHaveBeenCalledTimes(2)
+    for (const [args] of mockedGenerateText.mock.calls) {
+      expect(args).toMatchObject({ maxRetries: 0 })
+    }
   })
 
   it('commits sightings and stats in one transaction', async () => {

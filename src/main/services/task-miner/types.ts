@@ -92,5 +92,5 @@ export interface BackfillSummary {
   /** The single clustering pass run after all days are mined. */
   clustering?: ClusteringRunSummary
   /** Set when the backfill did not run at all because a guard tripped. */
-  skipped?: 'no-provider' | 'no-model' | 'busy'
+  skipped?: 'no-provider' | 'no-model' | 'busy' | 'cooling-down'
 }

@@ -130,6 +130,18 @@ describe('TaskMiner sweep', () => {
     }
   }
 
+  // A successful mine that commits the day like the real one does.
+  const commitDay: typeof runDetection = async (_provider, _storage, _embedder, config) => {
+    config?.onCommit?.({
+      candidatesFromScan: 1,
+      candidatesKept: 1,
+      candidatesRejected: 0,
+      tokensIn: 10,
+      tokensOut: 5,
+    })
+    return {} as never
+  }
+
   beforeEach(() => {
     deleteDbFiles(TEST_DB_PATH)
     storage = new StorageService(TEST_DB_PATH)
@@ -138,17 +150,7 @@ describe('TaskMiner sweep', () => {
     miner.updateModel('test/model')
     mockedRunDetection.mockReset()
     mockedRunClustering.mockClear()
-    // Default: a successful mine that commits the day like the real one does.
-    mockedRunDetection.mockImplementation(async (_provider, _storage, _embedder, config) => {
-      config?.onCommit?.({
-        candidatesFromScan: 1,
-        candidatesKept: 1,
-        candidatesRejected: 0,
-        tokensIn: 10,
-        tokensOut: 5,
-      })
-      return {} as never
-    })
+    mockedRunDetection.mockImplementation(commitDay)
   })
 
   afterEach(() => {
@@ -171,22 +173,26 @@ describe('TaskMiner sweep', () => {
     expect(all[0].stats).toMatchObject({ candidatesKept: 1 })
   })
 
-  it('skips days that already have sightings without re-mining them', async () => {
-    seedDays(2)
+  const seedSighting = (back: number): void => {
     storage.sightings.add({
-      id: 'existing',
+      id: `existing-${back}`,
       title: 't',
       subject: 's',
       description: 'd',
       steps: [],
       apps: [],
-      activityIds: ['act-2'],
-      startedAt: dayStart(2) + 1000,
-      endedAt: dayStart(2) + 2000,
+      activityIds: [`act-${back}`],
+      startedAt: dayStart(back) + 1000,
+      endedAt: dayStart(back) + 2000,
       interactionMin: 1,
       runId: 'r',
-      detectedAt: dayStart(2) + 2000,
+      detectedAt: dayStart(back) + 2000,
     })
+  }
+
+  it('skips days that already have sightings without re-mining them', async () => {
+    seedDays(2)
+    seedSighting(2)
 
     const summary = await miner.sweepNow(configuredProvider)
 
@@ -211,9 +217,9 @@ describe('TaskMiner sweep', () => {
     expect(failedDay?.lastError).toBe('provider down')
     expect(failedDay?.nextAttemptAt).toBe(Date.now() + TASK_BACKFILL.DAY_COOLDOWN_INITIAL_MS)
 
-    // Still cooling: the day is unclaimable.
+    // Still cooling: the day is unclaimable, and the dev flow says why.
     const gated = await miner.sweepNow(configuredProvider)
-    expect(gated).toMatchObject({ daysMined: 0, daysFailed: 0 })
+    expect(gated).toMatchObject({ daysMined: 0, daysFailed: 0, skipped: 'cooling-down' })
 
     vi.advanceTimersByTime(TASK_BACKFILL.DAY_COOLDOWN_INITIAL_MS)
     const second = await miner.sweepNow(configuredProvider)
@@ -363,6 +369,28 @@ describe('TaskMiner sweep', () => {
     const summary = await miner.sweepNow(configuredProvider)
     expect(summary).toMatchObject({ daysMined: 3, daysFailed: 3, aborted: false })
     expect(mockedRunDetection).toHaveBeenCalledTimes(6)
+  })
+
+  it('had-sightings skips do not reset the consecutive-failure count', async () => {
+    seedDays(5)
+    seedSighting(4)
+    seedSighting(2)
+    mockedRunDetection.mockRejectedValue(new Error('down'))
+
+    // Skips are DB-only — not evidence the provider recovered — so the
+    // interleaved failures still read as an outage and abort the sweep.
+    const summary = await miner.sweepNow(configuredProvider)
+    expect(summary).toMatchObject({ daysFailed: 3, daysSkipped: 2, aborted: true })
+    expect(mockedRunDetection).toHaveBeenCalledTimes(3)
+  })
+
+  it('skips the final clustering pass when the sweep aborts', async () => {
+    seedDays(4)
+    mockedRunDetection.mockImplementationOnce(commitDay).mockRejectedValue(new Error('down'))
+
+    const summary = await miner.sweepNow(configuredProvider)
+    expect(summary).toMatchObject({ daysMined: 1, daysFailed: 3, aborted: true })
+    expect(mockedRunClustering).not.toHaveBeenCalled()
   })
 
   it('startup resets a stale running day so the sweep can retry it', async () => {

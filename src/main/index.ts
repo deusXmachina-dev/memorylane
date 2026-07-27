@@ -481,8 +481,13 @@ app.on('ready', async () => {
     const completedDays = Math.max(0, counts.completed - (base?.completed ?? counts.completed))
     const failedDays = Math.max(0, counts.failed - (base?.failed ?? counts.failed))
     const pendingDays = counts.pending + counts.running
+    const state = taskMiner.isBusy()
+      ? 'mining'
+      : counts.pending > 0 && !storageRef.miningDays.hasClaimablePending()
+        ? 'cooling'
+        : 'idle'
     return {
-      state: taskMiner.isBusy() ? 'mining' : 'idle',
+      state,
       currentDay: storageRef.miningDays.getRunningDay(),
       pendingDays,
       completedDays,

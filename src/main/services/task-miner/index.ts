@@ -246,7 +246,6 @@ export class TaskMiner {
         if (this.storage.sightings.hasInWindow(start, end)) {
           this.storage.miningDays.markCompleted(claim.day, { skippedReason: 'had-sightings' })
           daysSkipped++
-          consecutiveFailures = 0
           this.emitStatus()
           continue
         }
@@ -306,10 +305,10 @@ export class TaskMiner {
 
       // Final clustering pass — also after an all-skipped drain, so a ledger
       // enqueued over pre-ledger sightings still gets its clusters refreshed.
-      // Skipped when nothing settled (e.g. the first day failed): there is
-      // nothing new to cluster, and a provider outage shouldn't get one more
-      // doomed LLM call.
-      if (daysMined + daysSkipped > 0 && (minedSinceCluster > 0 || !clustering)) {
+      // Skipped when nothing settled (e.g. the first day failed) or the sweep
+      // aborted on an outage signature: a down provider shouldn't get one
+      // more doomed LLM call; the next sweep clusters what was mined.
+      if (!aborted && daysMined + daysSkipped > 0 && (minedSinceCluster > 0 || !clustering)) {
         clustering = await this.cluster(provider, {
           ...DEFAULT_MINER_CONFIG,
           model: this.model,
@@ -352,6 +351,9 @@ export class TaskMiner {
       return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'no-model' }
     }
     this.ensureEnqueued()
+    if (this.storage.miningDays.hasPending() && !this.storage.miningDays.hasClaimablePending()) {
+      return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'cooling-down' }
+    }
     return this.sweep(provider)
   }
 
