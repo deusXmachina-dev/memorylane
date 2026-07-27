@@ -174,6 +174,7 @@ export async function runDetection(
       model: provider.languageModel(cfg.model),
       system: scanPrompt,
       prompt: scanUserMessage,
+      maxRetries: 0,
     })
 
     scanInputTokens += scanResult.usage.inputTokens ?? 0
@@ -289,6 +290,7 @@ export async function runDetection(
           prompt: candidateInput,
           tools,
           stopWhen: stepCountIs(GROUNDING_MAX_STEPS),
+          maxRetries: 0,
         })
 
         verifyInputTokens += verifyResult.usage.inputTokens ?? 0

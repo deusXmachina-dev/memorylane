@@ -16,8 +16,10 @@
  * persistent recurring-process clusters with stable ids.
  *
  * Includes built-in scheduling: startup() arms a poll interval that sweeps
- * whenever the ledger has pending days, paced by a doubling backoff after a
- * failed sweep.
+ * whenever the ledger has claimable pending days. A failed day cools down
+ * individually (escalating per-day cooldown) while the sweep continues past
+ * it; only consecutive failures — a provider outage, not one bad day — abort
+ * the sweep and gate the next one.
  */
 
 import type { StorageService } from '../../storage'
@@ -47,7 +49,6 @@ export class TaskMiner {
   /** Settled counts snapshotted at sweep start; null outside a sweep. */
   private sweepBaseline: { completed: number; failed: number } | null = null
   private pollTimer: ReturnType<typeof setInterval> | null = null
-  private retryDelayMs = TASK_BACKFILL.RETRY_INITIAL_MS
   private nextAttemptAt = 0
   private model = ''
   /** Remote override for the clustering (label/merge/split) passes; null = follow `model`. */
@@ -71,10 +72,9 @@ export class TaskMiner {
     log.info(`[TaskMiner] ${enabled ? 'Enabled' : 'Disabled'}`)
   }
 
-  /** Clears the failure backoff so the next scheduleRun() may sweep immediately. */
+  /** Clears the sweep-abort gate so the next scheduleRun() may sweep immediately. */
   resetBackoff(): void {
     this.nextAttemptAt = 0
-    this.retryDelayMs = TASK_BACKFILL.RETRY_INITIAL_MS
   }
 
   updateModel(model: string): void {
@@ -149,8 +149,16 @@ export class TaskMiner {
     }
 
     this.ensureEnqueued()
-    if (!this.storage.miningDays.hasPending()) {
+    const nextClaimable = this.storage.miningDays.nextClaimableAt()
+    if (nextClaimable === null) {
       this.logSkip('no-pending', 'No days pending, skipping')
+      return
+    }
+    if (nextClaimable > Date.now()) {
+      this.logSkip(
+        'cooling-down',
+        `All pending days cooling down, next attempt ~${new Date(nextClaimable).toLocaleTimeString()}`,
+      )
       return
     }
 
@@ -195,13 +203,14 @@ export class TaskMiner {
   }
 
   /**
-   * Drain the ledger: claim pending days oldest-first (earlier days' cluster
-   * labels feed the known-procedure vocabulary later days scan against) and
-   * mine each one. A day's sightings and its `completed` status commit in one
-   * transaction (see runDetection.onCommit), so a crash retries cleanly. A
-   * failed day records the attempt and stops the sweep — the next poll tick
-   * retries it (paced by a doubling backoff), and once its attempts are
-   * exhausted the claim skips past it.
+   * Drain the ledger: claim claimable pending days oldest-first (earlier
+   * days' cluster labels feed the known-procedure vocabulary later days scan
+   * against) and mine each one. A day's sightings and its `completed` status
+   * commit in one transaction (see runDetection.onCommit), so a crash retries
+   * cleanly. A failed day records the attempt and cools down individually
+   * while the sweep continues with the next day; once its attempts are
+   * exhausted the claim skips past it for good. Consecutive failures abort
+   * the sweep and gate the next one.
    * Clusters at the CLUSTER_EVERY_DAYS barrier and once at the end.
    */
   private async sweep(provider: InferenceProvider): Promise<BackfillSummary> {
@@ -219,6 +228,8 @@ export class TaskMiner {
       let daysFailed = 0
       let minedSinceCluster = 0
       let didWork = false
+      let consecutiveFailures = 0
+      let aborted = false
       let clustering: ClusteringRunSummary | undefined
 
       for (;;) {
@@ -249,6 +260,7 @@ export class TaskMiner {
           })
           daysMined++
           minedSinceCluster++
+          consecutiveFailures = 0
           const counts = this.storage.miningDays.countByStatus()
           log.info(
             `[TaskMiner] Day ${claim.day} completed (attempt ${claim.attempts}) — ` +
@@ -256,19 +268,28 @@ export class TaskMiner {
           )
         } catch (error) {
           const message = formatApiError(error)
+          const cooldownMs = Math.min(
+            TASK_BACKFILL.DAY_COOLDOWN_INITIAL_MS * 2 ** (claim.attempts - 1),
+            TASK_BACKFILL.DAY_COOLDOWN_MAX_MS,
+          )
           this.storage.miningDays.markAttemptFailed(
             claim.day,
             message,
             TASK_BACKFILL.MAX_DAY_ATTEMPTS,
+            cooldownMs,
           )
           daysFailed++
+          consecutiveFailures++
           log.error(
-            `[TaskMiner] Day ${claim.day} failed (attempt ${claim.attempts}/${TASK_BACKFILL.MAX_DAY_ATTEMPTS}): ${message}`,
+            `[TaskMiner] Day ${claim.day} failed (attempt ${claim.attempts}/${TASK_BACKFILL.MAX_DAY_ATTEMPTS}), ` +
+              `cooling down ${Math.round(cooldownMs / 60_000)}m: ${message}`,
           )
           this.emitStatus()
-          // Stop the sweep: the next trigger retries, and a provider outage
-          // isn't hammered once per remaining day.
-          break
+          if (consecutiveFailures >= TASK_BACKFILL.SWEEP_MAX_CONSECUTIVE_FAILURES) {
+            aborted = true
+            break
+          }
+          continue
         }
         this.emitStatus()
 
@@ -284,10 +305,10 @@ export class TaskMiner {
 
       // Final clustering pass — also after an all-skipped drain, so a ledger
       // enqueued over pre-ledger sightings still gets its clusters refreshed.
-      // Skipped when nothing settled (e.g. the first day failed): there is
-      // nothing new to cluster, and a provider outage shouldn't get one more
-      // doomed LLM call.
-      if (daysMined + daysSkipped > 0 && (minedSinceCluster > 0 || !clustering)) {
+      // Skipped when nothing settled (e.g. the first day failed) or the sweep
+      // aborted on an outage signature: a down provider shouldn't get one
+      // more doomed LLM call; the next sweep clusters what was mined.
+      if (!aborted && daysMined + daysSkipped > 0 && (minedSinceCluster > 0 || !clustering)) {
         clustering = await this.cluster(provider, {
           ...DEFAULT_MINER_CONFIG,
           model: this.model,
@@ -301,14 +322,16 @@ export class TaskMiner {
             `${daysSkipped} already present, ${daysFailed} failed`,
         )
       }
-      if (daysFailed > 0 && this.storage.miningDays.hasPending()) {
-        this.nextAttemptAt = Date.now() + this.retryDelayMs
-        log.info(`[TaskMiner] Retry sweep in ${Math.round(this.retryDelayMs / 60_000)}m`)
-        this.retryDelayMs = Math.min(this.retryDelayMs * 2, TASK_BACKFILL.RETRY_MAX_MS)
+      if (aborted) {
+        this.nextAttemptAt = Date.now() + TASK_BACKFILL.SWEEP_ABORT_BACKOFF_MS
+        log.info(
+          `[TaskMiner] Sweep aborted after ${consecutiveFailures} consecutive failures; ` +
+            `retry in ${Math.round(TASK_BACKFILL.SWEEP_ABORT_BACKOFF_MS / 60_000)}m`,
+        )
       } else {
         this.resetBackoff()
       }
-      return { daysMined, daysSkipped, daysFailed, clustering }
+      return { daysMined, daysSkipped, daysFailed, aborted, clustering }
     } finally {
       this.running = false
       this.sweepBaseline = null
@@ -328,6 +351,10 @@ export class TaskMiner {
       return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'no-model' }
     }
     this.ensureEnqueued()
+    const nextClaimable = this.storage.miningDays.nextClaimableAt()
+    if (nextClaimable !== null && nextClaimable > Date.now()) {
+      return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'cooling-down' }
+    }
     return this.sweep(provider)
   }
 

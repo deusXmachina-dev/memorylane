@@ -9,12 +9,11 @@ import { ClusterDetailPane } from './ClusterDetailPane'
 
 function MiningProgressBanner({ status }: { status: MiningStatus }): React.JSX.Element {
   const done = status.completedDays + status.failedDays
-  const mining = status.state === 'mining'
   return (
     <div className="flex items-center justify-between gap-4 text-xs">
       <span className="flex min-w-0 items-center gap-2 font-medium text-foreground/85">
-        <PingDot active={mining} />
-        <span className="truncate">{mining ? 'Analyzing your history' : 'Analysis paused'}</span>
+        <PingDot active />
+        <span className="truncate">Analyzing your history</span>
       </span>
       <span className="shrink-0 tabular-nums text-muted-foreground">
         {done} of {status.totalDays} days

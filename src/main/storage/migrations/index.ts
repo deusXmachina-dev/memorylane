@@ -16,6 +16,7 @@ import { migration as migration0014 } from './0014_drop_activities_vector'
 import { migration as migration0015 } from './0015_sighting_subject_backfill'
 import { migration as migration0016 } from './0016_add_mining_days'
 import { migration as migration0017 } from './0017_sighting_steps'
+import { migration as migration0018 } from './0018_mining_day_cooldown'
 
 // Cluster tables are module-owned derived state (see ../cluster-schema.ts),
 // created after migrations run — never add cluster migrations here.
@@ -37,4 +38,5 @@ export const migrations: Migration[] = [
   migration0015,
   migration0016,
   migration0017,
+  migration0018,
 ]
