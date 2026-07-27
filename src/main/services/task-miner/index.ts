@@ -211,8 +211,9 @@ export class TaskMiner {
    * cleanly. A failed day records the attempt and cools down individually
    * while the sweep continues with the next day; once its attempts are
    * exhausted the claim skips past it for good. Failures with no success in
-   * between abort the sweep and gate the next one; a throttled day is handed
-   * back unspent and stops the sweep without burning an attempt.
+   * between abort the sweep and gate the next one. A throttled day, or one
+   * still in flight when the sweep aborts, is handed back unspent instead —
+   * so what a provider outage costs in attempts doesn't scale with concurrency.
    *
    * Days drain in waves of at most CLUSTER_EVERY_DAYS claims, clustering every
    * CLUSTER_EVERY_DAYS mined days and once at the end. A wave runs
@@ -278,15 +279,19 @@ export class TaskMiner {
           )
         } catch (error) {
           const message = formatApiError(error)
-          // A throttled day isn't a bad day: the concurrency this sweep runs at
-          // is itself a cause, so hand the day back unspent and stop claiming
-          // rather than letting a rate-limit burst march days to terminal
-          // `failed` three sweeps later.
-          if (isThrottleStatus(extractHttpStatus(error))) {
+          const throttled = isThrottleStatus(extractHttpStatus(error))
+          // Neither a throttled day nor a day whose siblings already stopped the
+          // sweep is a bad day, so both go back unspent. That keeps the attempts
+          // burned by an outage at SWEEP_MAX_CONSECUTIVE_FAILURES no matter what
+          // concurrency the wave ran at.
+          if (throttled || aborted) {
             this.storage.miningDays.releaseClaim(claim.day, message)
-            aborted = true
-            abortReason = 'rate-limit'
-            log.warn(`[TaskMiner] Day ${claim.day} deferred, provider throttled: ${message}`)
+            const cause = throttled ? 'provider throttled' : 'sweep already stopping'
+            if (throttled && !aborted) {
+              aborted = true
+              abortReason = 'rate-limit'
+            }
+            log.warn(`[TaskMiner] Day ${claim.day} deferred unspent, ${cause}: ${message}`)
           } else {
             const cooldownMs = Math.min(
               TASK_BACKFILL.DAY_COOLDOWN_INITIAL_MS * 2 ** (claim.attempts - 1),

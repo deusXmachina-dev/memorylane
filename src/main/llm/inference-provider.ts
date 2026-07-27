@@ -17,9 +17,11 @@ export interface InferenceProvider {
   getActiveVendor(): Vendor
   /**
    * Resolve a Vercel AI SDK LanguageModel for the active vendor and given
-   * model id. Throws when the active vendor is not configured.
+   * model id. Throws when the active vendor is not configured. Pass
+   * `requestTimeoutMs` for calls that legitimately run past
+   * DEFAULT_REQUEST_TIMEOUT_MS (task mining scans a whole day in one prompt).
    */
-  languageModel(modelId: string): LanguageModel
+  languageModel(modelId: string, requestTimeoutMs?: number): LanguageModel
   /**
    * Snapshot of the active route's wire-level details. Returns non-null only
    * for vendors that speak the OpenAI-compatible chat-completions wire format
@@ -40,7 +42,7 @@ export interface InferenceProviderOptions {
   getActiveVendor: () => Vendor
   /** Optional fetch override forwarded to all underlying SDK providers (tests). */
   fetch?: typeof globalThis.fetch
-  /** Per-request timeout for SDK provider HTTP calls. Defaults to DEFAULT_REQUEST_TIMEOUT_MS. */
+  /** Default per-request timeout for SDK provider HTTP calls, overridable per languageModel() call. */
   requestTimeoutMs?: number
 }
 
@@ -49,12 +51,12 @@ export interface InferenceProviderOptions {
  * the gateway keeps the connection alive, so an explicit deadline is the only
  * thing that ever fails the call.
  *
- * Sized off the slowest *completed* task-mining scan observed on OpenRouter —
- * ~10k output tokens at 15 tok/s, about 11 minutes — since routing picks the
- * backend and a slow one is not a stalled one. Live capture is unaffected:
- * ActivitySemanticService applies its own, much shorter, per-request timeout.
+ * This is a stall detector, not a budget: every caller on the default emits a
+ * bounded response (a summary, a judgement, a user-context blob) and finishes
+ * in seconds. Callers whose output is genuinely long-running pass their own —
+ * see TASK_MINING_REQUEST_TIMEOUT_MS.
  */
-export const DEFAULT_REQUEST_TIMEOUT_MS = 20 * 60 * 1000
+export const DEFAULT_REQUEST_TIMEOUT_MS = 3 * 60 * 1000
 
 export function withRequestTimeout(
   fetchImpl: typeof globalThis.fetch,
@@ -77,7 +79,7 @@ export class InferenceProviderImpl implements InferenceProvider {
   private readonly getActiveVendorAccessor: () => Vendor
   private readonly customFetch: typeof globalThis.fetch | undefined
   private readonly requestTimeoutMs: number
-  private readonly sdkCache = new Map<Vendor, CacheEntry>()
+  private readonly sdkCache = new Map<string, CacheEntry>()
   private readonly loggedRouteSnapshots = new Set<string>()
   private readonly listeners = new Set<() => void>()
 
@@ -96,21 +98,22 @@ export class InferenceProviderImpl implements InferenceProvider {
     return this.getActiveVendorAccessor()
   }
 
-  languageModel(modelId: string): LanguageModel {
+  languageModel(modelId: string, requestTimeoutMs: number = this.requestTimeoutMs): LanguageModel {
     const vendor = this.getActiveVendor()
     const creds = this.credentials.getCredentials(vendor)
     if (!creds) {
       throw new Error(`InferenceProvider: vendor "${vendor}" is not configured`)
     }
     const signature = signatureFor(creds)
-    const cached = this.sdkCache.get(vendor)
+    const cacheKey = `${vendor}|${requestTimeoutMs}`
+    const cached = this.sdkCache.get(cacheKey)
     if (cached && cached.signature === signature) {
       return cached.sdkProvider.languageModel(modelId)
     }
     const sdkProvider = createSdkProvider(vendor, creds, {
-      fetch: withRequestTimeout(this.customFetch ?? globalThis.fetch, this.requestTimeoutMs),
+      fetch: withRequestTimeout(this.customFetch ?? globalThis.fetch, requestTimeoutMs),
     })
-    this.sdkCache.set(vendor, { signature, sdkProvider })
+    this.sdkCache.set(cacheKey, { signature, sdkProvider })
     log.info(`[InferenceProvider] built provider ${describeRoute(vendor, creds)}`)
     return sdkProvider.languageModel(modelId)
   }

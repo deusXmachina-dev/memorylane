@@ -416,13 +416,15 @@ describe('TaskMiner sweep', () => {
     const summary = await miner.sweepNow(configuredProvider)
 
     expect(summary).toMatchObject({ aborted: true, abortReason: 'failures' })
-    // Days already in flight when the signature lands still burn an attempt.
-    expect(summary.daysFailed).toBeGreaterThanOrEqual(TASK_BACKFILL.SWEEP_MAX_CONSECUTIVE_FAILURES)
-    expect(summary.daysFailed).toBeLessThanOrEqual(TASK_BACKFILL.SWEEP_CONCURRENCY)
+    // Days still in flight when the signature lands go back unspent, so an
+    // outage costs the same attempts at concurrency 5 as it did at 1.
+    expect(summary.daysFailed).toBe(TASK_BACKFILL.SWEEP_MAX_CONSECUTIVE_FAILURES)
     expect(mockedRunClustering).not.toHaveBeenCalled()
     // Workers claim their own day, so an abort leaves nothing half-claimed for
     // the startup crash recovery to unwind.
     expect(storage.miningDays.countByStatus().running).toBe(0)
+    const spent = storage.miningDays.getAll().filter((d) => d.attempts > 0)
+    expect(spent).toHaveLength(TASK_BACKFILL.SWEEP_MAX_CONSECUTIVE_FAILURES)
   })
 
   it('hands a throttled day back unspent and stops the sweep', async () => {
