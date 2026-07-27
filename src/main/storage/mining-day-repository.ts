@@ -119,6 +119,22 @@ export class MiningDayRepository {
   }
 
   /**
+   * Hand a claimed day back unspent: the provider throttled us, so the day
+   * never got a real attempt. Refunds the claim's attempt increment and leaves
+   * it immediately claimable — the sweep-level backoff does the waiting.
+   */
+  releaseClaim(day: string, error: string): void {
+    this.db
+      .prepare(
+        `UPDATE mining_days
+         SET status = 'pending', attempts = MAX(attempts - 1, 0), started_at = NULL,
+             next_attempt_at = NULL, last_error = ?
+         WHERE day = ?`,
+      )
+      .run(error, day)
+  }
+
+  /**
    * Startup crash recovery: a row still `running` means the app died mid-mine.
    * The crashed attempt was already counted by the claim, so the row goes back
    * to pending only while attempts remain.
@@ -156,9 +172,10 @@ export class MiningDayRepository {
     return row.next
   }
 
+  /** Oldest day currently being mined; a sweep may have several in flight. */
   getRunningDay(): string | null {
     const row = this.db
-      .prepare(`SELECT day FROM mining_days WHERE status = 'running' LIMIT 1`)
+      .prepare(`SELECT day FROM mining_days WHERE status = 'running' ORDER BY day ASC LIMIT 1`)
       .get() as { day: string } | undefined
     return row?.day ?? null
   }

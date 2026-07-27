@@ -379,7 +379,7 @@ export interface ManagedExclusions {
 /** Task-mining progress for the current sweep, pushed to the renderer while it runs. */
 export interface MiningStatus {
   state: 'idle' | 'mining'
-  /** Day currently being mined ('YYYY-MM-DD'); null between days. */
+  /** Oldest day currently being mined ('YYYY-MM-DD'); null between days. */
   currentDay: string | null
   pendingDays: number
   /** Days settled during this sweep — not lifetime ledger totals. */
@@ -397,6 +397,8 @@ export interface WipeAndRemineResult {
     daysMined: number
     daysSkipped: number
     daysFailed: number
+    /** Why the re-mine stopped early, when it did. */
+    abortReason?: 'failures' | 'rate-limit'
     /** Set when the re-mine did not run (no provider configured, or busy). */
     skipped?: 'no-provider' | 'busy'
   }

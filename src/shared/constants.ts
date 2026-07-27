@@ -117,6 +117,13 @@ export const USER_CONTEXT_CONFIG = {
 }
 
 // Pattern Detection Configuration
+// Request deadline for task-mining LLM calls, which scan a whole day in one
+// prompt: the slowest *completed* scan observed on OpenRouter was ~10k output
+// tokens at 15 tok/s, about 11 minutes. Routing picks the backend and a slow
+// one is not a stalled one, so this sits far above the shared default rather
+// than failing work that would have landed.
+export const TASK_MINING_REQUEST_TIMEOUT_MS = 20 * 60_000
+
 export const PATTERN_DETECTION_CONFIG = {
   MODEL: 'minimax/minimax-m3',
   LOOKBACK_DAYS: 1, // Days back from today to analyze (1 = yesterday)
@@ -155,6 +162,11 @@ export const TASK_BACKFILL = {
   DAY_COOLDOWN_MAX_MS: 30 * 60_000,
   SWEEP_MAX_CONSECUTIVE_FAILURES: 3,
   SWEEP_ABORT_BACKOFF_MS: 10 * 60_000,
+  // Days scanned at once, only while more than CLUSTER_EVERY_DAYS days are
+  // pending (first launch, gap-fill). A daily sweep stays serial. Matches
+  // CLUSTER_EVERY_DAYS so a wave is one round of scans, not a round plus a
+  // straggler waiting on the barrier.
+  SWEEP_CONCURRENCY: 5,
 }
 
 // User-initiated timed capture pause (auto-resumes when the timer elapses).

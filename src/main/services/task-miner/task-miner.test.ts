@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { APICallError } from 'ai'
 import * as os from 'os'
 import * as path from 'path'
 import { StorageService } from '@main/storage'
@@ -248,8 +249,70 @@ describe('TaskMiner sweep', () => {
 
     await miner.sweepNow(configuredProvider)
 
-    // 7 mined days with a barrier of 5 → one barrier pass + one final pass.
+    // 7 mined days with a barrier of 5 → a full wave, then a short one.
     expect(TASK_BACKFILL.CLUSTER_EVERY_DAYS).toBe(5)
+    expect(mockedRunClustering).toHaveBeenCalledTimes(2)
+  })
+
+  it('mines days concurrently once the ledger has a backlog', async () => {
+    seedDays(TASK_BACKFILL.CLUSTER_EVERY_DAYS + 3)
+    let inFlight = 0
+    let peak = 0
+    mockedRunDetection.mockImplementation(async (...args) => {
+      inFlight++
+      peak = Math.max(peak, inFlight)
+      await Promise.resolve()
+      inFlight--
+      return commitDay(...args)
+    })
+
+    const summary = await miner.sweepNow(configuredProvider)
+
+    expect(summary.daysMined).toBe(TASK_BACKFILL.CLUSTER_EVERY_DAYS + 3)
+    // A wave never claims past the barrier, so that caps the peak too.
+    expect(peak).toBe(Math.min(TASK_BACKFILL.SWEEP_CONCURRENCY, TASK_BACKFILL.CLUSTER_EVERY_DAYS))
+  })
+
+  it('mines one day at a time without a backlog', async () => {
+    seedDays(TASK_BACKFILL.CLUSTER_EVERY_DAYS)
+    let inFlight = 0
+    let peak = 0
+    mockedRunDetection.mockImplementation(async (...args) => {
+      inFlight++
+      peak = Math.max(peak, inFlight)
+      await Promise.resolve()
+      inFlight--
+      return commitDay(...args)
+    })
+
+    await miner.sweepNow(configuredProvider)
+
+    expect(peak).toBe(1)
+  })
+
+  it('never claims more than CLUSTER_EVERY_DAYS days before a wave clusters', async () => {
+    seedDays(TASK_BACKFILL.CLUSTER_EVERY_DAYS + 3)
+    const clustersBefore: number[] = []
+    mockedRunDetection.mockImplementation(async (...args) => {
+      clustersBefore.push(mockedRunClustering.mock.calls.length)
+      return commitDay(...args)
+    })
+
+    await miner.sweepNow(configuredProvider)
+
+    expect(clustersBefore).toEqual([0, 0, 0, 0, 0, 1, 1, 1])
+    expect(mockedRunClustering).toHaveBeenCalledTimes(2)
+  })
+
+  it('counts mined days, not claims, toward the clustering barrier', async () => {
+    seedDays(11)
+    for (const back of [11, 10, 9, 8]) seedSighting(back)
+
+    const summary = await miner.sweepNow(configuredProvider)
+
+    // The first wave claims 5 days but mines only one — four had-sightings
+    // skips must not buy a clustering pass. 7 mined → one barrier + one final.
+    expect(summary).toMatchObject({ daysMined: 7, daysSkipped: 4 })
     expect(mockedRunClustering).toHaveBeenCalledTimes(2)
   })
 
@@ -346,18 +409,80 @@ describe('TaskMiner sweep', () => {
     await drain()
   })
 
-  it('a success resets the consecutive-failure count', async () => {
-    seedDays(6)
-    let call = 0
+  it('aborts a backlog sweep no more than a wave deep', async () => {
+    seedDays(TASK_BACKFILL.CLUSTER_EVERY_DAYS + 3)
+    mockedRunDetection.mockRejectedValue(new Error('down'))
+
+    const summary = await miner.sweepNow(configuredProvider)
+
+    expect(summary).toMatchObject({ aborted: true, abortReason: 'failures' })
+    // Days still in flight when the signature lands go back unspent, so an
+    // outage costs the same attempts at concurrency 5 as it did at 1.
+    expect(summary.daysFailed).toBe(TASK_BACKFILL.SWEEP_MAX_CONSECUTIVE_FAILURES)
+    expect(mockedRunClustering).not.toHaveBeenCalled()
+    // Workers claim their own day, so an abort leaves nothing half-claimed for
+    // the startup crash recovery to unwind.
+    expect(storage.miningDays.countByStatus().running).toBe(0)
+    const spent = storage.miningDays.getAll().filter((d) => d.attempts > 0)
+    expect(spent).toHaveLength(TASK_BACKFILL.SWEEP_MAX_CONSECUTIVE_FAILURES)
+  })
+
+  it('hands a throttled day back unspent and stops the sweep', async () => {
+    seedDays(TASK_BACKFILL.CLUSTER_EVERY_DAYS + 3)
+    seedFiller()
+    mockedRunDetection.mockRejectedValue(
+      new APICallError({
+        message: 'rate limited',
+        url: 'https://provider.test',
+        requestBodyValues: {},
+        statusCode: 429,
+      }),
+    )
+
+    const summary = await miner.sweepNow(configuredProvider)
+
+    expect(summary).toMatchObject({
+      daysMined: 0,
+      daysFailed: 0,
+      aborted: true,
+      abortReason: 'rate-limit',
+    })
+    // A rate limit is the sweep's own concurrency talking back, not a bad day:
+    // no attempt is spent, so a burst can't march days to terminal `failed`.
+    const all = storage.miningDays.getAll()
+    expect(all.every((d) => d.status === 'pending' && d.attempts === 0)).toBe(true)
+    expect(mockedRunClustering).not.toHaveBeenCalled()
+
+    // The days are claimable again immediately; the sweep-level backoff waits.
+    miner.scheduleRun()
+    expect(miner.isBusy()).toBe(false)
+  })
+
+  it('successes reset the shared failure count between waves', async () => {
+    seedDays(TASK_BACKFILL.CLUSTER_EVERY_DAYS + 3)
+    // Two failures per wave (days 8 and 6, then 3 and 2), successes in between.
     mockedRunDetection.mockImplementation(async (...args) => {
-      call++
-      if (call % 2 === 1) throw new Error('flaky')
+      if ([8, 6, 3, 2].includes(args[3]?.lookbackDays ?? 0)) throw new Error('flaky')
       return commitDay(...args)
     })
 
     const summary = await miner.sweepNow(configuredProvider)
-    expect(summary).toMatchObject({ daysMined: 3, daysFailed: 3, aborted: false })
-    expect(mockedRunDetection).toHaveBeenCalledTimes(6)
+
+    // Four failed days total, but never three without a success landing
+    // between them — the count is shared, so the reset has to cross workers.
+    expect(summary).toMatchObject({ daysMined: 4, daysFailed: 4, aborted: false })
+  })
+
+  it('a success resets the consecutive-failure count', async () => {
+    seedDays(TASK_BACKFILL.CLUSTER_EVERY_DAYS)
+    mockedRunDetection.mockImplementation(async (...args) => {
+      if ((args[3]?.lookbackDays ?? 0) % 2 === 1) throw new Error('flaky')
+      return commitDay(...args)
+    })
+
+    const summary = await miner.sweepNow(configuredProvider)
+    expect(summary).toMatchObject({ daysMined: 2, daysFailed: 3, aborted: false })
+    expect(mockedRunDetection).toHaveBeenCalledTimes(TASK_BACKFILL.CLUSTER_EVERY_DAYS)
   })
 
   it('had-sightings skips do not reset the consecutive-failure count', async () => {

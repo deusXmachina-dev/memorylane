@@ -21,13 +21,21 @@ export function extractHttpStatus(error: unknown): number | null {
 }
 
 /**
+ * Codes a healthy provider returns under load — 429 (rate limited) and 529
+ * (overloaded). The request failed, but nothing is wrong with the request or
+ * the provider: the right response is to back off and retry the same work.
+ */
+export function isThrottleStatus(status: number | null): boolean {
+  return status === 429 || status === 529
+}
+
+/**
  * Whether a failed request should mark the LLM as unhealthy.
  *
  * Counts non-HTTP failures (timeout/network, status === null) and genuine
- * error responses (>= 400), but excludes transient codes that a healthy
- * provider returns under load: 429 (rate limited) and 529 (overloaded).
+ * error responses (>= 400), but excludes throttling.
  */
 export function isHealthAffectingStatus(status: number | null): boolean {
   if (status === null) return true
-  return status >= 400 && status !== 429 && status !== 529
+  return status >= 400 && !isThrottleStatus(status)
 }

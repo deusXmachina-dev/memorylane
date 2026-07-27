@@ -121,6 +121,24 @@ describe('InferenceProviderImpl', () => {
     )
   })
 
+  it('builds a separate SDK provider per request timeout', async () => {
+    const h = buildHarness('openrouter', (m) =>
+      m.saveCredentials('openrouter', { apiKey: 'sk-or-1' }),
+    )
+    harnesses.push(h)
+    const log = (await import('@main/utils/logger')).default
+    const built = () => vi.mocked(log.info).mock.calls.filter((c) => /built provider/.test(c[0]))
+
+    h.provider.languageModel('m')
+    h.provider.languageModel('m')
+    expect(built()).toHaveLength(1)
+
+    // The deadline is baked into the SDK provider's fetch, so a per-call
+    // override the cache served from the default entry would be silently lost.
+    h.provider.languageModel('m', 20 * 60_000)
+    expect(built()).toHaveLength(2)
+  })
+
   it('notifyConfigChanged invalidates SDK cache and fires listeners', () => {
     const h = buildHarness('openrouter', (m) =>
       m.saveCredentials('openrouter', { apiKey: 'sk-or-1' }),

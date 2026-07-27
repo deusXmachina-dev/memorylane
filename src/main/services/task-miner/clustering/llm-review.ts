@@ -1,6 +1,7 @@
 import { generateText } from 'ai'
 import type { InferenceProvider } from '@main/llm'
 import { extractJsonObject } from '../helpers'
+import { TASK_MINING_REQUEST_TIMEOUT_MS } from '@/shared/constants'
 import type { ReviewInput, ReviewOutput } from './types'
 import { CLUSTERING_CONFIG } from './types'
 import { buildClusterReviewSystemPrompt, serializeReviewInput } from './prompts'
@@ -29,7 +30,7 @@ export async function runLlmReview(
         (attempt > 1 ? ` (attempt ${attempt}/${CLUSTERING_CONFIG.LLM_MAX_ATTEMPTS})` : ''),
     )
     const result = await generateText({
-      model: provider.languageModel(model),
+      model: provider.languageModel(model, TASK_MINING_REQUEST_TIMEOUT_MS),
       system,
       prompt,
       maxRetries: 0,

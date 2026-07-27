@@ -27,6 +27,7 @@ import type { InferenceProvider } from '../../llm'
 import { PATTERN_DETECTION_CONFIG, TASK_BACKFILL } from '../../../shared/constants'
 import log from '@main/utils/logger'
 import { formatApiError } from './helpers'
+import { extractHttpStatus, isThrottleStatus } from '@main/semantic/error-classify'
 import { getDayBoundaries } from '@main/utils/day'
 import type {
   TaskMinerConfig,
@@ -209,9 +210,18 @@ export class TaskMiner {
    * commit in one transaction (see runDetection.onCommit), so a crash retries
    * cleanly. A failed day records the attempt and cools down individually
    * while the sweep continues with the next day; once its attempts are
-   * exhausted the claim skips past it for good. Consecutive failures abort
-   * the sweep and gate the next one.
-   * Clusters at the CLUSTER_EVERY_DAYS barrier and once at the end.
+   * exhausted the claim skips past it for good. Failures with no success in
+   * between abort the sweep and gate the next one. A throttled day, or one
+   * still in flight when the sweep aborts, is handed back unspent instead —
+   * so what a provider outage costs in attempts doesn't scale with concurrency.
+   *
+   * Days drain in waves of at most CLUSTER_EVERY_DAYS claims, clustering every
+   * CLUSTER_EVERY_DAYS mined days and once at the end. A wave runs
+   * SWEEP_CONCURRENCY days at once while the ledger has a backlog — a day is
+   * one scan-only LLM round trip and days within a barrier window are
+   * independent — so a 60-day seed or a post-downtime gap-fill isn't one round
+   * trip at a time. With no backlog the wave is serial, exactly as a daily
+   * sweep was.
    */
   private async sweep(provider: InferenceProvider): Promise<BackfillSummary> {
     if (this.running) {
@@ -228,14 +238,15 @@ export class TaskMiner {
       let daysFailed = 0
       let minedSinceCluster = 0
       let didWork = false
-      let consecutiveFailures = 0
+      let failuresSinceSuccess = 0
       let aborted = false
+      let abortReason: 'failures' | 'rate-limit' | undefined
       let clustering: ClusteringRunSummary | undefined
 
-      for (;;) {
-        const claim = this.storage.miningDays.claimOldestPending()
-        if (!claim) break
-        didWork = true
+      const concurrency =
+        settled.pending > TASK_BACKFILL.CLUSTER_EVERY_DAYS ? TASK_BACKFILL.SWEEP_CONCURRENCY : 1
+
+      const mineDay = async (claim: { day: string; attempts: number }): Promise<void> => {
         // Push the claim so the banner's currentDay is live while the day mines.
         this.emitStatus()
         const back = this.daysAgo(claim.day)
@@ -247,7 +258,7 @@ export class TaskMiner {
           this.storage.miningDays.markCompleted(claim.day, { skippedReason: 'had-sightings' })
           daysSkipped++
           this.emitStatus()
-          continue
+          return
         }
 
         try {
@@ -260,7 +271,7 @@ export class TaskMiner {
           })
           daysMined++
           minedSinceCluster++
-          consecutiveFailures = 0
+          failuresSinceSuccess = 0
           const counts = this.storage.miningDays.countByStatus()
           log.info(
             `[TaskMiner] Day ${claim.day} completed (attempt ${claim.attempts}) — ` +
@@ -268,32 +279,65 @@ export class TaskMiner {
           )
         } catch (error) {
           const message = formatApiError(error)
-          const cooldownMs = Math.min(
-            TASK_BACKFILL.DAY_COOLDOWN_INITIAL_MS * 2 ** (claim.attempts - 1),
-            TASK_BACKFILL.DAY_COOLDOWN_MAX_MS,
-          )
-          this.storage.miningDays.markAttemptFailed(
-            claim.day,
-            message,
-            TASK_BACKFILL.MAX_DAY_ATTEMPTS,
-            cooldownMs,
-          )
-          daysFailed++
-          consecutiveFailures++
-          log.error(
-            `[TaskMiner] Day ${claim.day} failed (attempt ${claim.attempts}/${TASK_BACKFILL.MAX_DAY_ATTEMPTS}), ` +
-              `cooling down ${Math.round(cooldownMs / 60_000)}m: ${message}`,
-          )
-          this.emitStatus()
-          if (consecutiveFailures >= TASK_BACKFILL.SWEEP_MAX_CONSECUTIVE_FAILURES) {
-            aborted = true
-            break
+          const throttled = isThrottleStatus(extractHttpStatus(error))
+          // Neither a throttled day nor a day whose siblings already stopped the
+          // sweep is a bad day, so both go back unspent. That keeps the attempts
+          // burned by an outage at SWEEP_MAX_CONSECUTIVE_FAILURES no matter what
+          // concurrency the wave ran at.
+          if (throttled || aborted) {
+            this.storage.miningDays.releaseClaim(claim.day, message)
+            const cause = throttled ? 'provider throttled' : 'sweep already stopping'
+            if (throttled && !aborted) {
+              aborted = true
+              abortReason = 'rate-limit'
+            }
+            log.warn(`[TaskMiner] Day ${claim.day} deferred unspent, ${cause}: ${message}`)
+          } else {
+            const cooldownMs = Math.min(
+              TASK_BACKFILL.DAY_COOLDOWN_INITIAL_MS * 2 ** (claim.attempts - 1),
+              TASK_BACKFILL.DAY_COOLDOWN_MAX_MS,
+            )
+            this.storage.miningDays.markAttemptFailed(
+              claim.day,
+              message,
+              TASK_BACKFILL.MAX_DAY_ATTEMPTS,
+              cooldownMs,
+            )
+            daysFailed++
+            failuresSinceSuccess++
+            log.error(
+              `[TaskMiner] Day ${claim.day} failed (attempt ${claim.attempts}/${TASK_BACKFILL.MAX_DAY_ATTEMPTS}), ` +
+                `cooling down ${Math.round(cooldownMs / 60_000)}m: ${message}`,
+            )
+            if (failuresSinceSuccess >= TASK_BACKFILL.SWEEP_MAX_CONSECUTIVE_FAILURES) {
+              aborted = true
+              abortReason = 'failures'
+            }
           }
-          continue
         }
         this.emitStatus()
+      }
 
-        if (minedSinceCluster >= TASK_BACKFILL.CLUSTER_EVERY_DAYS) {
+      for (;;) {
+        let claimedInWave = 0
+        let exhausted = false
+
+        const worker = async (): Promise<void> => {
+          for (;;) {
+            if (aborted || claimedInWave >= TASK_BACKFILL.CLUSTER_EVERY_DAYS) return
+            claimedInWave++
+            const claim = this.storage.miningDays.claimOldestPending()
+            if (!claim) {
+              exhausted = true
+              return
+            }
+            didWork = true
+            await mineDay(claim)
+          }
+        }
+        await Promise.all(Array.from({ length: concurrency }, () => worker()))
+
+        if (!aborted && minedSinceCluster >= TASK_BACKFILL.CLUSTER_EVERY_DAYS) {
           clustering = await this.cluster(provider, {
             ...DEFAULT_MINER_CONFIG,
             model: this.model,
@@ -301,6 +345,7 @@ export class TaskMiner {
           })
           minedSinceCluster = 0
         }
+        if (aborted || exhausted) break
       }
 
       // Final clustering pass — also after an all-skipped drain, so a ledger
@@ -324,14 +369,16 @@ export class TaskMiner {
       }
       if (aborted) {
         this.nextAttemptAt = Date.now() + TASK_BACKFILL.SWEEP_ABORT_BACKOFF_MS
+        const retryIn = `retry in ${Math.round(TASK_BACKFILL.SWEEP_ABORT_BACKOFF_MS / 60_000)}m`
         log.info(
-          `[TaskMiner] Sweep aborted after ${consecutiveFailures} consecutive failures; ` +
-            `retry in ${Math.round(TASK_BACKFILL.SWEEP_ABORT_BACKOFF_MS / 60_000)}m`,
+          abortReason === 'rate-limit'
+            ? `[TaskMiner] Sweep stopped: provider throttled; ${retryIn}`
+            : `[TaskMiner] Sweep aborted after ${failuresSinceSuccess} failures with no success; ${retryIn}`,
         )
       } else {
         this.resetBackoff()
       }
-      return { daysMined, daysSkipped, daysFailed, aborted, clustering }
+      return { daysMined, daysSkipped, daysFailed, aborted, abortReason, clustering }
     } finally {
       this.running = false
       this.sweepBaseline = null

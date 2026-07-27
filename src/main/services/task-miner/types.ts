@@ -87,8 +87,10 @@ export interface BackfillSummary {
   daysMined: number
   daysSkipped: number
   daysFailed: number
-  /** The sweep stopped early after consecutive day failures. */
+  /** The sweep stopped early and gated the next one. */
   aborted?: boolean
+  /** Why it stopped: day failures with no success between them, or a throttling provider. */
+  abortReason?: 'failures' | 'rate-limit'
   /** The single clustering pass run after all days are mined. */
   clustering?: ClusteringRunSummary
   /** Set when the backfill did not run at all because a guard tripped. */
