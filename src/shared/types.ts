@@ -378,8 +378,7 @@ export interface ManagedExclusions {
 
 /** Task-mining progress for the current sweep, pushed to the renderer while it runs. */
 export interface MiningStatus {
-  /** 'cooling': idle only because every pending day is in a retry cooldown. */
-  state: 'idle' | 'mining' | 'cooling'
+  state: 'idle' | 'mining'
   /** Day currently being mined ('YYYY-MM-DD'); null between days. */
   currentDay: string | null
   pendingDays: number
