@@ -209,9 +209,15 @@ export class TaskMiner {
    * commit in one transaction (see runDetection.onCommit), so a crash retries
    * cleanly. A failed day records the attempt and cools down individually
    * while the sweep continues with the next day; once its attempts are
-   * exhausted the claim skips past it for good. Consecutive failures abort
-   * the sweep and gate the next one.
-   * Clusters at the CLUSTER_EVERY_DAYS barrier and once at the end.
+   * exhausted the claim skips past it for good. Failures with no success in
+   * between abort the sweep and gate the next one.
+   *
+   * Days drain in waves of at most CLUSTER_EVERY_DAYS claims, clustering at
+   * each wave barrier and once at the end. A wave runs SWEEP_CONCURRENCY days
+   * at once while the ledger has a backlog — a day is one scan-only LLM round
+   * trip and days within a barrier window are independent — so a 60-day seed
+   * or a post-downtime gap-fill isn't one round trip at a time. With no
+   * backlog the wave is serial, exactly as a daily sweep was.
    */
   private async sweep(provider: InferenceProvider): Promise<BackfillSummary> {
     if (this.running) {
@@ -228,14 +234,14 @@ export class TaskMiner {
       let daysFailed = 0
       let minedSinceCluster = 0
       let didWork = false
-      let consecutiveFailures = 0
+      let failuresSinceSuccess = 0
       let aborted = false
       let clustering: ClusteringRunSummary | undefined
 
-      for (;;) {
-        const claim = this.storage.miningDays.claimOldestPending()
-        if (!claim) break
-        didWork = true
+      const concurrency =
+        settled.pending > TASK_BACKFILL.CLUSTER_EVERY_DAYS ? TASK_BACKFILL.SWEEP_CONCURRENCY : 1
+
+      const mineDay = async (claim: { day: string; attempts: number }): Promise<void> => {
         // Push the claim so the banner's currentDay is live while the day mines.
         this.emitStatus()
         const back = this.daysAgo(claim.day)
@@ -247,7 +253,7 @@ export class TaskMiner {
           this.storage.miningDays.markCompleted(claim.day, { skippedReason: 'had-sightings' })
           daysSkipped++
           this.emitStatus()
-          continue
+          return
         }
 
         try {
@@ -260,7 +266,7 @@ export class TaskMiner {
           })
           daysMined++
           minedSinceCluster++
-          consecutiveFailures = 0
+          failuresSinceSuccess = 0
           const counts = this.storage.miningDays.countByStatus()
           log.info(
             `[TaskMiner] Day ${claim.day} completed (attempt ${claim.attempts}) — ` +
@@ -279,21 +285,41 @@ export class TaskMiner {
             cooldownMs,
           )
           daysFailed++
-          consecutiveFailures++
+          failuresSinceSuccess++
           log.error(
             `[TaskMiner] Day ${claim.day} failed (attempt ${claim.attempts}/${TASK_BACKFILL.MAX_DAY_ATTEMPTS}), ` +
               `cooling down ${Math.round(cooldownMs / 60_000)}m: ${message}`,
           )
-          this.emitStatus()
-          if (consecutiveFailures >= TASK_BACKFILL.SWEEP_MAX_CONSECUTIVE_FAILURES) {
-            aborted = true
-            break
-          }
-          continue
+          if (failuresSinceSuccess >= TASK_BACKFILL.SWEEP_MAX_CONSECUTIVE_FAILURES) aborted = true
         }
         this.emitStatus()
+      }
 
-        if (minedSinceCluster >= TASK_BACKFILL.CLUSTER_EVERY_DAYS) {
+      for (;;) {
+        let claimedInWave = 0
+        let exhausted = false
+
+        // Each worker claims its own next day rather than the wave being handed
+        // out up front: an abort then just stops claiming, so no day is left
+        // `running` for the crash recovery to unwind. The counter bump and the
+        // claim run with no await between them, so workers can neither exceed
+        // the wave cap nor claim the same day.
+        const worker = async (): Promise<void> => {
+          for (;;) {
+            if (aborted || claimedInWave >= TASK_BACKFILL.CLUSTER_EVERY_DAYS) return
+            claimedInWave++
+            const claim = this.storage.miningDays.claimOldestPending()
+            if (!claim) {
+              exhausted = true
+              return
+            }
+            didWork = true
+            await mineDay(claim)
+          }
+        }
+        await Promise.all(Array.from({ length: concurrency }, worker))
+
+        if (!aborted && minedSinceCluster > 0) {
           clustering = await this.cluster(provider, {
             ...DEFAULT_MINER_CONFIG,
             model: this.model,
@@ -301,14 +327,16 @@ export class TaskMiner {
           })
           minedSinceCluster = 0
         }
+        if (aborted || exhausted) break
       }
 
-      // Final clustering pass — also after an all-skipped drain, so a ledger
-      // enqueued over pre-ledger sightings still gets its clusters refreshed.
-      // Skipped when nothing settled (e.g. the first day failed) or the sweep
-      // aborted on an outage signature: a down provider shouldn't get one
-      // more doomed LLM call; the next sweep clusters what was mined.
-      if (!aborted && daysMined + daysSkipped > 0 && (minedSinceCluster > 0 || !clustering)) {
+      // Final clustering pass for a drain no wave barrier clustered: an
+      // all-skipped drain (a ledger enqueued over pre-ledger sightings still
+      // gets its clusters refreshed) or a barrier pass that failed. Skipped
+      // when nothing settled (e.g. the first day failed) or the sweep aborted
+      // on an outage signature: a down provider shouldn't get one more doomed
+      // LLM call; the next sweep clusters what was mined.
+      if (!aborted && daysMined + daysSkipped > 0 && !clustering) {
         clustering = await this.cluster(provider, {
           ...DEFAULT_MINER_CONFIG,
           model: this.model,
@@ -325,7 +353,7 @@ export class TaskMiner {
       if (aborted) {
         this.nextAttemptAt = Date.now() + TASK_BACKFILL.SWEEP_ABORT_BACKOFF_MS
         log.info(
-          `[TaskMiner] Sweep aborted after ${consecutiveFailures} consecutive failures; ` +
+          `[TaskMiner] Sweep aborted after ${failuresSinceSuccess} failures with no success; ` +
             `retry in ${Math.round(TASK_BACKFILL.SWEEP_ABORT_BACKOFF_MS / 60_000)}m`,
         )
       } else {

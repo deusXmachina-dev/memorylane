@@ -156,9 +156,10 @@ export class MiningDayRepository {
     return row.next
   }
 
+  /** Oldest day currently being mined; a sweep may have several in flight. */
   getRunningDay(): string | null {
     const row = this.db
-      .prepare(`SELECT day FROM mining_days WHERE status = 'running' LIMIT 1`)
+      .prepare(`SELECT day FROM mining_days WHERE status = 'running' ORDER BY day ASC LIMIT 1`)
       .get() as { day: string } | undefined
     return row?.day ?? null
   }

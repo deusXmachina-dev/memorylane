@@ -379,7 +379,7 @@ export interface ManagedExclusions {
 /** Task-mining progress for the current sweep, pushed to the renderer while it runs. */
 export interface MiningStatus {
   state: 'idle' | 'mining'
-  /** Day currently being mined ('YYYY-MM-DD'); null between days. */
+  /** Oldest day currently being mined ('YYYY-MM-DD'); null between days. */
   currentDay: string | null
   pendingDays: number
   /** Days settled during this sweep — not lifetime ledger totals. */

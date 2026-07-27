@@ -47,6 +47,16 @@ describe('MiningDayRepository', () => {
     expect(storage.miningDays.claimOldestPending()?.day).toBe('2026-07-02')
   })
 
+  it('hands successive claims distinct days oldest-first and reports the oldest running', () => {
+    storage.miningDays.enqueueMissing(['2026-07-03', '2026-07-01', '2026-07-02'])
+
+    const days = [1, 2, 3].map(() => storage.miningDays.claimOldestPending()?.day)
+
+    expect(days).toEqual(['2026-07-01', '2026-07-02', '2026-07-03'])
+    expect(storage.miningDays.countByStatus().running).toBe(3)
+    expect(storage.miningDays.getRunningDay()).toBe('2026-07-01')
+  })
+
   it('returns null when nothing is pending', () => {
     expect(storage.miningDays.claimOldestPending()).toBeNull()
     expect(storage.miningDays.nextClaimableAt()).toBeNull()
