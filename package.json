@@ -49,6 +49,7 @@
     "eval-summaries": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/eval-summaries.ts",
     "eval-tasks": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/eval-tasks.ts",
     "eval-cluster-review": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/eval-cluster-review.ts",
+    "eval-pii-scrub": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/eval-pii-scrub.ts",
     "dump-review-input": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/dump-review-input.ts",
     "export-day": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/export-day.ts",
     "build-task-fixture": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/build-task-fixture.ts",
@@ -65,6 +66,7 @@
   },
   "license": "GPL-3.0-or-later",
   "devDependencies": {
+    "@coffeeandfun/remove-pii": "^3.0.1",
     "@electron/notarize": "^3.1.1",
     "@tailwindcss/vite": "^4.1.18",
     "@types/better-sqlite3": "^7.6.13",
@@ -88,6 +90,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "prettier": "^3.8.1",
+    "redact-pii": "^3.4.0",
     "tailwindcss": "^4.1.18",
     "tsx": "^4.19.0",
     "typescript": "~5.7.0",
