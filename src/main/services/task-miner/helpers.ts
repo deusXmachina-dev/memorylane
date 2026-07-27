@@ -1,4 +1,9 @@
+import { generateText } from 'ai'
 import type { ActivityDetail } from '../../storage'
+
+/** Every miner LLM call goes through here: SDK retries stay off because the mining ledger owns retry pacing. */
+export const minerGenerateText: typeof generateText = (options) =>
+  generateText({ ...options, maxRetries: 0 })
 
 interface TimeBounded {
   startTimestamp: number

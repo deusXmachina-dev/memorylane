@@ -149,15 +149,15 @@ export class TaskMiner {
     }
 
     this.ensureEnqueued()
-    if (!this.storage.miningDays.hasPending()) {
+    const nextClaimable = this.storage.miningDays.nextClaimableAt()
+    if (nextClaimable === null) {
       this.logSkip('no-pending', 'No days pending, skipping')
       return
     }
-    if (!this.storage.miningDays.hasClaimablePending()) {
-      const next = this.storage.miningDays.nextPendingAttemptAt()
+    if (nextClaimable > Date.now()) {
       this.logSkip(
         'cooling-down',
-        `All pending days cooling down${next ? `, next attempt ~${new Date(next).toLocaleTimeString()}` : ''}`,
+        `All pending days cooling down, next attempt ~${new Date(nextClaimable).toLocaleTimeString()}`,
       )
       return
     }
@@ -351,7 +351,8 @@ export class TaskMiner {
       return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'no-model' }
     }
     this.ensureEnqueued()
-    if (this.storage.miningDays.hasPending() && !this.storage.miningDays.hasClaimablePending()) {
+    const nextClaimable = this.storage.miningDays.nextClaimableAt()
+    if (nextClaimable !== null && nextClaimable > Date.now()) {
       return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'cooling-down' }
     }
     return this.sweep(provider)

@@ -49,7 +49,7 @@ describe('MiningDayRepository', () => {
 
   it('returns null when nothing is pending', () => {
     expect(storage.miningDays.claimOldestPending()).toBeNull()
-    expect(storage.miningDays.hasPending()).toBe(false)
+    expect(storage.miningDays.nextClaimableAt()).toBeNull()
   })
 
   it('sends a failed attempt back to pending until attempts are exhausted', () => {
@@ -83,15 +83,15 @@ describe('MiningDayRepository', () => {
     expect(storage.miningDays.claimOldestPending(1500)?.day).toBe('2026-07-01')
   })
 
-  it('distinguishes pending from claimable and reports the next attempt time', () => {
+  it('reports the earliest time a pending day becomes claimable', () => {
     storage.miningDays.enqueueMissing(['2026-07-01'])
-    storage.miningDays.claimOldestPending(1000)
-    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', 3, 500, 1000)
+    expect(storage.miningDays.nextClaimableAt()).toBe(0)
 
-    expect(storage.miningDays.hasPending()).toBe(true)
-    expect(storage.miningDays.hasClaimablePending(1400)).toBe(false)
-    expect(storage.miningDays.hasClaimablePending(1500)).toBe(true)
-    expect(storage.miningDays.nextPendingAttemptAt()).toBe(1500)
+    storage.miningDays.claimOldestPending(1000)
+    expect(storage.miningDays.nextClaimableAt()).toBeNull()
+
+    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', 3, 500, 1000)
+    expect(storage.miningDays.nextClaimableAt()).toBe(1500)
   })
 
   it('completing a day clears its error and cooldown and stores stats', () => {

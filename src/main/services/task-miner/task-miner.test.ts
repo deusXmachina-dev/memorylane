@@ -130,7 +130,6 @@ describe('TaskMiner sweep', () => {
     }
   }
 
-  // A successful mine that commits the day like the real one does.
   const commitDay: typeof runDetection = async (_provider, _storage, _embedder, config) => {
     config?.onCommit?.({
       candidatesFromScan: 1,
@@ -210,14 +209,12 @@ describe('TaskMiner sweep', () => {
 
     const first = await miner.sweepNow(configuredProvider)
     expect(first).toMatchObject({ daysMined: 2, daysFailed: 1, aborted: false })
-    // The failure did not stop the sweep: the two newer days were still mined.
     expect(mockedRunDetection).toHaveBeenCalledTimes(3)
     const failedDay = storage.miningDays.getAll().find((d) => d.day === localLabel(3))
     expect(failedDay?.status).toBe('pending')
     expect(failedDay?.lastError).toBe('provider down')
     expect(failedDay?.nextAttemptAt).toBe(Date.now() + TASK_BACKFILL.DAY_COOLDOWN_INITIAL_MS)
 
-    // Still cooling: the day is unclaimable, and the dev flow says why.
     const gated = await miner.sweepNow(configuredProvider)
     expect(gated).toMatchObject({ daysMined: 0, daysFailed: 0, skipped: 'cooling-down' })
 
@@ -316,7 +313,6 @@ describe('TaskMiner sweep', () => {
     const first = await miner.sweepNow(configuredProvider)
     expect(first).toMatchObject({ daysMined: 1, daysFailed: 1, aborted: false })
 
-    // Stands down only because the sole pending day is cooling, not a global gate.
     miner.scheduleRun()
     expect(miner.isBusy()).toBe(false)
 
@@ -353,17 +349,10 @@ describe('TaskMiner sweep', () => {
   it('a success resets the consecutive-failure count', async () => {
     seedDays(6)
     let call = 0
-    mockedRunDetection.mockImplementation(async (_provider, _storage, _embedder, config) => {
+    mockedRunDetection.mockImplementation(async (...args) => {
       call++
       if (call % 2 === 1) throw new Error('flaky')
-      config?.onCommit?.({
-        candidatesFromScan: 1,
-        candidatesKept: 1,
-        candidatesRejected: 0,
-        tokensIn: 10,
-        tokensOut: 5,
-      })
-      return {} as never
+      return commitDay(...args)
     })
 
     const summary = await miner.sweepNow(configuredProvider)

@@ -128,6 +128,7 @@ export class MiningDayRepository {
       .prepare(
         `UPDATE mining_days
          SET status = CASE WHEN attempts < ? THEN 'pending' ELSE 'failed' END,
+             next_attempt_at = NULL,
              last_error = COALESCE(last_error, 'interrupted')
          WHERE status = 'running'`,
       )
@@ -144,30 +145,12 @@ export class MiningDayRepository {
       .run().changes
   }
 
-  hasPending(): boolean {
-    return (
-      this.db.prepare(`SELECT 1 FROM mining_days WHERE status = 'pending' LIMIT 1`).get() !==
-      undefined
-    )
-  }
-
-  hasClaimablePending(now: number = Date.now()): boolean {
-    return (
-      this.db
-        .prepare(
-          `SELECT 1 FROM mining_days
-           WHERE status = 'pending' AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
-           LIMIT 1`,
-        )
-        .get(now) !== undefined
-    )
-  }
-
-  nextPendingAttemptAt(): number | null {
+  /** Earliest time any pending day becomes claimable (no cooldown counts as 0); null when nothing is pending. */
+  nextClaimableAt(): number | null {
     const row = this.db
       .prepare(
-        `SELECT MIN(next_attempt_at) AS next FROM mining_days
-         WHERE status = 'pending' AND next_attempt_at IS NOT NULL`,
+        `SELECT MIN(COALESCE(next_attempt_at, 0)) AS next FROM mining_days
+         WHERE status = 'pending'`,
       )
       .get() as { next: number | null }
     return row.next
