@@ -336,7 +336,9 @@ export interface ClusterSightingInfo {
   /** The object this run acted on; empty when the scan named none. */
   subject: string
   apps: string[]
+  /** Wall-clock span: first activity start → last activity end. */
   startedAt: number
+  endedAt: number
   /** Active time (union of cited-activity intervals), in minutes. */
   activeMin: number
   /** Underlying activity ids — handle for the "Copy prompt for Claude" flow. */
