@@ -1,10 +1,8 @@
 import { v4 as uuidv4 } from 'uuid'
 import type { StorageService } from '@main/storage'
-import type { ClusterVerdict, ClusterRecipe } from '@main/storage/cluster-repository'
+import type { ClusterRecipe } from '@main/storage/cluster-repository'
 import { mergePairKey } from '@main/storage/cluster-repository'
-import { CLUSTER_KINDS } from '@/shared/types'
 import { scrubPII } from '@/shared/sanitize'
-import type { ClusterKind } from '@types'
 import { averageLinkageGroups } from './attach'
 import { recomputeCentroid } from './signatures'
 import type { ReviewClusterVerdict, ReviewOutput } from './types'
@@ -28,18 +26,14 @@ export interface ReviewGuards {
 }
 
 /**
- * Whitelist the LLM's classification into a storable verdict. Fail closed:
- * anything off-enum — including a "procedure" without a concrete mechanism —
- * coerces to kind '' (the unclassified sentinel, never persisted over an
- * earlier classification). Non-procedure kinds never carry a mechanism.
+ * Collapse the LLM's classification to the one stored bit: the mechanism.
+ * The response taxonomy (procedure/monitoring/...) exists so the model isn't
+ * pressured to invent mechanisms; only a "procedure" claim may carry one, and
+ * a procedure without a concrete mechanism is, by the prompt's own rule, not
+ * a procedure — it stores '' (judged not automatable).
  */
-export function sanitizeVerdict(raw: ReviewClusterVerdict): ClusterVerdict {
-  const kind = (CLUSTER_KINDS as readonly string[]).includes(raw.kind ?? '')
-    ? (raw.kind as ClusterKind)
-    : ''
-  const mechanism = kind === 'procedure' ? (raw.mechanism ?? '').trim() : ''
-  if (kind === 'procedure' && mechanism === '') return { kind: '', mechanism: '' }
-  return { kind, mechanism }
+export function sanitizeMechanism(raw: ReviewClusterVerdict): string {
+  return raw.kind === 'procedure' ? (raw.mechanism ?? '').trim() : ''
 }
 
 const MAX_RECIPE_VARIABLES = 10
@@ -59,13 +53,12 @@ export function sanitizeRecipe(raw: ReviewClusterVerdict): ClusterRecipe {
  * identity rule, regardless of order in the LLM output), then splits and
  * incoherence verdicts, then labels for everything untouched by a merge/split.
  * Candidate pairs the LLM saw and left unmerged are recorded as declines
- * (see cluster_merge_declines in cluster-schema.ts).
+ * (the cluster_merge_declines table).
  */
 export function validateAndApply(
   storage: StorageService,
   review: ReviewOutput,
   guards: ReviewGuards,
-  model: string,
   now: number,
   progress?: ProgressCallback,
   /** Re-split groups per incoherent cluster, precomputed off-thread by the
@@ -119,19 +112,17 @@ export function validateAndApply(
         merged++
       }
       consumed.add(survivor.id)
+      // The survivor's mechanism and recipe were derived from only its
+      // pre-merge members — clear both so the next review redoes them.
       storage.clusters.updateLabel(
         survivor.id,
         proposal.label ?? '',
         proposal.description ?? '',
-        model,
+        '',
         storage.clusters.getMemberCount(survivor.id),
-        now,
       )
-      // The survivor's verdict and recipe were derived from only its pre-merge
-      // members — clear both so the next review redoes them.
-      storage.clusters.updateVerdict(survivor.id, { kind: '', mechanism: '' }, now)
-      storage.clusters.updateRecipe(survivor.id, { steps: [], variables: [] }, now)
-      recomputeCentroid(storage, survivor.id, now)
+      storage.clusters.updateRecipe(survivor.id, { steps: [], variables: [] })
+      recomputeCentroid(storage, survivor.id)
       labeled++
     }
 
@@ -186,7 +177,7 @@ export function validateAndApply(
           if (!assigned.has(id)) largest.sightingIds.push(id)
         }
 
-        applySplit(storage, verdict.id, nonEmpty, model, now)
+        applySplit(storage, verdict.id, nonEmpty, now)
         consumed.add(verdict.id)
         split++
         continue
@@ -199,16 +190,7 @@ export function validateAndApply(
           progress?.(`[Clustering] Dropped incoherent verdict on non-splittable ${verdict.id}`)
           continue
         }
-        if (
-          resplitByGeometry(
-            storage,
-            verdict.id,
-            resplitGroups?.get(verdict.id),
-            model,
-            now,
-            progress,
-          )
-        )
+        if (resplitByGeometry(storage, verdict.id, resplitGroups?.get(verdict.id), now, progress))
           split++
         consumed.add(verdict.id)
         continue
@@ -222,28 +204,20 @@ export function validateAndApply(
           progress?.(`[Clustering] Dropped label for single-member cluster ${verdict.id}`)
           continue
         }
+        // An omitted classification on a relabel must not wipe an earlier
+        // judgment — mechanism null keeps the stored value.
         storage.clusters.updateLabel(
           verdict.id,
           verdict.label,
           verdict.description ?? '',
-          model,
+          verdict.kind === undefined ? null : sanitizeMechanism(verdict),
           storage.clusters.getMemberCount(verdict.id),
-          now,
         )
-        // Only persist a valid verdict — an omitted or unsanitizable kind on a
-        // relabel must not wipe an earlier classification. An unclassified
-        // cluster keeps kind '' and is re-reviewed next run either way.
-        if (verdict.kind !== undefined) {
-          const sanitized = sanitizeVerdict(verdict)
-          if (sanitized.kind !== '') {
-            storage.clusters.updateVerdict(verdict.id, sanitized, now)
-          }
-        }
         // Only overwrite the recipe when the model returned steps — a relabel
         // that omits them must not wipe an existing recipe.
         const recipe = sanitizeRecipe(verdict)
         if (recipe.steps.length > 0) {
-          storage.clusters.updateRecipe(verdict.id, recipe, now)
+          storage.clusters.updateRecipe(verdict.id, recipe)
         }
         labeled++
       }
@@ -263,15 +237,13 @@ interface SplitGroup {
 /**
  * The largest group keeps the original cluster id — stable identity (and its
  * "seen X times" history) follows the dominant process; the rest move to new
- * clusters. Kind is cleared everywhere: membership changed, so the old
- * classification no longer applies. Unlabeled groups get empty label
- * provenance — the model never labeled them.
+ * clusters. Mechanism is cleared everywhere: membership changed, so the old
+ * judgment no longer applies — the next review redoes it.
  */
 function applySplit(
   storage: StorageService,
   clusterId: string,
   groups: SplitGroup[],
-  model: string,
   now: number,
 ): void {
   const largest = groups.reduce((a, b) => (b.sightingIds.length > a.sightingIds.length ? b : a))
@@ -283,32 +255,26 @@ function applySplit(
       label: group.label,
       description: group.description,
       centroid: null,
-      // Split groups are new processes — classified on the next review.
-      kind: '',
       mechanism: '',
       steps: [],
       variables: [],
-      labelModel: group.label ? model : '',
       labeledSize: group.label ? group.sightingIds.length : 0,
       createdAt: now,
-      updatedAt: now,
     })
     for (const sightingId of group.sightingIds) {
-      storage.clusters.addMembership(newId, sightingId, now)
+      storage.clusters.addMembership(newId, sightingId)
     }
-    recomputeCentroid(storage, newId, now)
+    recomputeCentroid(storage, newId)
   }
   storage.clusters.updateLabel(
     clusterId,
     largest.label,
     largest.description,
-    largest.label ? model : '',
+    '',
     largest.label ? largest.sightingIds.length : 0,
-    now,
   )
-  storage.clusters.updateVerdict(clusterId, { kind: '', mechanism: '' }, now)
-  storage.clusters.updateRecipe(clusterId, { steps: [], variables: [] }, now)
-  recomputeCentroid(storage, clusterId, now)
+  storage.clusters.updateRecipe(clusterId, { steps: [], variables: [] })
+  recomputeCentroid(storage, clusterId)
 }
 
 /**
@@ -322,7 +288,6 @@ function resplitByGeometry(
   storage: StorageService,
   clusterId: string,
   precomputed: string[][] | undefined,
-  model: string,
   now: number,
   progress?: ProgressCallback,
 ): boolean {
@@ -349,6 +314,6 @@ function resplitByGeometry(
     `[Clustering] Re-split incoherent cluster ${clusterId} into ` +
       `${groups.map((g) => g.length).join('+')} members`,
   )
-  applySplit(storage, clusterId, splitGroups, model, now)
+  applySplit(storage, clusterId, splitGroups, now)
   return true
 }

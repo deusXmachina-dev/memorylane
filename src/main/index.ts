@@ -553,8 +553,8 @@ app.on('ready', async () => {
   // enqueues its 60-day seed on the first tick; a mined DB picks up gap days.
   if (taskMiner) {
     const miner = taskMiner
-    // After a derived-data wipe (CLUSTER_SCHEMA_VERSION bump) the DB is still
-    // mined, so clusters rebuild from sightings before the sweep starts.
+    // After a derived-data wipe migration the DB is still mined, so clusters
+    // rebuild from sightings before the sweep starts.
     void miner.rebuildClustersIfEmpty().then(() => miner.startup())
   }
 

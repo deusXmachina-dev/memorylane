@@ -79,13 +79,13 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
         `deleted ${pruned.deletedClusters} empty clusters`,
     )
   }
-  for (const clusterId of pruned.touchedClusterIds) recomputeCentroid(storage, clusterId, now)
+  for (const clusterId of pruned.touchedClusterIds) recomputeCentroid(storage, clusterId)
 
   // 2. Signatures for sightings never seen by the clusterer. On the first run
   //    after the migration this is the whole retained backlog — bootstrap is
   //    the same code path.
   const unprocessed = storage.clusters.getUnprocessedSightings()
-  const { unclustered } = await computeAndStoreSignatures(storage, unprocessed, deps.embedder, now)
+  const { unclustered } = await computeAndStoreSignatures(storage, unprocessed, deps.embedder)
   summary.newSignatures = unprocessed.length
   summary.unclustered = unclustered
 
@@ -116,7 +116,7 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
   )
   const touched = new Set<string>(pruned.touchedClusterIds)
   for (const { sightingId, clusterId } of attached) {
-    storage.clusters.addMembership(clusterId, sightingId, now)
+    storage.clusters.addMembership(clusterId, sightingId)
     touched.add(clusterId)
   }
   summary.attached = attached.length
@@ -135,7 +135,7 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
   for (const group of groups) {
     const clusterId = uuidv4()
     createUnlabeledCluster(storage, clusterId, null, now)
-    for (const sightingId of group) storage.clusters.addMembership(clusterId, sightingId, now)
+    for (const sightingId of group) storage.clusters.addMembership(clusterId, sightingId)
     newClusterIds.add(clusterId)
     touched.add(clusterId)
   }
@@ -144,7 +144,7 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
   // 5. Refresh centroids of every touched cluster, then evict members that a
   //    merge or pruning has left far from their own centroid — the repair
   //    valve for "member for life" drift. Evictees become their own clusters.
-  for (const clusterId of touched) recomputeCentroid(storage, clusterId, now)
+  for (const clusterId of touched) recomputeCentroid(storage, clusterId)
   summary.evicted = evictDissonantMembers(storage, touched, newClusterIds, now)
   if (attached.length || newClusterIds.size || summary.evicted) {
     progress(
@@ -196,15 +196,7 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
         )
       }
     }
-    const applied = validateAndApply(
-      storage,
-      review.output,
-      guards,
-      model,
-      now,
-      progress,
-      resplitGroups,
-    )
+    const applied = validateAndApply(storage, review.output, guards, now, progress, resplitGroups)
     summary.merged = applied.merged
     summary.split = applied.split
     summary.labeled = applied.labeled
@@ -259,12 +251,12 @@ function evictDissonantMembers(
       if (evicted >= CLUSTERING_CONFIG.MAX_EVICTIONS_PER_RUN) break
       const newId = uuidv4()
       createUnlabeledCluster(storage, newId, signatures.get(sightingId) ?? null, now)
-      storage.clusters.addMembership(newId, sightingId, now)
+      storage.clusters.addMembership(newId, sightingId)
       storage.clusters.recordMergeDecline(cluster.id, newId, now)
       touched.add(newId)
       evicted++
     }
-    recomputeCentroid(storage, cluster.id, now)
+    recomputeCentroid(storage, cluster.id)
     touched.add(cluster.id)
   }
   return evicted
@@ -281,14 +273,11 @@ function createUnlabeledCluster(
     label: '',
     description: '',
     centroid,
-    kind: '',
     mechanism: '',
     steps: [],
     variables: [],
-    labelModel: '',
     labeledSize: 0,
     createdAt: now,
-    updatedAt: now,
   })
 }
 
@@ -318,14 +307,9 @@ async function buildReviewInput(
     const count = memberCount.get(c.id) ?? 0
     if (count < 2) return false
     // Relabel once a cluster doubles since its last labeling (semantic drift);
-    // kind === '' means the classify verdict is still missing, empty steps
-    // mean the recipe is — either way the review is incomplete, retry.
-    return (
-      c.label === '' ||
-      c.kind === '' ||
-      c.steps.length === 0 ||
-      count >= 2 * Math.max(1, c.labeledSize)
-    )
+    // empty steps mean the recipe is still missing — either way the review is
+    // incomplete, retry.
+    return c.label === '' || c.steps.length === 0 || count >= 2 * Math.max(1, c.labeledSize)
   }
 
   const belowFloor: { id: string; coherence: number }[] = []

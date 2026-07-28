@@ -112,6 +112,14 @@ export interface ReviewInput {
   mergeCandidates: [string, string][]
 }
 
+/**
+ * The classification taxonomy the review prompt offers. Response-level only:
+ * it exists so the model isn't pressured to invent mechanisms. Storage keeps
+ * just the mechanism (procedure ⟺ mechanism non-empty).
+ */
+export const REVIEW_KINDS = ['procedure', 'monitoring', 'ambient', 'dev-loop', 'judgment'] as const
+export type ReviewKind = (typeof REVIEW_KINDS)[number]
+
 export interface ReviewSplitGroup {
   label: string
   description: string

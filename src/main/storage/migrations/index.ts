@@ -18,9 +18,13 @@ import { migration as migration0016 } from './0016_add_mining_days'
 import { migration as migration0017 } from './0017_sighting_steps'
 import { migration as migration0018 } from './0018_mining_day_cooldown'
 import { migration as migration0019 } from './0019_reset_failed_mining_days'
+import { migration as migration0020 } from './0020_cluster_tables'
+import { migration as migration0021 } from './0021_drop_pattern_tables'
 
-// Cluster tables are module-owned derived state (see ../cluster-schema.ts),
-// created after migrations run — never add cluster migrations here.
+// Cluster tables hold state derived from the append-only `sightings` table and
+// are fully rebuildable (rebuildClustersIfEmpty repopulates after a wipe). A
+// change that invalidates existing clusters is an explicit wipe migration:
+// DELETE the derived rows and let the next launch rebuild.
 export const migrations: Migration[] = [
   migration0001,
   migration0002,
@@ -41,4 +45,6 @@ export const migrations: Migration[] = [
   migration0017,
   migration0018,
   migration0019,
+  migration0020,
+  migration0021,
 ]

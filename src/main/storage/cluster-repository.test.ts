@@ -27,14 +27,11 @@ const createCluster = (overrides: Partial<Cluster> & { id: string }): Cluster =>
   label: overrides.label ?? '',
   description: overrides.description ?? '',
   centroid: overrides.centroid ?? null,
-  kind: overrides.kind ?? '',
   mechanism: overrides.mechanism ?? '',
   steps: overrides.steps ?? [],
   variables: overrides.variables ?? [],
-  labelModel: overrides.labelModel ?? '',
   labeledSize: overrides.labeledSize ?? 0,
   createdAt: overrides.createdAt ?? 1000,
-  updatedAt: overrides.updatedAt ?? 1000,
 })
 
 describe('ClusterRepository', () => {
@@ -57,14 +54,14 @@ describe('ClusterRepository', () => {
     storage.sightings.add(createSighting({ id: 's2' }))
     storage.sightings.add(createSighting({ id: 's3' }))
 
-    storage.clusters.upsertSignature('s1', v(0.6, 0.8), 100)
-    storage.clusters.upsertSignature('s2', null, 100)
+    storage.clusters.upsertSignature('s1', v(0.6, 0.8))
+    storage.clusters.upsertSignature('s2', null)
 
     expect(storage.clusters.getUnprocessedSightings().map((s) => s.id)).toEqual(['s3'])
 
     storage.clusters.create(createCluster({ id: 'c1' }))
-    storage.clusters.addMembership('c1', 's1', 100)
-    storage.clusters.addMembership('c1', 's2', 100)
+    storage.clusters.addMembership('c1', 's1')
+    storage.clusters.addMembership('c1', 's2')
 
     // Only the non-null signature comes back.
     const sigs = storage.clusters.getSignaturesByClusterId('c1')
@@ -79,11 +76,27 @@ describe('ClusterRepository', () => {
     expect(cluster.centroid![0]).toBeCloseTo(1)
     expect(cluster.centroid).toHaveLength(384)
 
-    storage.clusters.updateCentroid('c1', v(0, 1), 200)
+    storage.clusters.updateCentroid('c1', v(0, 1))
     expect(storage.clusters.getById('c1')!.centroid![1]).toBeCloseTo(1)
   })
 
-  it('computes stats on read from member sightings', () => {
+  it('getRecurringLabels returns labeled clusters with 2+ members', () => {
+    storage.sightings.add(createSighting({ id: 's1' }))
+    storage.sightings.add(createSighting({ id: 's2' }))
+    storage.sightings.add(createSighting({ id: 's3' }))
+    storage.clusters.create(createCluster({ id: 'recurring', label: 'Weekly report' }))
+    storage.clusters.addMembership('recurring', 's1')
+    storage.clusters.addMembership('recurring', 's2')
+    storage.clusters.create(createCluster({ id: 'single', label: 'One-off' }))
+    storage.clusters.addMembership('single', 's3')
+    storage.clusters.create(createCluster({ id: 'unlabeled' }))
+
+    expect(storage.clusters.getRecurringLabels()).toEqual([
+      { label: 'Weekly report', timesSeen: 2 },
+    ])
+  })
+
+  it('getMemberDigest returns per-member rows across clusters', () => {
     storage.sightings.add(
       createSighting({ id: 's1', startedAt: 1000, endedAt: 2000, interactionMin: 4, apps: ['A'] }),
     )
@@ -97,23 +110,8 @@ describe('ClusterRepository', () => {
       }),
     )
     storage.clusters.create(createCluster({ id: 'c1' }))
-    storage.clusters.addMembership('c1', 's1', 100)
-    storage.clusters.addMembership('c1', 's2', 100)
-    storage.clusters.create(createCluster({ id: 'c-empty', createdAt: 2000 }))
-
-    const stats = storage.clusters.getAllWithStats()
-    expect(stats.map((c) => c.id)).toEqual(['c1', 'c-empty'])
-
-    const c1 = stats[0]
-    expect(c1.timesSeen).toBe(2)
-    expect(c1.avgActiveMin).toBe(6)
-    expect(c1.firstSeenAt).toBe(1000)
-    expect(c1.lastSeenAt).toBe(9000)
-    expect(c1.apps.sort()).toEqual(['A', 'B'])
-
-    const empty = stats[1]
-    expect(empty.timesSeen).toBe(0)
-    expect(empty.apps).toEqual([])
+    storage.clusters.addMembership('c1', 's1')
+    storage.clusters.addMembership('c1', 's2')
 
     const digest = storage.clusters.getMemberDigest()
     expect(digest.map((d) => d.interactionMin)).toEqual([4, 8])
@@ -127,11 +125,21 @@ describe('ClusterRepository', () => {
     storage.sightings.add(createSighting({ id: 's2', startedAt: 2000 }))
     storage.getDatabase().prepare(`UPDATE sightings SET steps = 'not json' WHERE id = 's2'`).run()
     storage.clusters.create(createCluster({ id: 'c1' }))
-    storage.clusters.addMembership('c1', 's1', 100)
-    storage.clusters.addMembership('c1', 's2', 100)
+    storage.clusters.addMembership('c1', 's1')
+    storage.clusters.addMembership('c1', 's2')
 
     const digest = storage.clusters.getMemberDigest()
     expect(digest.map((d) => d.steps)).toEqual([['TestApp: do the thing'], []])
+  })
+
+  it('updateLabel with null mechanism keeps the stored judgment', () => {
+    storage.clusters.create(createCluster({ id: 'c1', label: 'Old', mechanism: 'A script' }))
+
+    storage.clusters.updateLabel('c1', 'New', 'desc', null, 3)
+    expect(storage.clusters.getById('c1')!.mechanism).toBe('A script')
+
+    storage.clusters.updateLabel('c1', 'Newer', 'desc', '', 3)
+    expect(storage.clusters.getById('c1')!.mechanism).toBe('')
   })
 
   it('moves memberships between clusters', () => {
@@ -139,8 +147,8 @@ describe('ClusterRepository', () => {
     storage.sightings.add(createSighting({ id: 's2' }))
     storage.clusters.create(createCluster({ id: 'from' }))
     storage.clusters.create(createCluster({ id: 'to' }))
-    storage.clusters.addMembership('from', 's1', 100)
-    storage.clusters.addMembership('to', 's2', 100)
+    storage.clusters.addMembership('from', 's1')
+    storage.clusters.addMembership('to', 's2')
 
     expect(storage.clusters.moveMemberships('from', 'to')).toBe(1)
     expect(storage.clusters.getMemberCount('to')).toBe(2)
@@ -151,14 +159,14 @@ describe('ClusterRepository', () => {
     storage.sightings.add(createSighting({ id: 'stays', startedAt: Date.now() }))
     storage.sightings.add(createSighting({ id: 'goes1', startedAt: 0 }))
     storage.sightings.add(createSighting({ id: 'goes2', startedAt: 0 }))
-    storage.clusters.upsertSignature('stays', v(1), 100)
-    storage.clusters.upsertSignature('goes1', v(0, 1), 100)
+    storage.clusters.upsertSignature('stays', v(1))
+    storage.clusters.upsertSignature('goes1', v(0, 1))
 
     storage.clusters.create(createCluster({ id: 'mixed' }))
-    storage.clusters.addMembership('mixed', 'stays', 100)
-    storage.clusters.addMembership('mixed', 'goes1', 100)
+    storage.clusters.addMembership('mixed', 'stays')
+    storage.clusters.addMembership('mixed', 'goes1')
     storage.clusters.create(createCluster({ id: 'doomed' }))
-    storage.clusters.addMembership('doomed', 'goes2', 100)
+    storage.clusters.addMembership('doomed', 'goes2')
 
     storage.sightings.pruneOlderThan(90)
 
@@ -176,7 +184,7 @@ describe('ClusterRepository', () => {
   it('delete removes the cluster and its memberships but not sightings', () => {
     storage.sightings.add(createSighting({ id: 's1' }))
     storage.clusters.create(createCluster({ id: 'c1' }))
-    storage.clusters.addMembership('c1', 's1', 100)
+    storage.clusters.addMembership('c1', 's1')
 
     storage.clusters.delete('c1')
     expect(storage.clusters.getById('c1')).toBeNull()

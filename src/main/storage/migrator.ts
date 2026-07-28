@@ -1,7 +1,6 @@
 import Database from 'better-sqlite3'
 import log from '@main/utils/logger'
 import { migrations } from './migrations'
-import { ensureClusterSchema } from './cluster-schema'
 
 export interface Migration {
   name: string
@@ -59,7 +58,6 @@ export function runMigrations(db: Database.Database): void {
 export function applyMigrations(db: Database.Database): void {
   ensureMigrationsTable(db)
   runMigrations(db)
-  ensureClusterSchema(db)
 }
 
 export function getMigrationStatus(db: Database.Database): MigrationStatus[] {

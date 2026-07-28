@@ -6,13 +6,9 @@
  */
 
 import { CLUSTER_VIEW_CONFIG } from '@/shared/constants'
-import type {
-  ClusterInfo,
-  ClustersView,
-  ClusterKind,
-  RecurrenceBucket,
-  RecurrenceUnit,
-} from '@types'
+import type { ClusterInfo, ClustersView, RecurrenceBucket, RecurrenceUnit } from '@types'
+import type { ClusterRepository } from '@main/storage/cluster-repository'
+import type { ActivityRepository } from '@main/storage/activity-repository'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 // 1970-01-05 (day index 4) was a Monday; anchor week buckets to it.
@@ -125,10 +121,9 @@ export function buildClusterInfo(
     id: string
     label: string
     description: string
-    kind: ClusterKind
     mechanism: string
-    steps?: string[]
-    variables?: string[]
+    steps: string[]
+    variables: string[]
   },
   allMembers: ClusterMember[],
   observedDays: number,
@@ -156,33 +151,20 @@ export function buildClusterInfo(
     timesPerWeek: timesPerWeek(members.length, observedDays),
     observedDays,
     avgActiveMin,
-    totalActiveMin: activeMins.reduce((sum, v) => sum + v, 0),
-    kind: cluster.kind,
     mechanism: cluster.mechanism,
-    steps: resolveSteps(cluster.steps ?? [], members),
-    variables: cluster.variables ?? [],
-    firstSeenAt: members.length > 0 ? Math.min(...startedAts) : null,
+    steps: resolveSteps(cluster.steps, members),
+    variables: cluster.variables,
     lastSeenAt: members.length > 0 ? Math.max(...members.map((m) => m.endedAt)) : null,
     recurrence: recurrence.buckets,
-    recurrenceUnit: recurrence.unit,
   }
 }
 
-/** The storage surface the clusters view reads from (satisfied by StorageService). */
+/** The storage surface the clusters view reads from (satisfied by StorageService).
+ * Derived from the real repositories so the view can never silently narrow
+ * what a cluster row carries. */
 export interface ClusterViewStore {
-  clusters: {
-    getAll(): {
-      id: string
-      label: string
-      description: string
-      kind: ClusterKind
-      mechanism: string
-    }[]
-    getMemberDigest(): ({ clusterId: string } & ClusterMember)[]
-  }
-  activities: {
-    countDistinctActiveDays(windowStart: number, windowEnd: number): number
-  }
+  clusters: Pick<ClusterRepository, 'getAll' | 'getMemberDigest'>
+  activities: Pick<ActivityRepository, 'countDistinctActiveDays'>
 }
 
 /** Frequency denominator: distinct captured days in the same window sightings are retained for. */
@@ -238,7 +220,7 @@ export function computeClustersView(
     // "hidden noise" — exclude them from the view and the hidden count.
     .filter((c) => c.timesSeen > 0)
   const visible = infos
-    .filter((c) => !isBelowNoiseFloor(c.timesSeen, c.totalActiveMin))
+    .filter((c) => !isBelowNoiseFloor(c.timesSeen, c.avgActiveMin * c.timesSeen))
     .sort((a, b) => b.timesSeen - a.timesSeen || (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0))
   return { clusters: visible, hiddenCount: infos.length - visible.length, observedDays }
 }

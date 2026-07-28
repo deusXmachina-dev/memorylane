@@ -22,12 +22,6 @@ describe('stripDatabaseForUpload', () => {
     )
 
     const db = storage.getDatabase()
-    db.exec(`INSERT INTO patterns (id, name, description, apps, created_at)
-             VALUES ('pat-1', 'Test Pattern', 'A pattern', '[]', ${Date.now()})`)
-    db.exec(`INSERT INTO pattern_sightings (id, pattern_id, detected_at, run_id, evidence, activity_ids, confidence)
-             VALUES ('sight-1', 'pat-1', ${Date.now()}, 'run-1', 'evidence', '["act-1"]', 0.9)`)
-    db.exec(`INSERT INTO pattern_detection_runs (id, ran_at, findings_count)
-             VALUES ('run-1', ${Date.now()}, 1)`)
     db.exec(`INSERT INTO user_context (id, short_summary, detailed_summary, updated_at)
              VALUES (1, 'short', 'detailed', ${Date.now()})`)
 
@@ -60,21 +54,15 @@ describe('stripDatabaseForUpload', () => {
     expect(tables).toHaveLength(1)
   })
 
-  it('drops pattern_detection_runs but preserves user_context', async () => {
+  it('preserves user_context', async () => {
     await setupAndBackup()
     stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'summary' })
 
     const db = new Database(COPY_DB_PATH)
-    const runs = db
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name = 'pattern_detection_runs'",
-      )
-      .all()
     const userContext = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = 'user_context'")
       .all()
     db.close()
-    expect(runs).toHaveLength(0)
     expect(userContext).toHaveLength(1)
   })
 
@@ -124,19 +112,6 @@ describe('stripDatabaseForUpload', () => {
     expect(row.summary).toBe('hello')
   })
 
-  it('preserves patterns and pattern_sightings', async () => {
-    await setupAndBackup()
-    stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'summary' })
-
-    const db = new Database(COPY_DB_PATH)
-    const patterns = db.prepare('SELECT id FROM patterns').all()
-    const sightings = db.prepare('SELECT id FROM pattern_sightings').all()
-    db.close()
-
-    expect(patterns).toHaveLength(1)
-    expect(sightings).toHaveLength(1)
-  })
-
   it('preserves schema_migrations', async () => {
     await setupAndBackup()
     stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'summary' })
@@ -178,7 +153,7 @@ describe('stripDatabaseForUpload', () => {
       db.close()
     })
 
-    it('preserves FTS table and triggers but drops pattern_detection_runs', async () => {
+    it('preserves FTS table and triggers', async () => {
       await setupAndBackup()
       stripDatabaseForUpload(COPY_DB_PATH, { detailLevel: 'detailed' })
 
@@ -192,13 +167,6 @@ describe('stripDatabaseForUpload', () => {
       }[]
       const triggerNames = triggers.map((t) => t.name)
       expect(triggerNames).toContain('activities_ai')
-
-      const runs = db
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name = 'pattern_detection_runs'",
-        )
-        .all()
-      expect(runs).toHaveLength(0)
 
       db.close()
     })

@@ -31,6 +31,23 @@ export interface Sighting {
   detectedAt: number
 }
 
+export function rowToSighting(row: Record<string, unknown>): Sighting {
+  return {
+    id: row.id as string,
+    title: row.title as string,
+    subject: (row.subject as string) ?? '',
+    description: row.description as string,
+    steps: parseJsonStringArray(row.steps),
+    apps: JSON.parse((row.apps as string) || '[]') as string[],
+    activityIds: JSON.parse((row.activity_ids as string) || '[]') as string[],
+    startedAt: row.started_at as number,
+    endedAt: row.ended_at as number,
+    interactionMin: row.interaction_min as number,
+    runId: row.run_id as string,
+    detectedAt: row.detected_at as number,
+  }
+}
+
 export class SightingRepository {
   constructor(private readonly db: Database.Database) {}
 
@@ -62,23 +79,14 @@ export class SightingRepository {
     const row = this.db.prepare(`SELECT * FROM sightings WHERE id = ?`).get(id) as
       | Record<string, unknown>
       | undefined
-    return row ? this.rowToSighting(row) : null
-  }
-
-  getByIds(ids: readonly string[]): Sighting[] {
-    if (ids.length === 0) return []
-    const placeholders = ids.map(() => '?').join(', ')
-    const rows = this.db
-      .prepare(`SELECT * FROM sightings WHERE id IN (${placeholders})`)
-      .all(...ids) as Record<string, unknown>[]
-    return rows.map((r) => this.rowToSighting(r))
+    return row ? rowToSighting(row) : null
   }
 
   getByRunId(runId: string): Sighting[] {
     const rows = this.db
       .prepare(`SELECT * FROM sightings WHERE run_id = ? ORDER BY started_at ASC`)
       .all(runId) as Record<string, unknown>[]
-    return rows.map((r) => this.rowToSighting(r))
+    return rows.map((r) => rowToSighting(r))
   }
 
   getAll(limit?: number): Sighting[] {
@@ -87,19 +95,7 @@ export class SightingRepository {
         ? this.db.prepare(`SELECT * FROM sightings ORDER BY started_at DESC`).all()
         : this.db.prepare(`SELECT * FROM sightings ORDER BY started_at DESC LIMIT ?`).all(limit)
     ) as Record<string, unknown>[]
-    return rows.map((r) => this.rowToSighting(r))
-  }
-
-  search(query: string): Sighting[] {
-    const like = `%${query}%`
-    const rows = this.db
-      .prepare(
-        `SELECT * FROM sightings
-         WHERE title LIKE ? OR subject LIKE ? OR description LIKE ? OR apps LIKE ?
-         ORDER BY started_at DESC`,
-      )
-      .all(like, like, like, like) as Record<string, unknown>[]
-    return rows.map((r) => this.rowToSighting(r))
+    return rows.map((r) => rowToSighting(r))
   }
 
   count(): number {
@@ -136,22 +132,5 @@ export class SightingRepository {
   /** Delete every sighting. Backs the dev "wipe & re-mine" action. */
   deleteAll(): number {
     return this.db.prepare('DELETE FROM sightings').run().changes
-  }
-
-  private rowToSighting(row: Record<string, unknown>): Sighting {
-    return {
-      id: row.id as string,
-      title: row.title as string,
-      subject: (row.subject as string) ?? '',
-      description: row.description as string,
-      steps: parseJsonStringArray(row.steps),
-      apps: JSON.parse((row.apps as string) || '[]') as string[],
-      activityIds: JSON.parse((row.activity_ids as string) || '[]') as string[],
-      startedAt: row.started_at as number,
-      endedAt: row.ended_at as number,
-      interactionMin: row.interaction_min as number,
-      runId: row.run_id as string,
-      detectedAt: row.detected_at as number,
-    }
   }
 }

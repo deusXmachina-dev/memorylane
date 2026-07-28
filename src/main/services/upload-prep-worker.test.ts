@@ -19,10 +19,8 @@ describe('prepareUploadSync', () => {
     tempFiles.push(p)
     const db = new Database(p)
     db.exec('CREATE TABLE activities (id TEXT PRIMARY KEY, title TEXT, ocr_text TEXT)')
-    db.exec('CREATE TABLE pattern_detection_runs (id INTEGER PRIMARY KEY)')
     db.prepare('INSERT INTO activities VALUES (?, ?, ?)').run('a1', 'one', 'ocr one')
     db.prepare('INSERT INTO activities VALUES (?, ?, ?)').run('a2', 'two', 'ocr two')
-    db.prepare('INSERT INTO pattern_detection_runs (id) VALUES (1)').run()
     db.close()
     return p
   }
@@ -43,12 +41,6 @@ describe('prepareUploadSync', () => {
 
     const db = new Database(outPath, { readonly: true })
     try {
-      const tables = db
-        .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-        .all()
-        .map((r) => (r as { name: string }).name)
-      expect(tables).not.toContain('pattern_detection_runs')
-
       const cols = (db.prepare('PRAGMA table_info(activities)').all() as { name: string }[]).map(
         (c) => c.name,
       )

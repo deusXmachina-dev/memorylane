@@ -149,7 +149,7 @@ describe('MiningDayRepository', () => {
     storage.miningDays.enqueueMissing(['2026-07-01'])
     storage.miningDays.claimOldestPending()
     storage.miningDays.markAttemptFailed('2026-07-01', 'boom', 1, 0)
-    expect(storage.miningDays.getFailed()).toHaveLength(1)
+    expect(storage.miningDays.getAll().filter((d) => d.status === 'failed')).toHaveLength(1)
 
     expect(storage.miningDays.retryFailed()).toBe(1)
 

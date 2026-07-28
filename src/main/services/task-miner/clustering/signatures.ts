@@ -27,7 +27,6 @@ export async function computeAndStoreSignatures(
   storage: StorageService,
   sightings: readonly Sighting[],
   embedder: SignatureEmbedder,
-  now: number,
 ): Promise<{ signatures: SightingSignature[]; unclustered: number }> {
   const signatures: SightingSignature[] = []
   let unclustered = 0
@@ -41,7 +40,7 @@ export async function computeAndStoreSignatures(
     )
     chunk.forEach((sighting, i) => {
       const vector = normalize(vectors[i])
-      storage.clusters.upsertSignature(sighting.id, vector, now)
+      storage.clusters.upsertSignature(sighting.id, vector)
       if (vector) {
         signatures.push({ sightingId: sighting.id, vector })
       } else {
@@ -55,10 +54,10 @@ export async function computeAndStoreSignatures(
 
 /** Centroid = unit-normalized mean of member signatures (from the signature
  * store, never recomputed from source text). */
-export function recomputeCentroid(storage: StorageService, clusterId: string, now: number): void {
+export function recomputeCentroid(storage: StorageService, clusterId: string): void {
   const signatures = storage.clusters.getSignaturesByClusterId(clusterId)
   const centroid = normalize(meanPool([...signatures.values()]) ?? [])
-  storage.clusters.updateCentroid(clusterId, centroid, now)
+  storage.clusters.updateCentroid(clusterId, centroid)
 }
 
 /**

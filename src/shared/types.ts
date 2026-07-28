@@ -290,14 +290,6 @@ export interface PermissionStatus {
   screenRecording: PermissionState
 }
 
-/**
- * Cluster classification from the review LLM call. '' = not yet judged.
- * Advisory display metadata only — never used to filter or roll up until the
- * cluster-review eval's false-eliminable rate is green.
- */
-export const CLUSTER_KINDS = ['procedure', 'monitoring', 'ambient', 'dev-loop', 'judgment'] as const
-export type ClusterKind = (typeof CLUSTER_KINDS)[number] | ''
-
 /** A recurring task cluster with stats derived from its member sightings. */
 export type RecurrenceUnit = 'day' | 'week'
 
@@ -320,10 +312,10 @@ export interface ClusterInfo {
   observedDays: number
   /** Mean per-run active time (union of cited-activity intervals), in minutes. */
   avgActiveMin: number
-  /** Active minutes summed across all kept sightings (sightings are pruned at 90 days). */
-  totalActiveMin: number
-  kind: ClusterKind
-  /** Consolidated "Replace with" recommendation; set only for 'procedure' clusters. */
+  /**
+   * Consolidated "Replace with" recommendation. '' on a labeled cluster means
+   * the review judged it not automatable.
+   */
   mechanism: string
   /**
    * Recipe steps: the LLM's generalized de-identified recipe when labeled,
@@ -332,12 +324,9 @@ export interface ClusterInfo {
   steps: string[]
   /** Things that differ between runs (feeds the recipe); [] until labeled. */
   variables: string[]
-  firstSeenAt: number | null
   lastSeenAt: number | null
   /** Recurrence histogram, oldest→newest — drives the sparkline and bars. */
   recurrence: RecurrenceBucket[]
-  /** Whether each recurrence bucket is a day or a week. */
-  recurrenceUnit: RecurrenceUnit
 }
 
 /** A single occurrence of a cluster (one mined sighting). */
@@ -346,11 +335,8 @@ export interface ClusterSightingInfo {
   title: string
   /** The object this run acted on; empty when the scan named none. */
   subject: string
-  description: string
   apps: string[]
-  /** Wall-clock span: first activity start → last activity end. */
   startedAt: number
-  endedAt: number
   /** Active time (union of cited-activity intervals), in minutes. */
   activeMin: number
   /** Underlying activity ids — handle for the "Copy prompt for Claude" flow. */

@@ -619,9 +619,7 @@ function formatClusterLine(c: ClusterInfo): string {
   if (c.lastSeenAt) stats.push(`last seen ${new Date(c.lastSeenAt).toLocaleString()}`)
   const lines = [`- ${c.id} | ${c.title} [${c.apps.join(', ')}] (${stats.join(', ')})`]
   if (c.description) lines.push(`  ${c.description}`)
-  if (c.kind) {
-    lines.push(`  Kind: ${c.kind}${c.mechanism ? ` | Replace with: ${c.mechanism}` : ''}`)
-  }
+  if (c.mechanism) lines.push(`  Replace with: ${c.mechanism}`)
   return lines.join('\n')
 }
 

@@ -100,18 +100,6 @@ describe('SightingRepository', () => {
       storage.sightings.add(createSighting({ id: 's1' }))
       expect(storage.sightings.getById('s1')?.subject).toBe('')
     })
-
-    it('search() matches on subject', () => {
-      storage.sightings.add(
-        createSighting({
-          id: 's1',
-          title: 'Provision test tenant',
-          subject: 'Acme staging tenant',
-        }),
-      )
-      const hits = storage.sightings.search('Acme')
-      expect(hits.map((s) => s.id)).toContain('s1')
-    })
   })
 
   describe('wipeTasks', () => {
@@ -134,16 +122,13 @@ describe('SightingRepository', () => {
         label: 'Some process',
         description: '',
         centroid: null,
-        kind: '',
         mechanism: '',
         steps: [],
         variables: [],
-        labelModel: '',
         labeledSize: 0,
         createdAt: 1000,
-        updatedAt: 1000,
       })
-      storage.clusters.addMembership('c1', 's1', 100)
+      storage.clusters.addMembership('c1', 's1')
       storage.miningDays.enqueueMissing(['2026-07-01'], 1000)
 
       storage.wipeTasks()

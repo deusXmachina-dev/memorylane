@@ -132,7 +132,7 @@ async function main() {
       if (lastCompleted) {
         console.log(`  Last completed: ${lastCompleted.day}`)
       }
-      for (const d of storage.miningDays.getFailed()) {
+      for (const d of miningDays.filter((day) => day.status === 'failed')) {
         console.log(`  FAILED ${d.day} (${d.attempts} attempts): ${d.lastError ?? 'unknown error'}`)
       }
     }

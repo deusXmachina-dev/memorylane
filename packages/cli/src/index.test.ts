@@ -201,14 +201,11 @@ describe('command handlers', () => {
       label: 'Code Review',
       description: 'Reviewing PRs on GitHub',
       centroid: null,
-      kind: 'procedure',
       mechanism: 'Automate with gh CLI',
       steps: [],
       variables: [],
-      labelModel: '',
       labeledSize: 2,
       createdAt: now,
-      updatedAt: now,
     })
     const sightings = [
       {
@@ -216,6 +213,7 @@ describe('command handlers', () => {
         title: 'Code Review',
         subject: 'PR 41',
         description: 'Reviewed a pull request',
+        steps: [],
         apps: ['Chrome'],
         activityIds: ['act-1'],
         startedAt: now - 5 * HOUR_MS,
@@ -229,6 +227,7 @@ describe('command handlers', () => {
         title: 'Code Review',
         subject: 'PR 42',
         description: 'Reviewed a pull request',
+        steps: [],
         apps: ['Chrome'],
         activityIds: ['act-3'],
         startedAt: now - 2 * HOUR_MS,
@@ -240,7 +239,7 @@ describe('command handlers', () => {
     ]
     for (const s of sightings) {
       storage.sightings.add(s)
-      storage.clusters.addMembership('clu-1', s.id, now)
+      storage.clusters.addMembership('clu-1', s.id)
     }
   })
 
@@ -453,6 +452,7 @@ describe('command handlers', () => {
         title: 'Code Review',
         subject: 'PR 1',
         description: 'Reviewed a pull request',
+        steps: [],
         apps: ['Chrome'],
         activityIds: ['act-1'],
         startedAt: staleStart,
@@ -461,7 +461,7 @@ describe('command handlers', () => {
         runId: 'run-0',
         detectedAt: staleStart,
       })
-      storage.clusters.addMembership('clu-1', 'clu-sight-stale', staleStart)
+      storage.clusters.addMembership('clu-1', 'clu-sight-stale')
 
       const result = (await cmdPattern(['clu-1'], storage)) as Record<string, unknown>
       expect((result.pattern as Record<string, unknown>).timesSeen).toBe(2)

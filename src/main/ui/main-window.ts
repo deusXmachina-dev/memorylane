@@ -739,10 +739,8 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
           id: m.id,
           title: m.title,
           subject: m.subject,
-          description: m.description,
           apps: m.apps,
           startedAt: m.startedAt,
-          endedAt: m.endedAt,
           activeMin: Math.max(0, m.interactionMin),
           activityIds: m.activityIds,
         }))

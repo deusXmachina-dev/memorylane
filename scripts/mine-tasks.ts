@@ -43,6 +43,7 @@ import { getDefaultDbPath } from '../src/main/utils/paths'
 import { TaskMiner, DEFAULT_MINER_CONFIG } from '../src/main/services/task-miner'
 import { EmbeddingService } from '../src/main/processor/embedding'
 import type { ClusteringRunSummary } from '../src/main/services/task-miner'
+import { computeClustersView } from '../src/main/ui/cluster-view'
 import { PATTERN_DETECTION_CONFIG } from '../src/shared/constants'
 import { loadCliInferenceProvider } from './cli-inference-provider'
 
@@ -298,13 +299,11 @@ function printClustering(c: ClusteringRunSummary, storageService: StorageService
   console.log(`Tokens (review):  ${c.tokenUsage.input} in / ${c.tokenUsage.output} out`)
   if (c.llmError) console.log(`Review error:     ${c.llmError}`)
 
-  const clusters = storageService.clusters.getAllWithStats()
-  if (clusters.length > 0) {
-    console.log(`\n=== Clusters (${clusters.length}) ===`)
+  const { clusters, hiddenCount } = computeClustersView(storageService, Date.now())
+  if (clusters.length > 0 || hiddenCount > 0) {
+    console.log(`\n=== Clusters (${clusters.length} visible, ${hiddenCount} below noise floor) ===`)
     for (const cl of clusters) {
-      // Unlabeled clusters fall back to the most common member title.
-      const label = cl.label || mostCommonTitle(storageService.clusters.getMembers(cl.id))
-      console.log(`\n  ${label}${cl.label ? '' : ' [unlabeled]'}`)
+      console.log(`\n  ${cl.title}`)
       if (cl.description) console.log(`    ${cl.description}`)
       console.log(
         `    Seen ${cl.timesSeen}x | avg ${cl.avgActiveMin.toFixed(1)} min active` +
@@ -313,20 +312,6 @@ function printClustering(c: ClusteringRunSummary, storageService: StorageService
       if (cl.apps.length > 0) console.log(`    Apps: ${cl.apps.join(', ')}`)
     }
   }
-}
-
-function mostCommonTitle(sightings: { title: string }[]): string {
-  const counts = new Map<string, number>()
-  for (const s of sightings) counts.set(s.title, (counts.get(s.title) ?? 0) + 1)
-  let best = '(unlabeled)'
-  let bestCount = 0
-  for (const [title, count] of counts) {
-    if (count > bestCount) {
-      best = title
-      bestCount = count
-    }
-  }
-  return best
 }
 
 main().catch((err) => {

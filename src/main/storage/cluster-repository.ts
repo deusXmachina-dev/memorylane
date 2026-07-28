@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3'
-import type { ClusterKind } from '../../shared/types'
 import type { Sighting } from './sighting-repository'
+import { rowToSighting } from './sighting-repository'
 import { parseJsonStringArray, vectorToBlob, blobToVector } from './utils'
 
 // ---------------------------------------------------------------------------
@@ -19,24 +19,18 @@ export interface Cluster {
   description: string
   /** Unit-normalized mean of member signatures; null until first computed. */
   centroid: number[] | null
-  /** LLM classification; '' = not yet judged (drains through review over runs). */
-  kind: ClusterKind
-  /** Consolidated "Replace with" recommendation for 'procedure' clusters. */
+  /**
+   * Consolidated "Replace with" recommendation. On a labeled cluster, '' means
+   * the review judged it not automatable.
+   */
   mechanism: string
   /** Generalized, de-identified recipe steps (the "Build AI agent" recipe); [] until labeled. */
   steps: string[]
   /** Things that differ between runs (feeds the recipe); [] until labeled. */
   variables: string[]
-  labelModel: string
   /** Member count at the last labeling — relabel once the cluster doubles. */
   labeledSize: number
   createdAt: number
-  updatedAt: number
-}
-
-export interface ClusterVerdict {
-  kind: ClusterKind
-  mechanism: string
 }
 
 /** The generalized, sanitized recipe for a cluster, written by the review LLM. */
@@ -51,16 +45,6 @@ export function mergePairKey(a: string, b: string): string {
   return a < b ? `${a}|${b}` : `${b}|${a}`
 }
 
-/** Cluster plus stats computed on read from member sightings (never stored). */
-export interface ClusterWithStats extends Cluster {
-  timesSeen: number
-  /** Mean per-sighting active time (sum of cited-activity durations), minutes. */
-  avgActiveMin: number
-  firstSeenAt: number | null
-  lastSeenAt: number | null
-  apps: string[]
-}
-
 export class ClusterRepository {
   constructor(private readonly db: Database.Database) {}
 
@@ -69,15 +53,14 @@ export class ClusterRepository {
   // -------------------------------------------------------------------------
 
   /** Record a sighting's signature. NULL embedding = processed but unusable. */
-  upsertSignature(sightingId: string, embedding: number[] | null, computedAt: number): void {
+  upsertSignature(sightingId: string, embedding: number[] | null): void {
     this.db
       .prepare(
-        `INSERT INTO sighting_signatures (sighting_id, embedding, computed_at)
-         VALUES (?, ?, ?)
-         ON CONFLICT(sighting_id) DO UPDATE SET embedding = excluded.embedding,
-                                                computed_at = excluded.computed_at`,
+        `INSERT INTO sighting_signatures (sighting_id, embedding)
+         VALUES (?, ?)
+         ON CONFLICT(sighting_id) DO UPDATE SET embedding = excluded.embedding`,
       )
-      .run(sightingId, embedding ? vectorToBlob(embedding) : null, computedAt)
+      .run(sightingId, embedding ? vectorToBlob(embedding) : null)
   }
 
   /** Sightings that have never been through the clusterer. */
@@ -90,7 +73,7 @@ export class ClusterRepository {
          ORDER BY s.started_at ASC`,
       )
       .all() as Record<string, unknown>[]
-    return rows.map((r) => this.rowToSighting(r))
+    return rows.map((r) => rowToSighting(r))
   }
 
   /** Non-null signatures of a cluster's members, keyed by sighting id. */
@@ -118,23 +101,20 @@ export class ClusterRepository {
   create(cluster: Cluster): void {
     this.db
       .prepare(
-        `INSERT INTO clusters (id, label, description, centroid, kind, mechanism,
-                               steps, variables, label_model, labeled_size, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO clusters (id, label, description, centroid, mechanism,
+                               steps, variables, labeled_size, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         cluster.id,
         cluster.label,
         cluster.description,
         cluster.centroid ? vectorToBlob(cluster.centroid) : null,
-        cluster.kind,
         cluster.mechanism,
         JSON.stringify(cluster.steps),
         JSON.stringify(cluster.variables),
-        cluster.labelModel,
         cluster.labeledSize,
         cluster.createdAt,
-        cluster.updatedAt,
       )
   }
 
@@ -153,46 +133,18 @@ export class ClusterRepository {
     return rows.map((r) => this.rowToCluster(r))
   }
 
-  getAllWithStats(): ClusterWithStats[] {
-    const rows = this.db
+  /** Labels of reviewed clusters that have recurred, with their member counts. */
+  getRecurringLabels(): { label: string; timesSeen: number }[] {
+    return this.db
       .prepare(
-        `SELECT c.*,
-                COUNT(cs.sighting_id) AS times_seen,
-                AVG(s.interaction_min) AS avg_interaction_min,
-                MIN(s.started_at) AS first_seen_at,
-                MAX(s.ended_at) AS last_seen_at
+        `SELECT c.label AS label, COUNT(cs.sighting_id) AS timesSeen
          FROM clusters c
-         LEFT JOIN cluster_sightings cs ON cs.cluster_id = c.id
-         LEFT JOIN sightings s ON s.id = cs.sighting_id
+         JOIN cluster_sightings cs ON cs.cluster_id = c.id
+         WHERE c.label != ''
          GROUP BY c.id
-         ORDER BY times_seen DESC, c.created_at ASC`,
+         HAVING COUNT(cs.sighting_id) >= 2`,
       )
-      .all() as Record<string, unknown>[]
-
-    const appsRows = this.db
-      .prepare(
-        `SELECT cs.cluster_id, s.apps FROM cluster_sightings cs
-         JOIN sightings s ON s.id = cs.sighting_id`,
-      )
-      .all() as { cluster_id: string; apps: string }[]
-    const appsByCluster = new Map<string, Set<string>>()
-    for (const row of appsRows) {
-      let set = appsByCluster.get(row.cluster_id)
-      if (!set) {
-        set = new Set()
-        appsByCluster.set(row.cluster_id, set)
-      }
-      for (const app of JSON.parse(row.apps || '[]') as string[]) set.add(app)
-    }
-
-    return rows.map((row) => ({
-      ...this.rowToCluster(row),
-      timesSeen: (row.times_seen as number) ?? 0,
-      avgActiveMin: (row.avg_interaction_min as number) ?? 0,
-      firstSeenAt: (row.first_seen_at as number) ?? null,
-      lastSeenAt: (row.last_seen_at as number) ?? null,
-      apps: [...(appsByCluster.get(row.id as string) ?? [])],
-    }))
+      .all() as { label: string; timesSeen: number }[]
   }
 
   /** Member sightings ordered by start time. */
@@ -205,7 +157,7 @@ export class ClusterRepository {
          ORDER BY s.started_at ASC`,
       )
       .all(clusterId) as Record<string, unknown>[]
-    return rows.map((r) => this.rowToSighting(r))
+    return rows.map((r) => rowToSighting(r))
   }
 
   getMemberCount(clusterId: string): number {
@@ -254,15 +206,14 @@ export class ClusterRepository {
     }))
   }
 
-  addMembership(clusterId: string, sightingId: string, addedAt: number): void {
+  addMembership(clusterId: string, sightingId: string): void {
     this.db
       .prepare(
-        `INSERT INTO cluster_sightings (sighting_id, cluster_id, added_at)
-         VALUES (?, ?, ?)
-         ON CONFLICT(sighting_id) DO UPDATE SET cluster_id = excluded.cluster_id,
-                                                added_at = excluded.added_at`,
+        `INSERT INTO cluster_sightings (sighting_id, cluster_id)
+         VALUES (?, ?)
+         ON CONFLICT(sighting_id) DO UPDATE SET cluster_id = excluded.cluster_id`,
       )
-      .run(sightingId, clusterId, addedAt)
+      .run(sightingId, clusterId)
   }
 
   moveMemberships(fromClusterId: string, toClusterId: string): number {
@@ -271,47 +222,38 @@ export class ClusterRepository {
       .run(toClusterId, fromClusterId).changes
   }
 
-  updateCentroid(clusterId: string, centroid: number[] | null, updatedAt: number): void {
+  updateCentroid(clusterId: string, centroid: number[] | null): void {
     this.db
-      .prepare(`UPDATE clusters SET centroid = ?, updated_at = ? WHERE id = ?`)
-      .run(centroid ? vectorToBlob(centroid) : null, updatedAt, clusterId)
+      .prepare(`UPDATE clusters SET centroid = ? WHERE id = ?`)
+      .run(centroid ? vectorToBlob(centroid) : null, clusterId)
   }
 
+  /** `mechanism: null` leaves the stored mechanism untouched (relabel that
+   * omitted the classification must not wipe an earlier judgment). */
   updateLabel(
     clusterId: string,
     label: string,
     description: string,
-    labelModel: string,
+    mechanism: string | null,
     labeledSize: number,
-    updatedAt: number,
   ): void {
     this.db
       .prepare(
         `UPDATE clusters
-         SET label = ?, description = ?, label_model = ?, labeled_size = ?, updated_at = ?
+         SET label = ?, description = ?, mechanism = COALESCE(?, mechanism), labeled_size = ?
          WHERE id = ?`,
       )
-      .run(label, description, labelModel, labeledSize, updatedAt, clusterId)
+      .run(label, description, mechanism, labeledSize, clusterId)
   }
 
-  updateVerdict(clusterId: string, verdict: ClusterVerdict, updatedAt: number): void {
+  updateRecipe(clusterId: string, recipe: ClusterRecipe): void {
     this.db
       .prepare(
         `UPDATE clusters
-         SET kind = ?, mechanism = ?, updated_at = ?
+         SET steps = ?, variables = ?
          WHERE id = ?`,
       )
-      .run(verdict.kind, verdict.mechanism, updatedAt, clusterId)
-  }
-
-  updateRecipe(clusterId: string, recipe: ClusterRecipe, updatedAt: number): void {
-    this.db
-      .prepare(
-        `UPDATE clusters
-         SET steps = ?, variables = ?, updated_at = ?
-         WHERE id = ?`,
-      )
-      .run(JSON.stringify(recipe.steps), JSON.stringify(recipe.variables), updatedAt, clusterId)
+      .run(JSON.stringify(recipe.steps), JSON.stringify(recipe.variables), clusterId)
   }
 
   /**
@@ -448,31 +390,11 @@ export class ClusterRepository {
       label: row.label as string,
       description: row.description as string,
       centroid: row.centroid ? blobToVector(row.centroid as Buffer) : null,
-      kind: row.kind as ClusterKind,
       mechanism: row.mechanism as string,
       steps: parseJsonStringArray(row.steps),
       variables: parseJsonStringArray(row.variables),
-      labelModel: row.label_model as string,
       labeledSize: row.labeled_size as number,
       createdAt: row.created_at as number,
-      updatedAt: row.updated_at as number,
-    }
-  }
-
-  private rowToSighting(row: Record<string, unknown>): Sighting {
-    return {
-      id: row.id as string,
-      title: row.title as string,
-      subject: (row.subject as string) ?? '',
-      description: row.description as string,
-      steps: parseJsonStringArray(row.steps),
-      apps: JSON.parse((row.apps as string) || '[]') as string[],
-      activityIds: JSON.parse((row.activity_ids as string) || '[]') as string[],
-      startedAt: row.started_at as number,
-      endedAt: row.ended_at as number,
-      interactionMin: row.interaction_min as number,
-      runId: row.run_id as string,
-      detectedAt: row.detected_at as number,
     }
   }
 }
