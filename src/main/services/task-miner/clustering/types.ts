@@ -36,12 +36,21 @@ export const CLUSTERING_CONFIG = {
   /** Most-recent sample members that carry their run's steps (bounds prompt growth). */
   MAX_STEPPED_SAMPLE_MEMBERS: 5,
   /**
-   * Cap on clusters sent for (re)label/classify per run, so a backlog (e.g.
-   * every cluster needing a kind after a rebuild) drains over several runs
-   * instead of flooding one review call. Merge-candidate clusters ride along
-   * uncapped.
+   * Cap on merge candidate pairs per structure call, highest cosine first —
+   * uncapped candidates are what grew review calls past what the model could
+   * answer. Deferred pairs come back next run (the decline TTL only silences
+   * pairs the model actually saw and declined).
+   */
+  MAX_MERGE_CANDIDATES_PER_RUN: 15,
+  /**
+   * Cap on clusters sent through the content round per run, so a backlog
+   * (e.g. after a rebuild) drains over several runs instead of flooding one
+   * pass.
    */
   MAX_REVIEW_CLUSTERS_PER_RUN: 20,
+  /** Clusters per content call — bounds output size so long responses can't
+   * time out or degrade into label-only verdicts. */
+  CONTENT_BATCH_SIZE: 8,
   LLM_MAX_ATTEMPTS: 2,
 } as const
 
@@ -121,8 +130,6 @@ export const REVIEW_KINDS = ['procedure', 'monitoring', 'ambient', 'dev-loop', '
 export type ReviewKind = (typeof REVIEW_KINDS)[number]
 
 export interface ReviewSplitGroup {
-  label: string
-  description: string
   sighting_ids: string[]
 }
 
@@ -143,8 +150,6 @@ export interface ReviewClusterVerdict {
 
 export interface ReviewMerge {
   merge: string[]
-  label: string
-  description: string
 }
 
 export interface ReviewOutput {

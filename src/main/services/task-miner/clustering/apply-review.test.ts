@@ -7,10 +7,11 @@ import { deleteDbFiles, v } from '@main/storage/test-utils'
 import type { Cluster } from '@main/storage/cluster-repository'
 import type { Sighting } from '@main/storage/sighting-repository'
 import {
-  validateAndApply,
+  applyStructure,
+  applyContent,
   mergePairKey,
   sanitizeMechanism,
-  type ReviewGuards,
+  type StructureGuards,
 } from './apply-review'
 
 const createSighting = (overrides: Partial<Sighting> & { id: string }): Sighting => ({
@@ -40,48 +41,48 @@ const createCluster = (overrides: Partial<Cluster> & { id: string }): Cluster =>
   createdAt: overrides.createdAt ?? 1000,
 })
 
-describe('validateAndApply', () => {
-  const TEST_DB_PATH = path.join(os.tmpdir(), 'temp_apply_review_test.db')
-  let storage: StorageService
+const TEST_DB_PATH = path.join(os.tmpdir(), 'temp_apply_review_test.db')
+let storage: StorageService
 
-  const seedCluster = (
-    clusterId: string,
-    createdAt: number,
-    sightingIds: string[],
-    signature: (id: string) => number[] = () => v(1),
-  ) => {
-    storage.clusters.create(createCluster({ id: clusterId, createdAt }))
-    for (const id of sightingIds) {
-      storage.sightings.add(createSighting({ id }))
-      storage.clusters.upsertSignature(id, signature(id))
-      storage.clusters.addMembership(clusterId, id)
-    }
+const seedCluster = (
+  clusterId: string,
+  createdAt: number,
+  sightingIds: string[],
+  signature: (id: string) => number[] = () => v(1),
+) => {
+  storage.clusters.create(createCluster({ id: clusterId, createdAt }))
+  for (const id of sightingIds) {
+    storage.sightings.add(createSighting({ id }))
+    storage.clusters.upsertSignature(id, signature(id))
+    storage.clusters.addMembership(clusterId, id)
   }
+}
 
-  const guards = (overrides: Partial<ReviewGuards> = {}): ReviewGuards => ({
+beforeEach(() => {
+  deleteDbFiles(TEST_DB_PATH)
+  storage = new StorageService(TEST_DB_PATH)
+  applyMigrations(storage.getDatabase())
+})
+
+afterEach(() => {
+  storage.close()
+  deleteDbFiles(TEST_DB_PATH)
+})
+
+describe('applyStructure', () => {
+  const guards = (overrides: Partial<StructureGuards> = {}): StructureGuards => ({
     reviewableIds: overrides.reviewableIds ?? new Set(),
     splittableIds: overrides.splittableIds ?? new Set(),
     mergeCandidatePairs: overrides.mergeCandidatePairs ?? new Set(),
-  })
-
-  beforeEach(() => {
-    deleteDbFiles(TEST_DB_PATH)
-    storage = new StorageService(TEST_DB_PATH)
-    applyMigrations(storage.getDatabase())
-  })
-
-  afterEach(() => {
-    storage.close()
-    deleteDbFiles(TEST_DB_PATH)
   })
 
   it('merges candidate pairs into the oldest cluster regardless of LLM order', () => {
     seedCluster('older', 100, ['s1'])
     seedCluster('newer', 200, ['s2'])
 
-    const result = validateAndApply(
+    const result = applyStructure(
       storage,
-      { merges: [{ merge: ['newer', 'older'], label: 'Merged process', description: 'Both.' }] },
+      { merges: [{ merge: ['newer', 'older'] }] },
       guards({
         reviewableIds: new Set(['older', 'newer']),
         mergeCandidatePairs: new Set([mergePairKey('older', 'newer')]),
@@ -91,21 +92,18 @@ describe('validateAndApply', () => {
 
     expect(result.merged).toBe(1)
     expect(storage.clusters.getById('newer')).toBeNull()
-    const survivor = storage.clusters.getById('older')!
-    expect(survivor.label).toBe('Merged process')
-    expect(survivor.labeledSize).toBe(2)
     expect(storage.clusters.getMemberCount('older')).toBe(2)
   })
 
-  it('clears the survivor mechanism and recipe on merge so the review redoes them', () => {
+  it('clears the survivor recipe on merge so the content round redoes it', () => {
     seedCluster('older', 100, ['s1'])
     seedCluster('newer', 200, ['s2'])
     storage.clusters.updateLabel('older', 'Old label', '', 'A script.', 1)
     storage.clusters.updateRecipe('older', { steps: ['Open the tool'], variables: ['name'] })
 
-    validateAndApply(
+    applyStructure(
       storage,
-      { merges: [{ merge: ['newer', 'older'], label: 'Merged process', description: '' }] },
+      { merges: [{ merge: ['newer', 'older'] }] },
       guards({
         reviewableIds: new Set(['older', 'newer']),
         mergeCandidatePairs: new Set([mergePairKey('older', 'newer')]),
@@ -114,18 +112,21 @@ describe('validateAndApply', () => {
     )
 
     const survivor = storage.clusters.getById('older')!
-    expect(survivor.mechanism).toBe('')
     expect(survivor.steps).toEqual([])
     expect(survivor.variables).toEqual([])
+    // Label and mechanism stay until the content round rewrites them — a
+    // stale name beats an empty one in the meantime.
+    expect(survivor.label).toBe('Old label')
+    expect(survivor.mechanism).toBe('A script.')
   })
 
   it('rejects merges that were not proposed as candidates', () => {
     seedCluster('a', 100, ['s1'])
     seedCluster('b', 200, ['s2'])
 
-    const result = validateAndApply(
+    const result = applyStructure(
       storage,
-      { merges: [{ merge: ['a', 'b'], label: 'Nope', description: '' }] },
+      { merges: [{ merge: ['a', 'b'] }] },
       guards({ reviewableIds: new Set(['a', 'b']) }),
       5000,
     )
@@ -140,9 +141,9 @@ describe('validateAndApply', () => {
     seedCluster('b', 200, ['s2'])
     seedCluster('c', 300, ['s3'])
 
-    const result = validateAndApply(
+    const result = applyStructure(
       storage,
-      { merges: [{ merge: ['a', 'b', 'c'], label: 'Chain', description: '' }] },
+      { merges: [{ merge: ['a', 'b', 'c'] }] },
       guards({
         reviewableIds: new Set(['a', 'b', 'c']),
         // a~b and b~c were candidates, a~c never was — chaining is how
@@ -161,9 +162,9 @@ describe('validateAndApply', () => {
     seedCluster('b', 200, ['s2'])
     seedCluster('c', 300, ['s3'])
 
-    const result = validateAndApply(
+    const result = applyStructure(
       storage,
-      { merges: [{ merge: ['a', 'b', 'c'], label: 'Triple', description: '' }] },
+      { merges: [{ merge: ['a', 'b', 'c'] }] },
       guards({
         reviewableIds: new Set(['a', 'b', 'c']),
         mergeCandidatePairs: new Set([
@@ -184,9 +185,9 @@ describe('validateAndApply', () => {
     seedCluster('b', 200, ['s2'])
     seedCluster('c', 300, ['s3'])
 
-    validateAndApply(
+    applyStructure(
       storage,
-      { merges: [{ merge: ['a', 'b'], label: 'Merged', description: '' }] },
+      { merges: [{ merge: ['a', 'b'] }] },
       guards({
         reviewableIds: new Set(['a', 'b', 'c']),
         mergeCandidatePairs: new Set([mergePairKey('a', 'b'), mergePairKey('a', 'c')]),
@@ -199,6 +200,23 @@ describe('validateAndApply', () => {
     expect(declined.has(mergePairKey('a', 'b'))).toBe(false)
   })
 
+  it('records declines on an explicit empty merges array', () => {
+    seedCluster('a', 100, ['s1'])
+    seedCluster('b', 200, ['s2'])
+
+    applyStructure(
+      storage,
+      { merges: [], clusters: [] },
+      guards({
+        reviewableIds: new Set(['a', 'b']),
+        mergeCandidatePairs: new Set([mergePairKey('a', 'b')]),
+      }),
+      5000,
+    )
+
+    expect(storage.clusters.getActiveMergeDeclines(0).has(mergePairKey('a', 'b'))).toBe(true)
+  })
+
   it('does not record declines for pairs referencing a cluster deleted by a merge', () => {
     seedCluster('a', 100, ['s1'])
     seedCluster('b', 200, ['s2'])
@@ -206,9 +224,9 @@ describe('validateAndApply', () => {
 
     // b merges into a and is deleted; the unmerged (b, c) pair must not leave
     // a decline row pointing at the dead id.
-    validateAndApply(
+    applyStructure(
       storage,
-      { merges: [{ merge: ['a', 'b'], label: 'Merged', description: '' }] },
+      { merges: [{ merge: ['a', 'b'] }] },
       guards({
         reviewableIds: new Set(['a', 'b', 'c']),
         mergeCandidatePairs: new Set([mergePairKey('a', 'b'), mergePairKey('b', 'c')]),
@@ -219,11 +237,11 @@ describe('validateAndApply', () => {
     expect(storage.clusters.getActiveMergeDeclines(0).size).toBe(0)
   })
 
-  it('declines nothing on a degenerate empty review response', () => {
+  it('declines nothing on a degenerate response without a merges array', () => {
     seedCluster('a', 100, ['s1'])
     seedCluster('b', 200, ['s2'])
 
-    validateAndApply(
+    applyStructure(
       storage,
       {},
       guards({
@@ -239,34 +257,29 @@ describe('validateAndApply', () => {
   it('ignores hallucinated cluster ids', () => {
     seedCluster('real', 100, ['s1'])
 
-    const result = validateAndApply(
+    const result = applyStructure(
       storage,
-      {
-        clusters: [{ id: 'ghost', label: 'Boo', description: '' }],
-        merges: [{ merge: ['real', 'ghost'], label: 'No', description: '' }],
-      },
+      { merges: [{ merge: ['real', 'ghost'] }] },
       guards({ reviewableIds: new Set(['real']) }),
       5000,
     )
 
     expect(result.merged).toBe(0)
-    expect(result.labeled).toBe(0)
+    expect(storage.clusters.getById('real')).not.toBeNull()
   })
 
-  it('splits a cluster keeping the original id on the largest group', () => {
+  it('splits a cluster keeping the original id and label on the largest group', () => {
     seedCluster('fresh', 100, ['s1', 's2', 's3', 's4'])
     storage.clusters.updateLabel('fresh', 'Umbrella', '', 'A script.', 4)
+    storage.clusters.updateRecipe('fresh', { steps: ['Old step'], variables: [] })
 
-    const result = validateAndApply(
+    const result = applyStructure(
       storage,
       {
         clusters: [
           {
             id: 'fresh',
-            split: [
-              { label: 'Group A', description: 'a', sighting_ids: ['s1', 's2'] },
-              { label: 'Group B', description: 'b', sighting_ids: ['s3'] },
-            ],
+            split: [{ sighting_ids: ['s1', 's2'] }, { sighting_ids: ['s3'] }],
           },
         ],
       },
@@ -278,36 +291,30 @@ describe('validateAndApply', () => {
 
     const clusters = storage.clusters.getAll()
     expect(clusters).toHaveLength(2)
-    // The largest group (A, plus unassigned s4) keeps the stable id.
+    // The largest group (plus unassigned s4) keeps the stable id; the stale
+    // label stays until the content round renames it, the recipe is cleared.
     const survivor = storage.clusters.getById('fresh')!
-    expect(survivor.label).toBe('Group A')
-    expect(survivor.mechanism).toBe('')
+    expect(survivor.label).toBe('Umbrella')
+    expect(survivor.steps).toEqual([])
     expect(
       storage.clusters
         .getMembers('fresh')
         .map((s) => s.id)
         .sort(),
     ).toEqual(['s1', 's2', 's4'])
-    const groupB = clusters.find((c) => c.label === 'Group B')!
-    expect(storage.clusters.getMembers(groupB.id).map((s) => s.id)).toEqual(['s3'])
-    expect(groupB.centroid).not.toBeNull()
+    const offshoot = clusters.find((c) => c.id !== 'fresh')!
+    expect(offshoot.label).toBe('')
+    expect(storage.clusters.getMembers(offshoot.id).map((s) => s.id)).toEqual(['s3'])
+    expect(offshoot.centroid).not.toBeNull()
   })
 
   it('refuses to split a cluster that was not offered as splittable', () => {
     seedCluster('stable', 100, ['s1', 's2'])
 
-    const result = validateAndApply(
+    const result = applyStructure(
       storage,
       {
-        clusters: [
-          {
-            id: 'stable',
-            split: [
-              { label: 'A', description: '', sighting_ids: ['s1'] },
-              { label: 'B', description: '', sighting_ids: ['s2'] },
-            ],
-          },
-        ],
+        clusters: [{ id: 'stable', split: [{ sighting_ids: ['s1'] }, { sighting_ids: ['s2'] }] }],
       },
       guards({ reviewableIds: new Set(['stable']) }), // not in splittableIds
       5000,
@@ -324,7 +331,7 @@ describe('validateAndApply', () => {
     )
     storage.clusters.updateLabel('mess', 'Umbrella label', 'Everything.', '', 5)
 
-    const result = validateAndApply(
+    const result = applyStructure(
       storage,
       { clusters: [{ id: 'mess', incoherent: true }] },
       guards({ reviewableIds: new Set(['mess']), splittableIds: new Set(['mess']) }),
@@ -332,9 +339,6 @@ describe('validateAndApply', () => {
     )
 
     expect(result.split).toBe(1)
-    // Groups come out unlabeled — the next review names them.
-    const survivor = storage.clusters.getById('mess')!
-    expect(survivor.label).toBe('')
     expect(
       storage.clusters
         .getMembers('mess')
@@ -342,6 +346,7 @@ describe('validateAndApply', () => {
         .sort(),
     ).toEqual(['s1', 's2', 's3'])
     const offshoot = storage.clusters.getAll().find((c) => c.id !== 'mess')!
+    expect(offshoot.label).toBe('')
     expect(
       storage.clusters
         .getMembers(offshoot.id)
@@ -354,7 +359,7 @@ describe('validateAndApply', () => {
     seedCluster('sampled', 100, ['s1', 's2', 's3'], (id) => (id === 's3' ? v(0, 1) : v(1)))
     storage.clusters.updateLabel('sampled', 'Healthy', '', '', 3)
 
-    const result = validateAndApply(
+    const result = applyStructure(
       storage,
       { clusters: [{ id: 'sampled', incoherent: true }] },
       guards({ reviewableIds: new Set(['sampled']) }), // not splittable
@@ -370,7 +375,7 @@ describe('validateAndApply', () => {
     seedCluster('tight', 100, ['s1', 's2'])
     storage.clusters.updateLabel('tight', 'Fine actually', '', '', 2)
 
-    const result = validateAndApply(
+    const result = applyStructure(
       storage,
       { clusters: [{ id: 'tight', incoherent: true }] },
       guards({ reviewableIds: new Set(['tight']), splittableIds: new Set(['tight']) }),
@@ -381,11 +386,13 @@ describe('validateAndApply', () => {
     expect(storage.clusters.getById('tight')!.label).toBe('Fine actually')
     expect(storage.clusters.getMemberCount('tight')).toBe(2)
   })
+})
 
+describe('applyContent', () => {
   it('drops a label verdict on a single-member cluster', () => {
     seedCluster('solo', 100, ['s1'])
 
-    const result = validateAndApply(
+    const result = applyContent(
       storage,
       {
         clusters: [
@@ -398,8 +405,7 @@ describe('validateAndApply', () => {
           },
         ],
       },
-      guards({ reviewableIds: new Set(['solo']) }),
-      5000,
+      new Set(['solo']),
     )
 
     expect(result.labeled).toBe(0)
@@ -411,11 +417,10 @@ describe('validateAndApply', () => {
   it('applies labels with the member count as labeledSize', () => {
     seedCluster('c1', 100, ['s1', 's2', 's3'])
 
-    const result = validateAndApply(
+    const result = applyContent(
       storage,
       { clusters: [{ id: 'c1', label: 'Weekly invoicing', description: 'Sends invoices.' }] },
-      guards({ reviewableIds: new Set(['c1']) }),
-      5000,
+      new Set(['c1']),
     )
 
     expect(result.labeled).toBe(1)
@@ -424,10 +429,45 @@ describe('validateAndApply', () => {
     expect(cluster.labeledSize).toBe(3)
   })
 
-  it('persists a sanitized recipe when the label verdict includes steps', () => {
+  it('ignores verdicts for clusters outside the batch', () => {
     seedCluster('c1', 100, ['s1', 's2'])
 
-    validateAndApply(
+    const result = applyContent(
+      storage,
+      { clusters: [{ id: 'c1', label: 'Sneaky', description: '' }] },
+      new Set(['other']),
+    )
+
+    expect(result.labeled).toBe(0)
+    expect(storage.clusters.getById('c1')!.label).toBe('')
+  })
+
+  it('cannot restructure: split, incoherent, and merge output are inert', () => {
+    seedCluster('c1', 100, ['s1', 's2'])
+    seedCluster('c2', 200, ['s3', 's4'])
+
+    const result = applyContent(
+      storage,
+      {
+        clusters: [
+          { id: 'c1', split: [{ sighting_ids: ['s1'] }, { sighting_ids: ['s2'] }] },
+          { id: 'c2', incoherent: true },
+        ],
+        merges: [{ merge: ['c1', 'c2'] }],
+      },
+      new Set(['c1', 'c2']),
+    )
+
+    expect(result.labeled).toBe(0)
+    expect(storage.clusters.getAll()).toHaveLength(2)
+    expect(storage.clusters.getMemberCount('c1')).toBe(2)
+    expect(storage.clusters.getMemberCount('c2')).toBe(2)
+  })
+
+  it('persists a sanitized recipe when the verdict includes steps', () => {
+    seedCluster('c1', 100, ['s1', 's2'])
+
+    applyContent(
       storage,
       {
         clusters: [
@@ -440,8 +480,7 @@ describe('validateAndApply', () => {
           },
         ],
       },
-      guards({ reviewableIds: new Set(['c1']) }),
-      5000,
+      new Set(['c1']),
     )
 
     const cluster = storage.clusters.getById('c1')!
@@ -454,11 +493,10 @@ describe('validateAndApply', () => {
     seedCluster('c1', 100, ['s1', 's2'])
     storage.clusters.updateRecipe('c1', { steps: ['Old step'], variables: ['old'] })
 
-    validateAndApply(
+    applyContent(
       storage,
       { clusters: [{ id: 'c1', label: 'Renamed', description: 'x', variables: [] }] },
-      guards({ reviewableIds: new Set(['c1']) }),
-      5000,
+      new Set(['c1']),
     )
 
     const cluster = storage.clusters.getById('c1')!
@@ -470,7 +508,7 @@ describe('validateAndApply', () => {
   it('persists the mechanism alongside the label for a procedure verdict', () => {
     seedCluster('c1', 100, ['s1', 's2'])
 
-    validateAndApply(
+    applyContent(
       storage,
       {
         clusters: [
@@ -483,8 +521,7 @@ describe('validateAndApply', () => {
           },
         ],
       },
-      guards({ reviewableIds: new Set(['c1']) }),
-      5000,
+      new Set(['c1']),
     )
 
     expect(storage.clusters.getById('c1')!.mechanism).toBe(
@@ -496,11 +533,10 @@ describe('validateAndApply', () => {
     seedCluster('c1', 100, ['s1', 's2'])
     storage.clusters.updateLabel('c1', 'Old', '', 'A script.', 2)
 
-    validateAndApply(
+    applyContent(
       storage,
       { clusters: [{ id: 'c1', label: 'Renamed', description: '' }] },
-      guards({ reviewableIds: new Set(['c1']) }),
-      5000,
+      new Set(['c1']),
     )
 
     const cluster = storage.clusters.getById('c1')!
@@ -512,11 +548,10 @@ describe('validateAndApply', () => {
     seedCluster('c1', 100, ['s1', 's2'])
     storage.clusters.updateLabel('c1', 'Old', '', 'A script.', 2)
 
-    validateAndApply(
+    applyContent(
       storage,
       { clusters: [{ id: 'c1', label: 'Renamed', description: '', kind: 'monitoring' }] },
-      guards({ reviewableIds: new Set(['c1']) }),
-      5000,
+      new Set(['c1']),
     )
 
     expect(storage.clusters.getById('c1')!.mechanism).toBe('')

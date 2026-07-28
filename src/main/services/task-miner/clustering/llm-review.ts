@@ -1,12 +1,12 @@
 import { generateText } from 'ai'
 import type { InferenceProvider } from '@main/llm'
-import { extractJsonObject } from '../helpers'
+import { extractJsonObject, formatApiError } from '../helpers'
 import { TASK_MINING_REQUEST_TIMEOUT_MS } from '@/shared/constants'
 import type { ReviewInput, ReviewOutput } from './types'
 import { CLUSTERING_CONFIG } from './types'
 import {
-  buildClusterReviewSystemPrompt,
-  buildRecipeRoundSystemPrompt,
+  buildStructureReviewSystemPrompt,
+  buildContentReviewSystemPrompt,
   serializeReviewInput,
 } from './prompts'
 import type { ProgressCallback } from '../types'
@@ -16,6 +16,11 @@ export interface ReviewCallResult {
   tokenUsage: { input: number; output: number }
 }
 
+/**
+ * Attempts cover thrown errors too — a transient timeout on a long call must
+ * not forfeit the whole pass. The last attempt rethrows so the caller's error
+ * accounting sees the real failure.
+ */
 async function callReview(
   provider: InferenceProvider,
   model: string,
@@ -29,28 +34,33 @@ async function callReview(
 
   for (let attempt = 1; attempt <= CLUSTERING_CONFIG.LLM_MAX_ATTEMPTS; attempt++) {
     progress?.(describe(attempt))
-    const result = await generateText({
-      model: provider.languageModel(model, TASK_MINING_REQUEST_TIMEOUT_MS),
-      system,
-      prompt,
-      maxRetries: 0,
-    })
-    tokenUsage.input += result.usage.inputTokens ?? 0
-    tokenUsage.output += result.usage.outputTokens ?? 0
+    try {
+      const result = await generateText({
+        model: provider.languageModel(model, TASK_MINING_REQUEST_TIMEOUT_MS),
+        system,
+        prompt,
+        maxRetries: 0,
+      })
+      tokenUsage.input += result.usage.inputTokens ?? 0
+      tokenUsage.output += result.usage.outputTokens ?? 0
 
-    const parsed = extractJsonObject<ReviewOutput>(result.text)
-    if (parsed) return { output: parsed, tokenUsage }
-    progress?.(
-      `[Clustering] Could not parse review response` +
-        (attempt < CLUSTERING_CONFIG.LLM_MAX_ATTEMPTS ? ' — retrying' : ''),
-    )
+      const parsed = extractJsonObject<ReviewOutput>(result.text)
+      if (parsed) return { output: parsed, tokenUsage }
+      progress?.(
+        `[Clustering] Could not parse review response` +
+          (attempt < CLUSTERING_CONFIG.LLM_MAX_ATTEMPTS ? ' — retrying' : ''),
+      )
+    } catch (error) {
+      if (attempt >= CLUSTERING_CONFIG.LLM_MAX_ATTEMPTS) throw error
+      progress?.(`[Clustering] Review call failed (${formatApiError(error)}) — retrying`)
+    }
   }
 
   return { output: null, tokenUsage }
 }
 
-/** One review call over all proposals. Returns null output on parse failure. */
-export async function runLlmReview(
+/** The structure call: merge and split adjudication over all proposals. */
+export async function runStructureReview(
   provider: InferenceProvider,
   model: string,
   input: ReviewInput,
@@ -59,18 +69,18 @@ export async function runLlmReview(
   return callReview(
     provider,
     model,
-    buildClusterReviewSystemPrompt(),
+    buildStructureReviewSystemPrompt(),
     input,
     (attempt) =>
-      `[Clustering] Reviewing ${input.clusters.length} clusters, ` +
+      `[Clustering] Structure review: ${input.clusters.length} clusters, ` +
       `${input.mergeCandidates.length} merge candidates with ${model}` +
       (attempt > 1 ? ` (attempt ${attempt}/${CLUSTERING_CONFIG.LLM_MAX_ATTEMPTS})` : ''),
     progress,
   )
 }
 
-/** The focused recipe round over labeled clusters left without steps. */
-export async function runRecipeRound(
+/** One content batch: labels, classifications, and recipes. */
+export async function runContentReview(
   provider: InferenceProvider,
   model: string,
   input: ReviewInput,
@@ -79,10 +89,10 @@ export async function runRecipeRound(
   return callReview(
     provider,
     model,
-    buildRecipeRoundSystemPrompt(),
+    buildContentReviewSystemPrompt(),
     input,
     (attempt) =>
-      `[Clustering] Recipe round for ${input.clusters.length} stepless clusters with ${model}` +
+      `[Clustering] Content review: ${input.clusters.length} clusters with ${model}` +
       (attempt > 1 ? ` (attempt ${attempt}/${CLUSTERING_CONFIG.LLM_MAX_ATTEMPTS})` : ''),
     progress,
   )

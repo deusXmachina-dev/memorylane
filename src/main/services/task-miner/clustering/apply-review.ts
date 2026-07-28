@@ -16,8 +16,8 @@ export { mergePairKey }
  * What the LLM was actually shown — anything outside these sets is treated as
  * a hallucination and dropped.
  */
-export interface ReviewGuards {
-  /** Cluster ids sent for review (labelable / mergeable). */
+export interface StructureGuards {
+  /** Cluster ids sent to the structure call. */
   reviewableIds: Set<string>
   /** Clusters shown with their extended member list — the only ones that may be split. */
   splittableIds: Set<string>
@@ -48,27 +48,27 @@ export function sanitizeRecipe(raw: ReviewClusterVerdict): ClusterRecipe {
 }
 
 /**
- * Validate the LLM's review against what it was shown and apply it in one
- * transaction. Merges first (survivor = earliest created_at — the stable
- * identity rule, regardless of order in the LLM output), then splits and
- * incoherence verdicts, then labels for everything untouched by a merge/split.
- * Candidate pairs the LLM saw and left unmerged are recorded as declines
- * (the cluster_merge_declines table).
+ * Validate the structure call's output against what it was shown and apply it
+ * in one transaction. Merges first (survivor = earliest created_at — the
+ * stable identity rule, regardless of order in the LLM output), then splits
+ * and incoherence verdicts. Candidate pairs the LLM saw and left unmerged are
+ * recorded as declines (the cluster_merge_declines table). Labels and recipes
+ * are the content round's job — a merge or split clears the recipe, which is
+ * exactly what queues the cluster there.
  */
-export function validateAndApply(
+export function applyStructure(
   storage: StorageService,
   review: ReviewOutput,
-  guards: ReviewGuards,
+  guards: StructureGuards,
   now: number,
   progress?: ProgressCallback,
   /** Re-split groups per incoherent cluster, precomputed off-thread by the
    * caller (the transaction below can't await the ml-worker). Absent →
    * in-process linkage. */
   resplitGroups?: ReadonlyMap<string, string[][]>,
-): { merged: number; split: number; labeled: number } {
+): { merged: number; split: number } {
   let merged = 0
   let split = 0
-  let labeled = 0
 
   const apply = storage.getDatabase().transaction(() => {
     const consumed = new Set<string>()
@@ -112,27 +112,18 @@ export function validateAndApply(
         merged++
       }
       consumed.add(survivor.id)
-      // The survivor's mechanism and recipe were derived from only its
-      // pre-merge members — clear both so the next review redoes them.
-      storage.clusters.updateLabel(
-        survivor.id,
-        proposal.label ?? '',
-        proposal.description ?? '',
-        '',
-        storage.clusters.getMemberCount(survivor.id),
-      )
+      // The survivor's recipe was derived from only its pre-merge members —
+      // clearing it queues the cluster for the content round.
       storage.clusters.updateRecipe(survivor.id, { steps: [], variables: [] })
       recomputeCentroid(storage, survivor.id)
-      labeled++
     }
 
     // Candidate pairs the LLM saw and did not propose merging are declines.
-    // Pairs it proposed but validation dropped are NOT — it said yes. A
-    // degenerate response (parseable but empty) declines nothing: absence of
-    // any verdict is not a judgment. Pairs touching a just-deleted cluster
-    // are skipped so no rows reference dead ids.
-    const answered = (review.clusters?.length ?? 0) > 0 || (review.merges?.length ?? 0) > 0
-    if (answered) {
+    // Pairs it proposed but validation dropped are NOT — it said yes. The
+    // prompt requires an explicit "merges" array even when empty; a response
+    // without one is degenerate and declines nothing. Pairs touching a
+    // just-deleted cluster are skipped so no rows reference dead ids.
+    if (Array.isArray(review.merges)) {
       for (const key of guards.mergeCandidatePairs) {
         if (proposedPairs.has(key)) continue
         const [a, b] = key.split('|')
@@ -141,7 +132,7 @@ export function validateAndApply(
       }
     }
 
-    // --- Splits, incoherence, labels ---
+    // --- Splits and incoherence ---
     for (const verdict of review.clusters ?? []) {
       if (!guards.reviewableIds.has(verdict.id) || consumed.has(verdict.id)) continue
 
@@ -156,25 +147,21 @@ export function validateAndApply(
         // Each member goes to exactly one group (first claim wins); ids the
         // LLM invented are dropped; unassigned members go to the largest group.
         const assigned = new Set<string>()
-        const groups = verdict.split.map((g) => ({
-          label: g.label ?? '',
-          description: g.description ?? '',
-          sightingIds: (g.sighting_ids ?? []).filter((id) => {
+        const groups = verdict.split.map((g) =>
+          (g.sighting_ids ?? []).filter((id) => {
             if (!memberIds.has(id) || assigned.has(id)) return false
             assigned.add(id)
             return true
           }),
-        }))
-        const nonEmpty = groups.filter((g) => g.sightingIds.length > 0)
+        )
+        const nonEmpty = groups.filter((g) => g.length > 0)
         if (nonEmpty.length < 2) {
           progress?.(`[Clustering] Dropped degenerate split of cluster ${verdict.id}`)
           continue
         }
-        const largest = nonEmpty.reduce((a, b) =>
-          b.sightingIds.length > a.sightingIds.length ? b : a,
-        )
+        const largest = nonEmpty.reduce((a, b) => (b.length > a.length ? b : a))
         for (const id of memberIds) {
-          if (!assigned.has(id)) largest.sightingIds.push(id)
+          if (!assigned.has(id)) largest.push(id)
         }
 
         applySplit(storage, verdict.id, nonEmpty, now)
@@ -193,89 +180,91 @@ export function validateAndApply(
         if (resplitByGeometry(storage, verdict.id, resplitGroups?.get(verdict.id), now, progress))
           split++
         consumed.add(verdict.id)
-        continue
-      }
-
-      if (verdict.label) {
-        const existing = storage.clusters.getById(verdict.id)
-        if (!existing) continue
-        // Singletons ride along only for merge judgment — a label verdict on
-        // one would mint a single-run recipe, so it is dropped.
-        if (storage.clusters.getMemberCount(verdict.id) < 2) {
-          progress?.(`[Clustering] Dropped label for single-member cluster ${verdict.id}`)
-          continue
-        }
-        // An omitted classification on a relabel must not wipe an earlier
-        // judgment — mechanism null keeps the stored value.
-        storage.clusters.updateLabel(
-          verdict.id,
-          verdict.label,
-          verdict.description ?? '',
-          verdict.kind === undefined ? null : sanitizeMechanism(verdict),
-          storage.clusters.getMemberCount(verdict.id),
-        )
-        // Only overwrite the recipe when the model returned steps — a relabel
-        // that omits them must not wipe an existing recipe.
-        const recipe = sanitizeRecipe(verdict)
-        if (recipe.steps.length > 0) {
-          storage.clusters.updateRecipe(verdict.id, recipe)
-        } else if (existing.steps.length === 0) {
-          progress?.(`[Clustering] Label verdict without steps left cluster ${verdict.id} stepless`)
-        }
-        labeled++
       }
     }
   })
   apply()
 
-  return { merged, split, labeled }
-}
-
-interface SplitGroup {
-  label: string
-  description: string
-  sightingIds: string[]
+  return { merged, split }
 }
 
 /**
- * The largest group keeps the original cluster id — stable identity (and its
- * "seen X times" history) follows the dominant process; the rest move to new
- * clusters. Mechanism is cleared everywhere: membership changed, so the old
- * judgment no longer applies — the next review redoes it.
+ * Apply content verdicts (label + classification + recipe) to the clusters
+ * the content call was shown. Wipe-protections: an omitted classification
+ * keeps the stored mechanism, omitted steps keep the stored recipe — the
+ * cluster then simply stays queued for the next content round.
+ */
+export function applyContent(
+  storage: StorageService,
+  review: ReviewOutput,
+  reviewableIds: Set<string>,
+  progress?: ProgressCallback,
+): { labeled: number } {
+  let labeled = 0
+
+  const apply = storage.getDatabase().transaction(() => {
+    for (const verdict of review.clusters ?? []) {
+      if (!reviewableIds.has(verdict.id) || !verdict.label) continue
+      const existing = storage.clusters.getById(verdict.id)
+      if (!existing) continue
+      // A label verdict on a singleton would mint a single-run recipe.
+      if (storage.clusters.getMemberCount(verdict.id) < 2) {
+        progress?.(`[Clustering] Dropped label for single-member cluster ${verdict.id}`)
+        continue
+      }
+      storage.clusters.updateLabel(
+        verdict.id,
+        verdict.label,
+        verdict.description ?? '',
+        verdict.kind === undefined ? null : sanitizeMechanism(verdict),
+        storage.clusters.getMemberCount(verdict.id),
+      )
+      const recipe = sanitizeRecipe(verdict)
+      if (recipe.steps.length > 0) {
+        storage.clusters.updateRecipe(verdict.id, recipe)
+      } else if (existing.steps.length === 0) {
+        progress?.(`[Clustering] Label verdict without steps left cluster ${verdict.id} stepless`)
+      }
+      labeled++
+    }
+  })
+  apply()
+
+  return { labeled }
+}
+
+/**
+ * The largest group keeps the original cluster id and label — stable identity
+ * (and its "seen X times" history) follows the dominant process; the rest
+ * move to new unlabeled clusters. Recipes are cleared everywhere: membership
+ * changed, so the content round renames and re-classifies all of them.
  */
 function applySplit(
   storage: StorageService,
   clusterId: string,
-  groups: SplitGroup[],
+  groups: string[][],
   now: number,
 ): void {
-  const largest = groups.reduce((a, b) => (b.sightingIds.length > a.sightingIds.length ? b : a))
+  const largest = groups.reduce((a, b) => (b.length > a.length ? b : a))
   for (const group of groups) {
     if (group === largest) continue
     const newId = uuidv4()
     storage.clusters.create({
       id: newId,
-      label: group.label,
-      description: group.description,
+      label: '',
+      description: '',
       centroid: null,
       mechanism: '',
       steps: [],
       variables: [],
-      labeledSize: group.label ? group.sightingIds.length : 0,
+      labeledSize: 0,
       createdAt: now,
     })
-    for (const sightingId of group.sightingIds) {
+    for (const sightingId of group) {
       storage.clusters.addMembership(newId, sightingId)
     }
     recomputeCentroid(storage, newId)
   }
-  storage.clusters.updateLabel(
-    clusterId,
-    largest.label,
-    largest.description,
-    '',
-    largest.label ? largest.sightingIds.length : 0,
-  )
   storage.clusters.updateRecipe(clusterId, { steps: [], variables: [] })
   recomputeCentroid(storage, clusterId)
 }
@@ -285,7 +274,7 @@ function applySplit(
  * own member signatures by average-linkage. The LLM's judgment triggers the
  * split, the geometry assigns the members — the LLM saw only a sample, so its
  * member assignment can't be trusted. Groups come out unlabeled and are
- * (re)labeled on the next review. No-op if the geometry finds one group.
+ * (re)labeled by the content round. No-op if the geometry finds one group.
  */
 function resplitByGeometry(
   storage: StorageService,
@@ -308,15 +297,10 @@ function resplitByGeometry(
     return false
   }
   // Members with no signature can't be placed — they stay with the survivor.
-  const splitGroups: SplitGroup[] = groups.map((ids) => ({
-    label: '',
-    description: '',
-    sightingIds: ids,
-  }))
   progress?.(
     `[Clustering] Re-split incoherent cluster ${clusterId} into ` +
       `${groups.map((g) => g.length).join('+')} members`,
   )
-  applySplit(storage, clusterId, splitGroups, now)
+  applySplit(storage, clusterId, groups, now)
   return true
 }
