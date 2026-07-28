@@ -276,7 +276,13 @@ export class ActivitySemanticService implements SemanticServiceContract {
               }
               // Native vendors (openai, anthropic, google) handle file parts
               // through the AI SDK directly.
-              return invokeViaGenerateText({ provider: this.provider, model, content, signal })
+              return invokeViaGenerateText({
+                provider: this.provider,
+                model,
+                content,
+                signal,
+                requestTimeoutMs: this.requestTimeoutMs,
+              })
             },
             onRecordUsage: ({ model, promptTokens, completionTokens }) => {
               recordSemanticUsageSafe({
@@ -384,7 +390,13 @@ export class ActivitySemanticService implements SemanticServiceContract {
         return content
       },
       invoke: ({ model, content, signal }) =>
-        invokeViaGenerateText({ provider: this.provider, model, content, signal }),
+        invokeViaGenerateText({
+          provider: this.provider,
+          model,
+          content,
+          signal,
+          requestTimeoutMs: this.requestTimeoutMs,
+        }),
       onRecordUsage: ({ model, promptTokens, completionTokens }) => {
         recordSemanticUsageSafe({
           usageTracker: this.usageTracker,
@@ -640,6 +652,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
         model,
         content,
         signal: controller.signal,
+        requestTimeoutMs: this.requestTimeoutMs,
       })
       return outcome.summary.trim()
     } finally {

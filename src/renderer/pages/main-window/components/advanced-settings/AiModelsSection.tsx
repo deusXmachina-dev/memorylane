@@ -173,14 +173,24 @@ export function AiModelsSection({
                           : 'Uses only image snapshots and skips video requests.'}
                   </p>
                   <SliderRow
-                    label="LLM request timeout"
-                    value={form.semanticRequestTimeoutMs}
+                    label="Activity summary timeout"
+                    value={form.activityRequestTimeoutMs}
                     min={15_000}
-                    max={300_000}
-                    step={5_000}
+                    max={3_600_000}
+                    step={15_000}
                     format={formatMinSec}
-                    onChange={(v) => onSettingChange('semanticRequestTimeoutMs', v)}
-                    onCommit={(v) => onSettingCommit('semanticRequestTimeoutMs', v)}
+                    onChange={(v) => onSettingChange('activityRequestTimeoutMs', v)}
+                    onCommit={(v) => onSettingCommit('activityRequestTimeoutMs', v)}
+                  />
+                  <SliderRow
+                    label="Task mining timeout"
+                    value={form.taskMiningRequestTimeoutMs}
+                    min={60_000}
+                    max={3_600_000}
+                    step={60_000}
+                    format={formatMinSec}
+                    onChange={(v) => onSettingChange('taskMiningRequestTimeoutMs', v)}
+                    onCommit={(v) => onSettingCommit('taskMiningRequestTimeoutMs', v)}
                   />
                 </div>
                 <div className="space-y-3">

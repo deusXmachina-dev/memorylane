@@ -42,8 +42,6 @@ export interface InferenceProviderOptions {
   getActiveVendor: () => Vendor
   /** Optional fetch override forwarded to all underlying SDK providers (tests). */
   fetch?: typeof globalThis.fetch
-  /** Default per-request timeout for SDK provider HTTP calls, overridable per languageModel() call. */
-  requestTimeoutMs?: number
 }
 
 /**
@@ -54,7 +52,7 @@ export interface InferenceProviderOptions {
  * This is a stall detector, not a budget: every caller on the default emits a
  * bounded response (a summary, a judgement, a user-context blob) and finishes
  * in seconds. Callers whose output is genuinely long-running pass their own —
- * see TASK_MINING_REQUEST_TIMEOUT_MS.
+ * see the activityRequestTimeoutMs and taskMiningRequestTimeoutMs settings.
  */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 3 * 60 * 1000
 
@@ -78,7 +76,6 @@ export class InferenceProviderImpl implements InferenceProvider {
   private readonly credentials: VendorCredentialsManager
   private readonly getActiveVendorAccessor: () => Vendor
   private readonly customFetch: typeof globalThis.fetch | undefined
-  private readonly requestTimeoutMs: number
   private readonly sdkCache = new Map<string, CacheEntry>()
   private readonly loggedRouteSnapshots = new Set<string>()
   private readonly listeners = new Set<() => void>()
@@ -87,7 +84,6 @@ export class InferenceProviderImpl implements InferenceProvider {
     this.credentials = options.credentials
     this.getActiveVendorAccessor = options.getActiveVendor
     this.customFetch = options.fetch
-    this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
   }
 
   isConfigured(): boolean {
@@ -98,7 +94,10 @@ export class InferenceProviderImpl implements InferenceProvider {
     return this.getActiveVendorAccessor()
   }
 
-  languageModel(modelId: string, requestTimeoutMs: number = this.requestTimeoutMs): LanguageModel {
+  languageModel(
+    modelId: string,
+    requestTimeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
+  ): LanguageModel {
     const vendor = this.getActiveVendor()
     const creds = this.credentials.getCredentials(vendor)
     if (!creds) {

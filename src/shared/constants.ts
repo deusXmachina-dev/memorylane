@@ -117,17 +117,17 @@ export const USER_CONTEXT_CONFIG = {
 }
 
 // Pattern Detection Configuration
-// Request deadline for task-mining LLM calls, which scan a whole day in one
-// prompt: the slowest *completed* scan observed on OpenRouter was ~10k output
-// tokens at 15 tok/s, about 11 minutes. Routing picks the backend and a slow
-// one is not a stalled one, so this sits far above the shared default rather
-// than failing work that would have landed.
-export const TASK_MINING_REQUEST_TIMEOUT_MS = 20 * 60_000
-
 export const PATTERN_DETECTION_CONFIG = {
   MODEL: 'minimax/minimax-m3',
   LOOKBACK_DAYS: 1, // Days back from today to analyze (1 = yesterday)
   MIN_ACTIVITIES: 200, // Minimum total activities in DB before first run
+  // Request deadline for task-mining LLM calls, which scan a whole day in one
+  // prompt: the slowest *completed* scan observed on OpenRouter was ~10k output
+  // tokens at 15 tok/s, about 11 minutes. Routing picks the backend and a slow
+  // one is not a stalled one, so this sits far above the shared default rather
+  // than failing work that would have landed. User-configurable via the
+  // taskMiningRequestTimeoutMs setting (local endpoints can be far slower).
+  REQUEST_TIMEOUT_MS: 20 * 60_000,
 }
 
 // Sightings older than this are pruned on every mining run; cluster stats use

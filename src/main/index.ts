@@ -293,7 +293,7 @@ app.on('ready', async () => {
     },
     onPrivacyBlockingChanged: setPrivacyBlockedState,
     semanticPipelinePreference: initialCaptureSettings.semanticPipelineMode,
-    semanticRequestTimeoutMs: initialCaptureSettings.semanticRequestTimeoutMs,
+    semanticRequestTimeoutMs: initialCaptureSettings.activityRequestTimeoutMs,
     excludedApps: initialCaptureSettings.excludedApps,
     excludedUrlPatterns: initialCaptureSettings.excludedUrlPatterns,
     excludePrivateBrowsing: initialCaptureSettings.excludePrivateBrowsing,

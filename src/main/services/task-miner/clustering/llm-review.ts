@@ -1,7 +1,7 @@
 import { generateText } from 'ai'
 import type { InferenceProvider } from '@main/llm'
 import { extractJsonObject, formatApiError } from '../helpers'
-import { TASK_MINING_REQUEST_TIMEOUT_MS } from '@/shared/constants'
+import { PATTERN_DETECTION_CONFIG } from '@/shared/constants'
 import type { ReviewInput, ReviewOutput } from './types'
 import { CLUSTERING_CONFIG } from './types'
 import {
@@ -36,7 +36,7 @@ async function callReview(
     progress?.(describe(attempt))
     try {
       const result = await generateText({
-        model: provider.languageModel(model, TASK_MINING_REQUEST_TIMEOUT_MS),
+        model: provider.languageModel(model, PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS),
         system,
         prompt,
         maxRetries: 0,

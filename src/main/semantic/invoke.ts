@@ -8,6 +8,7 @@ interface SnapshotInvokeInput {
   model: string
   content: ChatContentItem[]
   signal: AbortSignal
+  requestTimeoutMs: number
 }
 
 /**
@@ -24,7 +25,7 @@ export async function invokeViaGenerateText(
     },
   ]
   const result = await generateText({
-    model: input.provider.languageModel(input.model),
+    model: input.provider.languageModel(input.model, input.requestTimeoutMs),
     messages,
     abortSignal: input.signal,
   })

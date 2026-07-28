@@ -357,7 +357,8 @@ function logCaptureSettingsChanges(previous: CaptureSettings, updated: CaptureSe
     'maxScreenshotsForLlm',
     'minActivityDurationMs',
     'maxActivityDurationMs',
-    'semanticRequestTimeoutMs',
+    'activityRequestTimeoutMs',
+    'taskMiningRequestTimeoutMs',
     'semanticPipelineMode',
     'captureHotkeyAccelerator',
     'excludePrivateBrowsing',
@@ -954,7 +955,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
           excludePrivateBrowsing: updated.excludePrivateBrowsing,
         })
         deps.semanticService.updatePipelinePreference(updated.semanticPipelineMode)
-        deps.semanticService.updateRequestTimeoutMs(updated.semanticRequestTimeoutMs)
+        deps.semanticService.updateRequestTimeoutMs(updated.activityRequestTimeoutMs)
         applyModelSettings(deps, updated, previous)
         void updateTrayMenu()
         sendStatusToRenderer()
@@ -1015,7 +1016,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         excludePrivateBrowsing: updated.excludePrivateBrowsing,
       })
       deps.semanticService.updatePipelinePreference(updated.semanticPipelineMode)
-      deps.semanticService.updateRequestTimeoutMs(updated.semanticRequestTimeoutMs)
+      deps.semanticService.updateRequestTimeoutMs(updated.activityRequestTimeoutMs)
       applyModelSettings(deps, updated, previous)
       void updateTrayMenu()
       sendStatusToRenderer()
