@@ -98,6 +98,17 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
     ([sightingId, vector]) => ({ sightingId, vector }),
   )
   if (signatures.length === 0 && pruned.touchedClusterIds.length === 0) {
+    // Nothing new to group, but requeued recipes still heal: without this a
+    // pass over an already-mined day leaves stepless clusters stuck until the
+    // next day actually mines.
+    if (provider) {
+      try {
+        await recipeRoundIfNeeded(deps, provider, model, now, summary, progress)
+      } catch (error) {
+        summary.llmError = formatApiError(error)
+        log.error('[TaskMiner] Clustering recipe round failed:', summary.llmError)
+      }
+    }
     return summary
   }
   progress(
@@ -207,41 +218,54 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
         `${applied.merged} merged, ${applied.split} split`,
     )
 
-    // Merges, splits, and relabels clear the recipe, and the main review may
-    // skip a well-labeled cluster entirely — without this round those clusters
-    // would show raw member steps until the next mined day. Nothing here can
-    // restructure: no merge candidates, nothing splittable.
-    const stepless = collectSteplessLabeled(storage)
-    if (stepless.length > 0) {
-      const roundInput: ReviewInput = {
-        clusters: stepless.map((c) => toReviewCluster(storage, c, false)),
-        mergeCandidates: [],
-      }
-      const round = deps.recipeReview
-        ? await deps.recipeReview(roundInput)
-        : await runRecipeRound(provider, model, roundInput, progress)
-      summary.tokenUsage.input += round.tokenUsage.input
-      summary.tokenUsage.output += round.tokenUsage.output
-      if (round.output) {
-        const roundGuards: ReviewGuards = {
-          reviewableIds: new Set(stepless.map((c) => c.id)),
-          splittableIds: new Set(),
-          mergeCandidatePairs: new Set(),
-        }
-        const roundApplied = validateAndApply(storage, round.output, roundGuards, now, progress)
-        summary.labeled += roundApplied.labeled
-        const filled = stepless.filter(
-          (c) => (storage.clusters.getById(c.id)?.steps.length ?? 0) > 0,
-        ).length
-        progress(`[Clustering] Recipe round: ${filled}/${stepless.length} recipes filled`)
-      }
-    }
+    await recipeRoundIfNeeded(deps, provider, model, now, summary, progress)
   } catch (error) {
     summary.llmError = formatApiError(error)
     log.error('[TaskMiner] Clustering LLM review failed:', summary.llmError)
   }
 
   return summary
+}
+
+/**
+ * Merges, splits, and relabels clear the recipe, and the main review may skip
+ * a well-labeled cluster entirely — without this round those clusters would
+ * show raw member steps until the next mined day. Nothing here can
+ * restructure: no merge candidates, nothing splittable.
+ */
+async function recipeRoundIfNeeded(
+  deps: ClusteringDeps,
+  provider: InferenceProvider,
+  model: string,
+  now: number,
+  summary: ClusteringRunSummary,
+  progress: ProgressCallback,
+): Promise<void> {
+  const { storage } = deps
+  const stepless = collectSteplessLabeled(storage)
+  if (stepless.length === 0) return
+
+  const input: ReviewInput = {
+    clusters: stepless.map((c) => toReviewCluster(storage, c, false)),
+    mergeCandidates: [],
+  }
+  const round = deps.recipeReview
+    ? await deps.recipeReview(input)
+    : await runRecipeRound(provider, model, input, progress)
+  summary.tokenUsage.input += round.tokenUsage.input
+  summary.tokenUsage.output += round.tokenUsage.output
+  if (!round.output) return
+
+  const guards: ReviewGuards = {
+    reviewableIds: new Set(stepless.map((c) => c.id)),
+    splittableIds: new Set(),
+    mergeCandidatePairs: new Set(),
+  }
+  summary.labeled += validateAndApply(storage, round.output, guards, now, progress).labeled
+  const filled = stepless.filter(
+    (c) => (storage.clusters.getById(c.id)?.steps.length ?? 0) > 0,
+  ).length
+  progress(`[Clustering] Recipe round: ${filled}/${stepless.length} recipes filled`)
 }
 
 /** Labeled multi-member clusters missing their recipe, biggest first. */

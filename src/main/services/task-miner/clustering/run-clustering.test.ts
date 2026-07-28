@@ -372,6 +372,51 @@ describe('runClustering', () => {
     expect(clusters.every((c) => storage.clusters.getMemberCount(c.id) === 2)).toBe(true)
   })
 
+  it('runs the recipe round on a pass with nothing new to group', async () => {
+    storage.sightings.add(createSighting({ id: 's1', title: 'alpha task' }))
+    storage.sightings.add(createSighting({ id: 's2', title: 'alpha task' }))
+    storage.clusters.create({
+      id: 'c1',
+      label: 'Thing',
+      description: '',
+      centroid: normalize(v(1)),
+      mechanism: '',
+      steps: [],
+      variables: [],
+      labeledSize: 2,
+      createdAt: 100,
+    })
+    storage.clusters.upsertSignature('s1', v(1))
+    storage.clusters.upsertSignature('s2', v(1))
+    storage.clusters.addMembership('c1', 's1')
+    storage.clusters.addMembership('c1', 's2')
+
+    let mainReviewCalled = false
+    await cluster({
+      provider: {} as InferenceProvider,
+      now: 10_000,
+      review: async () => {
+        mainReviewCalled = true
+        return { output: {}, tokenUsage: { input: 0, output: 0 } }
+      },
+      recipeReview: async (input) => ({
+        output: {
+          clusters: input.clusters.map((c) => ({
+            id: c.id,
+            label: c.label,
+            description: '',
+            steps: ['TestApp: do it'],
+            variables: [],
+          })),
+        },
+        tokenUsage: { input: 0, output: 0 },
+      }),
+    })
+
+    expect(mainReviewCalled).toBe(false)
+    expect(storage.clusters.getById('c1')!.steps).toEqual(['TestApp: do it'])
+  })
+
   it('skips the recipe round when every labeled cluster has its recipe', async () => {
     storage.sightings.add(createSighting({ id: 's1', title: 'alpha task' }))
     storage.sightings.add(createSighting({ id: 's2', title: 'alpha task' }))
