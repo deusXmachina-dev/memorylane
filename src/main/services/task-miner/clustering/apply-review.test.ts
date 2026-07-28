@@ -544,6 +544,19 @@ describe('applyContent', () => {
     expect(cluster.mechanism).toBe('A script.')
   })
 
+  it('keeps an existing mechanism when a relabel claims procedure without one', () => {
+    seedCluster('c1', 100, ['s1', 's2'])
+    storage.clusters.updateLabel('c1', 'Old', '', 'A script.', 2)
+
+    applyContent(
+      storage,
+      { clusters: [{ id: 'c1', label: 'Renamed', description: '', kind: 'procedure' }] },
+      new Set(['c1']),
+    )
+
+    expect(storage.clusters.getById('c1')!.mechanism).toBe('A script.')
+  })
+
   it('stores no mechanism when a relabel classifies as non-procedure', () => {
     seedCluster('c1', 100, ['s1', 's2'])
     storage.clusters.updateLabel('c1', 'Old', '', 'A script.', 2)
@@ -565,13 +578,14 @@ describe('sanitizeMechanism', () => {
     )
   })
 
-  it('rejects a procedure without a concrete mechanism', () => {
-    expect(sanitizeMechanism({ id: 'x', kind: 'procedure' })).toBe('')
-    expect(sanitizeMechanism({ id: 'x', kind: 'procedure', mechanism: '  ' })).toBe('')
+  it('treats a procedure without a concrete mechanism as no judgment', () => {
+    expect(sanitizeMechanism({ id: 'x', kind: 'procedure' })).toBeNull()
+    expect(sanitizeMechanism({ id: 'x', kind: 'procedure', mechanism: '  ' })).toBeNull()
   })
 
-  it('treats off-enum kinds as not automatable', () => {
-    expect(sanitizeMechanism({ id: 'x', kind: 'busywork', mechanism: 'A.' })).toBe('')
+  it('treats off-enum and omitted kinds as no judgment', () => {
+    expect(sanitizeMechanism({ id: 'x', kind: 'busywork', mechanism: 'A.' })).toBeNull()
+    expect(sanitizeMechanism({ id: 'x' })).toBeNull()
   })
 
   it('strips mechanisms from non-procedure kinds', () => {

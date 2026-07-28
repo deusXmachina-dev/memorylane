@@ -10,6 +10,10 @@ import type { Migration } from '../migrator'
  * old mechanism would have performed — and rebuildClustersIfEmpty repopulates
  * on next launch. Future changes that invalidate clusters are explicit wipe
  * migrations (DELETE the derived rows).
+ *
+ * Labeled clusters whose classification was still pending (`kind = ''`) would
+ * otherwise read as judged-not-automatable under the new model — their
+ * labeled_size is reset to 0 so the content round re-judges them.
  */
 
 const TABLES = ['clusters', 'cluster_sightings', 'sighting_signatures', 'cluster_merge_declines']
@@ -76,7 +80,9 @@ export const migration: Migration = {
     if (copy) {
       db.exec(`
         INSERT INTO clusters (id, label, description, centroid, labeled_size, mechanism, steps, variables, created_at)
-          SELECT id, label, description, centroid, labeled_size, mechanism, steps, variables, created_at FROM clusters_old;
+          SELECT id, label, description, centroid,
+                 CASE WHEN kind = '' AND label != '' THEN 0 ELSE labeled_size END,
+                 mechanism, steps, variables, created_at FROM clusters_old;
         INSERT INTO cluster_sightings (sighting_id, cluster_id)
           SELECT sighting_id, cluster_id FROM cluster_sightings_old;
         INSERT INTO sighting_signatures (sighting_id, embedding)

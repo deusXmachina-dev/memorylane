@@ -6,7 +6,7 @@ import { scrubPII } from '@/shared/sanitize'
 import { averageLinkageGroups } from './attach'
 import { recomputeCentroid } from './signatures'
 import type { ReviewClusterVerdict, ReviewOutput } from './types'
-import { CLUSTERING_CONFIG } from './types'
+import { CLUSTERING_CONFIG, REVIEW_KINDS } from './types'
 import { normalizeSteps } from '../candidate-normalizer'
 import type { ProgressCallback } from '../types'
 
@@ -28,12 +28,17 @@ export interface StructureGuards {
 /**
  * Collapse the LLM's classification to the one stored bit: the mechanism.
  * The response taxonomy (procedure/monitoring/...) exists so the model isn't
- * pressured to invent mechanisms; only a "procedure" claim may carry one, and
- * a procedure without a concrete mechanism is, by the prompt's own rule, not
- * a procedure — it stores '' (judged not automatable).
+ * pressured to invent mechanisms; only a "procedure" claim may carry one.
+ * null = no judgment (keep the stored mechanism): an omitted or off-enum
+ * kind, or a "procedure" claim without a concrete mechanism — by the prompt's
+ * own rule not a procedure, but not a verdict to overwrite an earlier one
+ * with either. On a fresh cluster null still lands as '' (not automatable).
  */
-export function sanitizeMechanism(raw: ReviewClusterVerdict): string {
-  return raw.kind === 'procedure' ? (raw.mechanism ?? '').trim() : ''
+export function sanitizeMechanism(raw: ReviewClusterVerdict): string | null {
+  if (!(REVIEW_KINDS as readonly string[]).includes(raw.kind ?? '')) return null
+  if (raw.kind !== 'procedure') return ''
+  const mechanism = (raw.mechanism ?? '').trim()
+  return mechanism === '' ? null : mechanism
 }
 
 const MAX_RECIPE_VARIABLES = 10
@@ -190,9 +195,9 @@ export function applyStructure(
 
 /**
  * Apply content verdicts (label + classification + recipe) to the clusters
- * the content call was shown. Wipe-protections: an omitted classification
- * keeps the stored mechanism, omitted steps keep the stored recipe — the
- * cluster then simply stays queued for the next content round.
+ * the content call was shown. Wipe-protections: an omitted or malformed
+ * classification keeps the stored mechanism, omitted steps keep the stored
+ * recipe — the cluster then simply stays queued for the next content round.
  */
 export function applyContent(
   storage: StorageService,
@@ -216,7 +221,7 @@ export function applyContent(
         verdict.id,
         verdict.label,
         verdict.description ?? '',
-        verdict.kind === undefined ? null : sanitizeMechanism(verdict),
+        sanitizeMechanism(verdict),
         storage.clusters.getMemberCount(verdict.id),
       )
       const recipe = sanitizeRecipe(verdict)
