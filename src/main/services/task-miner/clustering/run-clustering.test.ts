@@ -145,6 +145,8 @@ describe('runClustering', () => {
               description: 'Typically opens TestApp and does the thing.',
               kind: 'procedure',
               mechanism: 'A nightly cron script that does the thing.',
+              steps: ['TestApp: do the thing'],
+              variables: [],
             })),
           },
           tokenUsage: { input: 100, output: 50 },
@@ -168,6 +170,7 @@ describe('runClustering', () => {
     expect(labeled.label).toBe('Do the recurring thing')
     expect(labeled.labeledSize).toBe(2)
     expect(labeled.mechanism).toBe('A nightly cron script that does the thing.')
+    expect(labeled.steps).toEqual(['TestApp: do the thing'])
   })
 
   it('shows member steps to the review only on the most recent sample members', async () => {
@@ -247,6 +250,8 @@ describe('runClustering', () => {
     storage.sightings.add(createSighting({ id: 's1', title: 'alpha task' }))
     storage.sightings.add(createSighting({ id: 's2', title: 'alpha task' }))
 
+    const noRecipeRound = async () => ({ output: null, tokenUsage: { input: 0, output: 0 } })
+
     // First review labels and classifies but returns no steps.
     await cluster({
       provider: {} as InferenceProvider,
@@ -262,6 +267,7 @@ describe('runClustering', () => {
         },
         tokenUsage: { input: 0, output: 0 },
       }),
+      recipeReview: noRecipeRound,
     })
     const labeled = storage.clusters.getAll().find((c) => c.label === 'Thing')!
     expect(labeled.steps).toEqual([])
@@ -276,12 +282,124 @@ describe('runClustering', () => {
         seenInput = input
         return { output: {}, tokenUsage: { input: 0, output: 0 } }
       },
+      recipeReview: noRecipeRound,
     })
     expect(seenInput!.clusters.map((c) => c.label)).toContain('Thing')
     // Review input is sighting-only: apps come off the sighting, no domains.
     const member = seenInput!.clusters[0].members[0]
     expect(member.apps).toEqual(['TestApp'])
     expect(member).not.toHaveProperty('domains')
+  })
+
+  it('recipe round fills clusters the main review left stepless, same pass', async () => {
+    storage.sightings.add(createSighting({ id: 's1', title: 'alpha task' }))
+    storage.sightings.add(createSighting({ id: 's2', title: 'alpha task' }))
+
+    let roundInput: ReviewInput | null = null
+    const summary = await cluster({
+      provider: {} as InferenceProvider,
+      now: 10_000,
+      review: async (input) => ({
+        output: {
+          clusters: input.clusters.map((c) => ({ id: c.id, label: 'Thing', description: '' })),
+        },
+        tokenUsage: { input: 10, output: 10 },
+      }),
+      recipeReview: async (input) => {
+        roundInput = input
+        return {
+          output: {
+            clusters: input.clusters.map((c) => ({
+              id: c.id,
+              label: c.label,
+              description: 'd',
+              kind: 'procedure',
+              mechanism: 'A script.',
+              steps: ['TestApp: do the thing', 'TestApp: confirm'],
+              variables: ['object name'],
+            })),
+          },
+          tokenUsage: { input: 5, output: 5 },
+        }
+      },
+    })
+
+    expect(roundInput!.clusters.map((c) => c.label)).toEqual(['Thing'])
+    expect(roundInput!.mergeCandidates).toEqual([])
+    const filled = storage.clusters.getAll().find((c) => c.label === 'Thing')!
+    expect(filled.steps).toEqual(['TestApp: do the thing', 'TestApp: confirm'])
+    expect(filled.mechanism).toBe('A script.')
+    expect(summary.tokenUsage).toEqual({ input: 15, output: 15 })
+  })
+
+  it('recipe round cannot restructure clusters', async () => {
+    storage.sightings.add(createSighting({ id: 's1', title: 'alpha task' }))
+    storage.sightings.add(createSighting({ id: 's2', title: 'alpha task' }))
+    storage.sightings.add(createSighting({ id: 's3', title: 'beta chore' }))
+    storage.sightings.add(createSighting({ id: 's4', title: 'beta chore' }))
+
+    await cluster({
+      provider: {} as InferenceProvider,
+      now: 10_000,
+      review: async (input) => ({
+        output: {
+          clusters: input.clusters.map((c) => ({ id: c.id, label: 'Thing', description: '' })),
+        },
+        tokenUsage: { input: 0, output: 0 },
+      }),
+      recipeReview: async (input) => ({
+        output: {
+          clusters: input.clusters.map((c, i) =>
+            i === 0
+              ? {
+                  id: c.id,
+                  split: [
+                    { label: 'A', description: '', sighting_ids: ['s1'] },
+                    { label: 'B', description: '', sighting_ids: ['s2'] },
+                  ],
+                }
+              : { id: c.id, label: c.label, description: '', steps: ['TestApp: x'], variables: [] },
+          ),
+          merges: [{ merge: input.clusters.map((c) => c.id), label: 'No', description: '' }],
+        },
+        tokenUsage: { input: 0, output: 0 },
+      }),
+    })
+
+    // Both clusters survive: the split and merge were dropped by the guards.
+    const clusters = storage.clusters.getAll()
+    expect(clusters).toHaveLength(2)
+    expect(clusters.every((c) => storage.clusters.getMemberCount(c.id) === 2)).toBe(true)
+  })
+
+  it('skips the recipe round when every labeled cluster has its recipe', async () => {
+    storage.sightings.add(createSighting({ id: 's1', title: 'alpha task' }))
+    storage.sightings.add(createSighting({ id: 's2', title: 'alpha task' }))
+
+    let roundCalled = false
+    await cluster({
+      provider: {} as InferenceProvider,
+      now: 10_000,
+      review: async (input) => ({
+        output: {
+          clusters: input.clusters.map((c) => ({
+            id: c.id,
+            label: 'Thing',
+            description: '',
+            kind: 'monitoring',
+            steps: ['TestApp: check it'],
+            variables: [],
+          })),
+        },
+        tokenUsage: { input: 0, output: 0 },
+      }),
+      recipeReview: async () => {
+        roundCalled = true
+        return { output: null, tokenUsage: { input: 0, output: 0 } }
+      },
+    })
+
+    expect(roundCalled).toBe(false)
   })
 
   it('survives a throwing review step without losing deterministic progress', async () => {

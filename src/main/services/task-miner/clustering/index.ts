@@ -31,7 +31,7 @@ import {
 import { attachToCentroids, averageLinkageGroups, type SightingSignature } from './attach'
 import type { ClusteringRunSummary, ReviewCluster, ReviewInput } from './types'
 import { CLUSTERING_CONFIG, emptyClusteringSummary } from './types'
-import { runLlmReview, type ReviewCallResult } from './llm-review'
+import { runLlmReview, runRecipeRound, type ReviewCallResult } from './llm-review'
 import { validateAndApply, mergePairKey, type ReviewGuards } from './apply-review'
 
 export type { ClusteringRunSummary } from './types'
@@ -58,6 +58,8 @@ export interface ClusteringDeps {
   onProgress?: ProgressCallback
   /** Injectable LLM step for tests; defaults to the real review call. */
   review?: (input: ReviewInput) => Promise<ReviewCallResult>
+  /** Injectable recipe round for tests; defaults to the real call. */
+  recipeReview?: (input: ReviewInput) => Promise<ReviewCallResult>
 }
 
 export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRunSummary> {
@@ -204,12 +206,57 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
       `[Clustering] Review applied: ${applied.labeled} labeled, ` +
         `${applied.merged} merged, ${applied.split} split`,
     )
+
+    // Merges, splits, and relabels clear the recipe, and the main review may
+    // skip a well-labeled cluster entirely — without this round those clusters
+    // would show raw member steps until the next mined day. Nothing here can
+    // restructure: no merge candidates, nothing splittable.
+    const stepless = collectSteplessLabeled(storage)
+    if (stepless.length > 0) {
+      const roundInput: ReviewInput = {
+        clusters: stepless.map((c) => toReviewCluster(storage, c, false)),
+        mergeCandidates: [],
+      }
+      const round = deps.recipeReview
+        ? await deps.recipeReview(roundInput)
+        : await runRecipeRound(provider, model, roundInput, progress)
+      summary.tokenUsage.input += round.tokenUsage.input
+      summary.tokenUsage.output += round.tokenUsage.output
+      if (round.output) {
+        const roundGuards: ReviewGuards = {
+          reviewableIds: new Set(stepless.map((c) => c.id)),
+          splittableIds: new Set(),
+          mergeCandidatePairs: new Set(),
+        }
+        const roundApplied = validateAndApply(storage, round.output, roundGuards, now, progress)
+        summary.labeled += roundApplied.labeled
+        const filled = stepless.filter(
+          (c) => (storage.clusters.getById(c.id)?.steps.length ?? 0) > 0,
+        ).length
+        progress(`[Clustering] Recipe round: ${filled}/${stepless.length} recipes filled`)
+      }
+    }
   } catch (error) {
     summary.llmError = formatApiError(error)
     log.error('[TaskMiner] Clustering LLM review failed:', summary.llmError)
   }
 
   return summary
+}
+
+/** Labeled multi-member clusters missing their recipe, biggest first. */
+function collectSteplessLabeled(storage: StorageService): Cluster[] {
+  return storage.clusters
+    .getAll()
+    .filter(
+      (c) => c.label !== '' && c.steps.length === 0 && storage.clusters.getMemberCount(c.id) >= 2,
+    )
+    .sort(
+      (a, b) =>
+        storage.clusters.getMemberCount(b.id) - storage.clusters.getMemberCount(a.id) ||
+        a.createdAt - b.createdAt,
+    )
+    .slice(0, CLUSTERING_CONFIG.MAX_REVIEW_CLUSTERS_PER_RUN)
 }
 
 /**

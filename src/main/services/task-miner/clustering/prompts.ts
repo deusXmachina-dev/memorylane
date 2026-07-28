@@ -56,6 +56,46 @@ Output a single JSON object, no other text:
 \`\`\``
 }
 
+/**
+ * The focused second round of a clustering pass. Merges, splits, and relabels
+ * clear the recipe, and the main review may skip a well-labeled cluster
+ * entirely — this round exists so every labeled multi-member cluster ends the
+ * pass with a recipe. No merges or splits are offered, so it cannot
+ * restructure anything.
+ */
+export function buildRecipeRoundSystemPrompt(): string {
+  return `You write recipes for clusters of "sightings" — repeated instances of recurring real-world processes, mined from the user's computer activity. Each cluster below is missing its recipe, typically because it was just merged, split, or relabeled.
+
+You will receive a JSON object with "clusters". Each has an id, an existing "label", "stats" computed from ALL members (times_seen, span_days from first to last sighting, median_active_min), and member sightings (title, subject (the specific object that run acted on), description, apps (app identities: the website host for web work, e.g. "dashboard.stripe.com", the application name for desktop work, e.g. "Ghostty"), interaction minutes, date, and "steps" — that run's observed happy path).
+
+Output a verdict for EVERY cluster listed — a cluster missing from your output keeps no recipe:
+1. LABEL: keep the existing "label" verbatim unless it misnames the process — established names are load-bearing. Always output "label" and "description" (1-2 sentences describing what the process typically looks like, step by step where visible).
+2. CLASSIFY: "kind" is one of:
+   - "procedure": a repeatable multi-step process that changes something and could be taken over by a concrete mechanism.
+   - "monitoring": checking or watching — inboxes, dashboards, statuses, feeds. Never eliminable, however often it recurs.
+   - "ambient": everyday life — chat, social, news, calendar, browsing.
+   - "dev-loop": software-development inner-loop mechanics — restarts, reruns, git housekeeping.
+   - "judgment": creative or judgment work — writing, coding, review, analysis, design. Never eliminable; each instance needs a human.
+   For "procedure" also output "mechanism": ONE sentence naming the concrete replacement (a script, integration, alert, platform feature, or process change). Consolidate it from the "Replace with:" sentences in the member descriptions — never invent a mechanism the evidence doesn't support. No concrete mechanism = not a procedure. For every other kind omit "mechanism".
+3. RECIPE: every verdict MUST carry "steps" and "variables". "steps" is an ordered, generalized how-to for the process: 3 to 12 short lines, each starting with an app identity from the member sightings' apps, then a colon and the imperative action. For a website, a recognizable product name may precede the host in parentheses — "Gmail (mail.google.com): open the client thread" — otherwise use the host alone. For a desktop app use its name. Never use a browser name as the app. Steps describe only actions the member sightings evidence; consolidate from the members' observed "steps" first — they are raw single runs: generalize across them and move their specifics into "variables". When runs used different mechanisms, generalize to the recurring one — do not canonicalize one run's incidental flow. "variables" lists the things that differ from run to run, named generically (e.g. "customer name", "invoice number", "search term"). This recipe is copied into outside automation tools, so it MUST be fully de-identified: never write a real person, company, email, phone number, account number, or url-with-id. Write "enter the customer name", never "enter ACME Inc"; move every changing specific into "variables" as a generic label.
+
+Rules:
+- Never invent cluster ids not present in the input.
+- Do not mention counts, frequencies, or durations in labels/descriptions — those are computed separately.
+- When unsure of the kind, choose the non-eliminable reading — a wrongly promised automation costs more than a missed one.
+- steps and variables carry NO personal data: no real names, companies, emails, phone numbers, ids, or PII/PHI. When in doubt, replace the specific with a generic variable.
+
+Output a single JSON object, no other text:
+
+\`\`\`json
+{
+  "clusters": [
+    { "id": "<cluster id>", "label": "...", "description": "...", "kind": "procedure", "mechanism": "...", "steps": ["Gmail (mail.google.com): ...", "Ghostty: ..."], "variables": ["customer name", "..."] }
+  ]
+}
+\`\`\``
+}
+
 export function serializeReviewInput(input: ReviewInput): string {
   const payload = {
     clusters: input.clusters,

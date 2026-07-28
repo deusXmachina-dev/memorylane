@@ -197,7 +197,8 @@ export function validateAndApply(
       }
 
       if (verdict.label) {
-        if (!storage.clusters.getById(verdict.id)) continue
+        const existing = storage.clusters.getById(verdict.id)
+        if (!existing) continue
         // Singletons ride along only for merge judgment — a label verdict on
         // one would mint a single-run recipe, so it is dropped.
         if (storage.clusters.getMemberCount(verdict.id) < 2) {
@@ -218,6 +219,8 @@ export function validateAndApply(
         const recipe = sanitizeRecipe(verdict)
         if (recipe.steps.length > 0) {
           storage.clusters.updateRecipe(verdict.id, recipe)
+        } else if (existing.steps.length === 0) {
+          progress?.(`[Clustering] Label verdict without steps left cluster ${verdict.id} stepless`)
         }
         labeled++
       }
