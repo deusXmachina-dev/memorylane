@@ -1,13 +1,12 @@
-# MemoryLane v1.5.4-alpha.1
+# MemoryLane v1.5.4-alpha.2
 
-Task mining catches up much faster on first launch, and provider outages no longer stall a whole sweep.
+Recurring tasks now reliably get a happy path, and LLM request timeouts are configurable for slow local endpoints.
 
 ## What's Changed
 
-- **Parallel day mining**: When the mining ledger has a backlog, days are analyzed in waves instead of one at a time, so a first launch with weeks of history catches up far faster. Daily sweeps stay serial (#258).
-- **Per-day retry cooldown**: A day that fails now cools down on its own (10m, then 20m) while the sweep moves on to the next day. Only repeated consecutive failures pause the sweep (#257).
-- **Longer mining request deadline**: Mining calls get 20 minutes; other LLM calls drop to 3 minutes so they fail fast instead of hanging (#258).
-- **Clearer mining status**: The banner reads "Waiting to retry" while days are cooling down instead of "Analysis paused" (#257).
+- **Configurable LLM timeouts**: Two sliders under Advanced options bound the long-running model calls — activity summaries (up to 60 min) and task mining (default 20 min). Local endpoints that spend minutes on prompt processing no longer time out mid-request (#263).
+- **Reliable task recipes**: The cluster review is split into a small structure call (merges/splits) and batched content rounds that are the sole writer of labels and steps. Oversized reviews no longer time out and discard the whole pass, and labeled tasks that were left without steps get them on the next pass (#262).
+- **Legacy tables removed**: The old pattern tables are dropped from the database, which also removes them from enterprise uploads (#262).
 
 ## Known Issues & Limitations
 
@@ -25,4 +24,4 @@ Task mining catches up much faster on first launch, and provider outages no long
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.3...v1.5.4-alpha.1
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.4-alpha.1...v1.5.4-alpha.2
