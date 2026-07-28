@@ -5,12 +5,16 @@
  * payloads (exactly what production sends) plus expected outcomes; scoring is
  * fully deterministic. The headline metric is the FALSE-ELIMINABLE RATE:
  * clusters promised as automatable procedures that a human judged otherwise —
- * the number that must be ~0 before `kind` may gate or roll up anything.
+ * the number that must be ~0 before the mechanism may gate or roll up anything.
  */
 
-import type { ClusterKind } from '@types'
-import type { ReviewInput, ReviewOutput } from '@main/services/task-miner/clustering/types'
-import { sanitizeVerdict } from '@main/services/task-miner/clustering/apply-review'
+import type {
+  ReviewClusterVerdict,
+  ReviewInput,
+  ReviewKind,
+  ReviewOutput,
+} from '@main/services/task-miner/clustering/types'
+import { REVIEW_KINDS } from '@main/services/task-miner/clustering/types'
 
 export interface ClusterReviewFixture {
   name: string
@@ -19,8 +23,18 @@ export interface ClusterReviewFixture {
   input: ReviewInput
   expected: {
     /** Expected kind per reviewed cluster id. */
-    verdicts: Record<string, { kind: Exclude<ClusterKind, ''> }>
+    verdicts: Record<string, { kind: ReviewKind }>
   }
+}
+
+/** The response-level kind, whitelisted the way apply-review judges it: a
+ * "procedure" without a concrete mechanism counts as unclassified. */
+function sanitizeResponseKind(raw: ReviewClusterVerdict): ReviewKind | '' {
+  const kind = (REVIEW_KINDS as readonly string[]).includes(raw.kind ?? '')
+    ? (raw.kind as ReviewKind)
+    : ''
+  if (kind === 'procedure' && (raw.mechanism ?? '').trim() === '') return ''
+  return kind
 }
 
 export interface ClusterReviewScore {
@@ -69,17 +83,16 @@ export function scoreClusterReview(args: {
     score.verdictCount++
     const raw = verdictById.get(clusterId)
     // A split instead of a verdict, or no verdict at all, counts as unclassified.
-    const predicted =
-      raw && !splitIds.has(clusterId) ? sanitizeVerdict(raw) : { kind: '' as const, mechanism: '' }
+    const predicted = raw && !splitIds.has(clusterId) ? sanitizeResponseKind(raw) : ''
 
     const bucket = (score.perKind[exp.kind] ??= { total: 0, correct: 0, asProcedure: 0 })
     bucket.total++
-    if (predicted.kind === '') score.unclassified++
-    if (predicted.kind === exp.kind) {
+    if (predicted === '') score.unclassified++
+    if (predicted === exp.kind) {
       score.kindCorrect++
       bucket.correct++
     }
-    if (predicted.kind === 'procedure') {
+    if (predicted === 'procedure') {
       bucket.asProcedure++
       if (exp.kind !== 'procedure') score.falseEliminable++
     } else if (exp.kind === 'procedure') {

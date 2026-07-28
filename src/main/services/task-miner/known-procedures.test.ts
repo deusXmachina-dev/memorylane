@@ -6,7 +6,6 @@ import { applyMigrations } from '@main/storage/migrator'
 import { deleteDbFiles } from '@main/storage/test-utils'
 import type { Sighting } from '@main/storage/sighting-repository'
 import type { Cluster } from '@main/storage/cluster-repository'
-import type { ClusterKind } from '../../../shared/types'
 import { getKnownProcedureTitles } from './known-procedures'
 
 const createSighting = (id: string): Sighting => ({
@@ -29,14 +28,11 @@ const createCluster = (overrides: Partial<Cluster> & { id: string }): Cluster =>
   label: overrides.label ?? '',
   description: overrides.description ?? '',
   centroid: overrides.centroid ?? null,
-  kind: overrides.kind ?? '',
   mechanism: overrides.mechanism ?? '',
   steps: overrides.steps ?? [],
   variables: overrides.variables ?? [],
-  labelModel: overrides.labelModel ?? '',
   labeledSize: overrides.labeledSize ?? 0,
   createdAt: overrides.createdAt ?? 1000,
-  updatedAt: overrides.updatedAt ?? 1000,
 })
 
 describe('getKnownProcedureTitles', () => {
@@ -57,52 +53,52 @@ describe('getKnownProcedureTitles', () => {
   })
 
   // Create a cluster with `memberCount` attached sightings.
-  const cluster = (id: string, label: string, kind: ClusterKind, memberCount: number): void => {
-    storage.clusters.create(createCluster({ id, label, kind }))
+  const cluster = (id: string, label: string, mechanism: string, memberCount: number): void => {
+    storage.clusters.create(createCluster({ id, label, mechanism }))
     for (let i = 0; i < memberCount; i++) {
       const sid = `s${nextSighting++}`
       storage.sightings.add(createSighting(sid))
-      storage.clusters.addMembership(id, sid, 100)
+      storage.clusters.addMembership(id, sid)
     }
   }
 
-  it('includes labeled recurring clusters of any kind, not just procedures', () => {
-    cluster('c1', 'Review tenant devices', 'monitoring', 3)
-    cluster('c2', 'Draft security questionnaire answers', 'judgment', 2)
-    cluster('c3', 'Clear worktree', 'dev-loop', 2)
+  it('includes labeled recurring clusters whether or not they are automatable', () => {
+    cluster('c1', 'Review tenant devices', '', 3)
+    cluster('c2', 'Draft security questionnaire answers', '', 2)
+    cluster('c3', 'Provision test tenant', 'A provisioning script.', 2)
     const titles = getKnownProcedureTitles(storage)
     expect(titles).toContain('Review tenant devices')
     expect(titles).toContain('Draft security questionnaire answers')
-    expect(titles).toContain('Clear worktree')
+    expect(titles).toContain('Provision test tenant')
   })
 
-  it('excludes singletons, even labeled procedure ones', () => {
-    cluster('c1', 'One-off provisioning', 'procedure', 1)
+  it('excludes singletons, even labeled ones', () => {
+    cluster('c1', 'One-off provisioning', 'A script.', 1)
     expect(getKnownProcedureTitles(storage)).toEqual([])
   })
 
   it('excludes unlabeled clusters even when recurring', () => {
-    cluster('c1', '', 'procedure', 4)
-    cluster('c2', '   ', 'procedure', 4)
+    cluster('c1', '', '', 4)
+    cluster('c2', '   ', '', 4)
     expect(getKnownProcedureTitles(storage)).toEqual([])
   })
 
   it('dedups case-insensitively, first (more-seen) wins', () => {
-    cluster('c1', 'Provision Test Tenant', 'procedure', 5)
-    cluster('c2', 'provision test tenant', 'procedure', 2)
+    cluster('c1', 'Provision Test Tenant', '', 5)
+    cluster('c2', 'provision test tenant', '', 2)
     const titles = getKnownProcedureTitles(storage)
     expect(titles).toEqual(['Provision Test Tenant'])
   })
 
   it('caps the number of titles', () => {
-    for (let i = 0; i < 10; i++) cluster(`c${i}`, `Procedure ${i}`, 'procedure', 2)
+    for (let i = 0; i < 10; i++) cluster(`c${i}`, `Procedure ${i}`, '', 2)
     expect(getKnownProcedureTitles(storage, 3)).toHaveLength(3)
   })
 
   it('orders by timesSeen desc, then label asc for equal counts', () => {
-    cluster('c1', 'Zebra procedure', 'procedure', 2)
-    cluster('c2', 'Alpha procedure', 'procedure', 2)
-    cluster('c3', 'Most frequent', 'procedure', 5)
+    cluster('c1', 'Zebra procedure', '', 2)
+    cluster('c2', 'Alpha procedure', '', 2)
+    cluster('c3', 'Most frequent', '', 5)
     expect(getKnownProcedureTitles(storage)).toEqual([
       'Most frequent',
       'Alpha procedure',

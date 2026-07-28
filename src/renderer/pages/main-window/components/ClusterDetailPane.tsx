@@ -121,7 +121,7 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
                 </p>
               )
             )}
-            {cluster.kind === 'procedure' && cluster.mechanism && (
+            {cluster.mechanism && (
               <p className="mt-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm leading-relaxed">
                 <span className="font-medium">Replace with:</span> {cluster.mechanism}
               </p>

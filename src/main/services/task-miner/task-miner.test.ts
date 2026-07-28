@@ -233,7 +233,7 @@ describe('TaskMiner sweep', () => {
       vi.advanceTimersByTime(TASK_BACKFILL.DAY_COOLDOWN_MAX_MS)
     }
 
-    const failed = storage.miningDays.getFailed()
+    const failed = storage.miningDays.getAll().filter((d) => d.status === 'failed')
     expect(failed.map((d) => d.day)).toEqual([localLabel(2)])
     expect(failed[0].attempts).toBe(TASK_BACKFILL.MAX_DAY_ATTEMPTS)
 

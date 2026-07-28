@@ -31,8 +31,8 @@ import {
 import { attachToCentroids, averageLinkageGroups, type SightingSignature } from './attach'
 import type { ClusteringRunSummary, ReviewCluster, ReviewInput } from './types'
 import { CLUSTERING_CONFIG, emptyClusteringSummary } from './types'
-import { runLlmReview, type ReviewCallResult } from './llm-review'
-import { validateAndApply, mergePairKey, type ReviewGuards } from './apply-review'
+import { runStructureReview, runContentReview, type ReviewCallResult } from './llm-review'
+import { applyStructure, applyContent, mergePairKey, type StructureGuards } from './apply-review'
 
 export type { ClusteringRunSummary } from './types'
 export { CLUSTERING_CONFIG } from './types'
@@ -56,8 +56,10 @@ export interface ClusteringDeps {
   model: string
   now?: number
   onProgress?: ProgressCallback
-  /** Injectable LLM step for tests; defaults to the real review call. */
-  review?: (input: ReviewInput) => Promise<ReviewCallResult>
+  /** Injectable structure call for tests; defaults to the real call. */
+  structureReview?: (input: ReviewInput) => Promise<ReviewCallResult>
+  /** Injectable content call for tests; defaults to the real call. */
+  contentReview?: (input: ReviewInput) => Promise<ReviewCallResult>
 }
 
 export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRunSummary> {
@@ -79,13 +81,13 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
         `deleted ${pruned.deletedClusters} empty clusters`,
     )
   }
-  for (const clusterId of pruned.touchedClusterIds) recomputeCentroid(storage, clusterId, now)
+  for (const clusterId of pruned.touchedClusterIds) recomputeCentroid(storage, clusterId)
 
   // 2. Signatures for sightings never seen by the clusterer. On the first run
   //    after the migration this is the whole retained backlog — bootstrap is
   //    the same code path.
   const unprocessed = storage.clusters.getUnprocessedSightings()
-  const { unclustered } = await computeAndStoreSignatures(storage, unprocessed, deps.embedder, now)
+  const { unclustered } = await computeAndStoreSignatures(storage, unprocessed, deps.embedder)
   summary.newSignatures = unprocessed.length
   summary.unclustered = unclustered
 
@@ -96,6 +98,10 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
     ([sightingId, vector]) => ({ sightingId, vector }),
   )
   if (signatures.length === 0 && pruned.touchedClusterIds.length === 0) {
+    // Nothing new to group, but queued content still heals: without this a
+    // pass over an already-mined day leaves stepless clusters stuck until the
+    // next day actually mines.
+    if (provider) await contentRound(deps, provider, model, summary, progress)
     return summary
   }
   progress(
@@ -116,7 +122,7 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
   )
   const touched = new Set<string>(pruned.touchedClusterIds)
   for (const { sightingId, clusterId } of attached) {
-    storage.clusters.addMembership(clusterId, sightingId, now)
+    storage.clusters.addMembership(clusterId, sightingId)
     touched.add(clusterId)
   }
   summary.attached = attached.length
@@ -135,7 +141,7 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
   for (const group of groups) {
     const clusterId = uuidv4()
     createUnlabeledCluster(storage, clusterId, null, now)
-    for (const sightingId of group) storage.clusters.addMembership(clusterId, sightingId, now)
+    for (const sightingId of group) storage.clusters.addMembership(clusterId, sightingId)
     newClusterIds.add(clusterId)
     touched.add(clusterId)
   }
@@ -144,7 +150,7 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
   // 5. Refresh centroids of every touched cluster, then evict members that a
   //    merge or pruning has left far from their own centroid — the repair
   //    valve for "member for life" drift. Evictees become their own clusters.
-  for (const clusterId of touched) recomputeCentroid(storage, clusterId, now)
+  for (const clusterId of touched) recomputeCentroid(storage, clusterId)
   summary.evicted = evictDissonantMembers(storage, touched, newClusterIds, now)
   if (attached.length || newClusterIds.size || summary.evicted) {
     progress(
@@ -153,71 +159,140 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
     )
   }
 
-  // 6. LLM review: label new/grown clusters, adjudicate merges among
-  //    near-threshold centroid pairs, split clusters that are new or fell
-  //    below the coherence floor.
-  const input = await buildReviewInput(storage, touched, newClusterIds, now, deps.clusterVectors)
-  if (input.clusters.length === 0) return summary
+  // 6. Structure review: adjudicate merges among near-threshold centroid
+  //    pairs and splits of clusters that are new or fell below the coherence
+  //    floor. Applied before the content round so membership settles first.
   if (!provider) {
     progress('[Clustering] No inference provider — skipping LLM review')
     return summary
   }
-
-  try {
-    const review = deps.review
-      ? await deps.review(input)
-      : await runLlmReview(provider, model, input, progress)
-    summary.tokenUsage = review.tokenUsage
-    if (!review.output) {
-      summary.llmError = 'Could not parse review response'
-      return summary
-    }
-
-    const guards: ReviewGuards = {
-      reviewableIds: new Set(input.clusters.map((c) => c.id)),
-      splittableIds: new Set(input.clusters.filter((c) => c.splittable).map((c) => c.id)),
-      mergeCandidatePairs: new Set(input.mergeCandidates.map(([a, b]) => mergePairKey(a, b))),
-    }
-    // Re-split linkage precomputed here so it can ride the ml-worker —
-    // validateAndApply's transaction can't await. Nothing mutates membership
-    // between this and the apply, so the groups stay valid.
-    const resplitGroups = new Map<string, string[][]>()
-    if (deps.clusterVectors) {
-      for (const verdict of review.output.clusters ?? []) {
-        if (!verdict.incoherent || !guards.splittableIds.has(verdict.id)) continue
-        resplitGroups.set(
-          verdict.id,
-          await groupMemberSignatures(
-            storage,
-            verdict.id,
-            CLUSTERING_CONFIG.SIMILARITY_THRESHOLD,
-            deps.clusterVectors,
-          ),
-        )
+  const input = await buildStructureInput(storage, touched, newClusterIds, now, deps.clusterVectors)
+  if (input.clusters.length > 0) {
+    try {
+      const review = deps.structureReview
+        ? await deps.structureReview(input)
+        : await runStructureReview(provider, model, input, progress)
+      summary.tokenUsage.input += review.tokenUsage.input
+      summary.tokenUsage.output += review.tokenUsage.output
+      if (!review.output) {
+        summary.llmError = 'Could not parse structure response'
+      } else {
+        const guards: StructureGuards = {
+          reviewableIds: new Set(input.clusters.map((c) => c.id)),
+          splittableIds: new Set(input.clusters.filter((c) => c.splittable).map((c) => c.id)),
+          mergeCandidatePairs: new Set(input.mergeCandidates.map(([a, b]) => mergePairKey(a, b))),
+        }
+        // Re-split linkage precomputed here so it can ride the ml-worker —
+        // applyStructure's transaction can't await. Nothing mutates membership
+        // between this and the apply, so the groups stay valid.
+        const resplitGroups = new Map<string, string[][]>()
+        if (deps.clusterVectors) {
+          for (const verdict of review.output.clusters ?? []) {
+            if (!verdict.incoherent || !guards.splittableIds.has(verdict.id)) continue
+            resplitGroups.set(
+              verdict.id,
+              await groupMemberSignatures(
+                storage,
+                verdict.id,
+                CLUSTERING_CONFIG.SIMILARITY_THRESHOLD,
+                deps.clusterVectors,
+              ),
+            )
+          }
+        }
+        const applied = applyStructure(storage, review.output, guards, now, progress, resplitGroups)
+        summary.merged = applied.merged
+        summary.split = applied.split
+        progress(`[Clustering] Structure applied: ${applied.merged} merged, ${applied.split} split`)
       }
+    } catch (error) {
+      summary.llmError = formatApiError(error)
+      log.error('[TaskMiner] Clustering structure review failed:', summary.llmError)
     }
-    const applied = validateAndApply(
-      storage,
-      review.output,
-      guards,
-      model,
-      now,
-      progress,
-      resplitGroups,
-    )
-    summary.merged = applied.merged
-    summary.split = applied.split
-    summary.labeled = applied.labeled
-    progress(
-      `[Clustering] Review applied: ${applied.labeled} labeled, ` +
-        `${applied.merged} merged, ${applied.split} split`,
-    )
-  } catch (error) {
-    summary.llmError = formatApiError(error)
-    log.error('[TaskMiner] Clustering LLM review failed:', summary.llmError)
   }
 
+  // 7. Content round — runs regardless of the structure outcome, so a failed
+  //    structure call never leaves clusters unnamed or recipe-less.
+  await contentRound(deps, provider, model, summary, progress)
+
   return summary
+}
+
+/**
+ * Name, classify, and write recipes for every cluster whose content is
+ * missing or stale — new clusters, clusters a merge/split just cleared, and
+ * clusters that doubled since their last labeling. Batched so each call's
+ * output stays small, with per-batch failure isolation. Nothing here can
+ * restructure: no merge candidates, nothing splittable.
+ */
+async function contentRound(
+  deps: ClusteringDeps,
+  provider: InferenceProvider,
+  model: string,
+  summary: ClusteringRunSummary,
+  progress: ProgressCallback,
+): Promise<void> {
+  const { storage } = deps
+  const queue = collectContentClusters(storage)
+  if (queue.length === 0) return
+
+  let labeled = 0
+  for (let i = 0; i < queue.length; i += CLUSTERING_CONFIG.CONTENT_BATCH_SIZE) {
+    const batch = queue.slice(i, i + CLUSTERING_CONFIG.CONTENT_BATCH_SIZE)
+    const input: ReviewInput = {
+      clusters: batch.map((c) => toReviewCluster(storage, c, false)),
+      mergeCandidates: [],
+    }
+    try {
+      const round = deps.contentReview
+        ? await deps.contentReview(input)
+        : await runContentReview(provider, model, input, progress)
+      summary.tokenUsage.input += round.tokenUsage.input
+      summary.tokenUsage.output += round.tokenUsage.output
+      if (!round.output) {
+        summary.llmError ??= 'Could not parse content response'
+        continue
+      }
+      labeled += applyContent(
+        storage,
+        round.output,
+        new Set(batch.map((c) => c.id)),
+        progress,
+      ).labeled
+    } catch (error) {
+      summary.llmError ??= formatApiError(error)
+      log.error('[TaskMiner] Clustering content batch failed:', formatApiError(error))
+    }
+  }
+  summary.labeled += labeled
+  const filled = queue.filter((c) => (storage.clusters.getById(c.id)?.steps.length ?? 0) > 0).length
+  progress(
+    `[Clustering] Content round: ${labeled} labeled, ${filled}/${queue.length} recipes filled`,
+  )
+}
+
+/**
+ * Multi-member clusters needing content, biggest first (most user-visible),
+ * then oldest so the same clusters aren't starved. A doubled cluster is
+ * re-shown for semantic drift; an unlabeled or stepless one is simply
+ * incomplete. Capped per run so a backlog drains gradually.
+ */
+function collectContentClusters(storage: StorageService): Cluster[] {
+  const memberCount = new Map(
+    storage.clusters.getAll().map((c) => [c.id, storage.clusters.getMemberCount(c.id)]),
+  )
+  return storage.clusters
+    .getAll()
+    .filter((c) => {
+      const count = memberCount.get(c.id) ?? 0
+      if (count < 2) return false
+      return c.label === '' || c.steps.length === 0 || count >= 2 * Math.max(1, c.labeledSize)
+    })
+    .sort(
+      (a, b) =>
+        (memberCount.get(b.id) ?? 0) - (memberCount.get(a.id) ?? 0) || a.createdAt - b.createdAt,
+    )
+    .slice(0, CLUSTERING_CONFIG.MAX_REVIEW_CLUSTERS_PER_RUN)
 }
 
 /**
@@ -259,12 +334,12 @@ function evictDissonantMembers(
       if (evicted >= CLUSTERING_CONFIG.MAX_EVICTIONS_PER_RUN) break
       const newId = uuidv4()
       createUnlabeledCluster(storage, newId, signatures.get(sightingId) ?? null, now)
-      storage.clusters.addMembership(newId, sightingId, now)
+      storage.clusters.addMembership(newId, sightingId)
       storage.clusters.recordMergeDecline(cluster.id, newId, now)
       touched.add(newId)
       evicted++
     }
-    recomputeCentroid(storage, cluster.id, now)
+    recomputeCentroid(storage, cluster.id)
     touched.add(cluster.id)
   }
   return evicted
@@ -281,29 +356,23 @@ function createUnlabeledCluster(
     label: '',
     description: '',
     centroid,
-    kind: '',
     mechanism: '',
     steps: [],
     variables: [],
-    labelModel: '',
     labeledSize: 0,
     createdAt: now,
-    updatedAt: now,
   })
 }
 
 /**
- * What the LLM gets to see: clusters needing a (re)label or a kind verdict,
- * every cluster involved in a merge candidate, and the worst clusters below
- * the coherence floor, offered as splittable — the standing exit path from an
- * over-merged cluster (birth-run-only splitting let mega-clusters freeze).
- * New multi-member clusters that made it into the set are splittable too.
- * Singleton clusters are only shown when a merge involves them — they get no
- * label of their own (readers fall back to the member title). The
- * label/classify set is capped per run so a backlog drains gradually; merge
- * candidates and coherence picks ride along uncapped.
+ * What the structure call gets to see: every cluster involved in a merge
+ * candidate, and the worst clusters below the coherence floor, offered as
+ * splittable — the standing exit path from an over-merged cluster
+ * (birth-run-only splitting let mega-clusters freeze). New multi-member
+ * clusters are splittable too. Merge candidates are capped highest-cosine
+ * first so the call can't outgrow what the model can answer.
  */
-async function buildReviewInput(
+async function buildStructureInput(
   storage: StorageService,
   touched: Set<string>,
   newClusterIds: Set<string>,
@@ -313,20 +382,6 @@ async function buildReviewInput(
   const all = storage.clusters.getAll()
   const byId = new Map(all.map((c) => [c.id, c]))
   const memberCount = new Map(all.map((c) => [c.id, storage.clusters.getMemberCount(c.id)]))
-
-  const needsReview = (c: Cluster): boolean => {
-    const count = memberCount.get(c.id) ?? 0
-    if (count < 2) return false
-    // Relabel once a cluster doubles since its last labeling (semantic drift);
-    // kind === '' means the classify verdict is still missing, empty steps
-    // mean the recipe is — either way the review is incomplete, retry.
-    return (
-      c.label === '' ||
-      c.kind === '' ||
-      c.steps.length === 0 ||
-      count >= 2 * Math.max(1, c.labeledSize)
-    )
-  }
 
   const belowFloor: { id: string; coherence: number }[] = []
   for (const c of all) {
@@ -359,8 +414,7 @@ async function buildReviewInput(
   const declined = storage.clusters.getActiveMergeDeclines(
     now - CLUSTERING_CONFIG.MERGE_DECLINE_TTL_MS,
   )
-  const mergeCandidates: [string, string][] = []
-  const inMerge = new Set<string>()
+  const scored: { pair: [string, string]; cos: number }[] = []
   const seenPairs = new Set<string>()
   for (const id of touched) {
     const a = byId.get(id)
@@ -371,29 +425,22 @@ async function buildReviewInput(
       if (seenPairs.has(key)) continue
       seenPairs.add(key)
       if (declined.has(key)) continue
-      if (dot(a.centroid, b.centroid) >= CLUSTERING_CONFIG.MERGE_CANDIDATE_THRESHOLD) {
-        mergeCandidates.push([id, b.id])
-        inMerge.add(id)
-        inMerge.add(b.id)
+      const cos = dot(a.centroid, b.centroid)
+      if (cos >= CLUSTERING_CONFIG.MERGE_CANDIDATE_THRESHOLD) {
+        scored.push({ pair: [id, b.id], cos })
       }
     }
   }
+  const mergeCandidates = scored
+    .sort((a, b) => b.cos - a.cos)
+    .slice(0, CLUSTERING_CONFIG.MAX_MERGE_CANDIDATES_PER_RUN)
+    .map((s) => s.pair)
 
-  // Cap the label/classify backlog deterministically: biggest clusters first
-  // (most user-visible), then oldest, so the same clusters aren't starved.
-  const capped = all
-    .filter((c) => needsReview(c))
-    .sort(
-      (a, b) =>
-        (memberCount.get(b.id) ?? 0) - (memberCount.get(a.id) ?? 0) || a.createdAt - b.createdAt,
-    )
-    .slice(0, CLUSTERING_CONFIG.MAX_REVIEW_CLUSTERS_PER_RUN)
-
-  const reviewIds = new Set<string>([...capped.map((c) => c.id), ...inMerge, ...coherencePicks])
   const splittable = new Set<string>(coherencePicks)
-  for (const id of reviewIds) {
-    if (newClusterIds.has(id) && (memberCount.get(id) ?? 0) >= 2) splittable.add(id)
+  for (const id of newClusterIds) {
+    if ((memberCount.get(id) ?? 0) >= 2) splittable.add(id)
   }
+  const reviewIds = new Set<string>([...mergeCandidates.flat(), ...splittable])
 
   const clusters: ReviewCluster[] = [...reviewIds].map((id) =>
     toReviewCluster(storage, byId.get(id)!, splittable.has(id)),

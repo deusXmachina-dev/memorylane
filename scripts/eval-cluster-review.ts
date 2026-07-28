@@ -1,9 +1,9 @@
 #!/usr/bin/env npx tsx
 /**
- * Runs the REAL cluster-review LLM call (runLlmReview + the production
- * sanitizer) over canned ReviewInput fixtures and scores the classification
- * against expected verdicts. Headline: false-eliminable rate — clusters
- * promised as automatable procedures that a human judged otherwise.
+ * Runs the REAL cluster content-review LLM call (runContentReview + the
+ * production sanitizer) over canned ReviewInput fixtures and scores the
+ * classification against expected verdicts. Headline: false-eliminable rate —
+ * clusters promised as automatable procedures that a human judged otherwise.
  *
  * Fixtures: evals/task-mining/cluster-review/*.json (see ClusterReviewFixture
  * in src/main/eval/cluster-review-score.ts). Grow them from real clusters with
@@ -20,7 +20,7 @@ loadEnv()
 
 import * as fs from 'fs'
 import * as path from 'path'
-import { runLlmReview } from '../src/main/services/task-miner/clustering/llm-review'
+import { runContentReview } from '../src/main/services/task-miner/clustering/llm-review'
 import {
   scoreClusterReview,
   aggregateClusterReviewScores,
@@ -96,7 +96,7 @@ async function main() {
     for (const fixture of fixtures) {
       console.log(`\n--- ${fixture.name} × ${model} ---`)
       try {
-        const result = await runLlmReview(handle.provider, model, fixture.input, (msg) =>
+        const result = await runContentReview(handle.provider, model, fixture.input, (msg) =>
           console.log(`  ${msg}`),
         )
         if (!result.output) {

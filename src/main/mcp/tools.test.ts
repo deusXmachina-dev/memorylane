@@ -111,21 +111,18 @@ describe('pattern tools (task clusters)', () => {
     label: overrides.label ?? '',
     description: overrides.description ?? '',
     centroid: overrides.centroid ?? null,
-    kind: overrides.kind ?? '',
     mechanism: overrides.mechanism ?? '',
     steps: overrides.steps ?? [],
     variables: overrides.variables ?? [],
-    labelModel: overrides.labelModel ?? '',
     labeledSize: overrides.labeledSize ?? 0,
     createdAt: overrides.createdAt ?? now,
-    updatedAt: overrides.updatedAt ?? now,
   })
 
   const addClusterWithMembers = (cluster: Cluster, sightings: Sighting[]): void => {
     storage.clusters.create(cluster)
     for (const s of sightings) {
       storage.sightings.add(s)
-      storage.clusters.addMembership(cluster.id, s.id, now)
+      storage.clusters.addMembership(cluster.id, s.id)
     }
   }
 
@@ -218,14 +215,14 @@ describe('pattern tools (task clusters)', () => {
       expect(text).not.toContain('c-noise')
     })
 
-    it('renders kind and the Replace with recommendation', async () => {
+    it('renders the Replace with recommendation', async () => {
       addClusterWithMembers(
-        createCluster({ id: 'c1', kind: 'procedure', mechanism: 'A script that fills the form' }),
+        createCluster({ id: 'c1', mechanism: 'A script that fills the form' }),
         [createSighting({ id: 's1' }), createSighting({ id: 's2' })],
       )
 
       const text = (await handlers.get('list_patterns')!({})).content[0].text
-      expect(text).toContain('Kind: procedure | Replace with: A script that fills the form')
+      expect(text).toContain('Replace with: A script that fills the form')
     })
   })
 

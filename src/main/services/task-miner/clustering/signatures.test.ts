@@ -30,7 +30,6 @@ describe('computeAndStoreSignatures', () => {
       storage,
       sightings,
       embedder,
-      0,
     )
 
     // A text-less sighting embeds a blank string (zero vector → NULL

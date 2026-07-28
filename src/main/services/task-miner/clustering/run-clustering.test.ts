@@ -10,6 +10,7 @@ import { runClustering, type ClusteringDeps } from './index'
 import { averageLinkageGroupIndices } from './attach'
 import { normalize } from './vector-math'
 import type { ReviewInput } from './types'
+import type { ReviewCallResult } from './llm-review'
 
 const createSighting = (overrides: Partial<Sighting> & { id: string }): Sighting => ({
   id: overrides.id,
@@ -40,6 +41,15 @@ const fakeEmbed = async (text: string): Promise<number[]> => {
   return new Array<number>(384).fill(0)
 }
 const fakeEmbedder = { embedBatch: (texts: string[]) => Promise.all(texts.map(fakeEmbed)) }
+
+const noStructure = async (): Promise<ReviewCallResult> => ({
+  output: { clusters: [], merges: [] },
+  tokenUsage: { input: 0, output: 0 },
+})
+const noContent = async (): Promise<ReviewCallResult> => ({
+  output: { clusters: [] },
+  tokenUsage: { input: 0, output: 0 },
+})
 
 describe('runClustering', () => {
   const TEST_DB_PATH = path.join(os.tmpdir(), 'temp_run_clustering_test.db')
@@ -75,9 +85,11 @@ describe('runClustering', () => {
     expect(first.newClusters).toBe(2) // {s1,s2} and {s3}; s4 has no signature
     expect(first.llmError).toBeUndefined()
 
-    const stats = storage.clusters.getAllWithStats()
-    expect(stats.map((c) => c.timesSeen).sort()).toEqual([1, 2])
-    const pairClusterId = stats.find((c) => c.timesSeen === 2)!.id
+    const counts = storage.clusters.getAll().map((c) => storage.clusters.getMemberCount(c.id))
+    expect(counts.sort()).toEqual([1, 2])
+    const pairClusterId = storage.clusters
+      .getAll()
+      .find((c) => storage.clusters.getMemberCount(c.id) === 2)!.id
 
     // Second run: a near-duplicate sighting attaches to the SAME cluster id.
     storage.sightings.add(createSighting({ id: 's5', title: 'alpha once more' }))
@@ -87,8 +99,7 @@ describe('runClustering', () => {
     expect(second.attached).toBe(1)
     expect(second.newClusters).toBe(0)
 
-    const pairCluster = storage.clusters.getAllWithStats().find((c) => c.id === pairClusterId)!
-    expect(pairCluster.timesSeen).toBe(3)
+    expect(storage.clusters.getMemberCount(pairClusterId)).toBe(3)
 
     // Third run with nothing new is a no-op.
     const third = await cluster({ now: 30_000 })
@@ -107,12 +118,12 @@ describe('runClustering', () => {
     storage.sightings.pruneOlderThan(90)
     await cluster({ now: 20_000 })
 
-    const stats = storage.clusters.getAllWithStats()
-    expect(stats).toHaveLength(1)
-    expect(stats[0].timesSeen).toBe(1)
+    const remaining = storage.clusters.getAll()
+    expect(remaining).toHaveLength(1)
+    expect(storage.clusters.getMemberCount(remaining[0].id)).toBe(1)
   })
 
-  it('labels and classifies multi-member clusters through the injected review step', async () => {
+  it('labels and classifies multi-member clusters through the content round', async () => {
     storage.sightings.add(
       createSighting({
         id: 's1',
@@ -129,13 +140,18 @@ describe('runClustering', () => {
     )
     storage.sightings.add(createSighting({ id: 's3', title: 'beta chore' }))
 
-    let seenInput: ReviewInput | null = null
+    let structureInput: ReviewInput | null = null
+    let contentInput: ReviewInput | null = null
     const summary = await cluster({
-      // The injected review step makes the provider unused; it only gates the phase.
+      // The injected review steps make the provider unused; it only gates the phase.
       provider: {} as InferenceProvider,
       now: 10_000,
-      review: async (input) => {
-        seenInput = input
+      structureReview: async (input) => {
+        structureInput = input
+        return { output: { clusters: [], merges: [] }, tokenUsage: { input: 40, output: 10 } }
+      },
+      contentReview: async (input) => {
+        contentInput = input
         return {
           output: {
             clusters: input.clusters.map((c) => ({
@@ -144,18 +160,23 @@ describe('runClustering', () => {
               description: 'Typically opens TestApp and does the thing.',
               kind: 'procedure',
               mechanism: 'A nightly cron script that does the thing.',
+              steps: ['TestApp: do the thing'],
+              variables: [],
             })),
           },
-          tokenUsage: { input: 100, output: 50 },
+          tokenUsage: { input: 60, output: 40 },
         }
       },
     })
 
-    // Only the 2-member cluster needs a label; the singleton is not shown.
-    expect(seenInput!.clusters).toHaveLength(1)
-    expect(seenInput!.clusters[0].splittable).toBe(true)
-    expect(seenInput!.clusters[0].members).toHaveLength(2)
-    expect(seenInput!.clusters[0].stats).toEqual({
+    // The new 2-member cluster is offered to the structure call as splittable.
+    expect(structureInput!.clusters).toHaveLength(1)
+    expect(structureInput!.clusters[0].splittable).toBe(true)
+    // Only the 2-member cluster needs content; the singleton is not shown.
+    expect(contentInput!.clusters).toHaveLength(1)
+    expect(contentInput!.clusters[0].splittable).toBe(false)
+    expect(contentInput!.clusters[0].members).toHaveLength(2)
+    expect(contentInput!.clusters[0].stats).toEqual({
       times_seen: 2,
       span_days: 1,
       median_active_min: 5,
@@ -165,10 +186,9 @@ describe('runClustering', () => {
 
     const labeled = storage.clusters.getAll().find((c) => c.label !== '')!
     expect(labeled.label).toBe('Do the recurring thing')
-    expect(labeled.labelModel).toBe('test-model')
     expect(labeled.labeledSize).toBe(2)
-    expect(labeled.kind).toBe('procedure')
     expect(labeled.mechanism).toBe('A nightly cron script that does the thing.')
+    expect(labeled.steps).toEqual(['TestApp: do the thing'])
   })
 
   it('shows member steps to the review only on the most recent sample members', async () => {
@@ -190,10 +210,11 @@ describe('runClustering', () => {
     await cluster({
       provider: {} as InferenceProvider,
       now: 10_000,
-      review: async (input) => {
+      structureReview: async (input) => {
         seenInput = input
-        return { output: {}, tokenUsage: { input: 0, output: 0 } }
+        return { output: { clusters: [], merges: [] }, tokenUsage: { input: 0, output: 0 } }
       },
+      contentReview: noContent,
     })
 
     const members = seenInput!.clusters[0].members
@@ -204,46 +225,63 @@ describe('runClustering', () => {
     )
   })
 
-  it('re-reviews a labeled cluster whose kind verdict is still missing', async () => {
+  it('does not re-review a fully reviewed non-procedure cluster', async () => {
     storage.sightings.add(createSighting({ id: 's1', title: 'alpha task' }))
     storage.sightings.add(createSighting({ id: 's2', title: 'alpha task' }))
 
-    // First review labels but omits the kind (old-style response).
+    // A complete content verdict: label, non-procedure classification, recipe.
     await cluster({
       provider: {} as InferenceProvider,
       now: 10_000,
-      review: async (input) => ({
+      structureReview: noStructure,
+      contentReview: async (input) => ({
         output: {
-          clusters: input.clusters.map((c) => ({ id: c.id, label: 'Thing', description: '' })),
+          clusters: input.clusters.map((c) => ({
+            id: c.id,
+            label: 'Thing',
+            description: '',
+            kind: 'monitoring',
+            steps: ['TestApp: check it'],
+          })),
         },
         tokenUsage: { input: 0, output: 0 },
       }),
     })
-    expect(storage.clusters.getAll().find((c) => c.label === 'Thing')!.kind).toBe('')
+    const reviewed = storage.clusters.getAll().find((c) => c.label === 'Thing')!
+    expect(reviewed.mechanism).toBe('')
+    expect(reviewed.steps).toEqual(['TestApp: check it'])
 
-    // A later run re-shows it (kind === '') even though nothing else changed.
+    // Judged not-automatable is terminal — with nothing else to review, a
+    // later run makes no LLM call at all.
     storage.sightings.add(createSighting({ id: 's9', title: 'beta chore' }))
-    let seenInput: ReviewInput | null = null
+    let structureCalled = false
+    let contentCalled = false
     await cluster({
       provider: {} as InferenceProvider,
       now: 20_000,
-      review: async (input) => {
-        seenInput = input
-        return { output: {}, tokenUsage: { input: 0, output: 0 } }
+      structureReview: async () => {
+        structureCalled = true
+        return { output: { clusters: [], merges: [] }, tokenUsage: { input: 0, output: 0 } }
+      },
+      contentReview: async () => {
+        contentCalled = true
+        return { output: { clusters: [] }, tokenUsage: { input: 0, output: 0 } }
       },
     })
-    expect(seenInput!.clusters.map((c) => c.label)).toContain('Thing')
+    expect(structureCalled).toBe(false)
+    expect(contentCalled).toBe(false)
   })
 
-  it('re-reviews a labeled cluster whose recipe is still missing', async () => {
+  it('re-shows a labeled cluster whose recipe is still missing', async () => {
     storage.sightings.add(createSighting({ id: 's1', title: 'alpha task' }))
     storage.sightings.add(createSighting({ id: 's2', title: 'alpha task' }))
 
-    // First review labels and classifies but returns no steps.
+    // First content verdict labels and classifies but returns no steps.
     await cluster({
       provider: {} as InferenceProvider,
       now: 10_000,
-      review: async (input) => ({
+      structureReview: noStructure,
+      contentReview: async (input) => ({
         output: {
           clusters: input.clusters.map((c) => ({
             id: c.id,
@@ -256,7 +294,6 @@ describe('runClustering', () => {
       }),
     })
     const labeled = storage.clusters.getAll().find((c) => c.label === 'Thing')!
-    expect(labeled.kind).toBe('monitoring')
     expect(labeled.steps).toEqual([])
 
     // A later run re-shows it (steps empty) even though nothing else changed.
@@ -265,46 +302,247 @@ describe('runClustering', () => {
     await cluster({
       provider: {} as InferenceProvider,
       now: 20_000,
-      review: async (input) => {
+      contentReview: async (input) => {
         seenInput = input
-        return { output: {}, tokenUsage: { input: 0, output: 0 } }
+        return { output: { clusters: [] }, tokenUsage: { input: 0, output: 0 } }
       },
     })
     expect(seenInput!.clusters.map((c) => c.label)).toContain('Thing')
+    expect(seenInput!.mergeCandidates).toEqual([])
     // Review input is sighting-only: apps come off the sighting, no domains.
     const member = seenInput!.clusters[0].members[0]
     expect(member.apps).toEqual(['TestApp'])
     expect(member).not.toHaveProperty('domains')
   })
 
-  it('survives a throwing review step without losing deterministic progress', async () => {
+  it('runs the content round on a pass with nothing new to group', async () => {
+    storage.sightings.add(createSighting({ id: 's1', title: 'alpha task' }))
+    storage.sightings.add(createSighting({ id: 's2', title: 'alpha task' }))
+    storage.clusters.create({
+      id: 'c1',
+      label: 'Thing',
+      description: '',
+      centroid: normalize(v(1)),
+      mechanism: '',
+      steps: [],
+      variables: [],
+      labeledSize: 2,
+      createdAt: 100,
+    })
+    storage.clusters.upsertSignature('s1', v(1))
+    storage.clusters.upsertSignature('s2', v(1))
+    storage.clusters.addMembership('c1', 's1')
+    storage.clusters.addMembership('c1', 's2')
+
+    let structureCalled = false
+    await cluster({
+      provider: {} as InferenceProvider,
+      now: 10_000,
+      structureReview: async () => {
+        structureCalled = true
+        return { output: { clusters: [], merges: [] }, tokenUsage: { input: 0, output: 0 } }
+      },
+      contentReview: async (input) => ({
+        output: {
+          clusters: input.clusters.map((c) => ({
+            id: c.id,
+            label: c.label,
+            description: '',
+            steps: ['TestApp: do it'],
+            variables: [],
+          })),
+        },
+        tokenUsage: { input: 0, output: 0 },
+      }),
+    })
+
+    expect(structureCalled).toBe(false)
+    expect(storage.clusters.getById('c1')!.steps).toEqual(['TestApp: do it'])
+  })
+
+  it('content round still runs after a throwing structure call', async () => {
     storage.sightings.add(createSighting({ id: 's1', title: 'alpha task' }))
     storage.sightings.add(createSighting({ id: 's2', title: 'alpha task' }))
 
     const summary = await cluster({
       provider: {} as InferenceProvider,
       now: 10_000,
-      review: async () => {
+      structureReview: async () => {
         throw new Error('boom')
       },
+      contentReview: async (input) => ({
+        output: {
+          clusters: input.clusters.map((c) => ({
+            id: c.id,
+            label: 'Thing',
+            description: '',
+            kind: 'monitoring',
+            steps: ['TestApp: check it'],
+          })),
+        },
+        tokenUsage: { input: 0, output: 0 },
+      }),
     })
 
     expect(summary.llmError).toBe('boom')
     expect(summary.newClusters).toBe(1)
-    expect(storage.clusters.getAllWithStats()[0].timesSeen).toBe(2)
+    expect(summary.labeled).toBe(1)
+    const labeled = storage.clusters.getAll().find((c) => c.label === 'Thing')!
+    expect(labeled.steps).toEqual(['TestApp: check it'])
+  })
+
+  it('content round still runs after an unparseable structure response', async () => {
+    storage.sightings.add(createSighting({ id: 's1', title: 'alpha task' }))
+    storage.sightings.add(createSighting({ id: 's2', title: 'alpha task' }))
+
+    const summary = await cluster({
+      provider: {} as InferenceProvider,
+      now: 10_000,
+      structureReview: async () => ({ output: null, tokenUsage: { input: 5, output: 0 } }),
+      contentReview: async (input) => ({
+        output: {
+          clusters: input.clusters.map((c) => ({
+            id: c.id,
+            label: 'Thing',
+            description: '',
+            steps: ['TestApp: check it'],
+          })),
+        },
+        tokenUsage: { input: 5, output: 5 },
+      }),
+    })
+
+    expect(summary.llmError).toBe('Could not parse structure response')
+    expect(summary.labeled).toBe(1)
+    expect(summary.tokenUsage).toEqual({ input: 10, output: 5 })
+    expect(storage.clusters.getAll().find((c) => c.label === 'Thing')!.steps).toEqual([
+      'TestApp: check it',
+    ])
+  })
+
+  it('batches the content round and isolates a failing batch', async () => {
+    // 10 labeled stepless pair-clusters → two batches of 8 and 2. The first
+    // batch's call dies; the second must still label its clusters.
+    for (let i = 0; i < 10; i++) {
+      const a = `s${i}a`
+      const b = `s${i}b`
+      storage.sightings.add(createSighting({ id: a, title: 'alpha task' }))
+      storage.sightings.add(createSighting({ id: b, title: 'alpha task' }))
+      storage.clusters.create({
+        id: `c${i}`,
+        label: `Thing ${i}`,
+        description: '',
+        centroid: normalize(v(1)),
+        mechanism: '',
+        steps: [],
+        variables: [],
+        labeledSize: 2,
+        createdAt: 100 + i,
+      })
+      storage.clusters.upsertSignature(a, v(1))
+      storage.clusters.upsertSignature(b, v(1))
+      storage.clusters.addMembership(`c${i}`, a)
+      storage.clusters.addMembership(`c${i}`, b)
+    }
+
+    const batchInputs: ReviewInput[] = []
+    const summary = await cluster({
+      provider: {} as InferenceProvider,
+      now: 10_000,
+      contentReview: async (input) => {
+        batchInputs.push(input)
+        if (batchInputs.length === 1) throw new Error('batch down')
+        return {
+          output: {
+            clusters: input.clusters.map((c) => ({
+              id: c.id,
+              label: c.label,
+              description: '',
+              steps: ['TestApp: do it'],
+              variables: [],
+            })),
+          },
+          tokenUsage: { input: 1, output: 1 },
+        }
+      },
+    })
+
+    expect(batchInputs.map((i) => i.clusters.length)).toEqual([8, 2])
+    expect(summary.llmError).toBe('batch down')
+    expect(summary.labeled).toBe(2)
+    expect(storage.clusters.getById('c0')!.steps).toEqual([])
+    expect(storage.clusters.getById('c8')!.steps).toEqual(['TestApp: do it'])
+    expect(storage.clusters.getById('c9')!.steps).toEqual(['TestApp: do it'])
+  })
+
+  it('caps merge candidates at the highest-cosine pairs', async () => {
+    // One touched cluster vs 16 others inside the candidate band — only the
+    // 15 closest pairs may be proposed; the farthest is deferred.
+    storage.sightings.add(createSighting({ id: 'st', title: 'alpha task' }))
+    storage.clusters.create({
+      id: 'target',
+      label: '',
+      description: '',
+      centroid: normalize(v(1)),
+      mechanism: '',
+      steps: [],
+      variables: [],
+      labeledSize: 0,
+      createdAt: 100,
+    })
+    storage.clusters.upsertSignature('st', v(1))
+    storage.clusters.addMembership('target', 'st')
+    for (let i = 0; i < 16; i++) {
+      const x = 0.56 + i * 0.005
+      const centroid = normalize(v(x, Math.sqrt(1 - x * x)))!
+      const sid = `so${i}`
+      storage.sightings.add(createSighting({ id: sid, title: 'other task' }))
+      storage.clusters.create({
+        id: `c${i}`,
+        label: '',
+        description: '',
+        centroid,
+        mechanism: '',
+        steps: [],
+        variables: [],
+        labeledSize: 0,
+        createdAt: 200 + i,
+      })
+      storage.clusters.upsertSignature(sid, centroid)
+      storage.clusters.addMembership(`c${i}`, sid)
+    }
+
+    storage.sightings.add(createSighting({ id: 's-new', title: 'alpha fresh' }))
+
+    let seenInput: ReviewInput | null = null
+    await cluster({
+      provider: {} as InferenceProvider,
+      now: 10_000,
+      structureReview: async (input) => {
+        seenInput = input
+        return { output: { clusters: [], merges: [] }, tokenUsage: { input: 0, output: 0 } }
+      },
+      contentReview: noContent,
+    })
+
+    const pairs = seenInput!.mergeCandidates
+    expect(pairs).toHaveLength(15)
+    // Sorted highest-cosine first; the 0.56 pair (c0) fell off the cap.
+    expect(pairs[0]).toContain('c15')
+    expect(pairs.flat()).not.toContain('c0')
   })
 
   it('heals sightings signed by a crashed run that never grouped them', async () => {
     // Signature persisted, but no membership — the state left behind when a
     // run dies between signing and grouping.
     storage.sightings.add(createSighting({ id: 'stranded', title: 'alpha task' }))
-    storage.clusters.upsertSignature('stranded', v(1), 5000)
+    storage.clusters.upsertSignature('stranded', v(1))
 
     const summary = await cluster({ now: 10_000 })
 
     expect(summary.newSignatures).toBe(0)
     expect(summary.newClusters).toBe(1)
-    expect(storage.clusters.getAllWithStats()[0].timesSeen).toBe(1)
+    expect(storage.clusters.getMemberCount(storage.clusters.getAll()[0].id)).toBe(1)
   })
 
   it('evicts members stranded far from their own centroid', async () => {
@@ -322,19 +560,16 @@ describe('runClustering', () => {
       label: 'Driftwood',
       description: '',
       centroid: normalize(v(2, 1)),
-      kind: '',
       mechanism: '',
       steps: [],
       variables: [],
-      labelModel: '',
       labeledSize: 3,
       createdAt: 100,
-      updatedAt: 100,
     })
-    storage.clusters.upsertSignature('m1', v(1), 100)
-    storage.clusters.upsertSignature('m2', v(1), 100)
-    storage.clusters.upsertSignature('m3', v(0, 1), 100)
-    for (const id of ['m1', 'm2', 'm3']) storage.clusters.addMembership('drifted', id, 100)
+    storage.clusters.upsertSignature('m1', v(1))
+    storage.clusters.upsertSignature('m2', v(1))
+    storage.clusters.upsertSignature('m3', v(0, 1))
+    for (const id of ['m1', 'm2', 'm3']) storage.clusters.addMembership('drifted', id)
 
     // Any new sighting triggers a pass; gamma is orthogonal to everything.
     storage.sightings.add(createSighting({ id: 's-new', title: 'gamma fresh' }))
@@ -348,9 +583,9 @@ describe('runClustering', () => {
         .sort(),
     ).toEqual(['m1', 'm2'])
     const evicteeCluster = storage.clusters
-      .getAllWithStats()
+      .getAll()
       .find((c) => storage.clusters.getMembers(c.id).some((s) => s.id === 'm3'))!
-    expect(evicteeCluster.timesSeen).toBe(1)
+    expect(storage.clusters.getMemberCount(evicteeCluster.id)).toBe(1)
   })
 
   it('offers a low-coherence cluster as splittable with its full member list', async () => {
@@ -370,20 +605,17 @@ describe('runClustering', () => {
       label: 'Umbrella',
       description: '',
       centroid: normalize(v(1).map((x, i) => x + other[i]))!,
-      kind: 'procedure',
       mechanism: 'Something.',
       steps: [],
       variables: [],
-      labelModel: 'test-model',
       labeledSize: 4,
       createdAt: 100,
-      updatedAt: 100,
     })
-    storage.clusters.upsertSignature('s1', v(1), 100)
-    storage.clusters.upsertSignature('s2', v(1), 100)
-    storage.clusters.upsertSignature('s3', other, 100)
-    storage.clusters.upsertSignature('s4', other, 100)
-    for (const id of ['s1', 's2', 's3', 's4']) storage.clusters.addMembership('mixed', id, 100)
+    storage.clusters.upsertSignature('s1', v(1))
+    storage.clusters.upsertSignature('s2', v(1))
+    storage.clusters.upsertSignature('s3', other)
+    storage.clusters.upsertSignature('s4', other)
+    for (const id of ['s1', 's2', 's3', 's4']) storage.clusters.addMembership('mixed', id)
 
     storage.sightings.add(createSighting({ id: 's-new', title: 'gamma fresh' }))
 
@@ -391,20 +623,22 @@ describe('runClustering', () => {
     const summary = await cluster({
       provider: {} as InferenceProvider,
       now: 10_000,
-      review: async (input) => {
+      structureReview: async (input) => {
         seenInput = input
         return {
-          output: { clusters: [{ id: 'mixed', incoherent: true }] },
+          output: { clusters: [{ id: 'mixed', incoherent: true }], merges: [] },
           tokenUsage: { input: 0, output: 0 },
         }
       },
+      contentReview: noContent,
     })
 
     const shown = seenInput!.clusters.find((c) => c.id === 'mixed')!
     expect(shown.splittable).toBe(true)
     expect(shown.members).toHaveLength(4)
 
-    // The incoherent verdict re-groups by geometry: alphas keep the id.
+    // The incoherent verdict re-groups by geometry: alphas keep the id and
+    // the stale label until the content round renames them.
     expect(summary.split).toBe(1)
     expect(
       storage.clusters
@@ -412,10 +646,11 @@ describe('runClustering', () => {
         .map((s) => s.id)
         .sort(),
     ).toEqual(['s1', 's2'])
-    expect(storage.clusters.getById('mixed')!.label).toBe('')
+    expect(storage.clusters.getById('mixed')!.label).toBe('Umbrella')
     const offshoot = storage.clusters
       .getAll()
       .find((c) => c.id !== 'mixed' && storage.clusters.getMembers(c.id).length === 2)!
+    expect(offshoot.label).toBe('')
     expect(
       storage.clusters
         .getMembers(offshoot.id)
@@ -442,20 +677,17 @@ describe('runClustering', () => {
       label: 'Umbrella',
       description: '',
       centroid: normalize(v(1).map((x, i) => x + other[i]))!,
-      kind: '',
       mechanism: '',
       steps: [],
       variables: [],
-      labelModel: 'test-model',
       labeledSize: 4,
       createdAt: 100,
-      updatedAt: 100,
     })
-    storage.clusters.upsertSignature('s1', v(1), 100)
-    storage.clusters.upsertSignature('s2', v(1), 100)
-    storage.clusters.upsertSignature('s3', other, 100)
-    storage.clusters.upsertSignature('s4', other, 100)
-    for (const id of ['s1', 's2', 's3', 's4']) storage.clusters.addMembership('mixed', id, 100)
+    storage.clusters.upsertSignature('s1', v(1))
+    storage.clusters.upsertSignature('s2', v(1))
+    storage.clusters.upsertSignature('s3', other)
+    storage.clusters.upsertSignature('s4', other)
+    for (const id of ['s1', 's2', 's3', 's4']) storage.clusters.addMembership('mixed', id)
 
     storage.sightings.add(createSighting({ id: 's-new', title: 'gamma fresh' }))
 
@@ -467,10 +699,11 @@ describe('runClustering', () => {
         linkageCalls.push(vectors.length)
         return averageLinkageGroupIndices(vectors, threshold)
       },
-      review: async () => ({
-        output: { clusters: [{ id: 'mixed', incoherent: true }] },
+      structureReview: async () => ({
+        output: { clusters: [{ id: 'mixed', incoherent: true }], merges: [] },
         tokenUsage: { input: 0, output: 0 },
       }),
+      contentReview: noContent,
     })
 
     // First-cut grouping (1 leftover), the splittable probe (4 members), and

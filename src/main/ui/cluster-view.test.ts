@@ -1,6 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import * as os from 'os'
+import * as path from 'path'
+import { StorageService } from '@main/storage'
+import { applyMigrations } from '@main/storage/migrator'
+import { deleteDbFiles } from '@main/storage/test-utils'
 import {
   buildClusterInfo,
+  computeClustersView,
   computeRecurrence,
   isBelowNoiseFloor,
   mean,
@@ -170,8 +176,9 @@ describe('buildClusterInfo', () => {
     id: 'c1',
     label: 'Process invoices',
     description: 'Runs the batch.',
-    kind: 'procedure' as const,
     mechanism: 'A nightly sync.',
+    steps: [] as string[],
+    variables: [] as string[],
   }
 
   it('derives stats, apps, and recurrence from the members', () => {
@@ -205,12 +212,8 @@ describe('buildClusterInfo', () => {
     expect(info.timesSeen).toBe(2)
     expect(info.timesPerWeek).toBeCloseTo(1.4)
     expect(info.avgActiveMin).toBeCloseTo(3)
-    expect(info.totalActiveMin).toBeCloseTo(6)
-    expect(info.firstSeenAt).toBe(NOW - DAY_MS)
     expect(info.lastSeenAt).toBe(NOW)
-    expect(info.kind).toBe('procedure')
     expect(info.mechanism).toBe('A nightly sync.')
-    expect(info.recurrenceUnit).toBe('day')
     expect(info.recurrence.reduce((sum, b) => sum + b.count, 0)).toBe(2)
   })
 
@@ -239,7 +242,6 @@ describe('buildClusterInfo', () => {
       NOW,
     )
     expect(info.timesSeen).toBe(1)
-    expect(info.firstSeenAt).toBe(NOW - DAY_MS)
     expect(info.apps).toEqual(['Mail'])
   })
 
@@ -247,7 +249,6 @@ describe('buildClusterInfo', () => {
     const info = buildClusterInfo({ ...head, label: '' }, [], 10, NOW)
     expect(info.title).toBe('Untitled task')
     expect(info.timesSeen).toBe(0)
-    expect(info.firstSeenAt).toBeNull()
     expect(info.lastSeenAt).toBeNull()
     expect(info.recurrence).toEqual([])
   })
@@ -264,5 +265,78 @@ describe('buildClusterInfo', () => {
       NOW,
     )
     expect(info.steps).toEqual(['App: newest'])
+  })
+})
+
+describe('computeClustersView (real storage)', () => {
+  const TEST_DB_PATH = path.join(os.tmpdir(), 'temp_cluster_view_test.db')
+  let storage: StorageService
+
+  beforeEach(() => {
+    deleteDbFiles(TEST_DB_PATH)
+    storage = new StorageService(TEST_DB_PATH)
+    applyMigrations(storage.getDatabase())
+  })
+
+  afterEach(() => {
+    storage.close()
+    deleteDbFiles(TEST_DB_PATH)
+  })
+
+  const addSighting = (id: string, startedAt: number, steps: string[]) =>
+    storage.sightings.add({
+      id,
+      title: 'Run the batch',
+      subject: '',
+      description: 'd',
+      steps,
+      apps: ['App'],
+      activityIds: ['a1'],
+      startedAt,
+      endedAt: startedAt + 60_000,
+      interactionMin: 5,
+      runId: 'r1',
+      detectedAt: startedAt,
+    })
+
+  const addCluster = (id: string, label: string) =>
+    storage.clusters.create({
+      id,
+      label,
+      description: '',
+      centroid: null,
+      mechanism: '',
+      steps: [],
+      variables: [],
+      labeledSize: 0,
+      createdAt: 1000,
+    })
+
+  it('serves the stored recipe in the list view, with member fallback when absent', () => {
+    const now = Date.now()
+    addSighting('s1', now - DAY_MS, ['App: raw run one'])
+    addSighting('s2', now - 2 * DAY_MS, ['App: raw run two'])
+    addSighting('s3', now - DAY_MS, ['App: other raw'])
+    addSighting('s4', now - 2 * DAY_MS, [])
+
+    addCluster('with-recipe', 'Labeled process')
+    storage.clusters.addMembership('with-recipe', 's1')
+    storage.clusters.addMembership('with-recipe', 's2')
+    storage.clusters.updateRecipe('with-recipe', {
+      steps: ['App: generalized step'],
+      variables: ['customer name'],
+    })
+
+    addCluster('no-recipe', 'Other process')
+    storage.clusters.addMembership('no-recipe', 's3')
+    storage.clusters.addMembership('no-recipe', 's4')
+
+    const { clusters } = computeClustersView(storage, now)
+    const withRecipe = clusters.find((c) => c.id === 'with-recipe')!
+    const noRecipe = clusters.find((c) => c.id === 'no-recipe')!
+
+    expect(withRecipe.steps).toEqual(['App: generalized step'])
+    expect(withRecipe.variables).toEqual(['customer name'])
+    expect(noRecipe.steps).toEqual(['App: other raw'])
   })
 })

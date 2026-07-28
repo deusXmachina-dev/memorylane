@@ -194,13 +194,6 @@ export class MiningDayRepository {
     return counts
   }
 
-  getFailed(): MiningDay[] {
-    const rows = this.db
-      .prepare(`SELECT * FROM mining_days WHERE status = 'failed' ORDER BY day ASC`)
-      .all() as MiningDayRow[]
-    return rows.map(toMiningDay)
-  }
-
   getAll(): MiningDay[] {
     const rows = this.db
       .prepare('SELECT * FROM mining_days ORDER BY day ASC')
