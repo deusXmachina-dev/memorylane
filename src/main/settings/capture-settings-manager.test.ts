@@ -281,6 +281,17 @@ describe('CaptureSettingsManager', () => {
       )
     })
 
+    it('falls back to defaults when saving non-positive timeout values', () => {
+      const manager = new CaptureSettingsManager(configPath)
+      manager.save({ activityRequestTimeoutMs: 0, taskMiningRequestTimeoutMs: -5 })
+      expect(manager.get().activityRequestTimeoutMs).toBe(
+        ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS,
+      )
+      expect(manager.get().taskMiningRequestTimeoutMs).toBe(
+        PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS,
+      )
+    })
+
     it('reads legacy semanticRequestTimeoutMs values into activityRequestTimeoutMs', () => {
       fs.writeFileSync(configPath, JSON.stringify({ semanticRequestTimeoutMs: 240_000 }))
       const manager = new CaptureSettingsManager(configPath)

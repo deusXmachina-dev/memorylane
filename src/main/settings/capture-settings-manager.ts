@@ -410,6 +410,14 @@ export class CaptureSettingsManager {
       excludedUrlPatterns: normalizeWildcardPatterns(
         partial.excludedUrlPatterns ?? this.settings.excludedUrlPatterns,
       ),
+      activityRequestTimeoutMs: positiveMsOrDefault(
+        partial.activityRequestTimeoutMs ?? this.settings.activityRequestTimeoutMs,
+        this.defaults.activityRequestTimeoutMs,
+      ),
+      taskMiningRequestTimeoutMs: positiveMsOrDefault(
+        partial.taskMiningRequestTimeoutMs ?? this.settings.taskMiningRequestTimeoutMs,
+        this.defaults.taskMiningRequestTimeoutMs,
+      ),
     }
     // Mirror flat model picks into the per-vendor map for the active vendor,
     // unless the caller provided an explicit modelsByVendor (e.g. setActiveVendor
