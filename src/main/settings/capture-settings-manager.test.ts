@@ -9,6 +9,7 @@ import {
   VISUAL_DETECTOR_CONFIG,
   INTERACTION_MONITOR_CONFIG,
   ACTIVITY_CONFIG,
+  PATTERN_DETECTION_CONFIG,
 } from '../../shared/constants'
 import { DEFAULT_CAPTURE_HOTKEY_ACCELERATOR } from '@main/capture/hotkey-capture'
 
@@ -46,7 +47,8 @@ describe('CaptureSettingsManager', () => {
       expect(defaults.minActivityDurationMs).toBe(ACTIVITY_CONFIG.MIN_ACTIVITY_DURATION_MS)
       expect(defaults.maxActivityDurationMs).toBe(ACTIVITY_CONFIG.MAX_ACTIVITY_DURATION_MS)
       expect(defaults.maxScreenshotsForLlm).toBe(ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM)
-      expect(defaults.semanticRequestTimeoutMs).toBe(ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS)
+      expect(defaults.activityRequestTimeoutMs).toBe(ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS)
+      expect(defaults.taskMiningRequestTimeoutMs).toBe(PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS)
       expect(defaults.semanticPipelineMode).toBe('auto')
       expect(defaults.captureHotkeyAccelerator).toBe(DEFAULT_CAPTURE_HOTKEY_ACCELERATOR)
       expect(defaults.databaseExportDirectory).toBe('')
@@ -252,6 +254,48 @@ describe('CaptureSettingsManager', () => {
       const manager = new CaptureSettingsManager(configPath)
       const settings = manager.get()
       expect(settings.maxScreenshotsForLlm).toBe(ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM)
+    })
+
+    it('backfills taskMiningRequestTimeoutMs on legacy files and round-trips saved values', () => {
+      fs.writeFileSync(configPath, JSON.stringify({ typingDebounceMs: 3000 }))
+      const manager = new CaptureSettingsManager(configPath)
+      expect(manager.get().taskMiningRequestTimeoutMs).toBe(
+        PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS,
+      )
+      manager.save({ taskMiningRequestTimeoutMs: 45 * 60_000 })
+      const reloaded = new CaptureSettingsManager(configPath)
+      expect(reloaded.get().taskMiningRequestTimeoutMs).toBe(45 * 60_000)
+    })
+
+    it('falls back to defaults for non-positive timeout values', () => {
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({ activityRequestTimeoutMs: 0, taskMiningRequestTimeoutMs: -5 }),
+      )
+      const manager = new CaptureSettingsManager(configPath)
+      expect(manager.get().activityRequestTimeoutMs).toBe(
+        ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS,
+      )
+      expect(manager.get().taskMiningRequestTimeoutMs).toBe(
+        PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS,
+      )
+    })
+
+    it('falls back to defaults when saving non-positive timeout values', () => {
+      const manager = new CaptureSettingsManager(configPath)
+      manager.save({ activityRequestTimeoutMs: 0, taskMiningRequestTimeoutMs: -5 })
+      expect(manager.get().activityRequestTimeoutMs).toBe(
+        ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS,
+      )
+      expect(manager.get().taskMiningRequestTimeoutMs).toBe(
+        PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS,
+      )
+    })
+
+    it('reads legacy semanticRequestTimeoutMs values into activityRequestTimeoutMs', () => {
+      fs.writeFileSync(configPath, JSON.stringify({ semanticRequestTimeoutMs: 240_000 }))
+      const manager = new CaptureSettingsManager(configPath)
+      expect(manager.get().activityRequestTimeoutMs).toBe(240_000)
     })
 
     it('falls back to defaults when the file is corrupt JSON', () => {
@@ -553,6 +597,7 @@ describe('CaptureSettingsManager', () => {
       maxActivityDurationMs: ACTIVITY_CONFIG.MAX_ACTIVITY_DURATION_MS,
       maxScreenshotsForLlm: ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM,
       semanticRequestTimeoutMs: ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS,
+      taskMiningRequestTimeoutMs: PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS,
     }
 
     afterEach(() => {
@@ -564,6 +609,7 @@ describe('CaptureSettingsManager', () => {
       ACTIVITY_CONFIG.MAX_ACTIVITY_DURATION_MS = original.maxActivityDurationMs
       ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM = original.maxScreenshotsForLlm
       ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS = original.semanticRequestTimeoutMs
+      PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS = original.taskMiningRequestTimeoutMs
     })
 
     it('mutates the shared constants to match saved settings', () => {
@@ -577,13 +623,14 @@ describe('CaptureSettingsManager', () => {
       expect(ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM).toBe(4)
     })
 
-    it('applies semantic timeout to shared constants', () => {
+    it('applies both LLM timeouts to shared constants', () => {
       const p = makeTmpPath()
       const manager = new CaptureSettingsManager(p)
-      manager.save({ semanticRequestTimeoutMs: 180_000 })
+      manager.save({ activityRequestTimeoutMs: 180_000, taskMiningRequestTimeoutMs: 45 * 60_000 })
       manager.applyToConstants()
 
       expect(ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS).toBe(180_000)
+      expect(PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS).toBe(45 * 60_000)
     })
 
     it('after reset, applyToConstants restores constants to defaults', () => {

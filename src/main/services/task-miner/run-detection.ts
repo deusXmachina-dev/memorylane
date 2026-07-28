@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 import { generateText, stepCountIs } from 'ai'
-import { SIGHTING_RETENTION_DAYS, TASK_MINING_REQUEST_TIMEOUT_MS } from '../../../shared/constants'
+import { PATTERN_DETECTION_CONFIG, SIGHTING_RETENTION_DAYS } from '../../../shared/constants'
 import type { StorageService } from '../../storage'
 import type { Sighting } from '../../storage/sighting-repository'
 import type { ActivityEmbeddingService } from '@main/activity/activity-transformer-types'
@@ -174,7 +174,7 @@ export async function runDetection(
         (attempt > 1 ? ` (attempt ${attempt}/${SCAN_MAX_ATTEMPTS})` : ''),
     )
     const scanResult = await generateText({
-      model: provider.languageModel(cfg.model, TASK_MINING_REQUEST_TIMEOUT_MS),
+      model: provider.languageModel(cfg.model, PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS),
       system: scanPrompt,
       prompt: scanUserMessage,
       maxRetries: 0,
@@ -288,7 +288,7 @@ export async function runDetection(
         )}\n\`\`\``
 
         const verifyResult = await generateText({
-          model: provider.languageModel(cfg.model, TASK_MINING_REQUEST_TIMEOUT_MS),
+          model: provider.languageModel(cfg.model, PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS),
           system: groundPrompt,
           prompt: candidateInput,
           tools,

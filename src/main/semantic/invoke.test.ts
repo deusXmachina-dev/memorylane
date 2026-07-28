@@ -1,7 +1,10 @@
-import { describe, it, expect } from 'vitest'
-import { invokeRawVideoCompletion } from './invoke'
-import type { VendorRouteSnapshot } from '../llm'
+import { describe, it, expect, vi } from 'vitest'
+import { generateText } from 'ai'
+import { invokeRawVideoCompletion, invokeViaGenerateText } from './invoke'
+import type { InferenceProvider, VendorRouteSnapshot } from '../llm'
 import type { ChatContentItem } from './types'
+
+vi.mock('ai', () => ({ generateText: vi.fn() }))
 
 function makeRoute(overrides: Partial<VendorRouteSnapshot> = {}): VendorRouteSnapshot {
   return {
@@ -23,6 +26,35 @@ function jsonResponse(body: unknown, init: ResponseInit = { status: 200 }): Resp
     headers: { 'content-type': 'application/json', ...(init.headers ?? {}) },
   })
 }
+
+describe('invokeViaGenerateText', () => {
+  it('passes requestTimeoutMs through to languageModel', async () => {
+    vi.mocked(generateText).mockResolvedValue({
+      text: 'ok',
+      usage: { inputTokens: 1, outputTokens: 1 },
+      finishReason: 'stop',
+    } as never)
+    const languageModel = vi.fn<InferenceProvider['languageModel']>().mockReturnValue('model')
+    const provider: InferenceProvider = {
+      isConfigured: () => true,
+      getActiveVendor: () => 'openrouter',
+      languageModel,
+      getRouteSnapshot: () => null,
+      notifyConfigChanged: () => {},
+      onConfigChanged: () => () => {},
+    }
+
+    await invokeViaGenerateText({
+      provider,
+      model: 'm',
+      content: [{ type: 'text', text: 'hi' }],
+      signal: new AbortController().signal,
+      requestTimeoutMs: 120_000,
+    })
+
+    expect(languageModel).toHaveBeenCalledWith('m', 120_000)
+  })
+})
 
 describe('invokeRawVideoCompletion', () => {
   it('parses a successful chat-completion response', async () => {

@@ -233,7 +233,8 @@ export interface CaptureSettings {
   minActivityDurationMs: number
   maxActivityDurationMs: number
   maxScreenshotsForLlm: number
-  semanticRequestTimeoutMs: number
+  activityRequestTimeoutMs: number
+  taskMiningRequestTimeoutMs: number
   semanticPipelineMode: SemanticPipelineMode
   captureHotkeyAccelerator: string
   databaseExportDirectory: string

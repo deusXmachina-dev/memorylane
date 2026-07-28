@@ -23,6 +23,7 @@ import {
   VISUAL_DETECTOR_CONFIG,
   INTERACTION_MONITOR_CONFIG,
   ACTIVITY_CONFIG,
+  PATTERN_DETECTION_CONFIG,
 } from '../../shared/constants'
 import {
   DEFAULT_CAPTURE_HOTKEY_ACCELERATOR,
@@ -146,7 +147,8 @@ const DEFAULTS: CaptureSettings = {
   minActivityDurationMs: ACTIVITY_CONFIG.MIN_ACTIVITY_DURATION_MS,
   maxActivityDurationMs: ACTIVITY_CONFIG.MAX_ACTIVITY_DURATION_MS,
   maxScreenshotsForLlm: ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM,
-  semanticRequestTimeoutMs: ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS,
+  activityRequestTimeoutMs: ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS,
+  taskMiningRequestTimeoutMs: PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS,
   semanticPipelineMode: 'auto',
   captureHotkeyAccelerator: DEFAULT_CAPTURE_HOTKEY_ACCELERATOR,
   databaseExportDirectory: '',
@@ -223,6 +225,10 @@ function overrideWithVendorDefaults(
   }
 }
 
+function positiveMsOrDefault(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback
+}
+
 function normalizeModelsByVendor(value: unknown): Partial<Record<Vendor, VendorModelSelection>> {
   const out: Partial<Record<Vendor, VendorModelSelection>> = {}
   if (!value || typeof value !== 'object') return out
@@ -272,6 +278,7 @@ export class CaptureSettingsManager {
       if (fs.existsSync(this.configPath)) {
         type StoredCaptureSettings = Partial<CaptureSettings> & {
           pauseHotkeyAccelerator?: string
+          semanticRequestTimeoutMs?: number
           remoteModelConfigVersion?: number
         }
         const data = JSON.parse(fs.readFileSync(this.configPath, 'utf-8')) as StoredCaptureSettings
@@ -360,6 +367,15 @@ export class CaptureSettingsManager {
           captureHotkeyAccelerator: normalizeCaptureHotkeyAccelerator(
             data.captureHotkeyAccelerator ?? data.pauseHotkeyAccelerator,
           ),
+          // Backward compatibility for settings persisted before the activity-timeout rename.
+          activityRequestTimeoutMs: positiveMsOrDefault(
+            data.activityRequestTimeoutMs ?? data.semanticRequestTimeoutMs,
+            this.defaults.activityRequestTimeoutMs,
+          ),
+          taskMiningRequestTimeoutMs: positiveMsOrDefault(
+            data.taskMiningRequestTimeoutMs,
+            this.defaults.taskMiningRequestTimeoutMs,
+          ),
           databaseExportDirectory: normalizeDatabaseExportDirectory(data.databaseExportDirectory),
           modelDefaultsVersion: MODEL_DEFAULTS_VERSION,
           activeVendor,
@@ -393,6 +409,14 @@ export class CaptureSettingsManager {
       excludedApps: normalizeExcludedApps(partial.excludedApps ?? this.settings.excludedApps),
       excludedUrlPatterns: normalizeWildcardPatterns(
         partial.excludedUrlPatterns ?? this.settings.excludedUrlPatterns,
+      ),
+      activityRequestTimeoutMs: positiveMsOrDefault(
+        partial.activityRequestTimeoutMs ?? this.settings.activityRequestTimeoutMs,
+        this.defaults.activityRequestTimeoutMs,
+      ),
+      taskMiningRequestTimeoutMs: positiveMsOrDefault(
+        partial.taskMiningRequestTimeoutMs ?? this.settings.taskMiningRequestTimeoutMs,
+        this.defaults.taskMiningRequestTimeoutMs,
       ),
     }
     // Mirror flat model picks into the per-vendor map for the active vendor,
@@ -550,6 +574,7 @@ export class CaptureSettingsManager {
     ACTIVITY_CONFIG.MIN_ACTIVITY_DURATION_MS = cs.minActivityDurationMs
     ACTIVITY_CONFIG.MAX_ACTIVITY_DURATION_MS = cs.maxActivityDurationMs
     ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM = cs.maxScreenshotsForLlm
-    ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS = cs.semanticRequestTimeoutMs
+    ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS = cs.activityRequestTimeoutMs
+    PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS = cs.taskMiningRequestTimeoutMs
   }
 }
