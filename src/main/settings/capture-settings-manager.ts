@@ -225,6 +225,10 @@ function overrideWithVendorDefaults(
   }
 }
 
+function positiveMsOrDefault(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback
+}
+
 function normalizeModelsByVendor(value: unknown): Partial<Record<Vendor, VendorModelSelection>> {
   const out: Partial<Record<Vendor, VendorModelSelection>> = {}
   if (!value || typeof value !== 'object') return out
@@ -364,10 +368,14 @@ export class CaptureSettingsManager {
             data.captureHotkeyAccelerator ?? data.pauseHotkeyAccelerator,
           ),
           // Backward compatibility for settings persisted before the activity-timeout rename.
-          activityRequestTimeoutMs:
-            data.activityRequestTimeoutMs ??
-            data.semanticRequestTimeoutMs ??
+          activityRequestTimeoutMs: positiveMsOrDefault(
+            data.activityRequestTimeoutMs ?? data.semanticRequestTimeoutMs,
             this.defaults.activityRequestTimeoutMs,
+          ),
+          taskMiningRequestTimeoutMs: positiveMsOrDefault(
+            data.taskMiningRequestTimeoutMs,
+            this.defaults.taskMiningRequestTimeoutMs,
+          ),
           databaseExportDirectory: normalizeDatabaseExportDirectory(data.databaseExportDirectory),
           modelDefaultsVersion: MODEL_DEFAULTS_VERSION,
           activeVendor,

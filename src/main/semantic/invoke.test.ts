@@ -35,7 +35,14 @@ describe('invokeViaGenerateText', () => {
       finishReason: 'stop',
     } as never)
     const languageModel = vi.fn<InferenceProvider['languageModel']>().mockReturnValue('model')
-    const provider = { languageModel } as unknown as InferenceProvider
+    const provider: InferenceProvider = {
+      isConfigured: () => true,
+      getActiveVendor: () => 'openrouter',
+      languageModel,
+      getRouteSnapshot: () => null,
+      notifyConfigChanged: () => {},
+      onConfigChanged: () => () => {},
+    }
 
     await invokeViaGenerateText({
       provider,
