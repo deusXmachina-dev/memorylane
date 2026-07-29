@@ -276,7 +276,7 @@ async function main() {
         console.log(`\n  ${s.title}${s.subject ? ` — ${s.subject}` : ''}`)
         console.log(`    Apps: ${s.apps.join(', ')}`)
         console.log(
-          `    ${s.interactionMin} min interaction / ${spanMin} min span | ${s.activityIds.length} activities`,
+          `    ${s.activeMin} min interaction / ${spanMin} min span | ${s.activityIds.length} activities`,
         )
         console.log(
           `    ${new Date(s.startedAt).toISOString()} → ${new Date(s.endedAt).toISOString()}`,

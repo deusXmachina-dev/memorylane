@@ -24,7 +24,7 @@ const createSighting = (overrides: Partial<Sighting> & { id: string }): Sighting
   activityIds: overrides.activityIds ?? [],
   startedAt: overrides.startedAt ?? 1000,
   endedAt: overrides.endedAt ?? 2000,
-  interactionMin: overrides.interactionMin ?? 5,
+  activeMin: overrides.activeMin ?? 5,
   runId: overrides.runId ?? 'run-1',
   detectedAt: overrides.detectedAt ?? 2000,
 })

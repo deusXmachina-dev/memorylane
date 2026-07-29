@@ -18,7 +18,7 @@ const createSighting = (id: string): Sighting => ({
   activityIds: ['act-1'],
   startedAt: 1000,
   endedAt: 2000,
-  interactionMin: 5,
+  activeMin: 5,
   runId: 'run-1',
   detectedAt: 2000,
 })

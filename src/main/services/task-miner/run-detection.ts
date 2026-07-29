@@ -354,7 +354,7 @@ export async function runDetection(
         progress(`[Phase 2] Rejected "${title}": fewer than ${MIN_RUN_ACTIVITIES} activities`)
         continue
       }
-      const { startedAt, endedAt, interactionMin } = computeEpisodeWindow(resolved)
+      const { startedAt, endedAt, activeMin } = computeEpisodeWindow(resolved)
       pendingSightings.push({
         id: uuidv4(),
         title,
@@ -365,7 +365,7 @@ export async function runDetection(
         activityIds: resolved.map((a) => a.id),
         startedAt,
         endedAt,
-        interactionMin,
+        activeMin,
         runId,
         detectedAt: now,
       } satisfies Sighting)

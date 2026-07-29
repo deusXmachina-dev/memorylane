@@ -1,3 +1,4 @@
+import { SIGHTING_BRIDGE_MAX_GAP_MS } from '../../../shared/constants'
 import type { ActivityDetail } from '../../storage'
 
 interface TimeBounded {
@@ -6,22 +7,23 @@ interface TimeBounded {
 }
 
 /**
- * Compute a sighting's time window and on-task interaction time directly from
- * its constituent activities — never from an LLM estimate.
+ * Compute a sighting's time window and active time directly from its
+ * constituent activities — never from an LLM estimate.
  *
  * - `startedAt` / `endedAt`: min start / max end across the activities.
- * - `interactionMin`: union of the activities' [start, end] intervals (actual
- *   interaction time, excludes idle gaps between activities). Overlapping or
- *   nested activities are not double-counted, so active time never exceeds the
- *   wall-clock span. Span is just `endedAt - startedAt`, derived on read.
+ * - `activeMin`: union of the activities' [start, end] intervals, bridging gaps
+ *   up to `SIGHTING_BRIDGE_MAX_GAP_MS` so pauses inside one run count while
+ *   longer breaks do not. Overlapping or nested activities are not
+ *   double-counted, so active time never exceeds the wall-clock span, which is
+ *   just `endedAt - startedAt`, derived on read.
  */
 export function computeEpisodeWindow(activities: TimeBounded[]): {
   startedAt: number
   endedAt: number
-  interactionMin: number
+  activeMin: number
 } {
   if (activities.length === 0) {
-    return { startedAt: 0, endedAt: 0, interactionMin: 0 }
+    return { startedAt: 0, endedAt: 0, activeMin: 0 }
   }
   const intervals = activities
     .map((a) => ({ start: a.startTimestamp, end: Math.max(a.startTimestamp, a.endTimestamp) }))
@@ -33,7 +35,7 @@ export function computeEpisodeWindow(activities: TimeBounded[]): {
   let curStart = intervals[0].start
   for (let i = 1; i < intervals.length; i++) {
     const { start, end } = intervals[i]
-    if (start <= curEnd) {
+    if (start <= curEnd + SIGHTING_BRIDGE_MAX_GAP_MS) {
       curEnd = Math.max(curEnd, end)
     } else {
       unionMs += curEnd - curStart
@@ -46,7 +48,7 @@ export function computeEpisodeWindow(activities: TimeBounded[]): {
   return {
     startedAt,
     endedAt,
-    interactionMin: Math.round((unionMs / 60000) * 10) / 10,
+    activeMin: Math.round((unionMs / 60000) * 10) / 10,
   }
 }
 

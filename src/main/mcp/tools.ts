@@ -615,7 +615,7 @@ function formatClusterLine(c: ClusterInfo): string {
   if (c.observedDays > 0) {
     stats.push(`~${c.timesPerWeek.toFixed(1)}/wk over ${c.observedDays} observed days`)
   }
-  stats.push(`avg ${Math.round(c.avgActiveMin)} min active/run`)
+  stats.push(`avg ${Math.round(c.avgActiveMin)} min/run`)
   if (c.lastSeenAt) stats.push(`last seen ${new Date(c.lastSeenAt).toLocaleString()}`)
   const lines = [`- ${c.id} | ${c.title} [${c.apps.join(', ')}] (${stats.join(', ')})`]
   if (c.description) lines.push(`  ${c.description}`)
@@ -626,11 +626,9 @@ function formatClusterLine(c: ClusterInfo): string {
 function formatClusterSightingLine(s: Sighting): string {
   const start = new Date(s.startedAt).toLocaleString()
   const end = new Date(s.endedAt).toLocaleString()
-  const activeMin = Math.round(Math.max(0, s.interactionMin))
+  const activeMin = Math.round(Math.max(0, s.activeMin))
   const title = s.subject ? `${s.title} — ${s.subject}` : s.title
-  const lines = [
-    `- ${s.id} | ${start} -> ${end} | ~${activeMin} min active | [${s.apps.join(', ')}]`,
-  ]
+  const lines = [`- ${s.id} | ${start} -> ${end} | ~${activeMin} min | [${s.apps.join(', ')}]`]
   lines.push(`  ${title}`)
   if (s.description) lines.push(`  ${s.description}`)
   lines.push(`  Activity IDs: ${s.activityIds.join(', ')}`)

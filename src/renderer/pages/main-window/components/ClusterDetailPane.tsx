@@ -144,7 +144,7 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
           <div className="border-y py-4">
             <div className="grid grid-cols-3 gap-3">
               <Stat value={`${cluster.timesSeen}×`} label="Times done" />
-              <Stat value={formatMinutes(cluster.avgActiveMin)} label="Avg. net time" />
+              <Stat value={formatMinutes(cluster.avgActiveMin)} label="Avg. time per run" />
               <Stat
                 value={formatMonthlyHours(cluster.avgActiveMin, cluster.timesPerWeek) || '—'}
                 label="Est. per month"

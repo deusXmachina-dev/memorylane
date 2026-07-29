@@ -34,7 +34,7 @@ function detected(id: string, title: string, activityIds: string[]): DetectedSig
     steps: [],
     apps: [],
     activityIds,
-    interactionMin: 5,
+    activeMin: 5,
   }
 }
 

@@ -120,7 +120,7 @@ function collectDetected(storage: StorageService, runId: string): DetectedSighti
     steps: s.steps,
     apps: s.apps,
     activityIds: s.activityIds,
-    interactionMin: s.interactionMin,
+    activeMin: s.activeMin,
   }))
 }
 

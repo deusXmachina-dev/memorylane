@@ -8,8 +8,9 @@ import { parseJsonStringArray } from './utils'
 /**
  * A single task instance mined from activities. Carved in stone: append-only.
  * `activityIds` is explicit membership (the verifiable recall handle);
- * `interactionMin` is the summed on-task time of those activities (wall-clock
- * span is `endedAt - startedAt`, derived on read).
+ * `activeMin` is the gap-bridged union of those activities' intervals, stored
+ * in the `interaction_min` column (wall-clock span is `endedAt - startedAt`,
+ * derived on read).
  */
 export interface Sighting {
   id: string
@@ -26,7 +27,7 @@ export interface Sighting {
   activityIds: string[]
   startedAt: number
   endedAt: number
-  interactionMin: number
+  activeMin: number
   runId: string
   detectedAt: number
 }
@@ -42,7 +43,7 @@ export function rowToSighting(row: Record<string, unknown>): Sighting {
     activityIds: JSON.parse((row.activity_ids as string) || '[]') as string[],
     startedAt: row.started_at as number,
     endedAt: row.ended_at as number,
-    interactionMin: row.interaction_min as number,
+    activeMin: row.interaction_min as number,
     runId: row.run_id as string,
     detectedAt: row.detected_at as number,
   }
@@ -69,7 +70,7 @@ export class SightingRepository {
         JSON.stringify(sighting.activityIds),
         sighting.startedAt,
         sighting.endedAt,
-        sighting.interactionMin,
+        sighting.activeMin,
         sighting.runId,
         sighting.detectedAt,
       )

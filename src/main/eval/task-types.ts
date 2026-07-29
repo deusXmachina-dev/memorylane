@@ -96,7 +96,7 @@ export interface DetectedSighting {
   steps: string[]
   apps: string[]
   activityIds: string[]
-  interactionMin: number
+  activeMin: number
 }
 
 export interface TaskRunResult {
