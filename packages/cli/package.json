@@ -1,6 +1,6 @@
 {
   "name": "@deusxmachina-dev/memorylane-cli",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "CLI for querying the MemoryLane database",
   "bin": {
     "memorylane": "dist/index.js",
