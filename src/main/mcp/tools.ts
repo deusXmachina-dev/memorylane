@@ -628,7 +628,9 @@ function formatClusterSightingLine(s: Sighting): string {
   const end = new Date(s.endedAt).toLocaleString()
   const activeMin = Math.round(Math.max(0, s.activeMin))
   const title = s.subject ? `${s.title} — ${s.subject}` : s.title
-  const lines = [`- ${s.id} | ${start} -> ${end} | ~${activeMin} min | [${s.apps.join(', ')}]`]
+  const lines = [
+    `- ${s.id} | ${start} -> ${end} | ~${activeMin} min active | [${s.apps.join(', ')}]`,
+  ]
   lines.push(`  ${title}`)
   if (s.description) lines.push(`  ${s.description}`)
   lines.push(`  Activity IDs: ${s.activityIds.join(', ')}`)

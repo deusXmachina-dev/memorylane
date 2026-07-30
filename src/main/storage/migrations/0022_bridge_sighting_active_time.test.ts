@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
+import { SIGHTING_BRIDGE_MAX_GAP_MS } from '../../../shared/constants'
 import { migration } from './0022_bridge_sighting_active_time'
 
 const MIN = 60_000
@@ -126,6 +127,24 @@ describe('0022_bridge_sighting_active_time', () => {
     migration.up(db)
 
     expect(activeMin(db, 'partial')).toBe(7.5)
+  })
+
+  it('inlines the threshold the miner currently writes with — a new value needs a new migration', () => {
+    expect(SIGHTING_BRIDGE_MAX_GAP_MS).toBe(300_000)
+  })
+
+  it('skips a sighting whose activity_ids is not valid JSON instead of failing the migration', () => {
+    addActivity(db, 'v1', 0, 2)
+    addActivity(db, 'v2', 4, 6)
+    addSighting(db, 'valid', ['v1', 'v2'], 4)
+    db.prepare(
+      `INSERT INTO sightings (id, activity_ids, started_at, ended_at, interaction_min) VALUES ('broken', 'not json', 0, 0, 3)`,
+    ).run()
+
+    expect(() => migration.up(db)).not.toThrow()
+
+    expect(activeMin(db, 'valid')).toBe(6)
+    expect(activeMin(db, 'broken')).toBe(3)
   })
 
   it('is idempotent', () => {

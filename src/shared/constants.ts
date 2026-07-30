@@ -145,7 +145,7 @@ export const SIGHTING_RETENTION_DAYS = 90
 // sync are untouched, so a hidden singleton still attaches tomorrow's sighting.
 export const CLUSTER_VIEW_CONFIG = {
   MIN_TIMES_SEEN: 2,
-  SINGLETON_MIN_TOTAL_ACTIVE_MIN: 20,
+  SINGLETON_MIN_TOTAL_ACTIVE_MIN: 30,
   /** Window for cluster stats (frequency denominator). */
   STATS_WINDOW_DAYS: SIGHTING_RETENTION_DAYS,
 }

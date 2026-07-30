@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import * as os from 'os'
 import * as path from 'path'
+import { CLUSTER_VIEW_CONFIG } from '@constants'
 import { StorageService } from '@main/storage'
 import { applyMigrations } from '@main/storage/migrator'
 import { deleteDbFiles } from '@main/storage/test-utils'
@@ -163,7 +164,11 @@ describe('isBelowNoiseFloor', () => {
   })
 
   it('keeps a singleton once its total time clears the floor', () => {
-    expect(isBelowNoiseFloor(1, 20)).toBe(false)
+    expect(isBelowNoiseFloor(1, CLUSTER_VIEW_CONFIG.SINGLETON_MIN_TOTAL_ACTIVE_MIN)).toBe(false)
+  })
+
+  it('hides a singleton one minute short of the floor', () => {
+    expect(isBelowNoiseFloor(1, CLUSTER_VIEW_CONFIG.SINGLETON_MIN_TOTAL_ACTIVE_MIN - 1)).toBe(true)
   })
 
   it('keeps anything seen twice, however small', () => {

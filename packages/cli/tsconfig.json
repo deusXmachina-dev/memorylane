@@ -7,6 +7,7 @@
     "paths": {
       "@main/*": ["../../src/main/*"],
       "@/*": ["../../src/*"],
+      "@constants": ["../../src/shared/constants"],
       "@types": ["../../src/shared/types"]
     }
   },

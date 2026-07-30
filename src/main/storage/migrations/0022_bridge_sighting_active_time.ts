@@ -12,7 +12,8 @@ export const migration: Migration = {
     db.exec(`
       WITH cited AS (
         SELECT s.id AS sid, j.value AS aid
-        FROM sightings s, json_each(s.activity_ids) j
+        FROM sightings s,
+             json_each(CASE WHEN json_valid(s.activity_ids) THEN s.activity_ids ELSE '[]' END) j
       ),
       cited_counts AS (
         SELECT sid, COUNT(*) AS n FROM cited GROUP BY sid

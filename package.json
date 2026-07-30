@@ -24,7 +24,7 @@
     "make:enterprise:win": "cross-env EDITION=enterprise npm run make:win",
     "make:win:signed": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/make-win-signed.ps1",
     "lint": "eslint --ext .ts,.tsx .",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p packages/cli/tsconfig.json",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "node ./scripts/enode.js ./node_modules/vitest/vitest.mjs",
