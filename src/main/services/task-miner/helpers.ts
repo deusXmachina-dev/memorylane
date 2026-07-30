@@ -1,4 +1,4 @@
-import { SIGHTING_BRIDGE_MAX_GAP_MS } from '../../../shared/constants'
+import { SIGHTING_BRIDGE_MAX_GAP_MS } from '@constants'
 import type { ActivityDetail } from '../../storage'
 
 interface TimeBounded {
