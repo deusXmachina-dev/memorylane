@@ -60,6 +60,10 @@ export const MODEL_PRICING_USD_PER_MILLION: Record<
     input_tokens_per_million: 0.3,
     completion_tokens_per_million: 2.5,
   },
+  'google/gemini-3.5-flash': {
+    input_tokens_per_million: 1.5,
+    completion_tokens_per_million: 9,
+  },
   'moonshotai/kimi-k3': {
     input_tokens_per_million: 3,
     completion_tokens_per_million: 15,

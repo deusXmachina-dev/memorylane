@@ -13,7 +13,7 @@ export interface ModelPreset {
  * are authoritative — an upgrade replaces stale/retired ids rather than
  * stranding a seat on them.
  */
-export const MODEL_DEFAULTS_VERSION = 2
+export const MODEL_DEFAULTS_VERSION = 3
 
 export interface VendorPresets {
   /** Presets for each model slot. The first entry is the vendor's default. */
@@ -40,19 +40,18 @@ interface VendorModelDefaults {
 export const VENDOR_PRESETS: Record<Vendor, VendorPresets> = {
   openrouter: {
     // GA ids only — preview ids resolve on Google AI Studio but 404 on
-    // Vertex-pinned (ZDR) keys, and are the class that gets retired. All four
-    // verified available under the ZDR OpenRouter key (2026-07-10), ordered by
-    // cost-efficiency: gemini-3.1-flash-lite (~60 tok/frame, $0.25/M) heads it;
-    // gemini-2.5-flash is the quality-max floor.
+    // Vertex-pinned (ZDR) keys, and are the class that gets retired. Gemini 2.5
+    // is discontinued on Vertex 2026-10-20. Ordered by cost-efficiency:
+    // gemini-3.1-flash-lite (~60 tok/frame, $0.25/M) heads it;
+    // gemini-3.5-flash is the quality-max floor.
     semanticVideo: [
       { id: 'google/gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite' },
-      { id: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash' },
-      { id: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
-      { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+      { id: 'google/gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite' },
+      { id: 'google/gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
     ],
     semanticSnapshot: [
       { id: 'mistralai/mistral-small-3.2-24b-instruct', label: 'Mistral Small 3.2' },
-      { id: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite' },
+      { id: 'google/gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite' },
     ],
     // Task-miner models, ordered by the 2026-07-03 sweep
     // (findings/task-mining-benchmark.md); first entry is the default and heads
@@ -60,18 +59,18 @@ export const VENDOR_PRESETS: Record<Vendor, VendorPresets> = {
     // (tencent/hy3-preview, 78% @ $0.006) is deliberately excluded because it
     // has NO ZDR endpoints on OpenRouter and fails under a zero-data-retention
     // key policy. minimax-m3 won on recall (84% @ ~$0.04/day); mimo-v2.5 is the
-    // value pick (82% @ $0.015); gemini-2.5-flash is the reliable lower-recall
-    // fallback (the previous default).
+    // value pick (82% @ $0.015); gemini-3.5-flash is the reliable lower-recall
+    // fallback (succeeds the retired gemini-2.5-flash).
     patternDetection: [
       { id: 'minimax/minimax-m3', label: 'MiniMax M3' },
       { id: 'xiaomi/mimo-v2.5', label: 'MiMo V2.5' },
-      { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+      { id: 'google/gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
     ],
   },
   google: {
-    semanticVideo: [{ id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' }],
-    semanticSnapshot: [{ id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' }],
-    patternDetection: [{ id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' }],
+    semanticVideo: [{ id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite' }],
+    semanticSnapshot: [{ id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite' }],
+    patternDetection: [{ id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite' }],
   },
   // Local OpenAI-compatible endpoints (Ollama, LM Studio, vLLM) ship no
   // defaults — the user's local catalog varies per machine, so any preset
