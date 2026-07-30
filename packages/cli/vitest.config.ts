@@ -5,6 +5,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@main': resolve(__dirname, '../../src/main'),
+      '@constants': resolve(__dirname, '../../src/shared/constants'),
       '@types': resolve(__dirname, '../../src/shared/types'),
       '@': resolve(__dirname, '../../src'),
     },

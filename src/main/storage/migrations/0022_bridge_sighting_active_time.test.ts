@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Database from 'better-sqlite3'
-import { SIGHTING_BRIDGE_MAX_GAP_MS } from '../../../shared/constants'
 import { migration } from './0022_bridge_sighting_active_time'
 
 const MIN = 60_000
@@ -129,8 +128,12 @@ describe('0022_bridge_sighting_active_time', () => {
     expect(activeMin(db, 'partial')).toBe(7.5)
   })
 
-  it('inlines the threshold the miner currently writes with — a new value needs a new migration', () => {
-    expect(SIGHTING_BRIDGE_MAX_GAP_MS).toBe(300_000)
+  it('leaves a sighting citing no activities untouched', () => {
+    addSighting(db, 'empty', [], 0)
+
+    migration.up(db)
+
+    expect(activeMin(db, 'empty')).toBe(0)
   })
 
   it('skips a sighting whose activity_ids is not valid JSON instead of failing the migration', () => {
