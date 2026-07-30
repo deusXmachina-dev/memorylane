@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest'
+import { SIGHTING_BRIDGE_MAX_GAP_MS } from '../../../shared/constants'
 import { computeEpisodeWindow, tryExtractJsonArray } from './helpers'
 
 describe('computeEpisodeWindow', () => {
-  it('derives the window from min start / max end and sums interaction time', () => {
-    // Two 2-min activities with a 6-min idle gap between them:
-    // span = 0..600000 (10 min), interaction = 4 min.
+  it('derives the window from min start / max end and sums active time', () => {
+    // Two 2-min activities with a 6-min gap between them — past the bridge, so
+    // span = 0..600000 (10 min) but active time is 4 min.
     const activities = [
       { startTimestamp: 0, endTimestamp: 120_000 },
       { startTimestamp: 480_000, endTimestamp: 600_000 },
@@ -13,6 +14,41 @@ describe('computeEpisodeWindow', () => {
     expect(w.startedAt).toBe(0)
     expect(w.endedAt).toBe(600_000)
     expect(w.interactionMin).toBe(4) // 2 + 2, NOT the 10-min wall-clock span
+  })
+
+  it('bridges a gap shorter than the max', () => {
+    // 2-min activity, 2-min pause, 2-min activity: the pause is think time.
+    const w = computeEpisodeWindow([
+      { startTimestamp: 0, endTimestamp: 120_000 },
+      { startTimestamp: 240_000, endTimestamp: 360_000 },
+    ])
+    expect(w.interactionMin).toBe(6)
+  })
+
+  it('bridges a gap of exactly the max', () => {
+    const w = computeEpisodeWindow([
+      { startTimestamp: 0, endTimestamp: 120_000 },
+      { startTimestamp: 120_000 + SIGHTING_BRIDGE_MAX_GAP_MS, endTimestamp: 540_000 },
+    ])
+    expect(w.interactionMin).toBe(9)
+  })
+
+  it('excludes a gap one millisecond past the max', () => {
+    const w = computeEpisodeWindow([
+      { startTimestamp: 0, endTimestamp: 120_000 },
+      { startTimestamp: 120_001 + SIGHTING_BRIDGE_MAX_GAP_MS, endTimestamp: 540_001 },
+    ])
+    expect(w.interactionMin).toBe(4) // 2 + 2, the gap not bridged
+  })
+
+  it('bridges the 5s segmentation gaps a continuous run is cut into', () => {
+    // One 3-minute run, chopped into 30s activities by the event-capturer gap.
+    const activities = Array.from({ length: 6 }, (_, i) => ({
+      startTimestamp: i * 35_000,
+      endTimestamp: i * 35_000 + 30_000,
+    }))
+    const w = computeEpisodeWindow(activities)
+    expect(w.interactionMin).toBe(3.4) // whole run, not 6 × 30s = 3.0
   })
 
   it('is order-independent', () => {
@@ -49,7 +85,7 @@ describe('computeEpisodeWindow', () => {
     expect(w.endedAt).toBe(1_800_000)
   })
 
-  it('keeps interaction time within the wall-clock span', () => {
+  it('keeps active time within the wall-clock span', () => {
     const fixtures = [
       [
         { startTimestamp: 0, endTimestamp: 600_000 },
@@ -77,7 +113,7 @@ describe('computeEpisodeWindow', () => {
     ])
     expect(w.startedAt).toBe(0)
     expect(w.endedAt).toBe(7_200_000)
-    expect(w.interactionMin).toBe(90) // 30 + 60 active, idle gap excluded
+    expect(w.interactionMin).toBe(90) // 30 + 60 active, the 30-min break excluded
   })
 })
 

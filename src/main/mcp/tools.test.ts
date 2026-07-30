@@ -185,7 +185,7 @@ describe('pattern tools (task clusters)', () => {
       expect(text).toContain('c1 | Invoice processing')
       expect(text).toContain('Excel, Chrome')
       expect(text).toContain('seen 2x')
-      expect(text).toContain('avg 6 min active/run')
+      expect(text).toContain('avg 6 min/run')
       expect(text).toContain('Copies totals')
     })
 

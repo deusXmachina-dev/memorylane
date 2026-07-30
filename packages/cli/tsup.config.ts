@@ -12,6 +12,7 @@ export default defineConfig({
     options.alias = {
       '@main': path.resolve(__dirname, '../../src/main'),
       '@': path.resolve(__dirname, '../../src'),
+      '@constants': path.resolve(__dirname, '../../src/shared/constants'),
       '@types': path.resolve(__dirname, '../../src/shared/types'),
     }
   },

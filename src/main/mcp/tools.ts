@@ -615,7 +615,7 @@ function formatClusterLine(c: ClusterInfo): string {
   if (c.observedDays > 0) {
     stats.push(`~${c.timesPerWeek.toFixed(1)}/wk over ${c.observedDays} observed days`)
   }
-  stats.push(`avg ${Math.round(c.avgActiveMin)} min active/run`)
+  stats.push(`avg ${Math.round(c.avgActiveMin)} min/run`)
   if (c.lastSeenAt) stats.push(`last seen ${new Date(c.lastSeenAt).toLocaleString()}`)
   const lines = [`- ${c.id} | ${c.title} [${c.apps.join(', ')}] (${stats.join(', ')})`]
   if (c.description) lines.push(`  ${c.description}`)

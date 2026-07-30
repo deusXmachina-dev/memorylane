@@ -20,8 +20,8 @@ export function buildClusterAnalyzePrompt(
     cluster.description ? `Context: ${cluster.description}` : null,
     `Apps involved: ${cluster.apps.join(', ') || 'unknown'}.`,
     cluster.timesPerWeek > 0
-      ? `I do this about ${formatFrequency(cluster.timesPerWeek)} (${cluster.timesSeen} runs over ${cluster.observedDays} active days); a run takes ~${Math.round(cluster.avgActiveMin)} min of hands-on work.`
-      : `I've done this ${cluster.timesSeen} time${cluster.timesSeen === 1 ? '' : 's'}; a run takes ~${Math.round(cluster.avgActiveMin)} min of hands-on work.`,
+      ? `I do this about ${formatFrequency(cluster.timesPerWeek)} (${cluster.timesSeen} runs over ${cluster.observedDays} active days); a run takes ~${Math.round(cluster.avgActiveMin)} min of work.`
+      : `I've done this ${cluster.timesSeen} time${cluster.timesSeen === 1 ? '' : 's'}; a run takes ~${Math.round(cluster.avgActiveMin)} min of work.`,
     ``,
     ...(hasIds ? [`Activity IDs for research: ${sampleActivityIds.join(', ')}.`, ``] : []),
     `Recent occurrences:`,

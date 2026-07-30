@@ -311,7 +311,7 @@ export interface ClusterInfo {
   timesPerWeek: number
   /** Distinct local days with captured activity in the stats window (frequency denominator). */
   observedDays: number
-  /** Mean per-run active time (union of cited-activity intervals), in minutes. */
+  /** Mean per-run active time (gap-bridged union of cited-activity intervals), in minutes. */
   avgActiveMin: number
   /**
    * Consolidated "Replace with" recommendation. '' on a labeled cluster means
@@ -338,7 +338,7 @@ export interface ClusterSightingInfo {
   subject: string
   apps: string[]
   startedAt: number
-  /** Active time (union of cited-activity intervals), in minutes. */
+  /** Active time (gap-bridged union of cited-activity intervals), in minutes. */
   activeMin: number
   /** Underlying activity ids — handle for the "Copy prompt for Claude" flow. */
   activityIds: string[]

@@ -130,6 +130,11 @@ export const PATTERN_DETECTION_CONFIG = {
   REQUEST_TIMEOUT_MS: 20 * 60_000,
 }
 
+// A sighting's active time bridges gaps this short between its activities: an
+// activity window closes after 5s of silence, so think and read pauses inside
+// one run would otherwise drop out. Longer gaps are breaks and stay excluded.
+export const SIGHTING_BRIDGE_MAX_GAP_MS = 5 * 60_000
+
 // Sightings older than this are pruned on every mining run; cluster stats use
 // the same window so the timesSeen numerator and observedDays denominator
 // cover the same period.
@@ -140,7 +145,7 @@ export const SIGHTING_RETENTION_DAYS = 90
 // sync are untouched, so a hidden singleton still attaches tomorrow's sighting.
 export const CLUSTER_VIEW_CONFIG = {
   MIN_TIMES_SEEN: 2,
-  SINGLETON_MIN_TOTAL_ACTIVE_MIN: 20,
+  SINGLETON_MIN_TOTAL_ACTIVE_MIN: 30,
   /** Window for cluster stats (frequency denominator). */
   STATS_WINDOW_DAYS: SIGHTING_RETENTION_DAYS,
 }

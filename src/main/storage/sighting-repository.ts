@@ -8,8 +8,8 @@ import { parseJsonStringArray } from './utils'
 /**
  * A single task instance mined from activities. Carved in stone: append-only.
  * `activityIds` is explicit membership (the verifiable recall handle);
- * `interactionMin` is the summed on-task time of those activities (wall-clock
- * span is `endedAt - startedAt`, derived on read).
+ * `interactionMin` is the gap-bridged union of those activities' intervals
+ * (wall-clock span is `endedAt - startedAt`, derived on read).
  */
 export interface Sighting {
   id: string

@@ -163,7 +163,11 @@ describe('isBelowNoiseFloor', () => {
   })
 
   it('keeps a singleton once its total time clears the floor', () => {
-    expect(isBelowNoiseFloor(1, 20)).toBe(false)
+    expect(isBelowNoiseFloor(1, 30)).toBe(false)
+  })
+
+  it('hides a singleton one minute short of the floor', () => {
+    expect(isBelowNoiseFloor(1, 29)).toBe(true)
   })
 
   it('keeps anything seen twice, however small', () => {

@@ -19,7 +19,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.spec.ts', 'packages/cli/src/**/*.test.ts'],
     server: {
       deps: {
         external: ['better-sqlite3'],
