@@ -119,6 +119,15 @@ describe('0022_bridge_sighting_active_time', () => {
     expect(activeMin(db, 'orphan')).toBe(7.5)
   })
 
+  it('leaves a sighting whose activities are only partly present untouched', () => {
+    addActivity(db, 'p1', 0, 2)
+    addSighting(db, 'partial', ['p1', 'missing-1'], 7.5)
+
+    migration.up(db)
+
+    expect(activeMin(db, 'partial')).toBe(7.5)
+  })
+
   it('is idempotent', () => {
     addActivity(db, 'd1', 0, 2)
     addActivity(db, 'd2', 4, 6)

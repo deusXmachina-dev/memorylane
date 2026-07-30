@@ -2,27 +2,27 @@ import Database from 'better-sqlite3'
 import type { Migration } from '../migrator'
 
 /**
- * Recompute `sightings.interaction_min` as a gap-bridged union of the cited
- * activities' intervals: gaps up to 5 minutes are counted, longer ones are not.
- * Existing rows hold a zero-tolerance union, which drops every think and read
- * pause because an activity window closes after 5s of silence.
- *
- * The 5-minute threshold is inlined rather than imported so tuning
- * SIGHTING_BRIDGE_MAX_GAP_MS never changes what this migration did; a new
- * threshold needs a new migration. Sightings whose activities are gone keep
- * their old value.
+ * The 300000 threshold is inlined rather than imported from
+ * SIGHTING_BRIDGE_MAX_GAP_MS so tuning that constant can never change what this
+ * migration did; a new threshold needs a new migration.
  */
 export const migration: Migration = {
   name: '0022_bridge_sighting_active_time',
   up(db: Database.Database): void {
     db.exec(`
-      WITH intervals AS (
-        SELECT s.id AS sid,
+      WITH cited AS (
+        SELECT s.id AS sid, j.value AS aid
+        FROM sightings s, json_each(s.activity_ids) j
+      ),
+      cited_counts AS (
+        SELECT sid, COUNT(*) AS n FROM cited GROUP BY sid
+      ),
+      intervals AS (
+        SELECT c.sid AS sid,
                a.start_timestamp AS st,
                MAX(a.start_timestamp, a.end_timestamp) AS en
-        FROM sightings s
-        JOIN json_each(s.activity_ids) j
-        JOIN activities a ON a.id = j.value
+        FROM cited c
+        JOIN activities a ON a.id = c.aid
       ),
       prefixed AS (
         SELECT sid, st, en,
@@ -49,9 +49,15 @@ export const migration: Migration = {
         SELECT sid, block, MIN(st) AS block_start, MAX(en) AS block_end
         FROM grouped GROUP BY sid, block
       ),
+      resolved_counts AS (
+        SELECT sid, COUNT(*) AS n FROM intervals GROUP BY sid
+      ),
       totals AS (
-        SELECT sid, ROUND(SUM(block_end - block_start) / 60000.0, 1) AS mins
-        FROM blocks GROUP BY sid
+        SELECT b.sid AS sid, ROUND(SUM(b.block_end - b.block_start) / 60000.0, 1) AS mins
+        FROM blocks b
+        JOIN resolved_counts r ON r.sid = b.sid
+        JOIN cited_counts c ON c.sid = b.sid AND c.n = r.n
+        GROUP BY b.sid
       )
       UPDATE sightings
       SET interaction_min = (SELECT mins FROM totals WHERE totals.sid = sightings.id)

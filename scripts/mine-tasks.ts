@@ -276,7 +276,7 @@ async function main() {
         console.log(`\n  ${s.title}${s.subject ? ` — ${s.subject}` : ''}`)
         console.log(`    Apps: ${s.apps.join(', ')}`)
         console.log(
-          `    ${s.activeMin} min interaction / ${spanMin} min span | ${s.activityIds.length} activities`,
+          `    ${s.activeMin} min active / ${spanMin} min span | ${s.activityIds.length} activities`,
         )
         console.log(
           `    ${new Date(s.startedAt).toISOString()} → ${new Date(s.endedAt).toISOString()}`,
@@ -306,7 +306,7 @@ function printClustering(c: ClusteringRunSummary, storageService: StorageService
       console.log(`\n  ${cl.title}`)
       if (cl.description) console.log(`    ${cl.description}`)
       console.log(
-        `    Seen ${cl.timesSeen}x | avg ${cl.avgActiveMin.toFixed(1)} min active` +
+        `    Seen ${cl.timesSeen}x | avg ${cl.avgActiveMin.toFixed(1)} min/run` +
           (cl.lastSeenAt ? ` | last ${new Date(cl.lastSeenAt).toISOString().slice(0, 10)}` : ''),
       )
       if (cl.apps.length > 0) console.log(`    Apps: ${cl.apps.join(', ')}`)
