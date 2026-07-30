@@ -474,7 +474,7 @@ export function toReviewCluster(
     stats: {
       times_seen: members.length,
       span_days: Math.floor(spanMs / DAY_MS) + 1,
-      median_active_min: median(members.map((m) => m.activeMin)),
+      median_active_min: median(members.map((m) => m.interactionMin)),
     },
     members: sample.map((s, i) => ({
       sighting_id: s.id,
@@ -482,7 +482,7 @@ export function toReviewCluster(
       subject: s.subject,
       description: s.description,
       apps: s.apps,
-      active_min: s.activeMin,
+      interaction_min: s.interactionMin,
       date: new Date(s.startedAt).toISOString().slice(0, 10),
       steps:
         s.steps.length > 0 && i >= sample.length - CLUSTERING_CONFIG.MAX_STEPPED_SAMPLE_MEMBERS

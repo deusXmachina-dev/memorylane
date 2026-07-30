@@ -41,7 +41,10 @@ export const migration: Migration = {
         if (!Array.isArray(ids) || ids.length === 0) continue
         const resolved = ids.map((id) => getActivity.get(id) as ActivityRow | undefined)
         if (resolved.some((a) => a === undefined)) continue
-        update.run(computeEpisodeWindow(resolved as ActivityRow[], MAX_GAP_MS).activeMin, row.id)
+        update.run(
+          computeEpisodeWindow(resolved as ActivityRow[], MAX_GAP_MS).interactionMin,
+          row.id,
+        )
       }
     })()
   },

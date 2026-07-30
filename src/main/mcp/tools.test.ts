@@ -101,7 +101,7 @@ describe('pattern tools (task clusters)', () => {
     activityIds: overrides.activityIds ?? ['act-1'],
     startedAt: overrides.startedAt ?? now - 2 * HOUR_MS,
     endedAt: overrides.endedAt ?? now - HOUR_MS,
-    activeMin: overrides.activeMin ?? 5,
+    interactionMin: overrides.interactionMin ?? 5,
     runId: overrides.runId ?? 'run-1',
     detectedAt: overrides.detectedAt ?? now - HOUR_MS,
   })
@@ -148,7 +148,7 @@ describe('pattern tools (task clusters)', () => {
 
     it('reports hidden one-offs in the empty state when all clusters are noise', async () => {
       addClusterWithMembers(createCluster({ id: 'c-noise' }), [
-        createSighting({ id: 's1', activeMin: 5 }),
+        createSighting({ id: 's1', interactionMin: 5 }),
       ])
 
       const text = (await handlers.get('list_patterns')!({})).content[0].text
@@ -175,8 +175,8 @@ describe('pattern tools (task clusters)', () => {
       addClusterWithMembers(
         createCluster({ id: 'c1', label: 'Invoice processing', description: 'Copies totals' }),
         [
-          createSighting({ id: 's1', apps: ['Excel'], activeMin: 4 }),
-          createSighting({ id: 's2', apps: ['Excel', 'Chrome'], activeMin: 8 }),
+          createSighting({ id: 's1', apps: ['Excel'], interactionMin: 4 }),
+          createSighting({ id: 's2', apps: ['Excel', 'Chrome'], interactionMin: 8 }),
         ],
       )
 
@@ -191,9 +191,9 @@ describe('pattern tools (task clusters)', () => {
 
     it('falls back to the most common member title for unlabeled clusters', async () => {
       addClusterWithMembers(createCluster({ id: 'c1', label: '' }), [
-        createSighting({ id: 's1', title: 'Weekly report', activeMin: 15 }),
-        createSighting({ id: 's2', title: 'Weekly report', activeMin: 15 }),
-        createSighting({ id: 's3', title: 'Other thing', activeMin: 15 }),
+        createSighting({ id: 's1', title: 'Weekly report', interactionMin: 15 }),
+        createSighting({ id: 's2', title: 'Weekly report', interactionMin: 15 }),
+        createSighting({ id: 's3', title: 'Other thing', interactionMin: 15 }),
       ])
 
       const text = (await handlers.get('list_patterns')!({})).content[0].text
@@ -202,7 +202,7 @@ describe('pattern tools (task clusters)', () => {
 
     it('hides one-off noise clusters and reports the hidden count', async () => {
       addClusterWithMembers(createCluster({ id: 'c-noise' }), [
-        createSighting({ id: 's1', activeMin: 5 }),
+        createSighting({ id: 's1', interactionMin: 5 }),
       ])
       addClusterWithMembers(createCluster({ id: 'c-real', label: 'Real task' }), [
         createSighting({ id: 's2' }),

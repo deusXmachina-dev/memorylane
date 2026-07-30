@@ -11,9 +11,9 @@ interface TimeBounded {
  * constituent activities — never from an LLM estimate.
  *
  * - `startedAt` / `endedAt`: min start / max end across the activities.
- * - `activeMin`: union of the activities' [start, end] intervals, bridging gaps
- *   up to `maxGapMs` so pauses inside one run count while longer breaks do not.
- *   Overlapping or nested activities are not double-counted, so active time
+ * - `interactionMin`: union of the activities' [start, end] intervals, bridging
+ *   gaps up to `maxGapMs` so pauses inside one run count while longer breaks do
+ *   not. Overlapping or nested activities are not double-counted, so active time
  *   never exceeds the wall-clock span, which is just `endedAt - startedAt`,
  *   derived on read. Backfill migrations pass the threshold they shipped with
  *   instead of taking the current default.
@@ -24,10 +24,10 @@ export function computeEpisodeWindow(
 ): {
   startedAt: number
   endedAt: number
-  activeMin: number
+  interactionMin: number
 } {
   if (activities.length === 0) {
-    return { startedAt: 0, endedAt: 0, activeMin: 0 }
+    return { startedAt: 0, endedAt: 0, interactionMin: 0 }
   }
   const intervals = activities
     .map((a) => ({ start: a.startTimestamp, end: Math.max(a.startTimestamp, a.endTimestamp) }))
@@ -52,7 +52,7 @@ export function computeEpisodeWindow(
   return {
     startedAt,
     endedAt,
-    activeMin: Math.round((unionMs / 60000) * 10) / 10,
+    interactionMin: Math.round((unionMs / 60000) * 10) / 10,
   }
 }
 

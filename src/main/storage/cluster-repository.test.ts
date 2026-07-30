@@ -17,7 +17,7 @@ const createSighting = (overrides: Partial<Sighting> & { id: string }): Sighting
   activityIds: overrides.activityIds ?? ['act-1'],
   startedAt: overrides.startedAt ?? 1000,
   endedAt: overrides.endedAt ?? 2000,
-  activeMin: overrides.activeMin ?? 5,
+  interactionMin: overrides.interactionMin ?? 5,
   runId: overrides.runId ?? 'run-1',
   detectedAt: overrides.detectedAt ?? 2000,
 })
@@ -98,14 +98,14 @@ describe('ClusterRepository', () => {
 
   it('getMemberDigest returns per-member rows across clusters', () => {
     storage.sightings.add(
-      createSighting({ id: 's1', startedAt: 1000, endedAt: 2000, activeMin: 4, apps: ['A'] }),
+      createSighting({ id: 's1', startedAt: 1000, endedAt: 2000, interactionMin: 4, apps: ['A'] }),
     )
     storage.sightings.add(
       createSighting({
         id: 's2',
         startedAt: 5000,
         endedAt: 9000,
-        activeMin: 8,
+        interactionMin: 8,
         apps: ['A', 'B'],
       }),
     )
@@ -114,7 +114,7 @@ describe('ClusterRepository', () => {
     storage.clusters.addMembership('c1', 's2')
 
     const digest = storage.clusters.getMemberDigest()
-    expect(digest.map((d) => d.activeMin)).toEqual([4, 8])
+    expect(digest.map((d) => d.interactionMin)).toEqual([4, 8])
     expect(digest.map((d) => d.clusterId)).toEqual(['c1', 'c1'])
   })
 

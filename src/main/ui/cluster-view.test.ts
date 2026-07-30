@@ -100,7 +100,7 @@ describe('resolveTitle', () => {
 const member = (startedAt: number, title: string, steps: string[]): ClusterMember => ({
   startedAt,
   endedAt: startedAt + 1000,
-  activeMin: 1,
+  interactionMin: 1,
   title,
   apps: [],
   steps,
@@ -194,7 +194,7 @@ describe('buildClusterInfo', () => {
         {
           startedAt: NOW - DAY_MS,
           endedAt: NOW - DAY_MS + 600_000,
-          activeMin: 4,
+          interactionMin: 4,
           title: 'Run A',
           apps: ['Excel'],
           steps: [],
@@ -203,7 +203,7 @@ describe('buildClusterInfo', () => {
         {
           startedAt: NOW - 120_000,
           endedAt: NOW,
-          activeMin: 2,
+          interactionMin: 2,
           title: 'Run B',
           apps: ['Excel', 'Mail'],
           steps: [],
@@ -229,7 +229,7 @@ describe('buildClusterInfo', () => {
         {
           startedAt: NOW - 100 * DAY_MS,
           endedAt: NOW - 100 * DAY_MS + 600_000,
-          activeMin: 4,
+          interactionMin: 4,
           title: 'Old run',
           apps: ['Excel'],
           steps: [],
@@ -237,7 +237,7 @@ describe('buildClusterInfo', () => {
         {
           startedAt: NOW - DAY_MS,
           endedAt: NOW - DAY_MS + 600_000,
-          activeMin: 4,
+          interactionMin: 4,
           title: 'Recent run',
           apps: ['Mail'],
           steps: [],
@@ -299,7 +299,7 @@ describe('computeClustersView (real storage)', () => {
       activityIds: ['a1'],
       startedAt,
       endedAt: startedAt + 60_000,
-      activeMin: 5,
+      interactionMin: 5,
       runId: 'r1',
       detectedAt: startedAt,
     })

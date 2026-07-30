@@ -176,7 +176,7 @@ export class ClusterRepository {
     clusterId: string
     startedAt: number
     endedAt: number
-    activeMin: number
+    interactionMin: number
     title: string
     apps: string[]
     steps: string[]
@@ -184,7 +184,7 @@ export class ClusterRepository {
     const rows = this.db
       .prepare(
         `SELECT cs.cluster_id AS clusterId, s.started_at AS startedAt,
-                s.ended_at AS endedAt, s.interaction_min AS activeMin,
+                s.ended_at AS endedAt, s.interaction_min AS interactionMin,
                 s.title AS title, s.apps AS apps, s.steps AS steps
          FROM cluster_sightings cs
          JOIN sightings s ON s.id = cs.sighting_id
@@ -194,7 +194,7 @@ export class ClusterRepository {
       clusterId: string
       startedAt: number
       endedAt: number
-      activeMin: number
+      interactionMin: number
       title: string
       apps: string
       steps: string

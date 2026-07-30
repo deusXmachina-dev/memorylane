@@ -97,7 +97,7 @@ export interface ReviewSighting {
   steps?: string[]
   /** App identities off the sighting: website host for web work, app name otherwise. */
   apps: string[]
-  active_min: number
+  interaction_min: number
   date: string
 }
 

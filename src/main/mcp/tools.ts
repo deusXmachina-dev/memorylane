@@ -626,7 +626,7 @@ function formatClusterLine(c: ClusterInfo): string {
 function formatClusterSightingLine(s: Sighting): string {
   const start = new Date(s.startedAt).toLocaleString()
   const end = new Date(s.endedAt).toLocaleString()
-  const activeMin = Math.round(Math.max(0, s.activeMin))
+  const activeMin = Math.round(Math.max(0, s.interactionMin))
   const title = s.subject ? `${s.title} — ${s.subject}` : s.title
   const lines = [
     `- ${s.id} | ${start} -> ${end} | ~${activeMin} min active | [${s.apps.join(', ')}]`,

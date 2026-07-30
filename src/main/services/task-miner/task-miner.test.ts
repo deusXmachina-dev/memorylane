@@ -184,7 +184,7 @@ describe('TaskMiner sweep', () => {
       activityIds: [`act-${back}`],
       startedAt: dayStart(back) + 1000,
       endedAt: dayStart(back) + 2000,
-      activeMin: 1,
+      interactionMin: 1,
       runId: 'r',
       detectedAt: dayStart(back) + 2000,
     })

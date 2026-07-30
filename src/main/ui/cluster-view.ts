@@ -105,7 +105,7 @@ export function computeRecurrence(
 export interface ClusterMember {
   startedAt: number
   endedAt: number
-  activeMin: number
+  interactionMin: number
   title: string
   apps: string[]
   steps: string[]
@@ -134,7 +134,7 @@ export function buildClusterInfo(
   const windowStart = statsWindowStart(now)
   const members = allMembers.filter((m) => m.startedAt >= windowStart)
   const startedAts = members.map((m) => m.startedAt)
-  const activeMins = members.map((m) => Math.max(0, m.activeMin))
+  const activeMins = members.map((m) => Math.max(0, m.interactionMin))
   const apps = new Set<string>()
   for (const m of members) for (const app of m.apps) apps.add(app)
   const avgActiveMin = mean(activeMins)
