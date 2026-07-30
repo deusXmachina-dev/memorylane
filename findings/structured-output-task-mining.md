@@ -17,18 +17,18 @@ the custom parsing worth replacing?
 Three arms, one run each. Arms B and A share identical prompts and code; they
 differ only in whether the schema goes on the wire.
 
-| Fixture | main (exemplar prompt, custom parse) | A: schema on wire | B: schema in prompt, local parse |
-| --- | --: | --: | --: |
-| 2026-06-04-jaro-contract-multitask | 1/2 | 1/2 | 1/2 |
-| 2026-06-10-jaro-contract | 1/1 | 1/1 | 1/1 |
-| 2026-06-10-jaro-contract-multitask | 1/1 | 1/1 | 1/1 |
-| 2026-06-10-jaro-contract-x3 | 3/3 | 3/3 | 3/3 |
-| 2026-06-10-jaro-contract-x3-llm | 3/3 | **1/3** | 3/3 |
-| 2026-06-11-jaro-contract | 1/2 | **0/2** | 1/2 |
-| **Recall** | **10/12 (83%)** | **7/12 (58%)** | **10/12 (83%)** |
-| Id-precision | 100% everywhere | 27% and 70% on two fixtures | 100% except 41% on one |
-| Junk rejects reproduced | 0 | 5 | 1 |
-| Cost | $0.169 | $0.083 | $0.122 |
+| Fixture                            | main (exemplar prompt, custom parse) |           A: schema on wire | B: schema in prompt, local parse |
+| ---------------------------------- | -----------------------------------: | --------------------------: | -------------------------------: |
+| 2026-06-04-jaro-contract-multitask |                                  1/2 |                         1/2 |                              1/2 |
+| 2026-06-10-jaro-contract           |                                  1/1 |                         1/1 |                              1/1 |
+| 2026-06-10-jaro-contract-multitask |                                  1/1 |                         1/1 |                              1/1 |
+| 2026-06-10-jaro-contract-x3        |                                  3/3 |                         3/3 |                              3/3 |
+| 2026-06-10-jaro-contract-x3-llm    |                                  3/3 |                     **1/3** |                              3/3 |
+| 2026-06-11-jaro-contract           |                                  1/2 |                     **0/2** |                              1/2 |
+| **Recall**                         |                      **10/12 (83%)** |              **7/12 (58%)** |                  **10/12 (83%)** |
+| Id-precision                       |                      100% everywhere | 27% and 70% on two fixtures |           100% except 41% on one |
+| Junk rejects reproduced            |                                    0 |                           5 |                                1 |
+| Cost                               |                               $0.169 |                      $0.083 |                           $0.122 |
 
 Arm B matches main fixture for fixture, which is stronger evidence than the
 totals: the prompt rewrite (hand-written exemplar replaced by a rendered JSON
