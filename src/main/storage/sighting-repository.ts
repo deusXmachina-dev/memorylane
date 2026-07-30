@@ -6,9 +6,8 @@ import { parseJsonStringArray } from './utils'
 // ---------------------------------------------------------------------------
 
 /**
- * A single task instance mined from activities. Append-only; the one exception
- * is a migration re-deriving a stored metric from the activities it already
- * cites. `activityIds` is explicit membership (the verifiable recall handle);
+ * A single task instance mined from activities. Carved in stone: append-only.
+ * `activityIds` is explicit membership (the verifiable recall handle);
  * `interactionMin` is the gap-bridged union of those activities' intervals
  * (wall-clock span is `endedAt - startedAt`, derived on read).
  */

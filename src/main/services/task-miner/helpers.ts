@@ -12,16 +12,12 @@ interface TimeBounded {
  *
  * - `startedAt` / `endedAt`: min start / max end across the activities.
  * - `interactionMin`: union of the activities' [start, end] intervals, bridging
- *   gaps up to `maxGapMs` so pauses inside one run count while longer breaks do
- *   not. Overlapping or nested activities are not double-counted, so active time
- *   never exceeds the wall-clock span, which is just `endedAt - startedAt`,
- *   derived on read. Backfill migrations pass the threshold they shipped with
- *   instead of taking the current default.
+ *   gaps up to `SIGHTING_BRIDGE_MAX_GAP_MS` so pauses inside one run count while
+ *   longer breaks do not. Overlapping or nested activities are not
+ *   double-counted, so active time never exceeds the wall-clock span, which is
+ *   just `endedAt - startedAt`, derived on read.
  */
-export function computeEpisodeWindow(
-  activities: TimeBounded[],
-  maxGapMs: number = SIGHTING_BRIDGE_MAX_GAP_MS,
-): {
+export function computeEpisodeWindow(activities: TimeBounded[]): {
   startedAt: number
   endedAt: number
   interactionMin: number
@@ -39,7 +35,7 @@ export function computeEpisodeWindow(
   let curStart = intervals[0].start
   for (let i = 1; i < intervals.length; i++) {
     const { start, end } = intervals[i]
-    if (start <= curEnd + maxGapMs) {
+    if (start <= curEnd + SIGHTING_BRIDGE_MAX_GAP_MS) {
       curEnd = Math.max(curEnd, end)
     } else {
       unionMs += curEnd - curStart

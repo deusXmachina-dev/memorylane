@@ -38,7 +38,7 @@ describe('computeEpisodeWindow', () => {
       { startTimestamp: 0, endTimestamp: 120_000 },
       { startTimestamp: 120_001 + SIGHTING_BRIDGE_MAX_GAP_MS, endTimestamp: 540_001 },
     ])
-    expect(w.interactionMin).toBe(9 - SIGHTING_BRIDGE_MAX_GAP_MS / 60_000)
+    expect(w.interactionMin).toBe(4) // 2 + 2, the gap not bridged
   })
 
   it('bridges the 5s segmentation gaps a continuous run is cut into', () => {
