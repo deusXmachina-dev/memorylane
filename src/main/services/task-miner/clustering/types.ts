@@ -123,8 +123,9 @@ export interface ReviewInput {
 
 /**
  * The classification taxonomy the review prompt offers. Response-level only:
- * it exists so the model isn't pressured to invent mechanisms. Storage keeps
- * just the mechanism (procedure ⟺ mechanism non-empty).
+ * it exists so the model isn't pressured to invent mechanisms, and gives the
+ * eval a scoring vocabulary. Storage keeps just the mechanism; a kind off
+ * this list means the response carried no verdict at all.
  */
 export const REVIEW_KINDS = ['procedure', 'monitoring', 'ambient', 'dev-loop', 'judgment'] as const
 export type ReviewKind = (typeof REVIEW_KINDS)[number]

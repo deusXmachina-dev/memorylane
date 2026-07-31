@@ -544,7 +544,7 @@ describe('applyContent', () => {
     expect(cluster.mechanism).toBe('A script.')
   })
 
-  it('keeps an existing mechanism when a relabel claims procedure without one', () => {
+  it('drops an existing mechanism when a relabel classifies without one', () => {
     seedCluster('c1', 100, ['s1', 's2'])
     storage.clusters.updateLabel('c1', 'Old', '', 'A script.', 2)
 
@@ -554,7 +554,7 @@ describe('applyContent', () => {
       new Set(['c1']),
     )
 
-    expect(storage.clusters.getById('c1')!.mechanism).toBe('A script.')
+    expect(storage.clusters.getById('c1')!.mechanism).toBe('')
   })
 
   it('stores no mechanism when a relabel classifies as non-procedure', () => {
@@ -572,32 +572,25 @@ describe('applyContent', () => {
 })
 
 describe('sanitizeMechanism', () => {
-  it('accepts a concrete procedure mechanism', () => {
+  it('keeps the mechanism a classified verdict carries, whatever the kind', () => {
     expect(sanitizeMechanism({ id: 'x', kind: 'procedure', mechanism: 'A script.' })).toBe(
       'A script.',
     )
+    expect(sanitizeMechanism({ id: 'x', kind: 'monitoring', mechanism: 'An alert.' })).toBe(
+      'An alert.',
+    )
   })
 
-  it('treats a procedure without a concrete mechanism as no judgment', () => {
-    expect(sanitizeMechanism({ id: 'x', kind: 'procedure' })).toBeNull()
-    expect(sanitizeMechanism({ id: 'x', kind: 'procedure', mechanism: '  ' })).toBeNull()
+  it('reads a classified verdict without a mechanism as not eliminable', () => {
+    expect(sanitizeMechanism({ id: 'x', kind: 'procedure' })).toBe('')
+    expect(sanitizeMechanism({ id: 'x', kind: 'procedure', mechanism: '  ' })).toBe('')
+    for (const kind of ['monitoring', 'ambient', 'dev-loop', 'judgment']) {
+      expect(sanitizeMechanism({ id: 'x', kind })).toBe('')
+    }
   })
 
   it('treats off-enum and omitted kinds as no judgment', () => {
     expect(sanitizeMechanism({ id: 'x', kind: 'busywork', mechanism: 'A.' })).toBeNull()
     expect(sanitizeMechanism({ id: 'x' })).toBeNull()
-  })
-
-  it('keeps an alert mechanism on monitoring, and none when there is nothing to alert on', () => {
-    expect(sanitizeMechanism({ id: 'x', kind: 'monitoring', mechanism: 'An alert.' })).toBe(
-      'An alert.',
-    )
-    expect(sanitizeMechanism({ id: 'x', kind: 'monitoring' })).toBe('')
-  })
-
-  it('strips mechanisms from ambient, dev-loop and judgment', () => {
-    for (const kind of ['ambient', 'dev-loop', 'judgment']) {
-      expect(sanitizeMechanism({ id: 'x', kind, mechanism: 'A.' })).toBe('')
-    }
   })
 })

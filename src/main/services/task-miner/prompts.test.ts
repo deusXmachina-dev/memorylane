@@ -33,17 +33,17 @@ describe('buildScanSystemPrompt', () => {
     expect(prompt).toContain('describe only actions the cited activities evidence')
   })
 
-  it('instructs canonical, object-free titles', () => {
+  it('instructs canonical, subject-free titles', () => {
     const prompt = buildScanSystemPrompt('Monday')
     expect(prompt).toContain(
       'Word it so every future run of this same procedure would get this exact title',
     )
-    expect(prompt).toContain('Titles name the procedure, subjects name the object')
+    expect(prompt).toContain('Titles name the procedure, subjects name the thing it acted on')
   })
 
-  it('gates on object and end state, not on an elimination mechanism', () => {
+  it('gates on subject and end state, not on an elimination mechanism', () => {
     const prompt = buildScanSystemPrompt('Monday')
-    expect(prompt).toContain('A NAMEABLE OBJECT')
+    expect(prompt).toContain('A NAMEABLE SUBJECT')
     expect(prompt).toContain('AN END STATE')
     expect(prompt).not.toContain('Replace with:')
     expect(prompt).toContain('Deciding what can be eliminated is NOT your job here')
@@ -79,9 +79,9 @@ describe('buildGroundingSystemPrompt', () => {
     expect(prompt).not.toContain('"apps"')
   })
 
-  it('mirrors the scan gate: object and end state, no mechanism', () => {
+  it('mirrors the scan gate: subject and end state, no mechanism', () => {
     const prompt = buildGroundingSystemPrompt(candidate, ['admin.acme.com'])
-    expect(prompt).toContain('a nameable object it acted on')
+    expect(prompt).toContain('a nameable subject it acted on')
     expect(prompt).toContain('an end state it reached')
     expect(prompt).not.toContain('Replace with:')
     expect(prompt).toContain('Whether anything could take it over is judged later')
