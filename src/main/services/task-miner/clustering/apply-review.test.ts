@@ -588,7 +588,16 @@ describe('sanitizeMechanism', () => {
     expect(sanitizeMechanism({ id: 'x' })).toBeNull()
   })
 
-  it('strips mechanisms from non-procedure kinds', () => {
-    expect(sanitizeMechanism({ id: 'x', kind: 'monitoring', mechanism: 'A.' })).toBe('')
+  it('keeps an alert mechanism on monitoring, and none when there is nothing to alert on', () => {
+    expect(sanitizeMechanism({ id: 'x', kind: 'monitoring', mechanism: 'An alert.' })).toBe(
+      'An alert.',
+    )
+    expect(sanitizeMechanism({ id: 'x', kind: 'monitoring' })).toBe('')
+  })
+
+  it('strips mechanisms from ambient, dev-loop and judgment', () => {
+    for (const kind of ['ambient', 'dev-loop', 'judgment']) {
+      expect(sanitizeMechanism({ id: 'x', kind, mechanism: 'A.' })).toBe('')
+    }
   })
 })

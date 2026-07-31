@@ -26,28 +26,39 @@ export function buildScanSystemPrompt(
           )}\n\nThese are names, not evidence: nothing qualifies as a finding because it appears here, and the rules above decide what qualifies exactly as if this list were empty. When a qualifying run IS another instance of one of these procedures, reuse the known title EXACTLY as written and put what distinguishes this run in \`subject\`. When it is a different procedure — even a similar-sounding one — coin a fresh canonical title; never stretch a known title to cover different work.\n`
       : ''
 
-  return `You are an operations consultant reviewing my computer activity from ${dateLabel}. I pay you to recommend eliminations I would actually build: repeatable, meaningful work that a script, an integration, an alert, or an internal-platform feature could take over. A finding exists only if you can name that mechanism — no mechanism, no finding.
+  return `You are an operations consultant reviewing my computer activity from ${dateLabel}. I pay you to find the recurring work my week is actually made of — the tasks I run again and again — so we can later decide what to redesign, delegate, or automate. Deciding what can be eliminated is NOT your job here; finding the real tasks is.
 ${userContextSection}
-Below is the complete list of activities for the day. Each finding is ONE instance of eliminable work — a single run of a task on a single object — cited by the activity ids involved. The object defines the instance, not the clock: one report drafted over two hours (with breaks) is ONE finding; ten invoices processed back-to-back are TEN findings.
+Below is the complete list of activities for the day. Each finding is ONE instance of a task — a single run on a single object — cited by the activity ids involved. The object defines the instance, not the clock: one report drafted over two hours (with breaks) is ONE finding; ten invoices processed back-to-back are TEN findings.
 
 ## What qualifies
 
-A run of a repeatable multi-step procedure that CHANGES something — creates, processes, moves, configures, fixes. A monthly report built, an invoice batch processed, a candidate moved into the ATS, a refund walked through the same steps, a device or customer provisioned from a template, data shuttled between systems (form response → tracker, CRM → invoice), a press list assembled and mailed, a flaky job re-run and confirmed. Repeatable means the task COULD recur on any cadence — daily, weekly, monthly — not that you did it more than once today; a single run today of a normally-repeating task qualifies. How often it actually recurs is discovered later by matching runs across days, never asserted here. A real run has substance: 2+ substantive activities and a few minutes of interaction. Mechanism: script, integration, or platform feature.
+A run of a bounded piece of work meeting ALL FOUR of these:
 
-## What does not qualify — the client will not pay for these
+- A NAMEABLE OBJECT it acted on — an invoice, a candidate, a support ticket, a customer account, a monthly report, a contract, a device. This goes in \`subject\`.
+- AN END STATE it reached — approved, sent, filed, provisioned, triaged, reconciled, refunded, merged; or, for a check against a named condition, checked-and-clear. If you cannot say how the run ended, it is not a run.
+- SUBSTANCE — 2+ substantive activities and a few minutes of interaction.
+- REPEATABLE IN PRINCIPLE — the task COULD recur on any cadence, daily, weekly or monthly; not that you did it more than once today. A single run today of a normally-repeating task qualifies. How often it actually recurs is discovered later by matching runs across days, never asserted here.
 
-- Checking and watching: inbox, chat, social feeds, news, calendars, dashboards, status pages, usage meters. Watching changes nothing — it is not a task, however often it happens.
-- Re-checks of work in progress that day: re-opening the PR, doc, or app I am actively iterating on is the texture of the work, not eliminable.
-- Dev-loop mechanics: server restarts, git housekeeping, terminal clears, worktree or local-db cleanup — normal workflow.
-- One-off or single-click actions (one issue created, one archive click), unless they are steps inside a qualifying run.
-- Creative or judgment work: writing, coding, review, analysis, design, negotiation — recurring or not, each instance needs a human.
+Typical runs: a monthly report built and sent, an invoice processed, a candidate moved into the ATS, a refund walked through the same steps, a customer or device provisioned from a template, data shuttled between systems (form response → tracker, CRM → invoice), a press list assembled and mailed.
+
+Work qualifies even when a human must obviously do it: approving an invoice, signing off a contract, answering a customer, reviewing and approving a change are all tasks. Whether anything could ever take a task over is judged later, from many runs — never let that question decide what you report here.
+
+A check of a work system qualifies when it watched for a NAMED CONDITION — the payment-failure queue, the ticket backlog, an overnight job's status, an inbox worked down to zero. Name the condition in the description.
+
+## What does not qualify
+
+- Open-ended creation with no bounded object or end state: drafting a document, building a deck, a long writing, design or coding stretch. Once it has an object and an end state — "the Q3 board report, sent" — it qualifies.
+- Ambient consumption: feeds, social, news, personal browsing, an idle glance at an inbox or board with no condition being watched for.
+- Re-checks of work in progress that day: re-opening the document, ticket, or app I am actively iterating on is the texture of the work, not a run.
+- Workspace mechanics: restarting an app, reopening a tool, re-running something to watch it work, tidying local files.
+- One-off or single-click actions (one record created, one archive click), unless they are steps inside a qualifying run.
 
 ## Rules
 
 - One finding per OBJECT worked on — name it in \`subject\`. Duration never bounds an instance: a single object worked continuously (one report, even across a lunch break) is ONE finding no matter how long; the same procedure repeated on distinct objects (invoice #4471, then #4472, then #4473 — even seconds apart) is a SEPARATE finding per object, each with its own \`subject\` and citing only that object's activities. Never collapse repetitions into one finding to show volume, and never split one object's continuous run into several. How often the task recurs is found later by matching runs across days, not asserted here.
 - Leave unrelated interruptions (a mid-run Slack ping) out of a run's activity_ids.
 - Cite only real activity ids from the list below; findings with no ids are discarded. Do NOT estimate durations — they are computed from the activities.
-- Every description ENDS with exactly one sentence naming the mechanism: "Replace with: <the concrete script, integration, alert, or platform feature>." If you cannot write that sentence concretely, the finding does not exist.
+- Describe what the run did, not what could replace it. Never recommend a script, integration, alert, or tool — that judgment is made later, across many runs.
 - \`steps\` describe only actions the cited activities evidence, one action per line, each starting with that activity's \`app\` — never a browser name.
 - Titles name the procedure, subjects name the object: title "Process invoice", subject "Customer ABC" — never title "Process invoice for Customer ABC". The title is worded so every run of the procedure gets it identically; the specific object goes in \`subject\`. Two runs of the same procedure on different objects share one title and differ only in subject. \`subject\` is optional — leave it empty when the run acted on no single nameable object.
 ${knownProceduresSection}
@@ -58,14 +69,14 @@ ${knownProceduresSection}
   {
     "title": "Canonical name of the procedure — what it does, never when, and never to which object (that goes in subject). Word it so every future run of this same procedure would get this exact title.",
     "subject": "Optional. The specific object this run acted on (e.g. Invoice #4471, Customer: Acme onboarding, Q3 board report); empty string if the run acted on no single nameable object",
-    "description": "What this run did, step by step, ending with: Replace with: <the concrete script, integration, alert, or platform feature>.",
-    "steps": ["This run's happy path: 3-10 ordered lines, each '<app>: <imperative action>' with the app exactly as listed on the run's activities, e.g. 'mail.google.com: open the client thread', 'Ghostty: run the deploy command'"],
+    "description": "What this run did, step by step, ending with the state it left the object in",
+    "steps": ["This run's happy path: 3-10 ordered lines, each '<app>: <imperative action>' with the app exactly as listed on the run's activities, e.g. 'mail.google.com: open the client thread', 'Excel: update the reconciliation sheet'"],
     "activity_ids": ["ids of the activities in this run"]
   }
 ]
 \`\`\`
 
-Quality over volume: a few findings I would actually build beat a long list. Many days contain no meaningful eliminable work — an empty array \`[]\` is a common, correct answer.`
+Quality over volume: a few real tasks I would recognise as things I did beat a long list. Many days contain no discrete task at all — an empty array \`[]\` is a common, correct answer.`
 }
 
 // ---------------------------------------------------------------------------
@@ -78,7 +89,7 @@ export function buildGroundingSystemPrompt(candidate: Candidate, apps: readonly 
 
   return `You are verifying ONE candidate run of a repeatable task, found by a scan of my day. Confirm it is real, grounded in the evidence on screen, and correctly scoped to this single run.
 
-A valid finding is a single run of a repeatable multi-step procedure that CHANGES something — creates, processes, moves, configures, fixes — with 2+ substantive activities and a nameable elimination mechanism (a concrete script, integration, alert, or platform feature). What does NOT qualify: checking and watching (inbox, chat, feeds, dashboards, status pages); re-checks of work in progress that day; dev-loop mechanics (server restarts, git housekeeping); one-off or single-click actions; creative or judgment work (writing, coding, review, analysis, design).
+A valid finding is a single run of a bounded piece of work with all four of: a nameable object it acted on (an invoice, a candidate, a ticket, a customer account, a report, a contract), an end state it reached (approved, sent, filed, provisioned, triaged, reconciled — or, for a check against a named condition, checked-and-clear), 2+ substantive activities, and the property that it could recur on some cadence. Work qualifies even when a human must obviously do it — approving, signing off, answering a customer, reviewing and approving a change. Whether anything could take it over is judged later, from many runs; it is not your test. What does NOT qualify: open-ended creation with no object or end state (drafting a document, building a deck, a long writing, design or coding stretch); ambient consumption (feeds, social, news, an idle inbox or board glance with no condition watched for); re-checks of work in progress that day; workspace mechanics (restarting an app, re-running something to watch it work, tidying local files); one-off or single-click actions.
 
 ## Candidate (from a superficial scan)
 - Title: ${candidate.title}
@@ -103,19 +114,19 @@ If this is a real, grounded run:
   "verdict": "keep",
   "title": "Refined title",
   "subject": "The specific object this run acted on — corrected from the evidence if the scan got it wrong",
-  "description": "What this run did, step by step — informed by the OCR and timeline — ENDING with exactly one sentence: Replace with: <the concrete script, integration, alert, or platform feature>.",
+  "description": "What this run did, step by step — informed by the OCR and timeline — ending with the state it left the object in. Never recommend a script, integration, or tool.",
   "steps": ["This run's happy path corrected from the evidence: 3-10 ordered lines, each '<app>: <imperative action>' with the app the activity ran in"],
   "activity_ids": ["the exact, finalized set of supporting activity IDs"]
 }
 \`\`\`
-If you cannot write the "Replace with:" sentence concretely, reject.
+If you cannot name the object the run acted on and the state it left it in, reject.
 
 ### Reject
-Reject if the evidence shows checking/watching, re-checks of that day's work in progress, dev-loop mechanics, a one-off action, creative or judgment work; if the cited activities don't support the claim; or if fewer than 2 substantive activities remain after cleanup. Keep only what you could defend to the client from the evidence on screen:
+Reject if the evidence shows open-ended creation with no object or end state, ambient consumption, a re-check of that day's work in progress, workspace mechanics, or a one-off action; if the cited activities don't support the claim; or if fewer than 2 substantive activities remain after cleanup. Keep only what you could defend to the client from the evidence on screen:
 \`\`\`json
 {
   "verdict": "reject",
-  "reason": "Why this isn't an eliminable run"
+  "reason": "Why this isn't a task run"
 }
 \`\`\``
 }

@@ -28,16 +28,18 @@ export interface StructureGuards {
 /**
  * Collapse the LLM's classification to the one stored bit: the mechanism.
  * The response taxonomy (procedure/monitoring/...) exists so the model isn't
- * pressured to invent mechanisms; only a "procedure" claim may carry one.
- * null = no judgment (keep the stored mechanism): an omitted or off-enum
- * kind, or a "procedure" claim without a concrete mechanism — by the prompt's
- * own rule not a procedure, but not a verdict to overwrite an earlier one
- * with either. On a fresh cluster null still lands as '' (not automatable).
+ * pressured to invent mechanisms; only a "procedure" or an alert-replaceable
+ * "monitoring" claim may carry one. null = no judgment (keep the stored
+ * mechanism): an omitted or off-enum kind, or such a claim without a concrete
+ * mechanism — by the prompt's own rule not eliminable, but not a verdict to
+ * overwrite an earlier one with either. On a fresh cluster null still lands
+ * as '' (not automatable).
  */
 export function sanitizeMechanism(raw: ReviewClusterVerdict): string | null {
   if (!(REVIEW_KINDS as readonly string[]).includes(raw.kind ?? '')) return null
-  if (raw.kind !== 'procedure') return ''
   const mechanism = (raw.mechanism ?? '').trim()
+  if (raw.kind === 'monitoring') return mechanism
+  if (raw.kind !== 'procedure') return ''
   return mechanism === '' ? null : mechanism
 }
 

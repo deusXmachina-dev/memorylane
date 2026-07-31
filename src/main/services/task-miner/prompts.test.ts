@@ -40,13 +40,27 @@ describe('buildScanSystemPrompt', () => {
     )
     expect(prompt).toContain('Titles name the procedure, subjects name the object')
   })
+
+  it('gates on object and end state, not on an elimination mechanism', () => {
+    const prompt = buildScanSystemPrompt('Monday')
+    expect(prompt).toContain('A NAMEABLE OBJECT')
+    expect(prompt).toContain('AN END STATE')
+    expect(prompt).not.toContain('Replace with:')
+    expect(prompt).toContain('Deciding what can be eliminated is NOT your job here')
+  })
+
+  it('admits human-only procedural work and named-condition checks', () => {
+    const prompt = buildScanSystemPrompt('Monday')
+    expect(prompt).toContain('Work qualifies even when a human must obviously do it')
+    expect(prompt).toContain('watched for a NAMED CONDITION')
+  })
 })
 
 describe('buildGroundingSystemPrompt', () => {
   const candidate: Candidate = {
     title: 'Provision test tenant',
     subject: 'Acme staging tenant',
-    description: 'Did the thing. Replace with: a script.',
+    description: 'Did the thing; the tenant ended up active.',
     steps: ['admin.acme.com: create the tenant'],
     activity_ids: ['a1', 'a2'],
   }
@@ -63,5 +77,13 @@ describe('buildGroundingSystemPrompt', () => {
     const prompt = buildGroundingSystemPrompt(candidate, ['admin.acme.com', 'Ghostty'])
     expect(prompt).toContain('- Apps: admin.acme.com, Ghostty')
     expect(prompt).not.toContain('"apps"')
+  })
+
+  it('mirrors the scan gate: object and end state, no mechanism', () => {
+    const prompt = buildGroundingSystemPrompt(candidate, ['admin.acme.com'])
+    expect(prompt).toContain('a nameable object it acted on')
+    expect(prompt).toContain('an end state it reached')
+    expect(prompt).not.toContain('Replace with:')
+    expect(prompt).toContain('Whether anything could take it over is judged later')
   })
 })
