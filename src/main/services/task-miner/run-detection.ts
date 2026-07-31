@@ -5,6 +5,7 @@ import type { StorageService } from '../../storage'
 import type { Sighting } from '../../storage/sighting-repository'
 import type { ActivityEmbeddingService } from '@main/activity/activity-transformer-types'
 import type { InferenceProvider } from '../../llm'
+import { PositionalAliases } from '@main/llm/id-codec'
 import log from '@main/utils/logger'
 import type {
   TaskMinerConfig,
@@ -126,12 +127,11 @@ export async function runDetection(
   // Serve compact positional ids (a1..aN) to the scan instead of raw UUIDs —
   // models mangle long opaque ids when citing them (dropping whole findings),
   // and short handles cut prompt tokens. Mapped back right after parsing.
-  const realIdOf = new Map<string, string>()
-  const serialized = serializeActivities(activities).map((row, i) => {
-    const shortId = `a${i + 1}`
-    realIdOf.set(shortId, activities[i].id)
-    return { ...row, id: shortId }
-  })
+  const activityIds = new PositionalAliases().namespace('a')
+  const serialized = serializeActivities(activities).map((row, i) => ({
+    ...row,
+    id: activityIds.encode(activities[i].id),
+  }))
   const scanPrompt = buildScanSystemPrompt(label, userContextStr, knownProcedures)
   const scanUserMessage = `Here are all ${activities.length} activities from ${label}:\n\n\`\`\`json\n${JSON.stringify(serialized, null, 2)}\n\`\`\``
 
@@ -150,7 +150,7 @@ export async function runDetection(
     const candidates: Candidate[] = normalizedCandidates
       .map((c) => {
         const ids = c.activity_ids
-          .map((sid) => realIdOf.get(sid.trim()))
+          .map((sid) => activityIds.decode(sid))
           .filter((id): id is string => Boolean(id))
         unmappedIds += c.activity_ids.length - ids.length
         return { ...c, activity_ids: ids }
