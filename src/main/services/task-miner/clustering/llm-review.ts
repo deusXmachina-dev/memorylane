@@ -9,6 +9,7 @@ import {
   buildContentReviewSystemPrompt,
   serializeReviewInput,
 } from './prompts'
+import { aliasReviewInput, resolveReviewOutput } from './id-alias'
 import type { ProgressCallback } from '../types'
 
 export interface ReviewCallResult {
@@ -29,7 +30,8 @@ async function callReview(
   describe: (attempt: number) => string,
   progress?: ProgressCallback,
 ): Promise<ReviewCallResult> {
-  const prompt = serializeReviewInput(input)
+  const { input: aliased, aliases } = aliasReviewInput(input)
+  const prompt = serializeReviewInput(aliased)
   const tokenUsage = { input: 0, output: 0 }
 
   for (let attempt = 1; attempt <= CLUSTERING_CONFIG.LLM_MAX_ATTEMPTS; attempt++) {
@@ -45,7 +47,7 @@ async function callReview(
       tokenUsage.output += result.usage.outputTokens ?? 0
 
       const parsed = extractJsonObject<ReviewOutput>(result.text)
-      if (parsed) return { output: parsed, tokenUsage }
+      if (parsed) return { output: resolveReviewOutput(parsed, aliases), tokenUsage }
       progress?.(
         `[Clustering] Could not parse review response` +
           (attempt < CLUSTERING_CONFIG.LLM_MAX_ATTEMPTS ? ' — retrying' : ''),

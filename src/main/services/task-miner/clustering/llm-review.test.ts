@@ -52,6 +52,34 @@ describe('runStructureReview', () => {
   })
 })
 
+describe('id aliasing', () => {
+  it('sends short handles and returns real ids', async () => {
+    const clusterId = '11111111-1111-4111-8111-111111111111'
+    mockedGenerateText.mockResolvedValue({
+      text: '{"clusters":[{"id":"c1","label":"Process invoice"}],"merges":[]}',
+      usage: { inputTokens: 10, outputTokens: 5 },
+    } as never)
+
+    const result = await runStructureReview(provider, 'model', {
+      clusters: [
+        {
+          id: clusterId,
+          splittable: false,
+          label: '',
+          stats: { times_seen: 2, span_days: 3, median_active_min: 5 },
+          members: [],
+        },
+      ],
+      mergeCandidates: [],
+    })
+
+    const { prompt } = mockedGenerateText.mock.calls[0][0] as unknown as { prompt: string }
+    expect(prompt).toContain('"c1"')
+    expect(prompt).not.toContain(clusterId)
+    expect(result.output?.clusters?.[0].id).toBe(clusterId)
+  })
+})
+
 describe('runContentReview', () => {
   it('retries an unparseable response and returns the parsed second attempt', async () => {
     mockedGenerateText
