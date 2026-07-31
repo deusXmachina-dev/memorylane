@@ -29,7 +29,7 @@ export function aliasReviewInput(input: ReviewInput): {
 }
 
 export interface ResolvedReview {
-  /** null = the response cannot be acted on; the caller retries. */
+  /** null = the response's shape is unusable; the caller retries. */
   output: ReviewOutput | null
   unresolved: number
 }
@@ -67,8 +67,8 @@ export function resolveReviewOutput(
     if (!Array.isArray(output.merges)) return { output: null, unresolved: unresolved + 1 }
     const merges = output.merges.map((proposal) => aliases.decodeMany(CLUSTER, proposal?.merge))
     const unmapped = merges.reduce((sum, m) => sum + m.unmapped, 0)
-    if (unmapped > 0) return { output: null, unresolved: unresolved + unmapped }
-    resolved.merges = merges.map((m) => ({ merge: m.ids }))
+    unresolved += unmapped
+    if (unmapped === 0) resolved.merges = merges.map((m) => ({ merge: m.ids }))
   }
 
   return { output: resolved, unresolved }

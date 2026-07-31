@@ -121,15 +121,28 @@ describe('resolveReviewOutput', () => {
     expect(unresolved).toBe(1)
   })
 
-  it('rejects the whole response when a merge id will not decode', () => {
+  it('drops the whole merges key when any merge id will not decode', () => {
     const { aliases } = aliasReviewInput(input)
 
-    const { output } = resolveReviewOutput(
+    const { output, unresolved } = resolveReviewOutput(
       { clusters: [], merges: [{ merge: ['c1', 'c2'] }, { merge: ['c1', 'c7'] }] },
       aliases,
     )
 
-    expect(output).toBeNull()
+    expect(output && 'merges' in output).toBe(false)
+    expect(unresolved).toBe(1)
+  })
+
+  it('keeps the cluster verdicts when the merges key is dropped', () => {
+    const { aliases } = aliasReviewInput(input)
+
+    const { output } = resolveReviewOutput(
+      { clusters: [{ id: 'c1', label: 'Process invoice' }], merges: [{ merge: ['c1', 'c7'] }] },
+      aliases,
+    )
+
+    expect(output?.clusters).toEqual([{ id: UUID_A, label: 'Process invoice' }])
+    expect(output && 'merges' in output).toBe(false)
   })
 
   it('keeps an empty merges array — it is a real answer that declines candidates', () => {
@@ -150,7 +163,7 @@ describe('resolveReviewOutput', () => {
 
     expect(malformed({ clusters: {} }).output).toBeNull()
     expect(malformed({ merges: {} }).output).toBeNull()
-    expect(malformed({ merges: ['c1'] }).output).toBeNull()
+    expect(malformed({ merges: ['c1'] }).output?.merges).toBeUndefined()
     expect(malformed({ clusters: [null, 3, { id: 5 }] }).output?.clusters).toEqual([])
 
     const badSplit = malformed({ clusters: [{ id: 'c1', label: 'Keep', split: {} }] })
