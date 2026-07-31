@@ -78,6 +78,39 @@ describe('id aliasing', () => {
     expect(prompt).not.toContain(clusterId)
     expect(result.output?.clusters?.[0].id).toBe(clusterId)
   })
+
+  it('retries a response whose merge ids do not resolve', async () => {
+    mockedGenerateText
+      .mockResolvedValueOnce({
+        text: '{"clusters":[],"merges":[{"merge":["c1","c9"]}]}',
+        usage: { inputTokens: 10, outputTokens: 5 },
+      } as never)
+      .mockResolvedValue({
+        text: '{"clusters":[],"merges":[]}',
+        usage: { inputTokens: 10, outputTokens: 5 },
+      } as never)
+
+    const progress = vi.fn()
+    const result = await runStructureReview(provider, 'model', emptyInput, progress)
+
+    expect(mockedGenerateText).toHaveBeenCalledTimes(2)
+    expect(result.output).toEqual({ clusters: [], merges: [] })
+    expect(progress).toHaveBeenCalledWith(expect.stringContaining('did not resolve'))
+  })
+
+  it('reports dropped handles without failing the response', async () => {
+    mockedGenerateText.mockResolvedValue({
+      text: '{"clusters":[{"id":"c9","label":"Invented"}],"merges":[]}',
+      usage: { inputTokens: 10, outputTokens: 5 },
+    } as never)
+
+    const progress = vi.fn()
+    const result = await runStructureReview(provider, 'model', emptyInput, progress)
+
+    expect(mockedGenerateText).toHaveBeenCalledTimes(1)
+    expect(result.output).toEqual({ clusters: [], merges: [] })
+    expect(progress).toHaveBeenCalledWith(expect.stringContaining('1 id handle(s)'))
+  })
 })
 
 describe('runContentReview', () => {

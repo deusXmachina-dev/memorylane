@@ -4,7 +4,6 @@ import type { ReviewInput, ReviewOutput } from './types'
 const CLUSTER = 'c'
 const SIGHTING = 's'
 
-/** Swap every cluster and sighting uuid in the payload for a short handle. */
 export function aliasReviewInput(input: ReviewInput): {
   input: ReviewInput
   aliases: PositionalAliases
@@ -29,46 +28,48 @@ export function aliasReviewInput(input: ReviewInput): {
   }
 }
 
-/**
- * Map the response back to real ids. A verdict whose own id won't decode is
- * dropped — it can't be attributed to a cluster. Undecodable sighting ids fall
- * out of their split group, leaving the degenerate-split guard to handle it.
- *
- * A merges array holding any undecodable id loses the whole key: applyStructure
- * reads a response without "merges" as degenerate and declines nothing, which
- * is what an unreadable id should mean. Recording declines off a response we
- * can only half-read would suppress the very pairs the model asked to merge,
- * for the full decline TTL.
- */
+export interface ResolvedReview {
+  /** null = the response cannot be acted on; the caller retries. */
+  output: ReviewOutput | null
+  unresolved: number
+}
+
 export function resolveReviewOutput(
   output: ReviewOutput,
   aliases: PositionalAliases,
-): ReviewOutput {
+): ResolvedReview {
   const resolved: ReviewOutput = {}
+  let unresolved = 0
 
-  if (output.clusters) {
+  if (output.clusters !== undefined) {
+    if (!Array.isArray(output.clusters)) return { output: null, unresolved: unresolved + 1 }
     resolved.clusters = output.clusters.flatMap((verdict) => {
-      const id = aliases.decode(verdict.id ?? '')
-      if (!id) return []
-      if (!verdict.split) return [{ ...verdict, id }]
-      return [
-        {
-          ...verdict,
-          id,
-          split: verdict.split.map((group) => ({
-            sighting_ids: aliases.decodeMany(group.sighting_ids ?? []).ids,
-          })),
-        },
-      ]
+      const id = verdict && typeof verdict === 'object' ? aliases.decode(CLUSTER, verdict.id) : null
+      if (!id) {
+        unresolved++
+        return []
+      }
+      if (verdict.split === undefined) return [{ ...verdict, id }]
+      if (!Array.isArray(verdict.split)) {
+        unresolved++
+        return [{ ...verdict, id, split: undefined }]
+      }
+      const split = verdict.split.map((group) => {
+        const decoded = aliases.decodeMany(SIGHTING, group?.sighting_ids)
+        unresolved += decoded.unmapped
+        return { sighting_ids: decoded.ids }
+      })
+      return [{ ...verdict, id, split }]
     })
   }
 
-  if (output.merges) {
-    const merges = output.merges.map((proposal) => aliases.decodeMany(proposal.merge ?? []))
-    if (!merges.some((m) => m.unmapped > 0)) {
-      resolved.merges = merges.map((m) => ({ merge: m.ids }))
-    }
+  if (output.merges !== undefined) {
+    if (!Array.isArray(output.merges)) return { output: null, unresolved: unresolved + 1 }
+    const merges = output.merges.map((proposal) => aliases.decodeMany(CLUSTER, proposal?.merge))
+    const unmapped = merges.reduce((sum, m) => sum + m.unmapped, 0)
+    if (unmapped > 0) return { output: null, unresolved: unresolved + unmapped }
+    resolved.merges = merges.map((m) => ({ merge: m.ids }))
   }
 
-  return resolved
+  return { output: resolved, unresolved }
 }

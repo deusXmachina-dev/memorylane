@@ -30,6 +30,7 @@ import { getKnownProcedureTitles } from './known-procedures'
 
 const GROUNDING_MAX_STEPS = 8
 const MIN_RUN_ACTIVITIES = 2
+const ACTIVITY = 'a'
 // A malformed scan response — no parseable JSON, or candidates that all fail
 // validation / cite unknown ids — silently loses the whole day, so retry it.
 // A response that parses to `[]` is a legitimate empty day, not a failure.
@@ -127,10 +128,10 @@ export async function runDetection(
   // Serve compact positional ids (a1..aN) to the scan instead of raw UUIDs —
   // models mangle long opaque ids when citing them (dropping whole findings),
   // and short handles cut prompt tokens. Mapped back right after parsing.
-  const activityIds = new PositionalAliases().namespace('a')
+  const activityIds = new PositionalAliases()
   const serialized = serializeActivities(activities).map((row, i) => ({
     ...row,
-    id: activityIds.encode(activities[i].id),
+    id: activityIds.encode(ACTIVITY, activities[i].id),
   }))
   const scanPrompt = buildScanSystemPrompt(label, userContextStr, knownProcedures)
   const scanUserMessage = `Here are all ${activities.length} activities from ${label}:\n\n\`\`\`json\n${JSON.stringify(serialized, null, 2)}\n\`\`\``
@@ -149,10 +150,8 @@ export async function runDetection(
     let unmappedIds = 0
     const candidates: Candidate[] = normalizedCandidates
       .map((c) => {
-        const ids = c.activity_ids
-          .map((sid) => activityIds.decode(sid))
-          .filter((id): id is string => Boolean(id))
-        unmappedIds += c.activity_ids.length - ids.length
+        const { ids, unmapped } = activityIds.decodeMany(ACTIVITY, c.activity_ids)
+        unmappedIds += unmapped
         return { ...c, activity_ids: ids }
       })
       .filter((c) => c.activity_ids.length > 0)

@@ -60,7 +60,7 @@ describe('resolveReviewOutput', () => {
   it('round-trips verdicts, splits and merges back to real ids', () => {
     const { aliases } = aliasReviewInput(input)
 
-    const output = resolveReviewOutput(
+    const { output, unresolved } = resolveReviewOutput(
       {
         clusters: [
           { id: 'c1', label: 'Process invoice', split: [{ sighting_ids: ['s1'] }] },
@@ -71,28 +71,41 @@ describe('resolveReviewOutput', () => {
       aliases,
     )
 
-    expect(output.clusters?.[0].id).toBe(UUID_A)
-    expect(output.clusters?.[0].split).toEqual([{ sighting_ids: ['s-a1'] }])
-    expect(output.clusters?.[1].id).toBe(UUID_B)
-    expect(output.merges).toEqual([{ merge: [UUID_A, UUID_B] }])
+    expect(unresolved).toBe(0)
+    expect(output?.clusters?.[0].id).toBe(UUID_A)
+    expect(output?.clusters?.[0].split).toEqual([{ sighting_ids: ['s-a1'] }])
+    expect(output?.clusters?.[1].id).toBe(UUID_B)
+    expect(output?.merges).toEqual([{ merge: [UUID_A, UUID_B] }])
   })
 
   it('drops a verdict whose own id will not decode, keeping its siblings', () => {
     const { aliases } = aliasReviewInput(input)
 
-    const output = resolveReviewOutput(
+    const { output, unresolved } = resolveReviewOutput(
       { clusters: [{ id: 'c9', label: 'Invented' }, { id: 'c2' }] },
       aliases,
     )
 
-    expect(output.clusters).toHaveLength(1)
-    expect(output.clusters?.[0].id).toBe(UUID_B)
+    expect(output?.clusters).toHaveLength(1)
+    expect(output?.clusters?.[0].id).toBe(UUID_B)
+    expect(unresolved).toBe(1)
+  })
+
+  it('drops a verdict citing a sighting handle as its cluster id', () => {
+    const { aliases } = aliasReviewInput(input)
+
+    const { output } = resolveReviewOutput(
+      { clusters: [{ id: 's1', label: 'Wrong kind' }] },
+      aliases,
+    )
+
+    expect(output?.clusters).toEqual([])
   })
 
   it('drops undecodable sighting ids from a split, keeping the rest', () => {
     const { aliases } = aliasReviewInput(input)
 
-    const output = resolveReviewOutput(
+    const { output, unresolved } = resolveReviewOutput(
       {
         clusters: [
           { id: 'c1', split: [{ sighting_ids: ['s1', 's99'] }, { sighting_ids: ['s2'] }] },
@@ -101,28 +114,53 @@ describe('resolveReviewOutput', () => {
       aliases,
     )
 
-    expect(output.clusters?.[0].split).toEqual([
+    expect(output?.clusters?.[0].split).toEqual([
       { sighting_ids: ['s-a1'] },
       { sighting_ids: ['s-a2'] },
     ])
+    expect(unresolved).toBe(1)
   })
 
-  it('drops the merges key entirely when any id will not decode', () => {
+  it('rejects the whole response when a merge id will not decode', () => {
     const { aliases } = aliasReviewInput(input)
 
-    const output = resolveReviewOutput(
+    const { output } = resolveReviewOutput(
       { clusters: [], merges: [{ merge: ['c1', 'c2'] }, { merge: ['c1', 'c7'] }] },
       aliases,
     )
 
-    // Absent, not empty: applyStructure reads a missing "merges" as degenerate
-    // and declines nothing. An empty array would decline every candidate pair.
-    expect('merges' in output).toBe(false)
+    expect(output).toBeNull()
   })
 
   it('keeps an empty merges array — it is a real answer that declines candidates', () => {
     const { aliases } = aliasReviewInput(input)
-    const output = resolveReviewOutput({ clusters: [], merges: [] }, aliases)
-    expect(output.merges).toEqual([])
+    const { output } = resolveReviewOutput({ clusters: [], merges: [] }, aliases)
+    expect(output?.merges).toEqual([])
+  })
+
+  it('leaves an absent merges key absent', () => {
+    const { aliases } = aliasReviewInput(input)
+    const { output } = resolveReviewOutput({ clusters: [] }, aliases)
+    expect(output && 'merges' in output).toBe(false)
+  })
+
+  it('tolerates malformed shapes instead of throwing', () => {
+    const { aliases } = aliasReviewInput(input)
+    const malformed = (value: unknown) => resolveReviewOutput(value as never, aliases)
+
+    expect(malformed({ clusters: {} }).output).toBeNull()
+    expect(malformed({ merges: {} }).output).toBeNull()
+    expect(malformed({ merges: ['c1'] }).output).toBeNull()
+    expect(malformed({ clusters: [null, 3, { id: 5 }] }).output?.clusters).toEqual([])
+
+    const badSplit = malformed({ clusters: [{ id: 'c1', label: 'Keep', split: {} }] })
+    expect(badSplit.output?.clusters).toEqual([{ id: UUID_A, label: 'Keep' }])
+    expect(badSplit.unresolved).toBe(1)
+
+    const badGroup = malformed({ clusters: [{ id: 'c1', split: [{ sighting_ids: 's1' }, 4] }] })
+    expect(badGroup.output?.clusters?.[0].split).toEqual([
+      { sighting_ids: [] },
+      { sighting_ids: [] },
+    ])
   })
 })

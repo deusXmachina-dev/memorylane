@@ -47,9 +47,15 @@ async function callReview(
       tokenUsage.output += result.usage.outputTokens ?? 0
 
       const parsed = extractJsonObject<ReviewOutput>(result.text)
-      if (parsed) return { output: resolveReviewOutput(parsed, aliases), tokenUsage }
+      const resolved = parsed ? resolveReviewOutput(parsed, aliases) : null
+      if (resolved && resolved.unresolved > 0) {
+        progress?.(
+          `[Clustering] ${resolved.unresolved} id handle(s) in the review response did not resolve`,
+        )
+      }
+      if (resolved?.output) return { output: resolved.output, tokenUsage }
       progress?.(
-        `[Clustering] Could not parse review response` +
+        `[Clustering] Could not use review response` +
           (attempt < CLUSTERING_CONFIG.LLM_MAX_ATTEMPTS ? ' — retrying' : ''),
       )
     } catch (error) {
