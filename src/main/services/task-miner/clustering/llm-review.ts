@@ -15,6 +15,7 @@ import type { ProgressCallback } from '../types'
 export interface ReviewCallResult {
   output: ReviewOutput | null
   tokenUsage: { input: number; output: number }
+  mergesIncomplete?: boolean
 }
 
 /**
@@ -53,7 +54,7 @@ async function callReview(
             `[Clustering] ${resolved.unresolved} id reference(s) in the review response could not be read`,
           )
         }
-        return { output: resolved.output, tokenUsage }
+        return { output: resolved.output, tokenUsage, mergesIncomplete: resolved.mergesIncomplete }
       }
       progress?.(
         `[Clustering] Could not use review response` +

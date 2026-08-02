@@ -23,6 +23,7 @@ export interface StructureGuards {
   splittableIds: Set<string>
   /** Merge candidate pairs as mergePairKey()s. */
   mergeCandidatePairs: Set<string>
+  declinesInferable: boolean
 }
 
 /**
@@ -126,11 +127,9 @@ export function applyStructure(
     // Candidate pairs the LLM saw and did not propose merging are declines.
     // Pairs it proposed but validation dropped are NOT — it said yes. The
     // prompt requires an explicit "merges" array even when empty; a response
-    // without one is degenerate and declines nothing, and one whose proposals
-    // were only partly readable (mergesComplete false) cannot be read as
-    // silence either. Pairs touching a just-deleted cluster are skipped so no
-    // rows reference dead ids.
-    if (Array.isArray(review.merges) && review.mergesComplete !== false) {
+    // without one is degenerate and declines nothing. Pairs touching a
+    // just-deleted cluster are skipped so no rows reference dead ids.
+    if (Array.isArray(review.merges) && guards.declinesInferable) {
       for (const key of guards.mergeCandidatePairs) {
         if (proposedPairs.has(key)) continue
         const [a, b] = key.split('|')

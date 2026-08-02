@@ -1,5 +1,5 @@
 import { PositionalAliases } from '@main/llm/id-codec'
-import type { ReviewInput, ReviewMerge, ReviewOutput } from './types'
+import type { ReviewInput, ReviewMerge, ReviewOutput, ReviewSplitGroup } from './types'
 
 export interface ReviewAliases {
   clusters: PositionalAliases
@@ -34,60 +34,64 @@ export function aliasReviewInput(input: ReviewInput): {
 }
 
 export interface ResolvedReview {
-  /** null = the response's shape is unusable; the caller retries. */
   output: ReviewOutput | null
-  /** Id references that could not be read back. */
   unresolved: number
+  mergesIncomplete: boolean
 }
 
 export function resolveReviewOutput(output: unknown, aliases: ReviewAliases): ResolvedReview {
   let unresolved = 0
-  if (!output || typeof output !== 'object' || Array.isArray(output)) {
-    return { output: null, unresolved }
-  }
+  const unusable = () => ({ output: null, unresolved, mergesIncomplete: false })
+  if (!output || typeof output !== 'object' || Array.isArray(output)) return unusable()
 
   const raw = output as ReviewOutput
   const resolved: ReviewOutput = {}
 
-  if (raw.clusters !== undefined) {
-    if (!Array.isArray(raw.clusters)) return { output: null, unresolved }
-    resolved.clusters = raw.clusters.flatMap((verdict) => {
-      const id =
-        verdict && typeof verdict === 'object' ? aliases.clusters.decode(verdict.id) : undefined
-      if (!id) {
-        unresolved++
-        return []
-      }
-      if (verdict.split === undefined) return [{ ...verdict, id }]
-      if (!Array.isArray(verdict.split)) {
-        unresolved++
-        return [{ ...verdict, id, split: undefined }]
-      }
-      const split = verdict.split.map((group) => {
-        const decoded = aliases.sightings.decodeMany(group?.sighting_ids)
-        unresolved += decoded ? decoded.unmapped : 1
-        return { sighting_ids: decoded?.ids ?? [] }
-      })
-      return [{ ...verdict, id, split }]
+  const resolveSplit = (split: unknown): ReviewSplitGroup[] | undefined => {
+    if (split === undefined) return undefined
+    if (!Array.isArray(split)) {
+      unresolved++
+      return undefined
+    }
+    return split.map((group) => {
+      const { ids, unmapped } = aliases.sightings.decodeMany(group?.sighting_ids)
+      unresolved += unmapped
+      return { sighting_ids: ids }
     })
   }
 
-  if (raw.merges !== undefined) {
-    if (!Array.isArray(raw.merges)) return { output: null, unresolved }
-    const merges: ReviewMerge[] = []
-    let complete = true
-    for (const proposal of raw.merges) {
-      const decoded = aliases.clusters.decodeMany(proposal?.merge)
-      if (!decoded || decoded.unmapped > 0) {
-        unresolved += decoded ? decoded.unmapped : 1
-        complete = false
-        continue
+  if (raw.clusters !== undefined) {
+    if (!Array.isArray(raw.clusters)) return unusable()
+    const decoded = raw.clusters.map((verdict) =>
+      verdict && typeof verdict === 'object' ? aliases.clusters.decode(verdict.id) : undefined,
+    )
+    const claims = new Map<string, number>()
+    for (const id of decoded) if (id) claims.set(id, (claims.get(id) ?? 0) + 1)
+    resolved.clusters = raw.clusters.flatMap((verdict, i) => {
+      const id = decoded[i]
+      if (!id || (claims.get(id) ?? 0) > 1) {
+        unresolved++
+        return []
       }
-      merges.push({ merge: decoded.ids })
-    }
-    resolved.merges = merges
-    if (!complete) resolved.mergesComplete = false
+      return [{ ...verdict, id, split: resolveSplit(verdict.split) }]
+    })
   }
 
-  return { output: resolved, unresolved }
+  let mergesIncomplete = false
+  if (raw.merges !== undefined) {
+    if (!Array.isArray(raw.merges)) return unusable()
+    const merges: ReviewMerge[] = []
+    for (const proposal of raw.merges) {
+      const { ids, unmapped } = aliases.clusters.decodeMany(proposal?.merge)
+      if (unmapped > 0) {
+        unresolved += unmapped
+        continue
+      }
+      merges.push({ merge: ids })
+    }
+    resolved.merges = merges
+    mergesIncomplete = merges.length !== raw.merges.length
+  }
+
+  return { output: resolved, unresolved, mergesIncomplete }
 }

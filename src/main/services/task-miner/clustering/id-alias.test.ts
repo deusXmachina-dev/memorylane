@@ -91,6 +91,24 @@ describe('resolveReviewOutput', () => {
     expect(unresolved).toBe(1)
   })
 
+  it('drops both verdicts when two claim the same cluster', () => {
+    const { aliases } = aliasReviewInput(input)
+
+    const { output, unresolved } = resolveReviewOutput(
+      {
+        clusters: [
+          { id: 'c1', label: 'Process invoice' },
+          { id: 'c1', label: 'Reconcile payouts' },
+          { id: 'c2', label: 'Other' },
+        ],
+      },
+      aliases,
+    )
+
+    expect(output?.clusters).toEqual([{ id: UUID_B, label: 'Other', split: undefined }])
+    expect(unresolved).toBe(2)
+  })
+
   it('drops a verdict citing a sighting handle as its cluster id', () => {
     const { aliases } = aliasReviewInput(input)
 
@@ -124,41 +142,44 @@ describe('resolveReviewOutput', () => {
   it('drops only the unreadable merge proposal and marks the list incomplete', () => {
     const { aliases } = aliasReviewInput(input)
 
-    const { output, unresolved } = resolveReviewOutput(
+    const { output, unresolved, mergesIncomplete } = resolveReviewOutput(
       { clusters: [], merges: [{ merge: ['c1', 'c2'] }, { merge: ['c1', 'c7'] }] },
       aliases,
     )
 
     expect(output?.merges).toEqual([{ merge: [UUID_A, UUID_B] }])
-    expect(output?.mergesComplete).toBe(false)
+    expect(mergesIncomplete).toBe(true)
     expect(unresolved).toBe(1)
   })
 
   it('keeps the cluster verdicts when a merge proposal is dropped', () => {
     const { aliases } = aliasReviewInput(input)
 
-    const { output } = resolveReviewOutput(
+    const { output, mergesIncomplete } = resolveReviewOutput(
       { clusters: [{ id: 'c1', label: 'Process invoice' }], merges: [{ merge: ['c1', 'c7'] }] },
       aliases,
     )
 
     expect(output?.clusters).toEqual([{ id: UUID_A, label: 'Process invoice' }])
     expect(output?.merges).toEqual([])
-    expect(output?.mergesComplete).toBe(false)
+    expect(mergesIncomplete).toBe(true)
   })
 
   it('leaves a fully readable merge list complete', () => {
     const { aliases } = aliasReviewInput(input)
-    const { output } = resolveReviewOutput({ merges: [{ merge: ['c1', 'c2'] }] }, aliases)
+    const { output, mergesIncomplete } = resolveReviewOutput(
+      { merges: [{ merge: ['c1', 'c2'] }] },
+      aliases,
+    )
     expect(output?.merges).toEqual([{ merge: [UUID_A, UUID_B] }])
-    expect(output?.mergesComplete).toBeUndefined()
+    expect(mergesIncomplete).toBe(false)
   })
 
   it('keeps an empty merges array — it is a real answer that declines candidates', () => {
     const { aliases } = aliasReviewInput(input)
-    const { output } = resolveReviewOutput({ clusters: [], merges: [] }, aliases)
+    const { output, mergesIncomplete } = resolveReviewOutput({ clusters: [], merges: [] }, aliases)
     expect(output?.merges).toEqual([])
-    expect(output?.mergesComplete).toBeUndefined()
+    expect(mergesIncomplete).toBe(false)
   })
 
   it('leaves an absent merges key absent', () => {
@@ -182,7 +203,7 @@ describe('resolveReviewOutput', () => {
     expect(malformed({ clusters: {} }).output).toBeNull()
     expect(malformed({ merges: {} }).output).toBeNull()
     expect(malformed({ merges: ['c1'] }).output?.merges).toEqual([])
-    expect(malformed({ merges: ['c1'] }).output?.mergesComplete).toBe(false)
+    expect(malformed({ merges: ['c1'] }).mergesIncomplete).toBe(true)
     expect(malformed({ clusters: [null, 3, { id: 5 }] }).output?.clusters).toEqual([])
 
     const badSplit = malformed({ clusters: [{ id: 'c1', label: 'Keep', split: {} }] })

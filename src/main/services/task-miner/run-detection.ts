@@ -149,7 +149,7 @@ export async function runDetection(
     let unmappedIds = 0
     const candidates: Candidate[] = normalizedCandidates
       .map((c) => {
-        const { ids, unmapped } = activityIds.decodeMany(c.activity_ids) ?? { ids: [], unmapped: 0 }
+        const { ids, unmapped } = activityIds.decodeMany(c.activity_ids)
         unmappedIds += unmapped
         return { ...c, activity_ids: ids }
       })
@@ -239,7 +239,7 @@ export async function runDetection(
 
   const tools = cfg.scanOnly
     ? undefined
-    : buildVerificationTools(storage, embeddingService, start, end, progress)
+    : buildVerificationTools(storage, embeddingService, start, end, progress, activityIds)
   // The grounding tools (search/browse) can surface activities from other days;
   // a sighting must stay inside the day being mined, so its final ids are
   // intersected with this window before the duration is computed.
@@ -262,10 +262,11 @@ export async function runDetection(
         const groundPrompt = buildGroundingSystemPrompt(
           candidate,
           deriveSightingApps(candidateActivities),
+          candidate.activity_ids.map((id) => activityIds.encode(id)),
         )
 
         const enrichedActivities = candidateActivities.map((a) => ({
-          id: a.id,
+          id: activityIds.encode(a.id),
           app: a.appName,
           window_title: a.windowTitle,
           time: new Date(a.startTimestamp).toISOString(),
@@ -316,9 +317,15 @@ export async function runDetection(
 
       // Finalize activity_ids and resolve them to real activities. The window
       // and interaction time are computed from these — never LLM-estimated.
-      const requestedIds = (parsed.activity_ids as string[] | undefined)?.length
-        ? (parsed.activity_ids as string[])
-        : candidate.activity_ids
+      const cited = parsed.activity_ids
+      const gaveIds = Array.isArray(cited) && cited.length > 0
+      const decoded = activityIds.decodeMany(cited)
+      if (gaveIds && decoded.unmapped > 0) {
+        progress(
+          `[Phase 2] "${candidate.title}": dropped ${decoded.unmapped} unreadable activity id(s)`,
+        )
+      }
+      const requestedIds = gaveIds ? decoded.ids : candidate.activity_ids
       // Keep only ids inside the day being mined — a sighting can't span days,
       // and an out-of-window id would inflate the computed duration.
       const finalIds = requestedIds.filter((id) => dayActivityIds.has(id))

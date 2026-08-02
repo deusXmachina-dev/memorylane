@@ -155,9 +155,4 @@ export interface ReviewMerge {
 export interface ReviewOutput {
   clusters?: ReviewClusterVerdict[]
   merges?: ReviewMerge[]
-  /**
-   * Set by id resolution, not by the model: false = some merge proposals were
-   * unreadable, so a candidate pair's absence from "merges" is not a decline.
-   */
-  mergesComplete?: boolean
 }

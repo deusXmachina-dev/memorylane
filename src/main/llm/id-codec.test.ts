@@ -69,11 +69,11 @@ describe('PositionalAliases', () => {
     })
   })
 
-  it('separates an empty list from one that is not a list at all', () => {
+  it('reads an empty list as nothing lost and a non-list as one lost reference', () => {
     const aliases = new PositionalAliases('a')
     expect(aliases.decodeMany([])).toEqual({ ids: [], unmapped: 0 })
-    expect(aliases.decodeMany(undefined)).toBeNull()
-    expect(aliases.decodeMany('a1')).toBeNull()
-    expect(aliases.decodeMany({ a1: true })).toBeNull()
+    expect(aliases.decodeMany(undefined)).toEqual({ ids: [], unmapped: 1 })
+    expect(aliases.decodeMany('a1')).toEqual({ ids: [], unmapped: 1 })
+    expect(aliases.decodeMany({ a1: true })).toEqual({ ids: [], unmapped: 1 })
   })
 })

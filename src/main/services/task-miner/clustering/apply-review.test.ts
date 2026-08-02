@@ -74,6 +74,7 @@ describe('applyStructure', () => {
     reviewableIds: overrides.reviewableIds ?? new Set(),
     splittableIds: overrides.splittableIds ?? new Set(),
     mergeCandidatePairs: overrides.mergeCandidatePairs ?? new Set(),
+    declinesInferable: overrides.declinesInferable ?? true,
   })
 
   it('merges candidate pairs into the oldest cluster regardless of LLM order', () => {
@@ -242,13 +243,13 @@ describe('applyStructure', () => {
     seedCluster('b', 200, ['s2'])
     seedCluster('c', 300, ['s3'])
 
-    // One proposal was unreadable, so the absence of (a, c) is not a verdict.
     const result = applyStructure(
       storage,
-      { merges: [{ merge: ['a', 'b'] }], mergesComplete: false },
+      { merges: [{ merge: ['a', 'b'] }] },
       guards({
         reviewableIds: new Set(['a', 'b', 'c']),
         mergeCandidatePairs: new Set([mergePairKey('a', 'b'), mergePairKey('a', 'c')]),
+        declinesInferable: false,
       }),
       5000,
     )

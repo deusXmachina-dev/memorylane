@@ -134,8 +134,8 @@ describe('id aliasing', () => {
     expect(result.output).toEqual({
       clusters: [{ id: UUID_A, label: 'Process invoice' }],
       merges: [{ merge: [UUID_A, UUID_B] }],
-      mergesComplete: false,
     })
+    expect(result.mergesIncomplete).toBe(true)
     expect(progress).toHaveBeenCalledWith(expect.stringContaining('could not be read'))
   })
 
