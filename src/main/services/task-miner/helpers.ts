@@ -1,4 +1,3 @@
-import { SIGHTING_BRIDGE_MAX_GAP_MS } from '@constants'
 import type { ActivityDetail } from '../../storage'
 
 interface TimeBounded {
@@ -11,9 +10,10 @@ interface TimeBounded {
  * constituent activities — never from an LLM estimate.
  *
  * - `startedAt` / `endedAt`: min start / max end across the activities.
- * - `interactionMin`: union of the activities' [start, end] intervals, bridging
- *   gaps up to `SIGHTING_BRIDGE_MAX_GAP_MS` so pauses inside one run count while
- *   longer breaks do not. Overlapping or nested activities are not
+ * - `interactionMin`: union of the activities' [start, end] intervals. Gaps
+ *   never count — a presence heartbeat keeps a window alive while the user is at
+ *   the machine, so read and think time is already inside the activities, and a
+ *   gap is time spent elsewhere. Overlapping or nested activities are not
  *   double-counted, so active time never exceeds the wall-clock span, which is
  *   just `endedAt - startedAt`, derived on read.
  */
@@ -35,7 +35,7 @@ export function computeEpisodeWindow(activities: TimeBounded[]): {
   let curStart = intervals[0].start
   for (let i = 1; i < intervals.length; i++) {
     const { start, end } = intervals[i]
-    if (start <= curEnd + SIGHTING_BRIDGE_MAX_GAP_MS) {
+    if (start <= curEnd) {
       curEnd = Math.max(curEnd, end)
     } else {
       unionMs += curEnd - curStart
