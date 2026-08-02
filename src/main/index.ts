@@ -24,6 +24,7 @@ import { createCaptureHotkeyManager } from '@main/capture/capture-hotkey-manager
 import log from '@main/utils/logger'
 import '@main/utils/logger-electron'
 import { startPowerMonitoring, shouldPause } from '@main/monitoring/power-monitor'
+import { configureHttpTransport } from '@main/system/http-transport'
 import { CaptureStateManager } from './settings/capture-state-manager'
 import { CaptureSettingsManager } from './settings/capture-settings-manager'
 import { DeviceIdentity } from './settings/device-identity'
@@ -205,6 +206,7 @@ app.on('second-instance', (_event, argv) => {
 })
 
 app.on('ready', async () => {
+  configureHttpTransport()
   const startHidden = shouldStartHiddenOnLaunch()
   const editionConfig = loadAppEditionConfig()
 

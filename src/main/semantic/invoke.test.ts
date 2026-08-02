@@ -28,7 +28,7 @@ function jsonResponse(body: unknown, init: ResponseInit = { status: 200 }): Resp
 }
 
 describe('invokeViaGenerateText', () => {
-  it('passes requestTimeoutMs through to languageModel', async () => {
+  it('passes requestTimeoutMs to the SDK as the call deadline', async () => {
     vi.mocked(generateText).mockResolvedValue({
       text: 'ok',
       usage: { inputTokens: 1, outputTokens: 1 },
@@ -52,7 +52,8 @@ describe('invokeViaGenerateText', () => {
       requestTimeoutMs: 120_000,
     })
 
-    expect(languageModel).toHaveBeenCalledWith('m', 120_000)
+    expect(languageModel).toHaveBeenCalledWith('m')
+    expect(generateText).toHaveBeenCalledWith(expect.objectContaining({ timeout: 120_000 }))
   })
 })
 

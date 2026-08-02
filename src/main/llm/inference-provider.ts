@@ -1,5 +1,4 @@
 import type { LanguageModel } from 'ai'
-import { Agent } from 'undici'
 import type { Vendor, VendorCredentials } from '../../shared/types'
 import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
 import { createSdkProvider, rawHttpBaseURL, vendorSupportsRawHttp } from './adapters'
@@ -18,11 +17,10 @@ export interface InferenceProvider {
   getActiveVendor(): Vendor
   /**
    * Resolve a Vercel AI SDK LanguageModel for the active vendor and given
-   * model id. Throws when the active vendor is not configured. Pass
-   * `requestTimeoutMs` for calls that legitimately run past
-   * DEFAULT_REQUEST_TIMEOUT_MS (task mining scans a whole day in one prompt).
+   * model id. Throws when the active vendor is not configured. Deadlines are
+   * the caller's: pass `timeout` on the generateText call.
    */
-  languageModel(modelId: string, requestTimeoutMs?: number): LanguageModel
+  languageModel(modelId: string): LanguageModel
   /**
    * Snapshot of the active route's wire-level details. Returns non-null only
    * for vendors that speak the OpenAI-compatible chat-completions wire format
@@ -46,40 +44,13 @@ export interface InferenceProviderOptions {
 }
 
 /**
- * Upstream providers can accept a request and then stall indefinitely while
- * the gateway keeps the connection alive, so an explicit deadline is the only
- * thing that ever fails the call.
- *
- * This is a stall detector, not a budget: every caller on the default emits a
- * bounded response (a summary, a judgement, a user-context blob) and finishes
- * in seconds. Callers whose output is genuinely long-running pass their own —
- * see the activityRequestTimeoutMs and taskMiningRequestTimeoutMs settings.
+ * Deadline for callers that emit a bounded response (a summary, a judgement, a
+ * user-context blob) and finish in seconds. Pass it as `timeout` on the
+ * generateText call. Callers whose output is genuinely long-running pass their
+ * own — see the activityRequestTimeoutMs and taskMiningRequestTimeoutMs
+ * settings.
  */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 3 * 60 * 1000
-
-const dispatchers = new Map<number, Agent>()
-
-/** undici defaults headersTimeout and bodyTimeout to 300s, capping any longer deadline. */
-function dispatcherFor(timeoutMs: number): Agent {
-  let agent = dispatchers.get(timeoutMs)
-  if (!agent) {
-    agent = new Agent({ headersTimeout: timeoutMs, bodyTimeout: timeoutMs })
-    dispatchers.set(timeoutMs, agent)
-  }
-  return agent
-}
-
-export function withRequestTimeout(
-  fetchImpl: typeof globalThis.fetch,
-  timeoutMs: number,
-): typeof globalThis.fetch {
-  const dispatcher = dispatcherFor(timeoutMs)
-  return (input, init) => {
-    const timeout = AbortSignal.timeout(timeoutMs)
-    const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout
-    return fetchImpl(input, { ...init, signal, dispatcher })
-  }
-}
 
 interface CacheEntry {
   signature: string
@@ -108,25 +79,19 @@ export class InferenceProviderImpl implements InferenceProvider {
     return this.getActiveVendorAccessor()
   }
 
-  languageModel(
-    modelId: string,
-    requestTimeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
-  ): LanguageModel {
+  languageModel(modelId: string): LanguageModel {
     const vendor = this.getActiveVendor()
     const creds = this.credentials.getCredentials(vendor)
     if (!creds) {
       throw new Error(`InferenceProvider: vendor "${vendor}" is not configured`)
     }
     const signature = signatureFor(creds)
-    const cacheKey = `${vendor}|${requestTimeoutMs}`
-    const cached = this.sdkCache.get(cacheKey)
+    const cached = this.sdkCache.get(vendor)
     if (cached && cached.signature === signature) {
       return cached.sdkProvider.languageModel(modelId)
     }
-    const sdkProvider = createSdkProvider(vendor, creds, {
-      fetch: withRequestTimeout(this.customFetch ?? globalThis.fetch, requestTimeoutMs),
-    })
-    this.sdkCache.set(cacheKey, { signature, sdkProvider })
+    const sdkProvider = createSdkProvider(vendor, creds, { fetch: this.customFetch })
+    this.sdkCache.set(vendor, { signature, sdkProvider })
     log.info(`[InferenceProvider] built provider ${describeRoute(vendor, creds)}`)
     return sdkProvider.languageModel(modelId)
   }

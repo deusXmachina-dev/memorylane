@@ -1,5 +1,4 @@
 import { generateText } from 'ai'
-import { withRequestTimeout } from '../llm'
 import type { InferenceProvider, VendorRouteSnapshot } from '../llm'
 import type { ChainAttemptOutcome } from './model-chain'
 import type { ChatContentItem } from './types'
@@ -26,7 +25,8 @@ export async function invokeViaGenerateText(
     },
   ]
   const result = await generateText({
-    model: input.provider.languageModel(input.model, input.requestTimeoutMs),
+    model: input.provider.languageModel(input.model),
+    timeout: input.requestTimeoutMs,
     messages,
     abortSignal: input.signal,
   })
@@ -113,7 +113,7 @@ interface RawChatCompletionResponse {
 export async function invokeRawVideoCompletion(
   input: RawVideoCompletionInput,
 ): Promise<ChainAttemptOutcome> {
-  const fetchImpl = input.fetchImpl ?? withRequestTimeout(globalThis.fetch, input.requestTimeoutMs)
+  const fetchImpl = input.fetchImpl ?? globalThis.fetch
   const url = joinUrl(input.route.baseURL, '/chat/completions')
   const body = {
     model: input.model,
@@ -137,7 +137,7 @@ export async function invokeRawVideoCompletion(
       method: 'POST',
       headers,
       body: JSON.stringify(body),
-      signal: input.signal,
+      signal: AbortSignal.any([input.signal, AbortSignal.timeout(input.requestTimeoutMs)]),
     })
   } catch (error) {
     throw enrichRawHttpError(error)

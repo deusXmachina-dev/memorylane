@@ -174,7 +174,8 @@ export async function runDetection(
         (attempt > 1 ? ` (attempt ${attempt}/${SCAN_MAX_ATTEMPTS})` : ''),
     )
     const scanResult = await generateText({
-      model: provider.languageModel(cfg.model, PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS),
+      model: provider.languageModel(cfg.model),
+      timeout: PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS,
       system: scanPrompt,
       prompt: scanUserMessage,
       maxRetries: 0,
@@ -288,7 +289,8 @@ export async function runDetection(
         )}\n\`\`\``
 
         const verifyResult = await generateText({
-          model: provider.languageModel(cfg.model, PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS),
+          model: provider.languageModel(cfg.model),
+          timeout: PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS,
           system: groundPrompt,
           prompt: candidateInput,
           tools,
