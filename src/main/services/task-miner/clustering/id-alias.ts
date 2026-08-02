@@ -1,28 +1,33 @@
 import { PositionalAliases } from '@main/llm/id-codec'
 import type { ReviewInput, ReviewOutput } from './types'
 
-const CLUSTER = 'c'
-const SIGHTING = 's'
+export interface ReviewAliases {
+  clusters: PositionalAliases
+  sightings: PositionalAliases
+}
 
 export function aliasReviewInput(input: ReviewInput): {
   input: ReviewInput
-  aliases: PositionalAliases
+  aliases: ReviewAliases
 } {
-  const aliases = new PositionalAliases()
+  const aliases: ReviewAliases = {
+    clusters: new PositionalAliases('c'),
+    sightings: new PositionalAliases('s'),
+  }
   return {
     aliases,
     input: {
       clusters: input.clusters.map((cluster) => ({
         ...cluster,
-        id: aliases.encode(CLUSTER, cluster.id),
+        id: aliases.clusters.encode(cluster.id),
         members: cluster.members.map((member) => ({
           ...member,
-          sighting_id: aliases.encode(SIGHTING, member.sighting_id),
+          sighting_id: aliases.sightings.encode(member.sighting_id),
         })),
       })),
       mergeCandidates: input.mergeCandidates.map(([a, b]): [string, string] => [
-        aliases.encode(CLUSTER, a),
-        aliases.encode(CLUSTER, b),
+        aliases.clusters.encode(a),
+        aliases.clusters.encode(b),
       ]),
     },
   }
@@ -34,17 +39,14 @@ export interface ResolvedReview {
   unresolved: number
 }
 
-export function resolveReviewOutput(
-  output: ReviewOutput,
-  aliases: PositionalAliases,
-): ResolvedReview {
+export function resolveReviewOutput(output: ReviewOutput, aliases: ReviewAliases): ResolvedReview {
   const resolved: ReviewOutput = {}
   let unresolved = 0
 
   if (output.clusters !== undefined) {
     if (!Array.isArray(output.clusters)) return { output: null, unresolved: unresolved + 1 }
     resolved.clusters = output.clusters.flatMap((verdict) => {
-      const id = verdict && typeof verdict === 'object' ? aliases.decode(CLUSTER, verdict.id) : null
+      const id = verdict && typeof verdict === 'object' ? aliases.clusters.decode(verdict.id) : null
       if (!id) {
         unresolved++
         return []
@@ -55,7 +57,7 @@ export function resolveReviewOutput(
         return [{ ...verdict, id, split: undefined }]
       }
       const split = verdict.split.map((group) => {
-        const decoded = aliases.decodeMany(SIGHTING, group?.sighting_ids)
+        const decoded = aliases.sightings.decodeMany(group?.sighting_ids)
         unresolved += decoded.unmapped
         return { sighting_ids: decoded.ids }
       })
@@ -65,7 +67,7 @@ export function resolveReviewOutput(
 
   if (output.merges !== undefined) {
     if (!Array.isArray(output.merges)) return { output: null, unresolved: unresolved + 1 }
-    const merges = output.merges.map((proposal) => aliases.decodeMany(CLUSTER, proposal?.merge))
+    const merges = output.merges.map((proposal) => aliases.clusters.decodeMany(proposal?.merge))
     const unmapped = merges.reduce((sum, m) => sum + m.unmapped, 0)
     unresolved += unmapped
     if (unmapped === 0) resolved.merges = merges.map((m) => ({ merge: m.ids }))
