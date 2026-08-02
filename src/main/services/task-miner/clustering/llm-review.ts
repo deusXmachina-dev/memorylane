@@ -10,6 +10,7 @@ import {
   serializeReviewInput,
 } from './prompts'
 import { aliasReviewInput, resolveReviewOutput } from './id-alias'
+import log from '@main/utils/logger'
 import type { ProgressCallback } from '../types'
 
 export interface ReviewCallResult {
@@ -49,8 +50,8 @@ async function callReview(
       const parsed = extractJsonObject<ReviewOutput>(result.text)
       const resolved = parsed ? resolveReviewOutput(parsed, aliases) : null
       if (resolved && resolved.unresolved > 0) {
-        progress?.(
-          `[Clustering] ${resolved.unresolved} id handle(s) in the review response did not resolve`,
+        log.warn(
+          `[TaskMiner] [Clustering] ${resolved.unresolved} id handle(s) in the review response did not resolve`,
         )
       }
       if (resolved?.output) return { output: resolved.output, tokenUsage }

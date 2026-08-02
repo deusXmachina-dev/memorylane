@@ -2,10 +2,15 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { InferenceProvider } from '@main/llm'
 import { generateText } from 'ai'
 import { runStructureReview, runContentReview } from './llm-review'
+import log from '@main/utils/logger'
 
 vi.mock('ai', () => ({ generateText: vi.fn() }))
+vi.mock('@main/utils/logger', () => ({
+  default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}))
 
 const mockedGenerateText = vi.mocked(generateText)
+const mockedWarn = vi.mocked(log.warn)
 
 const languageModel: InferenceProvider['languageModel'] = () => 'model'
 const provider = {
@@ -17,6 +22,7 @@ const emptyInput = { clusters: [], mergeCandidates: [] }
 
 beforeEach(() => {
   mockedGenerateText.mockReset()
+  mockedWarn.mockReset()
 })
 
 describe('runStructureReview', () => {
@@ -86,28 +92,22 @@ describe('id aliasing', () => {
       usage: { inputTokens: 10, outputTokens: 5 },
     } as never)
 
-    const progress = vi.fn()
-    const result = await runStructureReview(
-      provider,
-      'model',
-      {
-        clusters: [
-          {
-            id: clusterId,
-            splittable: false,
-            label: '',
-            stats: { times_seen: 2, span_days: 3, median_active_min: 5 },
-            members: [],
-          },
-        ],
-        mergeCandidates: [],
-      },
-      progress,
-    )
+    const result = await runStructureReview(provider, 'model', {
+      clusters: [
+        {
+          id: clusterId,
+          splittable: false,
+          label: '',
+          stats: { times_seen: 2, span_days: 3, median_active_min: 5 },
+          members: [],
+        },
+      ],
+      mergeCandidates: [],
+    })
 
     expect(mockedGenerateText).toHaveBeenCalledTimes(1)
     expect(result.output).toEqual({ clusters: [{ id: clusterId, label: 'Process invoice' }] })
-    expect(progress).toHaveBeenCalledWith(expect.stringContaining('did not resolve'))
+    expect(mockedWarn).toHaveBeenCalledWith(expect.stringContaining('did not resolve'))
   })
 
   it('reports dropped handles without failing the response', async () => {
@@ -116,12 +116,11 @@ describe('id aliasing', () => {
       usage: { inputTokens: 10, outputTokens: 5 },
     } as never)
 
-    const progress = vi.fn()
-    const result = await runStructureReview(provider, 'model', emptyInput, progress)
+    const result = await runStructureReview(provider, 'model', emptyInput)
 
     expect(mockedGenerateText).toHaveBeenCalledTimes(1)
     expect(result.output).toEqual({ clusters: [], merges: [] })
-    expect(progress).toHaveBeenCalledWith(expect.stringContaining('1 id handle(s)'))
+    expect(mockedWarn).toHaveBeenCalledWith(expect.stringContaining('1 id handle(s)'))
   })
 })
 
