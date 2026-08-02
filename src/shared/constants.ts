@@ -130,11 +130,6 @@ export const PATTERN_DETECTION_CONFIG = {
   REQUEST_TIMEOUT_MS: 20 * 60_000,
 }
 
-// A sighting's active time bridges gaps this short between its activities: an
-// activity window closes after 5s of silence, so think and read pauses inside
-// one run would otherwise drop out. Longer gaps are breaks and stay excluded.
-export const SIGHTING_BRIDGE_MAX_GAP_MS = 5 * 60_000
-
 // Sightings older than this are pruned on every mining run; cluster stats use
 // the same window so the timesSeen numerator and observedDays denominator
 // cover the same period.
