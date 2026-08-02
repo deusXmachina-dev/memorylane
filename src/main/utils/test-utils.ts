@@ -26,6 +26,7 @@ export function makeCaptureSettings(overrides: Partial<CaptureSettings> = {}): C
     captureHotkeyAccelerator: 'CommandOrControl+Shift+M',
     databaseExportDirectory: '',
     excludePrivateBrowsing: true,
+    excludeLoginScreens: true,
     excludedApps: [],
     excludedUrlPatterns: [],
     activeVendor: 'openrouter',

@@ -6,6 +6,7 @@ export type NumericCaptureSetting = Exclude<
   | 'semanticPipelineMode'
   | 'captureHotkeyAccelerator'
   | 'excludePrivateBrowsing'
+  | 'excludeLoginScreens'
   | 'excludedApps'
   | 'excludedUrlPatterns'
   | 'urlMatchSchemaVersion'

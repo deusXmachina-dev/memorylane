@@ -53,6 +53,7 @@ describe('CaptureSettingsManager', () => {
       expect(defaults.captureHotkeyAccelerator).toBe(DEFAULT_CAPTURE_HOTKEY_ACCELERATOR)
       expect(defaults.databaseExportDirectory).toBe('')
       expect(defaults.excludePrivateBrowsing).toBe(true)
+      expect(defaults.excludeLoginScreens).toBe(true)
       expect(defaults.excludedApps).toEqual([])
       expect(defaults.excludedUrlPatterns).toEqual([])
       expect(defaults.uploadDetailLevel).toBe('off')
@@ -169,6 +170,20 @@ describe('CaptureSettingsManager', () => {
 
       const reloaded = new CaptureSettingsManager(configPath)
       expect(reloaded.get().excludePrivateBrowsing).toBe(false)
+    })
+
+    it('persists login screen exclusion flag', () => {
+      const manager = new CaptureSettingsManager(configPath)
+      manager.save({ excludeLoginScreens: false })
+
+      const reloaded = new CaptureSettingsManager(configPath)
+      expect(reloaded.get().excludeLoginScreens).toBe(false)
+    })
+
+    it('loads excludeLoginScreens as true when the stored file lacks the key', () => {
+      fs.writeFileSync(configPath, JSON.stringify({ excludePrivateBrowsing: false }))
+      const manager = new CaptureSettingsManager(configPath)
+      expect(manager.get().excludeLoginScreens).toBe(true)
     })
 
     it('persists uploadDetailLevel across reloads', () => {

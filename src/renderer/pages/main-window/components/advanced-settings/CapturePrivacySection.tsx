@@ -14,6 +14,7 @@ interface CapturePrivacySectionProps {
   onToggleRecordingHotkey: () => void
   onAutoStartEnabledChange: (enabled: boolean) => void
   onExcludePrivateBrowsingChange: (enabled: boolean) => void
+  onExcludeLoginScreensChange: (enabled: boolean) => void
   onExcludedRulesCommit: (rules: { excludedApps: string[]; excludedUrlPatterns: string[] }) => void
   onObserved: () => void
 }
@@ -25,6 +26,7 @@ export function CapturePrivacySection({
   onToggleRecordingHotkey,
   onAutoStartEnabledChange,
   onExcludePrivateBrowsingChange,
+  onExcludeLoginScreensChange,
   onExcludedRulesCommit,
   onObserved,
 }: CapturePrivacySectionProps): React.JSX.Element {
@@ -63,6 +65,18 @@ export function CapturePrivacySection({
               checked={form.excludePrivateBrowsing}
               onCheckedChange={onExcludePrivateBrowsingChange}
               aria-label="Exclude private browsing"
+            />
+          }
+        />
+
+        <SettingsRow
+          label="Exclude sign-in screens"
+          description="Login and password pages are never captured."
+          control={
+            <Switch
+              checked={form.excludeLoginScreens}
+              onCheckedChange={onExcludeLoginScreensChange}
+              aria-label="Exclude sign-in screens"
             />
           }
         />

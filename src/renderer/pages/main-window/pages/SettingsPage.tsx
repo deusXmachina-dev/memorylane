@@ -154,6 +154,17 @@ export function SettingsPage({
     [save],
   )
 
+  const commitExcludeLoginScreens = useCallback(
+    (enabled: boolean): void => {
+      setForm((prev) => (prev ? { ...prev, excludeLoginScreens: enabled } : prev))
+      save(
+        { excludeLoginScreens: enabled },
+        enabled ? 'Sign-in screen exclusion enabled' : 'Sign-in screen exclusion disabled',
+      )
+    },
+    [save],
+  )
+
   const setCaptureHotkeyAccelerator = useCallback((value: string): void => {
     setForm((prev) => (prev ? { ...prev, captureHotkeyAccelerator: value } : prev))
   }, [])
@@ -294,6 +305,7 @@ export function SettingsPage({
               onToggleRecordingHotkey={() => setRecordingHotkey((current) => !current)}
               onAutoStartEnabledChange={setAutoStartEnabled}
               onExcludePrivateBrowsingChange={commitExcludePrivateBrowsing}
+              onExcludeLoginScreensChange={commitExcludeLoginScreens}
               onExcludedRulesCommit={commitExcludedRules}
               onObserved={() => void load()}
             />

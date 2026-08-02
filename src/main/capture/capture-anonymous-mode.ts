@@ -35,11 +35,11 @@ const ANONYMOUS_MODE_MARKERS = [
   'about:incognito',
 ]
 
-function normalize(value: string | undefined): string {
+export function normalize(value: string | undefined): string {
   return value?.trim().toLowerCase() ?? ''
 }
 
-function normalizeProcessName(value: string | undefined): string {
+export function normalizeProcessName(value: string | undefined): string {
   const normalized = normalize(value)
   if (normalized.endsWith('.exe')) {
     return normalized.slice(0, -4)
@@ -52,7 +52,7 @@ function normalizeProcessName(value: string | undefined): string {
   return normalized
 }
 
-function isLikelyBrowser(window: AnonymousModeWindowContext): boolean {
+export function isLikelyBrowser(window: AnonymousModeWindowContext): boolean {
   const processName = normalizeProcessName(window.processName)
   const bundleId = normalize(window.bundleId)
 

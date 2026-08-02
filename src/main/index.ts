@@ -297,6 +297,7 @@ app.on('ready', async () => {
     excludedApps: initialCaptureSettings.excludedApps,
     excludedUrlPatterns: initialCaptureSettings.excludedUrlPatterns,
     excludePrivateBrowsing: initialCaptureSettings.excludePrivateBrowsing,
+    excludeLoginScreens: initialCaptureSettings.excludeLoginScreens,
     deviceIdentity,
     vendorCredentials: vendorCredentialsManager,
     getActiveVendor: () => captureSettingsManager.get().activeVendor,
