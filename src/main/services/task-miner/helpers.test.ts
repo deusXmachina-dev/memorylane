@@ -33,11 +33,13 @@ describe('computeEpisodeWindow', () => {
   })
 
   it('counts a long read whole across the chunks it is stored as', () => {
-    // A 20-min read is capped into contiguous 5-min activities by
-    // MAX_ACTIVITY_DURATION_MS — the union counts all 20.
+    // A 20-min read is cut into 5-min activities by MAX_ACTIVITY_DURATION_MS.
+    // buildWindowChunks ends a chunk at start + max - 1 and starts the next at
+    // end + 1, so the chunks sit 1ms apart, not flush: the union still counts
+    // all 20 min.
     const activities = Array.from({ length: 4 }, (_, i) => ({
       startTimestamp: i * 300_000,
-      endTimestamp: (i + 1) * 300_000,
+      endTimestamp: i * 300_000 + 299_999,
     }))
     expect(computeEpisodeWindow(activities).interactionMin).toBe(20)
   })
