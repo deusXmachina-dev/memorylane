@@ -2,6 +2,7 @@ import { tool } from 'ai'
 import { z } from 'zod'
 import type { StorageService } from '../../storage'
 import type { ActivityEmbeddingService } from '@main/activity/activity-transformer-types'
+import type { PositionalAliases } from '@main/llm/id-codec'
 
 export function buildVerificationTools(
   storage: StorageService,
@@ -9,6 +10,7 @@ export function buildVerificationTools(
   dayStart: number,
   dayEnd: number,
   progress: (msg: string) => void,
+  activityIds: PositionalAliases,
 ) {
   return {
     get_activity_ocr: tool({
@@ -25,9 +27,11 @@ export function buildVerificationTools(
       }),
       execute: (params) => {
         progress(`  [tool] get_activity_ocr: ${params.activity_ids.length} IDs`)
-        const activities = storage.activities.getByIds(params.activity_ids)
+        const { ids, unmapped } = activityIds.decodeMany(params.activity_ids)
+        if (unmapped > 0) progress(`  [tool] get_activity_ocr: ${unmapped} unreadable ID(s)`)
+        const activities = storage.activities.getByIds(ids)
         return activities.map((a) => ({
-          id: a.id,
+          id: activityIds.encode(a.id),
           app: a.appName,
           window_title: a.windowTitle,
           time: new Date(a.startTimestamp).toISOString(),
@@ -52,7 +56,7 @@ export function buildVerificationTools(
           .filter((a) => a.startTimestamp >= dayStart && a.startTimestamp < dayEnd)
           .slice(0, params.limit ?? 10)
         return results.map((a) => ({
-          id: a.id,
+          id: activityIds.encode(a.id),
           app: a.appName,
           window_title: a.windowTitle,
           time: new Date(a.startTimestamp).toISOString(),
@@ -88,7 +92,7 @@ export function buildVerificationTools(
         )
         const activities = storage.activities.getForDay(rangeStart, rangeEnd)
         return activities.map((a) => ({
-          id: a.id,
+          id: activityIds.encode(a.id),
           app: a.appName,
           window_title: a.windowTitle,
           time: new Date(a.startTimestamp).toISOString(),

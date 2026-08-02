@@ -196,6 +196,44 @@ describe('runDetection day commit', () => {
     expect(storage.sightings.getAll()[0].steps).toEqual(['TestApp: scan step'])
   })
 
+  it('grounds with short handles and reads the keep verdict back to real ids', async () => {
+    storage.activities.add({
+      id: 'act-3',
+      appName: 'TestApp',
+      windowTitle: 'w',
+      tld: null,
+      startTimestamp: dayStart(1) + 3000,
+      endTimestamp: dayStart(1) + 3500,
+      summary: 's',
+      summaryModel: '',
+      ocrText: '',
+      vector: v(0.1),
+    })
+    mockedGenerateText
+      .mockResolvedValueOnce(
+        scanResponse(
+          `\`\`\`json
+[{"title":"Do the thing","subject":"thing","description":"d","activity_ids":["a1","a2","a3"]}]
+\`\`\``,
+        ),
+      )
+      .mockResolvedValueOnce(
+        scanResponse(`\`\`\`json
+{"verdict":"keep","title":"Do the thing","description":"d","activity_ids":["a1","a3"]}
+\`\`\``),
+      )
+
+    await runDetection(provider, storage, embedder, { lookbackDays: 1, scanOnly: false })
+
+    const groundCall = mockedGenerateText.mock.calls[1][0]
+    expect(groundCall.system).toContain('- Activity IDs from scan: a1, a2, a3')
+    expect(groundCall.system).not.toContain('act-1')
+    expect(groundCall.prompt).not.toContain('act-1')
+    expect(groundCall.prompt).toContain('"a1"')
+    // Not the scan's three — proof the verdict's handles decoded, not fell back.
+    expect(storage.sightings.getAll()[0].activityIds).toEqual(['act-1', 'act-3'])
+  })
+
   it('persists no sightings when the commit callback throws (atomic day)', async () => {
     mockedGenerateText.mockResolvedValue(
       scanResponse(

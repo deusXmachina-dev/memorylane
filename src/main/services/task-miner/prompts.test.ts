@@ -43,25 +43,32 @@ describe('buildScanSystemPrompt', () => {
 })
 
 describe('buildGroundingSystemPrompt', () => {
+  const UUID = '11111111-1111-4111-8111-111111111111'
   const candidate: Candidate = {
     title: 'Provision test tenant',
     subject: 'Acme staging tenant',
     description: 'Did the thing. Replace with: a script.',
     steps: ['admin.acme.com: create the tenant'],
-    activity_ids: ['a1', 'a2'],
+    activity_ids: [UUID],
   }
 
   it('carries subject through the keep-JSON so scanOnly=false persists it', () => {
-    expect(buildGroundingSystemPrompt(candidate, ['admin.acme.com'])).toContain('"subject"')
+    expect(buildGroundingSystemPrompt(candidate, ['admin.acme.com'], ['a1'])).toContain('"subject"')
   })
 
   it('asks for corrected steps in the keep-JSON', () => {
-    expect(buildGroundingSystemPrompt(candidate, ['admin.acme.com'])).toContain('"steps"')
+    expect(buildGroundingSystemPrompt(candidate, ['admin.acme.com'], ['a1'])).toContain('"steps"')
   })
 
   it('shows derived app identities and asks for no apps back', () => {
-    const prompt = buildGroundingSystemPrompt(candidate, ['admin.acme.com', 'Ghostty'])
+    const prompt = buildGroundingSystemPrompt(candidate, ['admin.acme.com', 'Ghostty'], ['a1'])
     expect(prompt).toContain('- Apps: admin.acme.com, Ghostty')
     expect(prompt).not.toContain('"apps"')
+  })
+
+  it('lists the handles it is given, never the candidate uuids', () => {
+    const prompt = buildGroundingSystemPrompt(candidate, ['admin.acme.com'], ['a1', 'a2'])
+    expect(prompt).toContain('- Activity IDs from scan: a1, a2')
+    expect(prompt).not.toContain(UUID)
   })
 })

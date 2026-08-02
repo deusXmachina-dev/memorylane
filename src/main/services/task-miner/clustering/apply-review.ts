@@ -23,6 +23,7 @@ export interface StructureGuards {
   splittableIds: Set<string>
   /** Merge candidate pairs as mergePairKey()s. */
   mergeCandidatePairs: Set<string>
+  declinesInferable: boolean
 }
 
 /**
@@ -128,7 +129,7 @@ export function applyStructure(
     // prompt requires an explicit "merges" array even when empty; a response
     // without one is degenerate and declines nothing. Pairs touching a
     // just-deleted cluster are skipped so no rows reference dead ids.
-    if (Array.isArray(review.merges)) {
+    if (Array.isArray(review.merges) && guards.declinesInferable) {
       for (const key of guards.mergeCandidatePairs) {
         if (proposedPairs.has(key)) continue
         const [a, b] = key.split('|')

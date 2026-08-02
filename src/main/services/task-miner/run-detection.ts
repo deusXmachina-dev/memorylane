@@ -5,6 +5,7 @@ import type { StorageService } from '../../storage'
 import type { Sighting } from '../../storage/sighting-repository'
 import type { ActivityEmbeddingService } from '@main/activity/activity-transformer-types'
 import type { InferenceProvider } from '../../llm'
+import { PositionalAliases } from '@main/llm/id-codec'
 import log from '@main/utils/logger'
 import type {
   TaskMinerConfig,
@@ -126,12 +127,11 @@ export async function runDetection(
   // Serve compact positional ids (a1..aN) to the scan instead of raw UUIDs —
   // models mangle long opaque ids when citing them (dropping whole findings),
   // and short handles cut prompt tokens. Mapped back right after parsing.
-  const realIdOf = new Map<string, string>()
-  const serialized = serializeActivities(activities).map((row, i) => {
-    const shortId = `a${i + 1}`
-    realIdOf.set(shortId, activities[i].id)
-    return { ...row, id: shortId }
-  })
+  const activityIds = new PositionalAliases('a')
+  const serialized = serializeActivities(activities).map((row, i) => ({
+    ...row,
+    id: activityIds.encode(activities[i].id),
+  }))
   const scanPrompt = buildScanSystemPrompt(label, userContextStr, knownProcedures)
   const scanUserMessage = `Here are all ${activities.length} activities from ${label}:\n\n\`\`\`json\n${JSON.stringify(serialized, null, 2)}\n\`\`\``
 
@@ -149,10 +149,8 @@ export async function runDetection(
     let unmappedIds = 0
     const candidates: Candidate[] = normalizedCandidates
       .map((c) => {
-        const ids = c.activity_ids
-          .map((sid) => realIdOf.get(sid.trim()))
-          .filter((id): id is string => Boolean(id))
-        unmappedIds += c.activity_ids.length - ids.length
+        const { ids, unmapped } = activityIds.decodeMany(c.activity_ids)
+        unmappedIds += unmapped
         return { ...c, activity_ids: ids }
       })
       .filter((c) => c.activity_ids.length > 0)
@@ -241,7 +239,7 @@ export async function runDetection(
 
   const tools = cfg.scanOnly
     ? undefined
-    : buildVerificationTools(storage, embeddingService, start, end, progress)
+    : buildVerificationTools(storage, embeddingService, start, end, progress, activityIds)
   // The grounding tools (search/browse) can surface activities from other days;
   // a sighting must stay inside the day being mined, so its final ids are
   // intersected with this window before the duration is computed.
@@ -264,10 +262,11 @@ export async function runDetection(
         const groundPrompt = buildGroundingSystemPrompt(
           candidate,
           deriveSightingApps(candidateActivities),
+          candidate.activity_ids.map((id) => activityIds.encode(id)),
         )
 
         const enrichedActivities = candidateActivities.map((a) => ({
-          id: a.id,
+          id: activityIds.encode(a.id),
           app: a.appName,
           window_title: a.windowTitle,
           time: new Date(a.startTimestamp).toISOString(),
@@ -318,9 +317,15 @@ export async function runDetection(
 
       // Finalize activity_ids and resolve them to real activities. The window
       // and interaction time are computed from these — never LLM-estimated.
-      const requestedIds = (parsed.activity_ids as string[] | undefined)?.length
-        ? (parsed.activity_ids as string[])
-        : candidate.activity_ids
+      const cited = parsed.activity_ids
+      const gaveIds = Array.isArray(cited) && cited.length > 0
+      const decoded = activityIds.decodeMany(cited)
+      if (gaveIds && decoded.unmapped > 0) {
+        progress(
+          `[Phase 2] "${candidate.title}": dropped ${decoded.unmapped} unreadable activity id(s)`,
+        )
+      }
+      const requestedIds = gaveIds ? decoded.ids : candidate.activity_ids
       // Keep only ids inside the day being mined — a sighting can't span days,
       // and an out-of-window id would inflate the computed duration.
       const finalIds = requestedIds.filter((id) => dayActivityIds.has(id))

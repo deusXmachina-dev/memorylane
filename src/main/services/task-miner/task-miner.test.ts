@@ -93,6 +93,14 @@ describe('TaskMiner sweep', () => {
     return new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysBack).getTime()
   }
 
+  // Pinned to local noon: these tests advance the clock by up to 90 minutes, and
+  // a run starting near midnight would recompute every day label a day later.
+  const useFakeClockAtNoon = (): void => {
+    const now = new Date()
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12))
+  }
+
   // One activity per day, `days` days back through yesterday, so ensureEnqueued
   // bounds the window to exactly those days.
   const seedDays = (days: number): void => {
@@ -204,7 +212,7 @@ describe('TaskMiner sweep', () => {
   })
 
   it('skips past a failed day, keeps mining, and retries it after its cooldown', async () => {
-    vi.useFakeTimers()
+    useFakeClockAtNoon()
     seedDays(3)
     mockedRunDetection.mockRejectedValueOnce(new Error('provider down'))
 
@@ -225,7 +233,7 @@ describe('TaskMiner sweep', () => {
   })
 
   it('marks a day failed after exhausting attempts and sweeps past it', async () => {
-    vi.useFakeTimers()
+    useFakeClockAtNoon()
     seedDays(2)
     for (let i = 0; i < TASK_BACKFILL.MAX_DAY_ATTEMPTS; i++) {
       mockedRunDetection.mockRejectedValueOnce(new Error(`boom ${i + 1}`))
@@ -355,7 +363,7 @@ describe('TaskMiner sweep', () => {
   })
 
   it('the poll started by startup() triggers a sweep', async () => {
-    vi.useFakeTimers()
+    useFakeClockAtNoon()
     seedDays(2)
     seedFiller()
 
@@ -369,7 +377,7 @@ describe('TaskMiner sweep', () => {
   })
 
   it('a single day failure gates only that day, not the next sweep', async () => {
-    vi.useFakeTimers()
+    useFakeClockAtNoon()
     seedDays(2)
     seedFiller()
     mockedRunDetection.mockRejectedValueOnce(new Error('blip'))
@@ -387,7 +395,7 @@ describe('TaskMiner sweep', () => {
   })
 
   it('aborts the sweep after consecutive failures and gates the next one', async () => {
-    vi.useFakeTimers()
+    useFakeClockAtNoon()
     seedDays(5)
     seedFiller()
     mockedRunDetection.mockRejectedValue(new Error('down'))
@@ -508,7 +516,7 @@ describe('TaskMiner sweep', () => {
   })
 
   it('startup resets a stale running day so the sweep can retry it', async () => {
-    vi.useFakeTimers()
+    useFakeClockAtNoon()
     seedDays(1)
     storage.miningDays.enqueueMissing([localLabel(1)])
     storage.miningDays.claimOldestPending() // simulate a crash mid-mine

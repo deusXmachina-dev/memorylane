@@ -72,9 +72,13 @@ Quality over volume: a few findings I would actually build beat a long list. Man
 // Phase 2: Grounding prompt — confirm a candidate is a real, discrete task
 // ---------------------------------------------------------------------------
 
-export function buildGroundingSystemPrompt(candidate: Candidate, apps: readonly string[]): string {
+export function buildGroundingSystemPrompt(
+  candidate: Candidate,
+  apps: readonly string[],
+  activityIds: readonly string[],
+): string {
   const appList = formatList(apps, 'Unknown')
-  const activityIdList = formatList(candidate.activity_ids, 'None provided')
+  const activityIdList = formatList(activityIds, 'None provided')
 
   return `You are verifying ONE candidate run of a repeatable task, found by a scan of my day. Confirm it is real, grounded in the evidence on screen, and correctly scoped to this single run.
 

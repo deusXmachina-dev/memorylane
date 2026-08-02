@@ -181,6 +181,7 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
           reviewableIds: new Set(input.clusters.map((c) => c.id)),
           splittableIds: new Set(input.clusters.filter((c) => c.splittable).map((c) => c.id)),
           mergeCandidatePairs: new Set(input.mergeCandidates.map(([a, b]) => mergePairKey(a, b))),
+          declinesInferable: !review.mergesIncomplete,
         }
         // Re-split linkage precomputed here so it can ride the ml-worker —
         // applyStructure's transaction can't await. Nothing mutates membership

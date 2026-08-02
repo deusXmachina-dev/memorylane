@@ -9,11 +9,13 @@ import {
   buildContentReviewSystemPrompt,
   serializeReviewInput,
 } from './prompts'
+import { aliasReviewInput, resolveReviewOutput } from './id-alias'
 import type { ProgressCallback } from '../types'
 
 export interface ReviewCallResult {
   output: ReviewOutput | null
   tokenUsage: { input: number; output: number }
+  mergesIncomplete?: boolean
 }
 
 /**
@@ -29,7 +31,8 @@ async function callReview(
   describe: (attempt: number) => string,
   progress?: ProgressCallback,
 ): Promise<ReviewCallResult> {
-  const prompt = serializeReviewInput(input)
+  const { input: aliased, aliases } = aliasReviewInput(input)
+  const prompt = serializeReviewInput(aliased)
   const tokenUsage = { input: 0, output: 0 }
 
   for (let attempt = 1; attempt <= CLUSTERING_CONFIG.LLM_MAX_ATTEMPTS; attempt++) {
@@ -44,10 +47,17 @@ async function callReview(
       tokenUsage.input += result.usage.inputTokens ?? 0
       tokenUsage.output += result.usage.outputTokens ?? 0
 
-      const parsed = extractJsonObject<ReviewOutput>(result.text)
-      if (parsed) return { output: parsed, tokenUsage }
+      const resolved = resolveReviewOutput(extractJsonObject(result.text), aliases)
+      if (resolved.output) {
+        if (resolved.unresolved > 0) {
+          progress?.(
+            `[Clustering] ${resolved.unresolved} id reference(s) in the review response could not be read`,
+          )
+        }
+        return { output: resolved.output, tokenUsage, mergesIncomplete: resolved.mergesIncomplete }
+      }
       progress?.(
-        `[Clustering] Could not parse review response` +
+        `[Clustering] Could not use review response` +
           (attempt < CLUSTERING_CONFIG.LLM_MAX_ATTEMPTS ? ' — retrying' : ''),
       )
     } catch (error) {

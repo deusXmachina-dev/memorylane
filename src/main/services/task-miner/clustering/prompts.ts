@@ -21,7 +21,7 @@ Your tasks:
 3. FLAG: if a cluster marked "splittable": true mixes unrelated processes and you cannot split it cleanly, output { "id": ..., "incoherent": true } instead of a split — it will be re-grouped automatically.
 
 Rules:
-- Never invent cluster ids or sighting ids not present in the input.
+- Cluster and sighting ids are short handles ("c1", "s7"). Copy them back exactly as given — never invent, renumber, or reformat one. A mis-copied id discards that verdict.
 - When unsure whether two clusters are the same process, do NOT merge; leaving them apart is recoverable, merging is not.
 - Always output both keys, even when empty: no merges → "merges": [], no splits or flags → "clusters": [].
 
@@ -66,7 +66,7 @@ Output a verdict for EVERY cluster listed — a cluster missing from your output
 3. RECIPE: every verdict MUST carry "steps" and "variables" — this applies equally when the cluster already has a label. "steps" is an ordered, generalized how-to for the process: 3 to 12 short lines, each starting with an app identity from the member sightings' apps, then a colon and the imperative action. For a website, a recognizable product name may precede the host in parentheses — "Gmail (mail.google.com): open the client thread" — otherwise use the host alone: "dashboard.stripe.com: locate the customer profile". For a desktop app use its name: "Ghostty: run the deploy command". Never use a browser name as the app. Steps describe only actions the member sightings evidence; consolidate from the members' observed "steps" first — they are raw single runs: generalize across them and move their specifics into "variables". When runs used different mechanisms, generalize to the recurring one — do not canonicalize one run's incidental flow. "variables" lists the things that differ from run to run, named generically (e.g. "customer name", "invoice number", "search term"). This recipe is copied into outside automation tools, so it MUST be fully de-identified: never write a real person, company, email, phone number, account number, or url-with-id. Write "enter the customer name", never "enter ACME Inc"; move every changing specific into "variables" as a generic label.
 
 Rules:
-- Never invent cluster ids not present in the input.
+- Cluster ids are short handles ("c1"). Copy them back exactly as given — never invent, renumber, or reformat one. A mis-copied id discards that verdict.
 - Do not mention counts, frequencies, or durations in labels/descriptions — those are computed separately.
 - When unsure of the kind, choose the non-eliminable reading — a wrongly promised automation costs more than a missed one.
 - steps and variables carry NO personal data: no real names, companies, emails, phone numbers, ids, or PII/PHI. When in doubt, replace the specific with a generic variable.

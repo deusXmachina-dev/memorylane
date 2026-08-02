@@ -74,6 +74,7 @@ describe('applyStructure', () => {
     reviewableIds: overrides.reviewableIds ?? new Set(),
     splittableIds: overrides.splittableIds ?? new Set(),
     mergeCandidatePairs: overrides.mergeCandidatePairs ?? new Set(),
+    declinesInferable: overrides.declinesInferable ?? true,
   })
 
   it('merges candidate pairs into the oldest cluster regardless of LLM order', () => {
@@ -234,6 +235,26 @@ describe('applyStructure', () => {
       5000,
     )
 
+    expect(storage.clusters.getActiveMergeDeclines(0).size).toBe(0)
+  })
+
+  it('applies readable merges but declines nothing when the merge list is incomplete', () => {
+    seedCluster('a', 100, ['s1'])
+    seedCluster('b', 200, ['s2'])
+    seedCluster('c', 300, ['s3'])
+
+    const result = applyStructure(
+      storage,
+      { merges: [{ merge: ['a', 'b'] }] },
+      guards({
+        reviewableIds: new Set(['a', 'b', 'c']),
+        mergeCandidatePairs: new Set([mergePairKey('a', 'b'), mergePairKey('a', 'c')]),
+        declinesInferable: false,
+      }),
+      5000,
+    )
+
+    expect(result.merged).toBe(1)
     expect(storage.clusters.getActiveMergeDeclines(0).size).toBe(0)
   })
 
