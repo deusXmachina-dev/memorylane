@@ -99,6 +99,26 @@ describe('capture login gate detection', () => {
     expect(match).toBeNull()
   })
 
+  it('matches a sign-in title even when the url is clean', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Sign in to Acme',
+      url: 'https://keycloak.acme.com/realms/acme/protocol/openid-connect/auth',
+    })
+
+    expect(match).toBe('title=sign in')
+  })
+
+  it('ignores a language-code id subdomain', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Kopi - Wikipedia',
+      url: 'https://id.wikipedia.org/wiki/Kopi',
+    })
+
+    expect(match).toBeNull()
+  })
+
   it('ignores a bare vendor docs url', () => {
     const match = getLoginScreenMatch({
       processName: 'Google Chrome',

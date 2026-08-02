@@ -26,16 +26,7 @@ const PASSWORD_MANAGER_PROCESS_NAMES = [
   'enpass',
 ]
 
-const LOGIN_HOST_PREFIXES = [
-  'login.',
-  'signin.',
-  'sso.',
-  'auth.',
-  'accounts.',
-  'id.',
-  'idp.',
-  'mfa.',
-]
+const LOGIN_HOST_PREFIXES = ['login.', 'signin.', 'sso.', 'auth.', 'accounts.', 'idp.', 'mfa.']
 
 const LOGIN_PATH_SEGMENTS = [
   'login',
@@ -55,7 +46,6 @@ const LOGIN_PATH_SEGMENTS = [
 const LOGIN_TITLE_PHRASES = [
   'sign in',
   'log in to',
-  'sign in to',
   'two-factor',
   'verification code',
   'enter your password',

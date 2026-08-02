@@ -64,7 +64,11 @@ export async function replayCell(params: {
     params.ocr ? activityOcrService : new StubOcrService(),
     semantic,
     new StubEmbeddingService(),
-    { outputDir: tmpDir, getPipelinePreference: () => semantic.getPipelinePreference() },
+    {
+      outputDir: tmpDir,
+      getPipelinePreference: () => semantic.getPipelinePreference(),
+      getExcludeLoginScreens: () => false,
+    },
   )
 
   try {
