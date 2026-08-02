@@ -221,7 +221,8 @@ export class TaskMiner {
    * one scan-only LLM round trip and days within a barrier window are
    * independent — so a 60-day seed or a post-downtime gap-fill isn't one round
    * trip at a time. With no backlog the wave is serial, exactly as a daily
-   * sweep was.
+   * sweep was, and so is every wave on a self-hosted endpoint — those serve one
+   * prediction at a time, so concurrency only makes days queue.
    */
   private async sweep(provider: InferenceProvider): Promise<BackfillSummary> {
     if (this.running) {
@@ -244,7 +245,10 @@ export class TaskMiner {
       let clustering: ClusteringRunSummary | undefined
 
       const concurrency =
-        settled.pending > TASK_BACKFILL.CLUSTER_EVERY_DAYS ? TASK_BACKFILL.SWEEP_CONCURRENCY : 1
+        provider.getActiveVendor() === 'openai-compatible' ||
+        settled.pending <= TASK_BACKFILL.CLUSTER_EVERY_DAYS
+          ? 1
+          : TASK_BACKFILL.SWEEP_CONCURRENCY
 
       const mineDay = async (claim: { day: string; attempts: number }): Promise<void> => {
         // Push the claim so the banner's currentDay is live while the day mines.

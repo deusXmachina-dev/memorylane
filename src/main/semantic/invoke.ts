@@ -1,4 +1,5 @@
 import { generateText } from 'ai'
+import { withRequestTimeout } from '../llm'
 import type { InferenceProvider, VendorRouteSnapshot } from '../llm'
 import type { ChainAttemptOutcome } from './model-chain'
 import type { ChatContentItem } from './types'
@@ -76,6 +77,7 @@ interface RawVideoCompletionInput {
   model: string
   content: ChatContentItem[]
   signal: AbortSignal
+  requestTimeoutMs: number
   fetchImpl?: typeof globalThis.fetch
 }
 
@@ -111,7 +113,7 @@ interface RawChatCompletionResponse {
 export async function invokeRawVideoCompletion(
   input: RawVideoCompletionInput,
 ): Promise<ChainAttemptOutcome> {
-  const fetchImpl = input.fetchImpl ?? globalThis.fetch
+  const fetchImpl = input.fetchImpl ?? withRequestTimeout(globalThis.fetch, input.requestTimeoutMs)
   const url = joinUrl(input.route.baseURL, '/chat/completions')
   const body = {
     model: input.model,

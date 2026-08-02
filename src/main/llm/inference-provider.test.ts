@@ -1,6 +1,9 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
+import { createServer, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import type { Dispatcher } from 'undici'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { InferenceProviderImpl, withRequestTimeout } from './inference-provider'
 import { OPENROUTER_BASE_URL } from './adapters'
@@ -182,5 +185,64 @@ describe('withRequestTimeout', () => {
     const response = new Response('ok')
     const wrapped = withRequestTimeout(async () => response, 20)
     await expect(wrapped('https://example.test')).resolves.toBe(response)
+  })
+
+  it('reuses one dispatcher per distinct deadline', async () => {
+    const seen: RequestInit[] = []
+    const capture: typeof globalThis.fetch = async (_input, init) => {
+      seen.push(init!)
+      return new Response('ok')
+    }
+    await withRequestTimeout(capture, 90_000)('https://example.test')
+    await withRequestTimeout(capture, 90_000)('https://example.test')
+    await withRequestTimeout(capture, 120_000)('https://example.test')
+
+    expect(seen[0].dispatcher).toBeDefined()
+    expect(seen[0].dispatcher).toBe(seen[1].dispatcher)
+    expect(seen[0].dispatcher).not.toBe(seen[2].dispatcher)
+  })
+})
+
+describe('withRequestTimeout transport deadline', () => {
+  // undici's timer wheel has a ~1s floor and a ~500ms tick, so a short deadline
+  // still fires around 1s — the stall has to outlast that to be observable.
+  const HEADER_DELAY_MS = 2500
+  let server: Server
+  let url: string
+
+  beforeEach(async () => {
+    server = createServer((_req, res) => {
+      setTimeout(() => {
+        res.writeHead(200, { 'content-type': 'text/plain' })
+        res.end('ok')
+      }, HEADER_DELAY_MS)
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`
+  })
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  })
+
+  /** The dispatcher alone, so the wrapper's AbortSignal can't mask it. */
+  const dispatcherFor = async (timeoutMs: number): Promise<Dispatcher> => {
+    let captured: Dispatcher | undefined
+    await withRequestTimeout(async (_input, init) => {
+      captured = init!.dispatcher
+      return new Response('ok')
+    }, timeoutMs)('https://example.test')
+    return captured!
+  }
+
+  it('fails before the headers arrive when the deadline is shorter', async () => {
+    await expect(fetch(url, { dispatcher: await dispatcherFor(200) })).rejects.toMatchObject({
+      cause: { code: 'UND_ERR_HEADERS_TIMEOUT' },
+    })
+  })
+
+  it('waits for the headers when the deadline is longer', async () => {
+    const response = await fetch(url, { dispatcher: await dispatcherFor(30_000) })
+    expect(response.status).toBe(200)
   })
 })

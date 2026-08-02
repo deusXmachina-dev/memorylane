@@ -1,3 +1,4 @@
+import { networkErrorCode } from '@main/utils/network-error'
 import type { ActivityDetail } from '../../storage'
 
 interface TimeBounded {
@@ -114,15 +115,17 @@ export function extractJsonObject<T>(content: string): T | null {
  * ChatError has an `.error` object with `{ code, message, type }`.
  */
 export function formatApiError(error: unknown): string {
+  const transport = networkErrorCode(error)
+  const suffix = transport ? ` transport=${transport}` : ''
   if (error && typeof error === 'object' && 'error' in error) {
     const inner = (error as { error: { code?: unknown; message?: string; type?: string } }).error
     if (inner?.message) {
       const parts = [inner.message]
       if (inner.code) parts.push(`code=${inner.code}`)
       if (inner.type) parts.push(`type=${inner.type}`)
-      return parts.join(' ')
+      return parts.join(' ') + suffix
     }
   }
-  if (error instanceof Error) return error.message
-  return String(error)
+  if (error instanceof Error) return error.message + suffix
+  return String(error) + suffix
 }

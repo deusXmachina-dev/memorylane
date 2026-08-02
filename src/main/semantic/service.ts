@@ -271,6 +271,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
                   model,
                   content,
                   signal,
+                  requestTimeoutMs: this.requestTimeoutMs,
                   fetchImpl: this.fetchImpl,
                 })
               }

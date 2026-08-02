@@ -1,4 +1,5 @@
 import type { LanguageModel } from 'ai'
+import { Agent } from 'undici'
 import type { Vendor, VendorCredentials } from '../../shared/types'
 import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
 import { createSdkProvider, rawHttpBaseURL, vendorSupportsRawHttp } from './adapters'
@@ -56,14 +57,27 @@ export interface InferenceProviderOptions {
  */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 3 * 60 * 1000
 
+const dispatchers = new Map<number, Agent>()
+
+/** undici defaults headersTimeout and bodyTimeout to 300s, capping any longer deadline. */
+function dispatcherFor(timeoutMs: number): Agent {
+  let agent = dispatchers.get(timeoutMs)
+  if (!agent) {
+    agent = new Agent({ headersTimeout: timeoutMs, bodyTimeout: timeoutMs })
+    dispatchers.set(timeoutMs, agent)
+  }
+  return agent
+}
+
 export function withRequestTimeout(
   fetchImpl: typeof globalThis.fetch,
   timeoutMs: number,
 ): typeof globalThis.fetch {
+  const dispatcher = dispatcherFor(timeoutMs)
   return (input, init) => {
     const timeout = AbortSignal.timeout(timeoutMs)
     const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout
-    return fetchImpl(input, { ...init, signal })
+    return fetchImpl(input, { ...init, signal, dispatcher })
   }
 }
 

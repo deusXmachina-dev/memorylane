@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeEpisodeWindow, tryExtractJsonArray } from './helpers'
+import { computeEpisodeWindow, formatApiError, tryExtractJsonArray } from './helpers'
 
 describe('computeEpisodeWindow', () => {
   it('derives the window from min start / max end and sums active time', () => {
@@ -146,5 +146,27 @@ describe('tryExtractJsonArray', () => {
     expect(tryExtractJsonArray('sorry, I cannot help with that')).toBeNull()
     expect(tryExtractJsonArray('{"not": "an array"}')).toBeNull()
     expect(tryExtractJsonArray('[{"truncated": ')).toBeNull()
+  })
+})
+
+describe('formatApiError', () => {
+  it('appends the undici code the AI SDK drops from the message', () => {
+    const cause = Object.assign(new TypeError('fetch failed'), {
+      cause: Object.assign(new Error('Headers Timeout Error'), {
+        code: 'UND_ERR_HEADERS_TIMEOUT',
+      }),
+    })
+    const error = new Error('Cannot connect to API: Headers Timeout Error', { cause })
+
+    expect(formatApiError(error)).toBe(
+      'Cannot connect to API: Headers Timeout Error transport=UND_ERR_HEADERS_TIMEOUT',
+    )
+  })
+
+  it('leaves errors with no transport code untouched', () => {
+    expect(formatApiError(new Error('boom'))).toBe('boom')
+    expect(formatApiError({ error: { message: 'bad request', code: 400 } })).toBe(
+      'bad request code=400',
+    )
   })
 })
