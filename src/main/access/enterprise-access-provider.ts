@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { ENTERPRISE_BACKEND_CONFIG } from '../../shared/constants'
+import { BACKEND_REQUEST_TIMEOUT_MS, ENTERPRISE_BACKEND_CONFIG } from '../../shared/constants'
 import type { ConsentOutcome, PendingConsent } from '../../shared/types'
 import log from '@main/utils/logger'
 import { NetworkError, toUserFacingError } from '@main/utils/network-error'
@@ -121,7 +121,10 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
   /** fetch() that rethrows transport failures with a user-facing message. */
   private async fetchMapped(url: string | URL, init?: RequestInit): Promise<Response> {
     try {
-      return await fetch(url.toString(), init)
+      return await fetch(url.toString(), {
+        ...init,
+        signal: init?.signal ?? AbortSignal.timeout(BACKEND_REQUEST_TIMEOUT_MS),
+      })
     } catch (error) {
       log.warn('[EnterpriseAccess] Network request failed:', error)
       throw toUserFacingError(error)

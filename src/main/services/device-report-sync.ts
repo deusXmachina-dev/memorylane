@@ -2,6 +2,7 @@ import log from '@main/utils/logger'
 import { backendPlatformToken } from '@main/utils/platform'
 import type { AppEdition } from '../../shared/edition'
 import type { DeviceReportState } from './device-report-store'
+import { BACKEND_REQUEST_TIMEOUT_MS } from '../../shared/constants'
 
 // Retry cadence for a report that hasn't landed yet. Once the running version is
 // confirmed reported, every tick is a cheap no-op, so an hourly retry is plenty
@@ -86,6 +87,7 @@ export class DeviceReportSync {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ app_version: version, platform: backendPlatformToken() }),
+        signal: AbortSignal.timeout(BACKEND_REQUEST_TIMEOUT_MS),
       })
       if (!response.ok) {
         throw new Error(`Device report failed (${response.status})`)

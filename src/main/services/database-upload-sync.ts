@@ -4,6 +4,7 @@ import * as path from 'path'
 import log from '@main/utils/logger'
 import { isSameDay } from '@main/utils/day'
 import { type StripOptions } from './strip-database-for-upload'
+import { BACKEND_UPLOAD_TIMEOUT_MS } from '../../shared/constants'
 
 // Poll cadence, NOT the upload frequency. We check hourly whether today's
 // upload has happened yet; the isSameDay gate deduplicates to exactly one
@@ -198,6 +199,7 @@ export class DatabaseUploadSync {
         method: 'POST',
         headers: { Authorization: `Bearer ${this.getDeviceId()}` },
         body: formData,
+        signal: AbortSignal.timeout(BACKEND_UPLOAD_TIMEOUT_MS),
       })
 
       if (!response.ok) {

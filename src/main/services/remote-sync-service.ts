@@ -1,4 +1,5 @@
 import log from '@main/utils/logger'
+import { BACKEND_REQUEST_TIMEOUT_MS } from '../../shared/constants'
 
 export interface RemoteSyncServiceParams<T> {
   getDeviceId: () => string
@@ -114,6 +115,7 @@ export abstract class RemoteSyncService<T> {
   protected async fetchJson(url: URL): Promise<unknown> {
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${this.params.getDeviceId()}` },
+      signal: AbortSignal.timeout(BACKEND_REQUEST_TIMEOUT_MS),
     })
     if (!response.ok) {
       throw new Error(`Request failed (${response.status})`)

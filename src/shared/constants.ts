@@ -70,6 +70,14 @@ export const MAX_REQUEST_TIMEOUT_MS = 60 * 60_000
  */
 export const TRANSPORT_TIMEOUT_MS = 2 * MAX_REQUEST_TIMEOUT_MS
 
+/**
+ * Deadlines for the backend calls, which run on plain intervals with no
+ * re-entrancy guard. Both sit under the shortest cadence that drives them, so
+ * a stalled request cannot still be running when the next tick fires.
+ */
+export const BACKEND_REQUEST_TIMEOUT_MS = 30_000
+export const BACKEND_UPLOAD_TIMEOUT_MS = 30 * 60_000
+
 // Activity Window Configuration
 export const ACTIVITY_CONFIG = {
   MIN_ACTIVITY_DURATION_MS: 3_000, // Discard activities shorter than 3s
