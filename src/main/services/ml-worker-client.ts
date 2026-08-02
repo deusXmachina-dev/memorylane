@@ -3,6 +3,7 @@ import type { UtilityProcess } from 'electron'
 import * as os from 'os'
 import * as path from 'path'
 import log from '@main/utils/logger'
+import { scrubPII } from '@/shared/sanitize'
 import { getBundledModelPath, getModelCacheDir } from '@main/utils/paths'
 import { isWorkerLogEvent, logWorkerEvent, type WorkerLogEvent } from '@main/utils/worker-log'
 import type { ActivityEmbeddingService } from '@main/activity/activity-transformer-types'
@@ -26,6 +27,9 @@ function workerScriptPath(): string {
 const INIT_TIMEOUT_MS = 15 * 60 * 1000
 const EMBED_TIMEOUT_MS = 60 * 1000
 const CLUSTER_TIMEOUT_MS = 2 * 60 * 1000
+// First scrub may download the NER model in dev, and a timeout kills the
+// shared worker that also serves embeddings — err far on the generous side.
+const SCRUB_TIMEOUT_MS = 5 * 60 * 1000
 const RESPAWN_WINDOW_MS = 60 * 1000
 const MAX_SPAWNS_PER_WINDOW = 3
 
@@ -84,6 +88,22 @@ export class MlWorkerClient implements ActivityEmbeddingService {
     )
     if (result.type !== 'groups') throw new Error(`ml-worker: unexpected ${result.type} response`)
     return result.groups
+  }
+
+  /** NER + regex PII scrub in the worker; falls back to the local regex scrub
+   * on any worker error so egress is never left unscrubbed. */
+  async scrubBatch(texts: string[], allow?: string[]): Promise<string[]> {
+    if (texts.length === 0) return []
+    try {
+      await this.ensureReady()
+      const result = await this.request({ type: 'scrubBatch', texts, allow }, SCRUB_TIMEOUT_MS)
+      if (result.type !== 'scrubbed')
+        throw new Error(`ml-worker: unexpected ${result.type} response`)
+      return result.texts
+    } catch (error) {
+      log.warn('[MlWorker] scrubBatch failed; falling back to regex scrub', error)
+      return texts.map(scrubPII)
+    }
   }
 
   dispose(): void {

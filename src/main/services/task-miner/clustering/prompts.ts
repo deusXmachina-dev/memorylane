@@ -72,7 +72,7 @@ Rules:
 - Never invent cluster ids not present in the input.
 - Do not mention counts, frequencies, or durations in labels/descriptions — those are computed separately.
 - When unsure of the kind, choose the non-eliminable reading — a wrongly promised automation costs more than a missed one.
-- steps and variables carry NO personal data: no real names, companies, emails, phone numbers, ids, or PII/PHI. When in doubt, replace the specific with a generic variable.
+- labels, descriptions, steps, and variables carry NO personal data: no real names, companies, emails, phone numbers, credentials, account numbers, or PII/PHI. They are copied into outside tools; when in doubt, replace the specific with a generic variable.
 
 Output a single JSON object, no other text:
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { handleMlWorkerRequest } from './ml-worker'
 import { packVectors, unpackVectors } from './ml-worker-protocol'
+import { PiiScrubber } from '@main/processor/pii-scrub'
 import type { EmbeddingService } from '@main/processor/embedding'
 
 const fakeService = {
@@ -51,6 +52,20 @@ describe('handleMlWorkerRequest', () => {
     expect(response.ok).toBe(true)
     if (!response.ok || response.result.type !== 'groups') throw new Error('wrong response')
     expect(response.result.groups).toEqual([[0, 1], [2]])
+  })
+
+  it('scrubBatch returns scrubbed texts', async () => {
+    const scrubber = new PiiScrubber(async () => [
+      { entity: 'B-GIVENNAME', score: 0.9, index: 1, word: 'jane', start: null, end: null },
+    ])
+    const response = await handleMlWorkerRequest(
+      { id: 4, type: 'scrubBatch', texts: ['ping Jane about it'] },
+      fakeService,
+      scrubber,
+    )
+    expect(response.ok).toBe(true)
+    if (!response.ok || response.result.type !== 'scrubbed') throw new Error('wrong response')
+    expect(response.result.texts).toEqual(['ping [redacted name] about it'])
   })
 
   it('maps a thrown error to ok:false', async () => {

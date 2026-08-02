@@ -8,11 +8,13 @@ import type {
   ActivityEmbeddingService,
 } from './activity-transformer-types'
 import type { SemanticPipelinePreference } from '@main/semantic/activity-semantic-service'
+import { getLoginScreenMatch } from '@main/capture/capture-login-gate'
 import log from '@main/utils/logger'
 
 export interface DefaultActivityTransformerConfig {
   outputDir: string
   getPipelinePreference?: () => SemanticPipelinePreference
+  getExcludeLoginScreens?: () => boolean
 }
 
 const OCR_FRAME_POSITION_FROM_END = 5
@@ -81,6 +83,20 @@ export class DefaultActivityTransformer implements ActivityTransformer {
 
   private async extractOcrText(activity: Activity): Promise<string> {
     if (activity.frames.length === 0) return ''
+    if (this.config.getExcludeLoginScreens?.() !== false) {
+      const loginScreenMatch = getLoginScreenMatch({
+        processName: activity.context.appName,
+        bundleId: activity.context.bundleId,
+        title: activity.context.windowTitle,
+        url: activity.context.url,
+      })
+      if (loginScreenMatch !== null) {
+        log.debug(
+          `[ActivityTransformer] Skipping OCR for activity ${activity.id} (login_screen=${loginScreenMatch})`,
+        )
+        return ''
+      }
+    }
     const ocrFrame =
       activity.frames.length >= OCR_FRAME_POSITION_FROM_END
         ? activity.frames[activity.frames.length - OCR_FRAME_POSITION_FROM_END]

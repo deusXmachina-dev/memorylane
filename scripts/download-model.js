@@ -2,23 +2,28 @@
 const fs = require('fs')
 const path = require('path')
 
-const MODEL_ID = 'Xenova/all-MiniLM-L6-v2'
-const BASE_URL = `https://huggingface.co/${MODEL_ID}/resolve/main`
+const MODELS = [
+  {
+    id: 'Xenova/all-MiniLM-L6-v2',
+    files: ['config.json', 'tokenizer.json', 'tokenizer_config.json', 'onnx/model.onnx'],
+  },
+  {
+    id: 'nationaldesignstudio/rampart',
+    files: ['config.json', 'tokenizer.json', 'tokenizer_config.json', 'onnx/model_q4.onnx'],
+  },
+]
 
 const repoRoot = path.resolve(__dirname, '..')
-const outputDir = path.join(repoRoot, 'build', 'models', MODEL_ID)
 
-const FILES = ['config.json', 'tokenizer.json', 'tokenizer_config.json', 'onnx/model.onnx']
-
-async function downloadFile(file) {
+async function downloadFile(model, outputDir, file) {
   const dest = path.join(outputDir, file)
   if (fs.existsSync(dest)) {
-    console.log(`[build:model] Already exists, skipping: ${file}`)
+    console.log(`[build:model] Already exists, skipping: ${model.id}/${file}`)
     return
   }
 
-  const url = `${BASE_URL}/${file}`
-  console.log(`[build:model] Downloading ${file}...`)
+  const url = `https://huggingface.co/${model.id}/resolve/main/${file}`
+  console.log(`[build:model] Downloading ${model.id}/${file}...`)
 
   const res = await fetch(url)
   if (!res.ok) {
@@ -30,15 +35,18 @@ async function downloadFile(file) {
   const buffer = Buffer.from(await res.arrayBuffer())
   fs.writeFileSync(dest, buffer)
   const sizeMB = (buffer.length / 1024 / 1024).toFixed(1)
-  console.log(`[build:model] Saved ${file} (${sizeMB} MB)`)
+  console.log(`[build:model] Saved ${model.id}/${file} (${sizeMB} MB)`)
 }
 
 async function main() {
-  console.log(`[build:model] Downloading ${MODEL_ID} to ${outputDir}`)
-  fs.mkdirSync(outputDir, { recursive: true })
+  for (const model of MODELS) {
+    const outputDir = path.join(repoRoot, 'build', 'models', model.id)
+    console.log(`[build:model] Downloading ${model.id} to ${outputDir}`)
+    fs.mkdirSync(outputDir, { recursive: true })
 
-  for (const file of FILES) {
-    await downloadFile(file)
+    for (const file of model.files) {
+      await downloadFile(model, outputDir, file)
+    }
   }
 
   console.log('[build:model] Done.')

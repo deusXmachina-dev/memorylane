@@ -1,5 +1,6 @@
 import type { InteractionContext } from '../../shared/types'
 import type { Activity } from '@main/activity/activity-types'
+import { scrubPromptPII } from '@/shared/sanitize'
 import type { SemanticMode } from './types'
 
 export function buildSemanticPrompt(
@@ -26,6 +27,8 @@ export function buildSemanticPrompt(
   prompt +=
     '- Be specific: name files, functions, errors, URLs, and UI elements visible in the provided media.\n'
   prompt +=
+    '- NEVER transcribe credentials, API keys, or payment/account numbers. Replace them with a typed placeholder ([redacted password], [redacted secret], [redacted payment card]) — never silently omit what happened.\n'
+  prompt +=
     '- Match verb intensity to evidence: browsing/reviewing (no visible edits) -> "browsed," "reviewed," "checked." Light editing (small visible changes) -> "tweaked," "adjusted." Active work (sustained edits, new code, debugging) -> "implemented," "debugged," "refactored." Evidence of editing = visible changed lines, new code, or diff markers.\n'
   prompt +=
     '- Do NOT exaggerate. Switching files/tabs = browsing, not editing. Opening a file/page = reviewing, not working on it.\n'
@@ -44,7 +47,7 @@ export function buildSemanticPrompt(
   prompt += '## Context\n'
   prompt += `- App: ${activity.context.appName}\n`
   if (activity.context.windowTitle) {
-    prompt += `- Window: ${activity.context.windowTitle}\n`
+    prompt += `- Window: ${scrubPromptPII(activity.context.windowTitle)}\n`
   }
   if (activity.context.tld) {
     prompt += `- TLD: ${activity.context.tld}\n`
@@ -53,7 +56,7 @@ export function buildSemanticPrompt(
   prompt += `- Start: ${new Date(activity.startTimestamp).toISOString()}\n`
   prompt += `- End: ${new Date(activity.endTimestamp).toISOString()}\n`
   if (userContext) {
-    prompt += `- User: ${userContext}\n`
+    prompt += `- User: ${scrubPromptPII(userContext)}\n`
   }
   prompt += `- ${sourceNote}\n\n`
 
@@ -86,7 +89,7 @@ function buildInteractionTimeline(activity: Activity): string {
   const items: string[] = []
   for (const interaction of interactions.slice(0, maxItems)) {
     const offsetSeconds = ((interaction.timestamp - activity.startTimestamp) / 1000).toFixed(1)
-    items.push(`- t+${offsetSeconds}s: ${describeInteraction(interaction)}`)
+    items.push(`- t+${offsetSeconds}s: ${scrubPromptPII(describeInteraction(interaction))}`)
   }
 
   if (interactions.length > maxItems) {

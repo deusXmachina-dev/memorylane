@@ -55,6 +55,7 @@ export interface MainRuntime {
     apps: string[]
     urlPatterns: string[]
     excludePrivateBrowsing: boolean
+    excludeLoginScreens: boolean
   }): void
   setManagedExclusions(managed: { apps: string[]; urlPatterns: string[] }): void
   purgeAll(): Promise<void>
@@ -69,6 +70,7 @@ export async function createMainRuntime(params: {
   excludedApps?: string[]
   excludedUrlPatterns?: string[]
   excludePrivateBrowsing?: boolean
+  excludeLoginScreens?: boolean
   deviceIdentity?: DeviceIdentity
   edition: AppEdition
   vendorCredentials: VendorCredentialsManager
@@ -156,6 +158,8 @@ export async function createMainRuntime(params: {
     throw error
   }
 
+  let excludeLoginScreens = params.excludeLoginScreens ?? true
+
   const transformer = new DefaultActivityTransformer(
     new FfmpegVideoStitcher(),
     activityOcrService,
@@ -164,6 +168,7 @@ export async function createMainRuntime(params: {
     {
       outputDir,
       getPipelinePreference: () => semanticService.getPipelinePreference(),
+      getExcludeLoginScreens: () => excludeLoginScreens,
     },
   )
   const sink = new SqliteActivitySink(storage.activities)
@@ -200,6 +205,7 @@ export async function createMainRuntime(params: {
     initialExcludedApps: params.excludedApps,
     initialExcludedUrlPatterns: params.excludedUrlPatterns,
     initialExcludePrivateBrowsing: params.excludePrivateBrowsing,
+    initialExcludeLoginScreens: params.excludeLoginScreens,
     onPrivacyBlockingChanged: params.onPrivacyBlockingChanged,
     forwardInteraction: (event) => {
       // Dump only events that passed the blacklist — excluded window
@@ -250,6 +256,7 @@ export async function createMainRuntime(params: {
     taskFixtureStore,
     evalFixturesRoot,
     updateExclusions(exclusions): void {
+      excludeLoginScreens = exclusions.excludeLoginScreens
       blacklistCoordinator.updateExclusions(exclusions)
     },
     setManagedExclusions(managed): void {

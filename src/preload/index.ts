@@ -70,6 +70,8 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   resetCaptureSettings: () => ipcRenderer.invoke('main-window:resetCaptureSettings'),
   // Patterns (task clusters) — new TaskMiner view
   getClusters: () => ipcRenderer.invoke('main-window:getClusters'),
+  scrubTexts: (texts: string[], allow?: string[]) =>
+    ipcRenderer.invoke('main-window:scrubTexts', texts, allow),
   getClusterDetail: (id: string) => ipcRenderer.invoke('main-window:getClusterDetail', id),
   // Task-mining progress (ledger sweep)
   getMiningStatus: () => ipcRenderer.invoke('main-window:getMiningStatus'),

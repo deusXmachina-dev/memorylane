@@ -7,6 +7,7 @@ import {
   normalizeWildcardPatterns,
 } from './capture-exclusions'
 import { getAnonymousModeBrowserMatch } from './capture-anonymous-mode'
+import { getLoginScreenMatch } from './capture-login-gate'
 import { normalizeUrlPattern } from '@/shared/url-utils'
 
 export interface CaptureBlacklistCoordinator {
@@ -15,6 +16,7 @@ export interface CaptureBlacklistCoordinator {
     apps: string[]
     urlPatterns: string[]
     excludePrivateBrowsing: boolean
+    excludeLoginScreens: boolean
   }): void
   /** The org's centrally-synced blacklist (enterprise). Unioned with the user's
    * own exclusions for app/URL matching; private browsing stays user-only. */
@@ -25,6 +27,7 @@ export function createCaptureBlacklistCoordinator(params: {
   initialExcludedApps?: string[]
   initialExcludedUrlPatterns?: string[]
   initialExcludePrivateBrowsing?: boolean
+  initialExcludeLoginScreens?: boolean
   onPrivacyBlockingChanged?: (blocked: boolean) => void
   forwardInteraction: (event: InteractionContext) => void
   flushEvents: () => void
@@ -45,6 +48,7 @@ export function createCaptureBlacklistCoordinator(params: {
   let managedExcludedApps: string[] = []
   let managedExcludedUrlPatterns: string[] = []
   let excludePrivateBrowsing = params.initialExcludePrivateBrowsing ?? true
+  let excludeLoginScreens = params.initialExcludeLoginScreens ?? true
 
   let excludedApps = new Set<string>()
   let excludedUrlPatterns: string[] = []
@@ -56,6 +60,7 @@ export function createCaptureBlacklistCoordinator(params: {
   let blockedByExcludedApp = false
   let blockedByExcludedUrl = false
   let blockedByAnonymousBrowser = false
+  let blockedByLoginScreen = false
   const privateBrowserWindowHandles = new Set<string>()
   let lastActiveWindow: InteractionContext['activeWindow'] | undefined
 
@@ -90,18 +95,28 @@ export function createCaptureBlacklistCoordinator(params: {
     excludedAppMatch: string | null,
     excludedUrlMatch: string | null,
     anonymousModeMatch: string | null,
+    loginScreenMatch: string | null,
     reason: string,
   ): void => {
     const nextBlockedByExcludedApp = excludedAppMatch !== null
     const nextBlockedByExcludedUrl = excludedUrlMatch !== null
     const nextBlockedByAnonymousBrowser = anonymousModeMatch !== null
-    const wasBlocked = blockedByExcludedApp || blockedByExcludedUrl || blockedByAnonymousBrowser
+    const nextBlockedByLoginScreen = loginScreenMatch !== null
+    const wasBlocked =
+      blockedByExcludedApp ||
+      blockedByExcludedUrl ||
+      blockedByAnonymousBrowser ||
+      blockedByLoginScreen
     const blocked =
-      nextBlockedByExcludedApp || nextBlockedByExcludedUrl || nextBlockedByAnonymousBrowser
+      nextBlockedByExcludedApp ||
+      nextBlockedByExcludedUrl ||
+      nextBlockedByAnonymousBrowser ||
+      nextBlockedByLoginScreen
 
     blockedByExcludedApp = nextBlockedByExcludedApp
     blockedByExcludedUrl = nextBlockedByExcludedUrl
     blockedByAnonymousBrowser = nextBlockedByAnonymousBrowser
+    blockedByLoginScreen = nextBlockedByLoginScreen
 
     if (wasBlocked !== blocked) {
       params.onPrivacyBlockingChanged?.(blocked)
@@ -116,6 +131,7 @@ export function createCaptureBlacklistCoordinator(params: {
       if (excludedAppMatch !== null) details.push(`excluded_app=${excludedAppMatch}`)
       if (excludedUrlMatch !== null) details.push(`excluded_url=${excludedUrlMatch}`)
       if (anonymousModeMatch !== null) details.push(`anonymous_mode=${anonymousModeMatch}`)
+      if (loginScreenMatch !== null) details.push(`login_screen=${loginScreenMatch}`)
       log.info(`[Blacklist] Entering blocked mode (${reason}: ${details.join(', ')})`)
       return
     }
@@ -133,13 +149,20 @@ export function createCaptureBlacklistCoordinator(params: {
       ? getAnonymousModeBrowserMatch(activeWindow)
       : null
     const anonymousModeMatch = resolveAnonymousModeMatch(activeWindow, detectedAnonymousModeMatch)
+    const loginScreenMatch = excludeLoginScreens ? getLoginScreenMatch(activeWindow) : null
     log.debug(
       `[Blacklist] reconcile reason=${reason} url=${activeWindow?.url ?? '(none)'} ` +
         `urlMatch=${excludedUrlMatch ?? '(none)'} appMatch=${excludedAppMatch ?? '(none)'} ` +
-        `anon=${anonymousModeMatch ?? '(none)'} urlPatterns=${excludedUrlPatterns.length}`,
+        `anon=${anonymousModeMatch ?? '(none)'} login=${loginScreenMatch ?? '(none)'} ` +
+        `urlPatterns=${excludedUrlPatterns.length}`,
     )
-    setBlocked(excludedAppMatch, excludedUrlMatch, anonymousModeMatch, reason)
-    return excludedAppMatch === null && excludedUrlMatch === null && anonymousModeMatch === null
+    setBlocked(excludedAppMatch, excludedUrlMatch, anonymousModeMatch, loginScreenMatch, reason)
+    return (
+      excludedAppMatch === null &&
+      excludedUrlMatch === null &&
+      anonymousModeMatch === null &&
+      loginScreenMatch === null
+    )
   }
 
   return {
@@ -154,7 +177,12 @@ export function createCaptureBlacklistCoordinator(params: {
         return
       }
 
-      if (blockedByExcludedApp || blockedByExcludedUrl || blockedByAnonymousBrowser) {
+      if (
+        blockedByExcludedApp ||
+        blockedByExcludedUrl ||
+        blockedByAnonymousBrowser ||
+        blockedByLoginScreen
+      ) {
         return
       }
       params.forwardInteraction(event)
@@ -163,6 +191,7 @@ export function createCaptureBlacklistCoordinator(params: {
       userExcludedApps = normalizeExcludedApps(exclusions.apps)
       userExcludedUrlPatterns = normalizeUrlPatterns(exclusions.urlPatterns)
       excludePrivateBrowsing = exclusions.excludePrivateBrowsing
+      excludeLoginScreens = exclusions.excludeLoginScreens
       if (!excludePrivateBrowsing) {
         privateBrowserWindowHandles.clear()
       }

@@ -121,6 +121,7 @@ interface MainWindowDependencies {
     apps: string[]
     urlPatterns: string[]
     excludePrivateBrowsing: boolean
+    excludeLoginScreens: boolean
   }) => void
   // Org-provided (centrally-synced) exclusions, surfaced read-only in the UI.
   getManagedExclusions: () => { apps: string[]; urlPatterns: string[] }
@@ -148,6 +149,7 @@ interface MainWindowDependencies {
   evalRecorder: EvalRecorder
   evalFixtureStore: EvalFixtureStore
   taskFixtureStore: TaskFixtureStore
+  scrubTexts: (texts: string[], allow?: string[]) => Promise<string[]>
 }
 
 let mainWindow: BrowserWindow | null = null
@@ -362,6 +364,7 @@ function logCaptureSettingsChanges(previous: CaptureSettings, updated: CaptureSe
     'semanticPipelineMode',
     'captureHotkeyAccelerator',
     'excludePrivateBrowsing',
+    'excludeLoginScreens',
     'activeVendor',
     'semanticVideoModel',
     'semanticSnapshotModel',
@@ -702,6 +705,11 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     return deps.accessProvider.getAccessState().customerSubscriptionStatus ?? 'idle'
   })
 
+  handle('main-window:scrubTexts', (_event, texts: string[], allow?: string[]) => {
+    if (!deps) return texts
+    return deps.scrubTexts(texts, allow)
+  })
+
   // Patterns (task clusters)
   handle('main-window:getClusters', (): ClustersView => {
     if (!deps) return { clusters: [], hiddenCount: 0 }
@@ -953,6 +961,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
           apps: updated.excludedApps,
           urlPatterns: updated.excludedUrlPatterns,
           excludePrivateBrowsing: updated.excludePrivateBrowsing,
+          excludeLoginScreens: updated.excludeLoginScreens,
         })
         deps.semanticService.updatePipelinePreference(updated.semanticPipelineMode)
         deps.semanticService.updateRequestTimeoutMs(updated.activityRequestTimeoutMs)
@@ -1014,6 +1023,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         apps: updated.excludedApps,
         urlPatterns: updated.excludedUrlPatterns,
         excludePrivateBrowsing: updated.excludePrivateBrowsing,
+        excludeLoginScreens: updated.excludeLoginScreens,
       })
       deps.semanticService.updatePipelinePreference(updated.semanticPipelineMode)
       deps.semanticService.updateRequestTimeoutMs(updated.activityRequestTimeoutMs)

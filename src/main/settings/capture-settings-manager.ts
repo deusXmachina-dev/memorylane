@@ -153,6 +153,7 @@ const DEFAULTS: CaptureSettings = {
   captureHotkeyAccelerator: DEFAULT_CAPTURE_HOTKEY_ACCELERATOR,
   databaseExportDirectory: '',
   excludePrivateBrowsing: true,
+  excludeLoginScreens: true,
   excludedApps: [],
   excludedUrlPatterns: [],
   urlMatchSchemaVersion: URL_MATCH_SCHEMA_VERSION,

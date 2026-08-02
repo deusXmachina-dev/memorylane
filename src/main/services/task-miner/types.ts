@@ -53,6 +53,7 @@ export interface MinerEmbedder {
   embed(text: string): Promise<number[]>
   embedBatch(texts: string[]): Promise<number[][]>
   clusterVectors?(vectors: readonly (readonly number[])[], threshold: number): Promise<number[][]>
+  scrubBatch?(texts: string[], allow?: string[]): Promise<string[]>
 }
 
 /** A discrete task instance proposed by the broad scan. */

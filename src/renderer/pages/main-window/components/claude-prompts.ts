@@ -3,9 +3,36 @@ import { scrubPII } from '@/shared/sanitize'
 import { formatFrequency, formatSightingTime } from './activities/format'
 
 /** Clipboard prompts for the "Analyze with Claude" / "Build AI agent" buttons.
- * The analyze prompt is NOT scrubbed: activity ids are UUIDs, and
- * scrubPII's id/phone patterns would corrupt all-digit segments (DEU-207
- * tracks the egress-scrub redesign). */
+ * Callers pre-scrub the interpolated fields via scrubClusterForShare (NER in
+ * the main process); the assembled strings are never scrubbed whole, so
+ * activity-id UUIDs survive intact. */
+
+export async function scrubClusterForShare(
+  cluster: ClusterInfo,
+  sightings: ClusterSightingInfo[],
+  scrubTexts: (texts: string[], allow?: string[]) => Promise<string[]>,
+): Promise<{ cluster: ClusterInfo; sightings: ClusterSightingInfo[] }> {
+  const texts = [
+    cluster.title,
+    cluster.description,
+    ...cluster.steps,
+    ...cluster.variables,
+    ...sightings.flatMap((s) => [s.title, s.subject]),
+  ]
+  const scrubbed = await scrubTexts(texts, cluster.apps)
+  let i = 0
+  const next = (): string => scrubbed[i++]
+  return {
+    cluster: {
+      ...cluster,
+      title: next(),
+      description: next(),
+      steps: cluster.steps.map(() => next()),
+      variables: cluster.variables.map(() => next()),
+    },
+    sightings: sightings.map((s) => ({ ...s, title: next(), subject: next() })),
+  }
+}
 
 export function buildClusterAnalyzePrompt(
   cluster: ClusterInfo,
@@ -89,9 +116,8 @@ export function buildClusterAnalyzePrompt(
   return lines.filter((l) => l !== null).join('\n')
 }
 
-/** Tool-agnostic prompt; scrubPII runs over the final string. For labeled
- * clusters that backstops the recipe's LLM de-identification; for fallback
- * member steps it is the only scrub, and it does not catch names. */
+/** Tool-agnostic prompt; the final-string scrubPII stays as the regex
+ * backstop behind the caller's scrubClusterForShare NER pass. */
 export function buildClusterAgentPrompt(cluster: ClusterInfo): string {
   const lines: string[] = [
     `Build an AI agent that automates this task.`,

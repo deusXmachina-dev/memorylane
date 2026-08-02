@@ -1,4 +1,5 @@
 import { EmbeddingService, configureModelEnv } from '@main/processor/embedding'
+import { PiiScrubber } from '@main/processor/pii-scrub'
 import { averageLinkageGroupIndices } from '@main/services/task-miner/clustering/attach'
 import { forwardLogsToParent, type WorkerLogEvent } from '@main/utils/worker-log'
 import {
@@ -15,11 +16,13 @@ import {
  */
 
 const embedder = new EmbeddingService()
+const piiScrubber = new PiiScrubber()
 
 /** Exported for unit tests; the parentPort wiring below is the runtime path. */
 export async function handleMlWorkerRequest(
   request: MlWorkerRequest,
   service: EmbeddingService = embedder,
+  scrubber: PiiScrubber = piiScrubber,
 ): Promise<MlWorkerResponse> {
   try {
     switch (request.type) {
@@ -40,6 +43,10 @@ export async function handleMlWorkerRequest(
         const vectors = unpackVectors(request.vectors, request.dims)
         const groups = averageLinkageGroupIndices(vectors, request.threshold)
         return { id: request.id, ok: true, result: { type: 'groups', groups } }
+      }
+      case 'scrubBatch': {
+        const texts = await scrubber.scrubBatch(request.texts, request.allow ?? [])
+        return { id: request.id, ok: true, result: { type: 'scrubbed', texts } }
       }
     }
   } catch (error) {

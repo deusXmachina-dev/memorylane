@@ -50,6 +50,7 @@ A run of a repeatable multi-step procedure that CHANGES something — creates, p
 - Every description ENDS with exactly one sentence naming the mechanism: "Replace with: <the concrete script, integration, alert, or platform feature>." If you cannot write that sentence concretely, the finding does not exist.
 - \`steps\` describe only actions the cited activities evidence, one action per line, each starting with that activity's \`app\` — never a browser name.
 - Titles name the procedure, subjects name the object: title "Process invoice", subject "Customer ABC" — never title "Process invoice for Customer ABC". The title is worded so every run of the procedure gets it identically; the specific object goes in \`subject\`. Two runs of the same procedure on different objects share one title and differ only in subject. \`subject\` is optional — leave it empty when the run acted on no single nameable object.
+- Never copy credentials, passwords, API keys, or payment/account/government-id numbers into \`title\`, \`subject\`, \`description\`, or \`steps\`; if the object is only identifiable by one, use a typed placeholder like [redacted account number].
 ${knownProceduresSection}
 ## Output
 
@@ -109,6 +110,8 @@ If this is a real, grounded run:
 }
 \`\`\`
 If you cannot write the "Replace with:" sentence concretely, reject.
+
+Never copy credentials, passwords, API keys, or payment/account/government-id numbers from the OCR into any field; use a typed placeholder like [redacted secret] where one is needed.
 
 ### Reject
 Reject if the evidence shows checking/watching, re-checks of that day's work in progress, dev-loop mechanics, a one-off action, creative or judgment work; if the cited activities don't support the claim; or if fewer than 2 substantive activities remain after cleanup. Keep only what you could defend to the client from the evidence on screen:
