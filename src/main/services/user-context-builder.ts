@@ -15,6 +15,7 @@ import type { StorageService, ActivityDetail } from '../storage'
 import type { InferenceProvider } from '../llm'
 import type { UserContext } from '../storage/user-context-repository'
 import { USER_CONTEXT_CONFIG } from '../../shared/constants'
+import { scrubPromptPII } from '@/shared/sanitize'
 import log from '@main/utils/logger'
 
 // ---------------------------------------------------------------------------
@@ -92,7 +93,7 @@ function aggregateActivities(activities: ActivityDetail[]): AggregatedProfile {
       top_windows: [...stats.windows.entries()]
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
-        .map(([title]) => title),
+        .map(([title]) => scrubPromptPII(title)),
     }))
 
   // Sample up to 80 unique summaries evenly across the set
@@ -101,7 +102,7 @@ function aggregateActivities(activities: ActivityDetail[]): AggregatedProfile {
   const step = Math.max(1, Math.floor(allSummaries.length / maxSamples))
   const sample_summaries: string[] = []
   for (let i = 0; i < allSummaries.length && sample_summaries.length < maxSamples; i += step) {
-    sample_summaries.push(allSummaries[i])
+    sample_summaries.push(scrubPromptPII(allSummaries[i]))
   }
 
   const totalMs = activities.reduce((sum, a) => sum + (a.endTimestamp - a.startTimestamp), 0)

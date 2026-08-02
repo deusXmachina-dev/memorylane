@@ -2,6 +2,7 @@ import { tool } from 'ai'
 import { z } from 'zod'
 import type { StorageService } from '../../storage'
 import type { ActivityEmbeddingService } from '@main/activity/activity-transformer-types'
+import { scrubPromptPII } from '@/shared/sanitize'
 
 export function buildVerificationTools(
   storage: StorageService,
@@ -29,10 +30,10 @@ export function buildVerificationTools(
         return activities.map((a) => ({
           id: a.id,
           app: a.appName,
-          window_title: a.windowTitle,
+          window_title: scrubPromptPII(a.windowTitle),
           time: new Date(a.startTimestamp).toISOString(),
-          summary: a.summary,
-          ocr_text: a.ocrText || '(no OCR text captured)',
+          summary: scrubPromptPII(a.summary),
+          ocr_text: a.ocrText ? scrubPromptPII(a.ocrText) : '(no OCR text captured)',
         }))
       },
     }),
@@ -54,10 +55,10 @@ export function buildVerificationTools(
         return results.map((a) => ({
           id: a.id,
           app: a.appName,
-          window_title: a.windowTitle,
+          window_title: scrubPromptPII(a.windowTitle),
           time: new Date(a.startTimestamp).toISOString(),
           duration_min: Math.round((a.endTimestamp - a.startTimestamp) / 60000),
-          summary: a.summary,
+          summary: scrubPromptPII(a.summary),
         }))
       },
     }),
@@ -90,11 +91,11 @@ export function buildVerificationTools(
         return activities.map((a) => ({
           id: a.id,
           app: a.appName,
-          window_title: a.windowTitle,
+          window_title: scrubPromptPII(a.windowTitle),
           time: new Date(a.startTimestamp).toISOString(),
           end_time: new Date(a.endTimestamp).toISOString(),
           duration_min: Math.round((a.endTimestamp - a.startTimestamp) / 60000),
-          summary: a.summary,
+          summary: scrubPromptPII(a.summary),
         }))
       },
     }),

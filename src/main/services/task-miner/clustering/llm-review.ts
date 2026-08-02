@@ -2,6 +2,7 @@ import { generateText } from 'ai'
 import type { InferenceProvider } from '@main/llm'
 import { extractJsonObject, formatApiError } from '../helpers'
 import { PATTERN_DETECTION_CONFIG } from '@/shared/constants'
+import { scrubPromptPII } from '@/shared/sanitize'
 import type { ReviewInput, ReviewOutput } from './types'
 import { CLUSTERING_CONFIG } from './types'
 import {
@@ -14,6 +15,23 @@ import type { ProgressCallback } from '../types'
 export interface ReviewCallResult {
   output: ReviewOutput | null
   tokenUsage: { input: number; output: number }
+}
+
+function scrubReviewInputForPrompt(input: ReviewInput): ReviewInput {
+  return {
+    mergeCandidates: input.mergeCandidates,
+    clusters: input.clusters.map((cluster) => ({
+      ...cluster,
+      label: scrubPromptPII(cluster.label),
+      members: cluster.members.map((member) => ({
+        ...member,
+        title: scrubPromptPII(member.title),
+        subject: scrubPromptPII(member.subject),
+        description: scrubPromptPII(member.description),
+        ...(member.steps && { steps: member.steps.map(scrubPromptPII) }),
+      })),
+    })),
+  }
 }
 
 /**
@@ -29,7 +47,7 @@ async function callReview(
   describe: (attempt: number) => string,
   progress?: ProgressCallback,
 ): Promise<ReviewCallResult> {
-  const prompt = serializeReviewInput(input)
+  const prompt = serializeReviewInput(scrubReviewInputForPrompt(input))
   const tokenUsage = { input: 0, output: 0 }
 
   for (let attempt = 1; attempt <= CLUSTERING_CONFIG.LLM_MAX_ATTEMPTS; attempt++) {
