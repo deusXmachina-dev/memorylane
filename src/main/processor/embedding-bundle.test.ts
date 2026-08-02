@@ -4,10 +4,18 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { pipeline, env } from '@huggingface/transformers'
 
 const MODEL_ID = 'Xenova/all-MiniLM-L6-v2'
+const NER_MODEL_ID = 'nationaldesignstudio/rampart'
 const BUNDLE_DIR = path.resolve(__dirname, '..', '..', '..', 'build', 'models')
 const MODEL_DIR = path.join(BUNDLE_DIR, MODEL_ID)
+const NER_MODEL_DIR = path.join(BUNDLE_DIR, NER_MODEL_ID)
 
 const REQUIRED_FILES = ['config.json', 'tokenizer.json', 'tokenizer_config.json', 'onnx/model.onnx']
+const NER_REQUIRED_FILES = [
+  'config.json',
+  'tokenizer.json',
+  'tokenizer_config.json',
+  'onnx/model_q4.onnx',
+]
 
 describe('bundled embedding model', () => {
   it('download script produced all required files', () => {
@@ -39,5 +47,34 @@ describe('bundled embedding model', () => {
     expect(vector.length).toBe(384)
     expect(typeof vector[0]).toBe('number')
     expect(isNaN(vector[0])).toBe(false)
+  })
+})
+
+describe('bundled pii ner model', () => {
+  it('download script produced all required files', () => {
+    for (const file of NER_REQUIRED_FILES) {
+      const filePath = path.join(NER_MODEL_DIR, file)
+      expect(fs.existsSync(filePath), `missing: ${file}`).toBe(true)
+      const stat = fs.statSync(filePath)
+      expect(stat.size, `${file} is empty`).toBeGreaterThan(0)
+    }
+  })
+
+  it('model loads fully offline from bundled path', { timeout: 30000 }, async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (() => {
+      throw new Error('Network call detected — bundled model should load without fetch')
+    }) as typeof fetch
+    afterEach(() => {
+      globalThis.fetch = originalFetch
+    })
+
+    env.localModelPath = BUNDLE_DIR
+    env.allowRemoteModels = false
+
+    const pipe = await pipeline('token-classification', NER_MODEL_ID, { dtype: 'q4' })
+    const result = (await pipe('Reviewed the invoice with Sarah Johnson yesterday.')) as unknown[]
+
+    expect(Array.isArray(result)).toBe(true)
   })
 })

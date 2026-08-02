@@ -110,4 +110,48 @@ describe('PII scrubbing', () => {
     expect(call.prompt).toContain('[redacted password]')
     expect(call.prompt).toContain('jane.doe@acme.co')
   })
+
+  it('scrubs model-written output through the injected scrubber before returning', async () => {
+    mockedGenerateText.mockResolvedValue({
+      text: JSON.stringify({
+        clusters: [
+          {
+            id: 'c1',
+            label: 'Email Jane Novak the report',
+            description: 'Weekly report emailing',
+            steps: ['mail.google.com: mail Jane Novak'],
+            variables: ['recipient'],
+          },
+        ],
+      }),
+      usage: { inputTokens: 1, outputTokens: 1 },
+    } as never)
+    const scrub = vi.fn(async (texts: string[]) =>
+      texts.map((t) => t.replace(/Jane Novak/g, '[redacted name]')),
+    )
+
+    const result = await runContentReview(provider, 'model', memberInput, undefined, scrub)
+
+    expect(scrub).toHaveBeenCalledWith(expect.arrayContaining(['Email Jane Novak the report']), [
+      'mail.google.com',
+    ])
+    expect(result.output?.clusters?.[0]).toEqual({
+      id: 'c1',
+      label: 'Email [redacted name] the report',
+      description: 'Weekly report emailing',
+      steps: ['mail.google.com: mail [redacted name]'],
+      variables: ['recipient'],
+    })
+  })
+
+  it('returns output untouched when no scrubber is provided', async () => {
+    mockedGenerateText.mockResolvedValue({
+      text: '{"clusters":[{"id":"c1","label":"Email Jane Novak"}]}',
+      usage: { inputTokens: 1, outputTokens: 1 },
+    } as never)
+
+    const result = await runContentReview(provider, 'model', memberInput)
+
+    expect(result.output?.clusters?.[0].label).toBe('Email Jane Novak')
+  })
 })

@@ -7,7 +7,11 @@ import type { ClusterDetailInfo, ClusterInfo, MainWindowAPI } from '@types'
 import { formatMinutes, formatMonthlyHours, formatSightingTime } from './activities/format'
 import { WeeklyTrend } from './WeeklyTrend'
 import { ClaudeWordmark } from './ClaudeWordmark'
-import { buildClusterAgentPrompt, buildClusterAnalyzePrompt } from './claude-prompts'
+import {
+  buildClusterAgentPrompt,
+  buildClusterAnalyzePrompt,
+  scrubClusterForShare,
+} from './claude-prompts'
 
 interface ClusterDetailPaneProps {
   api: MainWindowAPI
@@ -75,21 +79,23 @@ export function ClusterDetailPane({ api, cluster }: ClusterDetailPaneProps): Rea
   const trendTimestamps = useMemo(() => (detail?.sightings ?? []).map((s) => s.startedAt), [detail])
 
   const handleCopyPrompt = (): void => {
-    navigator.clipboard
-      .writeText(buildClusterAnalyzePrompt(cluster, sightings))
+    scrubClusterForShare(cluster, sightings, api.scrubTexts)
+      .then((clean) =>
+        navigator.clipboard.writeText(buildClusterAnalyzePrompt(clean.cluster, clean.sightings)),
+      )
       .then(() => toast.success('Copied! Paste it into Claude Cowork'))
       .catch((err) => {
-        console.warn('[clusters] clipboard.writeText failed', err)
+        console.warn('[clusters] copy prompt failed', err)
         toast.error('Could not copy prompt to clipboard')
       })
   }
 
   const handleCopyAgentPrompt = (): void => {
-    navigator.clipboard
-      .writeText(buildClusterAgentPrompt(cluster))
+    scrubClusterForShare(cluster, [], api.scrubTexts)
+      .then((clean) => navigator.clipboard.writeText(buildClusterAgentPrompt(clean.cluster)))
       .then(() => toast.success('Agent prompt copied to clipboard'))
       .catch((err) => {
-        console.warn('[clusters] clipboard.writeText failed', err)
+        console.warn('[clusters] copy prompt failed', err)
         toast.error('Could not copy prompt to clipboard')
       })
   }

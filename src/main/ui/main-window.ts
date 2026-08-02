@@ -148,6 +148,7 @@ interface MainWindowDependencies {
   evalRecorder: EvalRecorder
   evalFixtureStore: EvalFixtureStore
   taskFixtureStore: TaskFixtureStore
+  scrubTexts: (texts: string[], allow?: string[]) => Promise<string[]>
 }
 
 let mainWindow: BrowserWindow | null = null
@@ -700,6 +701,11 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   handle('main-window:getSubscriptionStatus', () => {
     if (!deps) return 'idle'
     return deps.accessProvider.getAccessState().customerSubscriptionStatus ?? 'idle'
+  })
+
+  handle('main-window:scrubTexts', (_event, texts: string[], allow?: string[]) => {
+    if (!deps) return texts
+    return deps.scrubTexts(texts, allow)
   })
 
   // Patterns (task clusters)

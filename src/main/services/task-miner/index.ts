@@ -430,6 +430,7 @@ export class TaskMiner {
         storage: this.storage,
         embedder: this.embedder,
         clusterVectors: this.embedder.clusterVectors?.bind(this.embedder),
+        scrub: this.embedder.scrubBatch?.bind(this.embedder),
         provider:
           this.enabled && model && this.provider?.isConfigured() ? this.provider : undefined,
         model,
@@ -588,6 +589,7 @@ export class TaskMiner {
         storage: this.storage,
         embedder: this.embedder,
         clusterVectors: this.embedder.clusterVectors?.bind(this.embedder),
+        scrub: this.embedder.scrubBatch?.bind(this.embedder),
         provider,
         model: this.clusterModel ?? cfg.model,
         onProgress,

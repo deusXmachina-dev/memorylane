@@ -53,6 +53,8 @@ export interface ClusteringDeps {
   ) => Promise<number[][]>
   /** Absent → deterministic steps only (offline / tests). */
   provider?: InferenceProvider
+  /** NER egress scrub for model-written review output; absent → regex-only downstream. */
+  scrub?: (texts: string[], allow?: string[]) => Promise<string[]>
   model: string
   now?: number
   onProgress?: ProgressCallback
@@ -171,7 +173,7 @@ export async function runClustering(deps: ClusteringDeps): Promise<ClusteringRun
     try {
       const review = deps.structureReview
         ? await deps.structureReview(input)
-        : await runStructureReview(provider, model, input, progress)
+        : await runStructureReview(provider, model, input, progress, deps.scrub)
       summary.tokenUsage.input += review.tokenUsage.input
       summary.tokenUsage.output += review.tokenUsage.output
       if (!review.output) {
@@ -246,7 +248,7 @@ async function contentRound(
     try {
       const round = deps.contentReview
         ? await deps.contentReview(input)
-        : await runContentReview(provider, model, input, progress)
+        : await runContentReview(provider, model, input, progress, deps.scrub)
       summary.tokenUsage.input += round.tokenUsage.input
       summary.tokenUsage.output += round.tokenUsage.output
       if (!round.output) {

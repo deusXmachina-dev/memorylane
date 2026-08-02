@@ -8,6 +8,7 @@ export type MlWorkerRequestBody =
   | { type: 'init'; bundledModelPath: string | null; cacheDir: string; maxThreads: number | null }
   | { type: 'embedBatch'; texts: string[] }
   | { type: 'clusterVectors'; vectors: ArrayBuffer; dims: number; threshold: number }
+  | { type: 'scrubBatch'; texts: string[]; allow?: string[] }
 
 export type MlWorkerRequest = MlWorkerRequestBody & { id: number }
 
@@ -15,6 +16,7 @@ export type MlWorkerResult =
   | { type: 'ready' }
   | { type: 'vectors'; vectors: ArrayBuffer; dims: number }
   | { type: 'groups'; groups: number[][] }
+  | { type: 'scrubbed'; texts: string[] }
 
 export type MlWorkerResponse =
   | { id: number; ok: true; result: MlWorkerResult }

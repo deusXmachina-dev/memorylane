@@ -31,6 +31,7 @@ import { listInstalledApps } from './apps/installed-apps'
 import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
 import { TaskMiner } from './services/task-miner'
 import type { MiningStatus } from '../shared/types'
+import { scrubPII } from '../shared/sanitize'
 import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
 import { DatabaseUploadSync } from './services/database-upload-sync'
@@ -545,6 +546,8 @@ app.on('ready', async () => {
     evalRecorder: runtime.evalRecorder,
     evalFixtureStore: runtime.evalFixtureStore,
     taskFixtureStore: runtime.taskFixtureStore,
+    scrubTexts: (texts, allow) =>
+      runtime?.mlWorker.scrubBatch(texts, allow) ?? Promise.resolve(texts.map(scrubPII)),
   })
 
   runtime.accessProvider.startPeriodicRefresh()

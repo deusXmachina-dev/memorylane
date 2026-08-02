@@ -16,8 +16,9 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
-import Database from 'better-sqlite3'
-import { scrubPII } from '../src/shared/sanitize'
+import DatabaseConstructor from 'better-sqlite3'
+import { scrubPII, scrubPromptPII } from '../src/shared/sanitize'
+import { PiiScrubber } from '../src/main/processor/pii-scrub'
 import { getDefaultDbPath, getModelCacheDir } from '../src/main/utils/paths'
 import {
   PII_PLANTS,
@@ -63,6 +64,8 @@ const NER_MODELS: Record<string, { id: string; dtype: string }> = {
 
 const ALL_SCRUBBERS = [
   'current',
+  'prompt',
+  'shipped',
   'remove-pii',
   'redact-pii',
   'rampart',
@@ -382,6 +385,28 @@ function buildScrubber(spec: string, threshold: number, cache: Map<string, Scrub
       async () => scrubPII,
       () => '0MB (built-in)',
     )
+  } else if (spec === 'prompt') {
+    scrubber = makeSimpleScrubber(
+      'prompt',
+      async () => scrubPromptPII,
+      () => '0MB (built-in)',
+    )
+  } else if (spec === 'shipped') {
+    const shipped = new PiiScrubber()
+    scrubber = {
+      name: 'shipped',
+      loadMs: 0,
+      async init() {
+        const t0 = performance.now()
+        await shipped.scrubBatch(['warmup'])
+        this.loadMs = Math.round(performance.now() - t0)
+      },
+      async scrub(text: string) {
+        const [out] = await shipped.scrubBatch([text])
+        return out
+      },
+      footprint: () => '14MB model + 0MB (built-in)',
+    }
   } else if (spec === 'remove-pii') {
     scrubber = makeSimpleScrubber(
       'remove-pii',
@@ -508,7 +533,7 @@ function diffSample(before: string, after: string): { before: string; after: str
 function loadDayTexts(dbPath: string, day: string, includeOcr: boolean, cap: number): string[] {
   const start = new Date(`${day}T00:00:00`).getTime()
   const end = start + 24 * 60 * 60 * 1000
-  const db = new Database(dbPath, { readonly: true, fileMustExist: true })
+  const db = new DatabaseConstructor(dbPath, { readonly: true, fileMustExist: true })
   try {
     const rows = db
       .prepare(

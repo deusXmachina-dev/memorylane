@@ -430,6 +430,8 @@ export interface MainWindowAPI {
   // Patterns (task clusters) — new TaskMiner view
   getClusters: () => Promise<ClustersView>
   getClusterDetail: (id: string) => Promise<ClusterDetailInfo | null>
+  /** NER + regex PII scrub in the main process, for share/copy surfaces. */
+  scrubTexts: (texts: string[], allow?: string[]) => Promise<string[]>
   // Task-mining progress (ledger sweep)
   getMiningStatus: () => Promise<MiningStatus>
   onMiningProgressChanged: (callback: (status: MiningStatus) => void) => () => void
