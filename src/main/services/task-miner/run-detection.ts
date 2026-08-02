@@ -149,7 +149,7 @@ export async function runDetection(
     let unmappedIds = 0
     const candidates: Candidate[] = normalizedCandidates
       .map((c) => {
-        const { ids, unmapped } = activityIds.decodeMany(c.activity_ids)
+        const { ids, unmapped } = activityIds.decodeMany(c.activity_ids) ?? { ids: [], unmapped: 0 }
         unmappedIds += unmapped
         return { ...c, activity_ids: ids }
       })

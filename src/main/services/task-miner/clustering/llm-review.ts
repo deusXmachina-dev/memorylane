@@ -10,7 +10,6 @@ import {
   serializeReviewInput,
 } from './prompts'
 import { aliasReviewInput, resolveReviewOutput } from './id-alias'
-import log from '@main/utils/logger'
 import type { ProgressCallback } from '../types'
 
 export interface ReviewCallResult {
@@ -47,14 +46,15 @@ async function callReview(
       tokenUsage.input += result.usage.inputTokens ?? 0
       tokenUsage.output += result.usage.outputTokens ?? 0
 
-      const parsed = extractJsonObject<ReviewOutput>(result.text)
-      const resolved = parsed ? resolveReviewOutput(parsed, aliases) : null
-      if (resolved && resolved.unresolved > 0) {
-        log.warn(
-          `[TaskMiner] [Clustering] ${resolved.unresolved} id handle(s) in the review response did not resolve`,
-        )
+      const resolved = resolveReviewOutput(extractJsonObject(result.text), aliases)
+      if (resolved.output) {
+        if (resolved.unresolved > 0) {
+          progress?.(
+            `[Clustering] ${resolved.unresolved} id reference(s) in the review response could not be read`,
+          )
+        }
+        return { output: resolved.output, tokenUsage }
       }
-      if (resolved?.output) return { output: resolved.output, tokenUsage }
       progress?.(
         `[Clustering] Could not use review response` +
           (attempt < CLUSTERING_CONFIG.LLM_MAX_ATTEMPTS ? ' — retrying' : ''),

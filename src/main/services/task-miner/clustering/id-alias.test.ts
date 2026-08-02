@@ -121,7 +121,7 @@ describe('resolveReviewOutput', () => {
     expect(unresolved).toBe(1)
   })
 
-  it('drops the whole merges key when any merge id will not decode', () => {
+  it('drops only the unreadable merge proposal and marks the list incomplete', () => {
     const { aliases } = aliasReviewInput(input)
 
     const { output, unresolved } = resolveReviewOutput(
@@ -129,11 +129,12 @@ describe('resolveReviewOutput', () => {
       aliases,
     )
 
-    expect(output && 'merges' in output).toBe(false)
+    expect(output?.merges).toEqual([{ merge: [UUID_A, UUID_B] }])
+    expect(output?.mergesComplete).toBe(false)
     expect(unresolved).toBe(1)
   })
 
-  it('keeps the cluster verdicts when the merges key is dropped', () => {
+  it('keeps the cluster verdicts when a merge proposal is dropped', () => {
     const { aliases } = aliasReviewInput(input)
 
     const { output } = resolveReviewOutput(
@@ -142,13 +143,22 @@ describe('resolveReviewOutput', () => {
     )
 
     expect(output?.clusters).toEqual([{ id: UUID_A, label: 'Process invoice' }])
-    expect(output && 'merges' in output).toBe(false)
+    expect(output?.merges).toEqual([])
+    expect(output?.mergesComplete).toBe(false)
+  })
+
+  it('leaves a fully readable merge list complete', () => {
+    const { aliases } = aliasReviewInput(input)
+    const { output } = resolveReviewOutput({ merges: [{ merge: ['c1', 'c2'] }] }, aliases)
+    expect(output?.merges).toEqual([{ merge: [UUID_A, UUID_B] }])
+    expect(output?.mergesComplete).toBeUndefined()
   })
 
   it('keeps an empty merges array — it is a real answer that declines candidates', () => {
     const { aliases } = aliasReviewInput(input)
     const { output } = resolveReviewOutput({ clusters: [], merges: [] }, aliases)
     expect(output?.merges).toEqual([])
+    expect(output?.mergesComplete).toBeUndefined()
   })
 
   it('leaves an absent merges key absent', () => {
@@ -157,13 +167,22 @@ describe('resolveReviewOutput', () => {
     expect(output && 'merges' in output).toBe(false)
   })
 
+  it('rejects a response that is not a JSON object', () => {
+    const { aliases } = aliasReviewInput(input)
+
+    expect(resolveReviewOutput(null, aliases).output).toBeNull()
+    expect(resolveReviewOutput('{"clusters":[]}', aliases).output).toBeNull()
+    expect(resolveReviewOutput([{ id: 'c1' }], aliases).output).toBeNull()
+  })
+
   it('tolerates malformed shapes instead of throwing', () => {
     const { aliases } = aliasReviewInput(input)
-    const malformed = (value: unknown) => resolveReviewOutput(value as never, aliases)
+    const malformed = (value: unknown) => resolveReviewOutput(value, aliases)
 
     expect(malformed({ clusters: {} }).output).toBeNull()
     expect(malformed({ merges: {} }).output).toBeNull()
-    expect(malformed({ merges: ['c1'] }).output?.merges).toBeUndefined()
+    expect(malformed({ merges: ['c1'] }).output?.merges).toEqual([])
+    expect(malformed({ merges: ['c1'] }).output?.mergesComplete).toBe(false)
     expect(malformed({ clusters: [null, 3, { id: 5 }] }).output?.clusters).toEqual([])
 
     const badSplit = malformed({ clusters: [{ id: 'c1', label: 'Keep', split: {} }] })
@@ -175,5 +194,6 @@ describe('resolveReviewOutput', () => {
       { sighting_ids: [] },
       { sighting_ids: [] },
     ])
+    expect(badGroup.unresolved).toBe(2)
   })
 })

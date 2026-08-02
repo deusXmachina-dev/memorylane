@@ -237,6 +237,26 @@ describe('applyStructure', () => {
     expect(storage.clusters.getActiveMergeDeclines(0).size).toBe(0)
   })
 
+  it('applies readable merges but declines nothing when the merge list is incomplete', () => {
+    seedCluster('a', 100, ['s1'])
+    seedCluster('b', 200, ['s2'])
+    seedCluster('c', 300, ['s3'])
+
+    // One proposal was unreadable, so the absence of (a, c) is not a verdict.
+    const result = applyStructure(
+      storage,
+      { merges: [{ merge: ['a', 'b'] }], mergesComplete: false },
+      guards({
+        reviewableIds: new Set(['a', 'b', 'c']),
+        mergeCandidatePairs: new Set([mergePairKey('a', 'b'), mergePairKey('a', 'c')]),
+      }),
+      5000,
+    )
+
+    expect(result.merged).toBe(1)
+    expect(storage.clusters.getActiveMergeDeclines(0).size).toBe(0)
+  })
+
   it('declines nothing on a degenerate response without a merges array', () => {
     seedCluster('a', 100, ['s1'])
     seedCluster('b', 200, ['s2'])

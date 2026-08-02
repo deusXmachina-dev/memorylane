@@ -69,9 +69,11 @@ describe('PositionalAliases', () => {
     })
   })
 
-  it('reports a non-array id list as unmapped instead of throwing', () => {
+  it('separates an empty list from one that is not a list at all', () => {
     const aliases = new PositionalAliases('a')
-    expect(aliases.decodeMany(undefined)).toEqual({ ids: [], unmapped: 1 })
-    expect(aliases.decodeMany({ a1: true } as never)).toEqual({ ids: [], unmapped: 1 })
+    expect(aliases.decodeMany([])).toEqual({ ids: [], unmapped: 0 })
+    expect(aliases.decodeMany(undefined)).toBeNull()
+    expect(aliases.decodeMany('a1')).toBeNull()
+    expect(aliases.decodeMany({ a1: true })).toBeNull()
   })
 })

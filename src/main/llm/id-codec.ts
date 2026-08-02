@@ -19,8 +19,9 @@ export class PositionalAliases {
     return this.realOf.get(short.trim())
   }
 
-  decodeMany(shorts: readonly unknown[] | undefined): { ids: string[]; unmapped: number } {
-    if (!Array.isArray(shorts)) return { ids: [], unmapped: 1 }
+  /** null = not a list of handles at all, which is not the same as a list none of whose handles resolved. */
+  decodeMany(shorts: unknown): { ids: string[]; unmapped: number } | null {
+    if (!Array.isArray(shorts)) return null
     const ids = shorts
       .map((short) => this.decode(short))
       .filter((id): id is string => id !== undefined)
