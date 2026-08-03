@@ -1,15 +1,14 @@
-# MemoryLane v1.5.4
+# MemoryLane v1.5.5-alpha.1
 
-Task durations now count the pauses inside a run, mining catches up faster on first launch, and LLM request timeouts are configurable.
+Configured LLM timeouts are finally honored, task durations go back to measured time, and the Gemini 2.5 defaults are retired ahead of their shutdown.
 
 ## What's Changed
 
-- **Realistic task durations**: A run's duration used to drop every think and read pause, because activity windows close after 5 seconds of silence. Pauses up to 5 minutes are now counted as part of the run, and existing data is recalculated on upgrade. Averages roughly double, which also raises the projected monthly hours (#264).
-- **Configurable LLM timeouts**: Two sliders under Advanced options bound the long-running model calls — activity summaries (up to 60 min) and task mining (default 20 min). Local endpoints that spend minutes on prompt processing no longer time out mid-request (#263).
-- **Reliable task recipes**: The cluster review is split into a small structure call (merges/splits) and batched content rounds that are the sole writer of labels and steps. Oversized reviews no longer time out and discard the whole pass, and labeled tasks that were left without steps get them on the next pass (#262).
-- **Parallel day mining**: When the mining ledger has a backlog, days are analyzed in waves instead of one at a time, so a first launch with weeks of history catches up far faster. Daily sweeps stay serial (#258).
-- **Per-day retry cooldown**: A day that fails now cools down on its own (10m, then 20m) while the sweep moves on to the next day. Only repeated consecutive failures pause the sweep, and the banner reads "Waiting to retry" instead of "Analysis paused" (#257).
-- **Legacy tables removed**: The old pattern tables are dropped from the database, which also removes them from enterprise uploads (#262).
+- **Configured LLM timeouts now hold**: the HTTP layer capped every request at 5 minutes beneath `fetch()`, below any setting, so a local model still generating was disconnected no matter what you configured. The deadline is now the caller's, with a global backstop above it. Errors also carry the underlying network code, so a stalled local model is distinguishable from a refused connection (#274).
+- **Task durations back to measured time**: v1.5.4 bridged gaps up to 5 minutes between a task's activities and counted them as active. On interleaved days the same minute was credited to several tasks at once — 1.68× inflated on a real database, with days claiming more task time than the machine captured all day. Duration is now the plain union of captured activity; the presence heartbeat already keeps read and think time inside it. Existing data is recalculated on upgrade, so averages come back down (#269).
+- **Reliable cluster merges**: the review calls served the model raw UUIDs, and one mangled character turned a merge the model proposed into a 30-day suppression of that pair. Review now uses the same short handles the scan has always used (#267).
+- **Gemini 2.5 retired from defaults**: Google discontinues Gemini 2.5 on Vertex endpoints on 2026-10-20. Vertex moves to `gemini-3.5-flash-lite` and the OpenRouter chain swaps in GA successors. Remembered model picks are overwritten on upgrade so no install is stranded on a retired id (#265).
+- **Explorer plan price**: the activation screen now shows $100/mo (#275).
 
 ## Known Issues & Limitations
 
@@ -27,4 +26,4 @@ Task durations now count the pauses inside a run, mining catches up faster on fi
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.3...v1.5.4
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.4...v1.5.5-alpha.1
