@@ -1,10 +1,10 @@
 /**
  * CLI plumbing for the InferenceProvider.
  *
- * Mirrors what the Electron main process does at startup: load
- * VendorCredentialsManager + CaptureSettingsManager from the on-disk
- * userData dir, then construct an InferenceProvider against the active
- * vendor.
+ * Mirrors what the Electron main process does at startup: raise the undici
+ * transport ceiling, load VendorCredentialsManager + CaptureSettingsManager
+ * from the on-disk userData dir, then construct an InferenceProvider against
+ * the active vendor.
  *
  * Differences from the app:
  * - No Electron app context, so `safeStorage` is unavailable. We pass a
@@ -20,6 +20,7 @@ import { CaptureSettingsManager } from '../src/main/settings/capture-settings-ma
 import { VendorCredentialsManager } from '../src/main/settings/vendor-credentials-manager'
 import { InferenceProviderImpl } from '../src/main/llm'
 import type { InferenceProvider } from '../src/main/llm'
+import { configureHttpTransport } from '../src/main/system/http-transport'
 import { getAppDataPath } from '../src/main/utils/paths'
 import { VENDORS, type Vendor } from '../src/shared/types'
 
@@ -56,6 +57,8 @@ export interface CliInferenceProviderHandle {
 export function loadCliInferenceProvider(
   options: CliInferenceProviderOptions = {},
 ): CliInferenceProviderHandle {
+  configureHttpTransport()
+
   const userData = options.userDataPath ?? getAppDataPath()
 
   const captureSettings = new CaptureSettingsManager(path.join(userData, 'capture-settings.json'))

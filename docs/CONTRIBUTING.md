@@ -90,3 +90,14 @@ After activity extraction:
 
 - frame/video media is deleted as part of activity cleanup;
 - a periodic stale-file sweep removes older leftover media.
+
+## LLM Request Deadlines
+
+A request deadline lives in exactly two places, and it matters which:
+
+- **The deadline itself is the caller's**, passed as `timeout` on the `generateText` call (`ai` turns it into an `AbortSignal`). The raw-HTTP video path, which bypasses the SDK, composes the same deadline into its own `signal`. There is no fetch wrapper and no per-request dispatcher — `InferenceProvider.languageModel(modelId)` takes no timeout.
+- **The transport backstop is global**, set once by `configureHttpTransport()` on app ready. It exists only so a black-holed connection cannot hang forever.
+
+The backstop must always exceed `MAX_REQUEST_TIMEOUT_MS`, the upper bound of the timeout sliders. undici defaults `headersTimeout` and `bodyTimeout` to 300s and applies them beneath `fetch()` where no SDK option can reach, so a local model still generating after five minutes was killed no matter what the user configured (issue #268). Any transport guard shorter than a configured deadline reintroduces that bug; `http-transport.test.ts` pins the invariant and reproduces the failure at a 1s/2.5s scale.
+
+The backstop is not a policy for anyone. Sync and access services pass their own `signal: AbortSignal.timeout(…)` — `BACKEND_REQUEST_TIMEOUT_MS` for the small JSON calls, `BACKEND_UPLOAD_TIMEOUT_MS` for the two uploads. Both sit under the interval that drives them: `database-upload-sync` and `device-report-sync` tick hourly with no re-entrancy guard, so a request outliving its tick would run alongside the next one. A new interval-driven `fetch()` needs a deadline shorter than its own cadence.

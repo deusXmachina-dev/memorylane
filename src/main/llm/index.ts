@@ -1,4 +1,4 @@
-export { InferenceProviderImpl } from './inference-provider'
+export { InferenceProviderImpl, DEFAULT_REQUEST_TIMEOUT_MS } from './inference-provider'
 export type {
   InferenceProvider,
   InferenceProviderOptions,

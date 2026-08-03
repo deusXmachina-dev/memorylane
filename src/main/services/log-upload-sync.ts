@@ -3,7 +3,7 @@ import * as fsPromises from 'fs/promises'
 import * as os from 'os'
 import * as path from 'path'
 import log from '@main/utils/logger'
-import { LOG_UPLOAD_MIN_INTERVAL_MS } from '../../shared/constants'
+import { BACKEND_UPLOAD_TIMEOUT_MS, LOG_UPLOAD_MIN_INTERVAL_MS } from '../../shared/constants'
 import { collectSupportBundleFiles } from '../ui/logs-export'
 import { createZipWithFiles } from '../ui/zip'
 import type { LogUploadState } from './log-upload-store'
@@ -185,6 +185,7 @@ export class LogUploadSync {
         method: 'POST',
         headers: { Authorization: `Bearer ${this.getDeviceId()}` },
         body: form,
+        signal: AbortSignal.timeout(BACKEND_UPLOAD_TIMEOUT_MS),
       })
 
       if (!response.ok) {

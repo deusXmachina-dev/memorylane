@@ -1,5 +1,5 @@
 import { shell } from 'electron'
-import { MANAGED_KEY_CONFIG } from '../../shared/constants'
+import { BACKEND_REQUEST_TIMEOUT_MS, MANAGED_KEY_CONFIG } from '../../shared/constants'
 import type { ConsentOutcome, PendingConsent, SubscriptionPlan } from '../../shared/types'
 import { isSameRegistrableDomain } from '../../shared/url-utils'
 import log from '@main/utils/logger'
@@ -113,6 +113,7 @@ export class CustomerAccessProvider extends BaseAccessProvider {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body ?? {}),
+      signal: AbortSignal.timeout(BACKEND_REQUEST_TIMEOUT_MS),
     })
     if (!response.ok) {
       throw new Error(`Backend returned ${response.status} for ${path}`)
@@ -202,6 +203,7 @@ export class CustomerAccessProvider extends BaseAccessProvider {
     try {
       response = await fetch(url.toString(), {
         headers: { Authorization: `Bearer ${deviceId}` },
+        signal: AbortSignal.timeout(BACKEND_REQUEST_TIMEOUT_MS),
       })
     } catch (error) {
       log.warn(

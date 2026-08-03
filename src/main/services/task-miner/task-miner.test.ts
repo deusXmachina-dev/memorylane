@@ -6,6 +6,7 @@ import { StorageService } from '@main/storage'
 import { applyMigrations } from '@main/storage/migrator'
 import { deleteDbFiles, v } from '@main/storage/test-utils'
 import type { InferenceProvider } from '@main/llm'
+import type { Vendor } from '../../../shared/types'
 import { PATTERN_DETECTION_CONFIG, TASK_BACKFILL } from '../../../shared/constants'
 import { TaskMiner } from '.'
 import { runDetection } from './run-detection'
@@ -18,7 +19,9 @@ vi.mock('./clustering', () => ({ runClustering: vi.fn(async () => ({})) }))
 const mockedRunDetection = vi.mocked(runDetection)
 const mockedRunClustering = vi.mocked(runClustering)
 
-const configuredProvider = { isConfigured: () => true } as InferenceProvider
+const providerFor = (vendor: Vendor) =>
+  ({ isConfigured: () => true, getActiveVendor: () => vendor }) as InferenceProvider
+const configuredProvider = providerFor('openrouter')
 const embedder: MinerEmbedder = {
   embed: async () => [0.1, 0.2, 0.3],
   embedBatch: async (texts) => texts.map(() => [0.1, 0.2, 0.3]),
@@ -279,6 +282,24 @@ describe('TaskMiner sweep', () => {
     expect(summary.daysMined).toBe(TASK_BACKFILL.CLUSTER_EVERY_DAYS + 3)
     // A wave never claims past the barrier, so that caps the peak too.
     expect(peak).toBe(Math.min(TASK_BACKFILL.SWEEP_CONCURRENCY, TASK_BACKFILL.CLUSTER_EVERY_DAYS))
+  })
+
+  it('mines one day at a time on a self-hosted endpoint despite a backlog', async () => {
+    seedDays(TASK_BACKFILL.CLUSTER_EVERY_DAYS + 3)
+    let inFlight = 0
+    let peak = 0
+    mockedRunDetection.mockImplementation(async (...args) => {
+      inFlight++
+      peak = Math.max(peak, inFlight)
+      await Promise.resolve()
+      inFlight--
+      return commitDay(...args)
+    })
+
+    const summary = await miner.sweepNow(providerFor('openai-compatible'))
+
+    expect(summary.daysMined).toBe(TASK_BACKFILL.CLUSTER_EVERY_DAYS + 3)
+    expect(peak).toBe(1)
   })
 
   it('mines one day at a time without a backlog', async () => {

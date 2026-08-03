@@ -539,7 +539,7 @@ export class CaptureSettingsManager {
         )
       }
     }
-    const changed = this.settings.excludedApps.join(' ') !== before.join(' ')
+    const changed = JSON.stringify(this.settings.excludedApps) !== JSON.stringify(before)
     if (changed) log.info('[CaptureSettings] Migrated excluded-app tokens to bundle ids')
     return changed
   }

@@ -25,7 +25,8 @@ export async function invokeViaGenerateText(
     },
   ]
   const result = await generateText({
-    model: input.provider.languageModel(input.model, input.requestTimeoutMs),
+    model: input.provider.languageModel(input.model),
+    timeout: input.requestTimeoutMs,
     messages,
     abortSignal: input.signal,
   })
@@ -76,6 +77,7 @@ interface RawVideoCompletionInput {
   model: string
   content: ChatContentItem[]
   signal: AbortSignal
+  requestTimeoutMs: number
   fetchImpl?: typeof globalThis.fetch
 }
 
@@ -135,7 +137,7 @@ export async function invokeRawVideoCompletion(
       method: 'POST',
       headers,
       body: JSON.stringify(body),
-      signal: input.signal,
+      signal: AbortSignal.any([input.signal, AbortSignal.timeout(input.requestTimeoutMs)]),
     })
   } catch (error) {
     throw enrichRawHttpError(error)

@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { InferenceProviderImpl, withRequestTimeout } from './inference-provider'
+import { InferenceProviderImpl } from './inference-provider'
 import { OPENROUTER_BASE_URL } from './adapters'
 import { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
 import type { Vendor } from '../../shared/types'
@@ -121,7 +121,7 @@ describe('InferenceProviderImpl', () => {
     )
   })
 
-  it('builds a separate SDK provider per request timeout', async () => {
+  it('reuses one SDK provider per vendor', async () => {
     const h = buildHarness('openrouter', (m) =>
       m.saveCredentials('openrouter', { apiKey: 'sk-or-1' }),
     )
@@ -132,11 +132,6 @@ describe('InferenceProviderImpl', () => {
     h.provider.languageModel('m')
     h.provider.languageModel('m')
     expect(built()).toHaveLength(1)
-
-    // The deadline is baked into the SDK provider's fetch, so a per-call
-    // override the cache served from the default entry would be silently lost.
-    h.provider.languageModel('m', 20 * 60_000)
-    expect(built()).toHaveLength(2)
   })
 
   it('notifyConfigChanged invalidates SDK cache and fires listeners', () => {
@@ -156,31 +151,5 @@ describe('InferenceProviderImpl', () => {
     unsubscribe()
     h.provider.notifyConfigChanged()
     expect(firedCount).toBe(1)
-  })
-})
-
-describe('withRequestTimeout', () => {
-  const hangingFetch: typeof globalThis.fetch = (_input, init) =>
-    new Promise((_resolve, reject) => {
-      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason))
-    })
-
-  it('aborts a request that never responds', async () => {
-    const wrapped = withRequestTimeout(hangingFetch, 20)
-    await expect(wrapped('https://example.test')).rejects.toMatchObject({ name: 'TimeoutError' })
-  })
-
-  it('a caller-supplied signal still aborts first', async () => {
-    const wrapped = withRequestTimeout(hangingFetch, 60_000)
-    const controller = new AbortController()
-    const pending = wrapped('https://example.test', { signal: controller.signal })
-    controller.abort()
-    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
-  })
-
-  it('passes responses through untouched', async () => {
-    const response = new Response('ok')
-    const wrapped = withRequestTimeout(async () => response, 20)
-    await expect(wrapped('https://example.test')).resolves.toBe(response)
   })
 })

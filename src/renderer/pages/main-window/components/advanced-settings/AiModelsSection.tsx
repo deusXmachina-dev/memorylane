@@ -19,6 +19,7 @@ import type {
 } from '@types'
 import { VENDORS } from '@types'
 import { getVendorDefaults } from '@/shared/vendor-defaults'
+import { MAX_REQUEST_TIMEOUT_MS } from '@constants'
 import { ManageKeySection } from '../ManageKeySection'
 import { ModelSelector } from './ModelSelector'
 import { SegmentedControl } from './SegmentedControl'
@@ -176,7 +177,7 @@ export function AiModelsSection({
                     label="Activity summary timeout"
                     value={form.activityRequestTimeoutMs}
                     min={15_000}
-                    max={3_600_000}
+                    max={MAX_REQUEST_TIMEOUT_MS}
                     step={15_000}
                     format={formatMinSec}
                     onChange={(v) => onSettingChange('activityRequestTimeoutMs', v)}
@@ -186,7 +187,7 @@ export function AiModelsSection({
                     label="Task mining timeout"
                     value={form.taskMiningRequestTimeoutMs}
                     min={60_000}
-                    max={3_600_000}
+                    max={MAX_REQUEST_TIMEOUT_MS}
                     step={60_000}
                     format={formatMinSec}
                     onChange={(v) => onSettingChange('taskMiningRequestTimeoutMs', v)}

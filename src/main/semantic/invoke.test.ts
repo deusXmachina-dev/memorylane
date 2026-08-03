@@ -28,7 +28,7 @@ function jsonResponse(body: unknown, init: ResponseInit = { status: 200 }): Resp
 }
 
 describe('invokeViaGenerateText', () => {
-  it('passes requestTimeoutMs through to languageModel', async () => {
+  it('passes requestTimeoutMs to the SDK as the call deadline', async () => {
     vi.mocked(generateText).mockResolvedValue({
       text: 'ok',
       usage: { inputTokens: 1, outputTokens: 1 },
@@ -52,7 +52,8 @@ describe('invokeViaGenerateText', () => {
       requestTimeoutMs: 120_000,
     })
 
-    expect(languageModel).toHaveBeenCalledWith('m', 120_000)
+    expect(languageModel).toHaveBeenCalledWith('m')
+    expect(generateText).toHaveBeenCalledWith(expect.objectContaining({ timeout: 120_000 }))
   })
 })
 
@@ -69,6 +70,7 @@ describe('invokeRawVideoCompletion', () => {
       model: 'm',
       content: VIDEO_CONTENT,
       signal: new AbortController().signal,
+      requestTimeoutMs: 120_000,
       fetchImpl,
     })
 
@@ -96,6 +98,7 @@ describe('invokeRawVideoCompletion', () => {
         model: 'm',
         content: VIDEO_CONTENT,
         signal: new AbortController().signal,
+        requestTimeoutMs: 120_000,
         fetchImpl,
       }),
     ).rejects.toThrow(/code=invalid_input/)
@@ -115,6 +118,7 @@ describe('invokeRawVideoCompletion', () => {
         model: 'm',
         content: VIDEO_CONTENT,
         signal: new AbortController().signal,
+        requestTimeoutMs: 120_000,
         fetchImpl,
       }),
     ).rejects.toThrow(/upstream is down/)
@@ -129,6 +133,7 @@ describe('invokeRawVideoCompletion', () => {
         model: 'm',
         content: VIDEO_CONTENT,
         signal: new AbortController().signal,
+        requestTimeoutMs: 120_000,
         fetchImpl,
       }),
     ).rejects.toThrow(/Empty response body/)
@@ -145,6 +150,7 @@ describe('invokeRawVideoCompletion', () => {
         model: 'm',
         content: VIDEO_CONTENT,
         signal: new AbortController().signal,
+        requestTimeoutMs: 120_000,
         fetchImpl,
       }),
     ).rejects.toThrow(/aborted by test/)
@@ -164,6 +170,7 @@ describe('invokeRawVideoCompletion', () => {
           { type: 'image_url', imageUrl: { url: 'data:image/png;base64,XX', detail: 'high' } },
         ],
         signal: new AbortController().signal,
+        requestTimeoutMs: 120_000,
         fetchImpl,
       }),
     ).rejects.toThrow(/does not serialize content of type "image_url"/)
@@ -181,6 +188,7 @@ describe('invokeRawVideoCompletion', () => {
       model: 'm',
       content: VIDEO_CONTENT,
       signal: new AbortController().signal,
+      requestTimeoutMs: 120_000,
       fetchImpl,
     })
 

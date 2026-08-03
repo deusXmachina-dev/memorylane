@@ -39,7 +39,8 @@ async function callReview(
     progress?.(describe(attempt))
     try {
       const result = await generateText({
-        model: provider.languageModel(model, PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS),
+        model: provider.languageModel(model),
+        timeout: PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS,
         system,
         prompt,
         maxRetries: 0,

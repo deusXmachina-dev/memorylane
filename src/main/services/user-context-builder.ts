@@ -12,7 +12,7 @@
 import { generateText } from 'ai'
 import { isSameDay, getDayBoundaries } from '@main/utils/day'
 import type { StorageService, ActivityDetail } from '../storage'
-import type { InferenceProvider } from '../llm'
+import { DEFAULT_REQUEST_TIMEOUT_MS, type InferenceProvider } from '../llm'
 import type { UserContext } from '../storage/user-context-repository'
 import { USER_CONTEXT_CONFIG } from '../../shared/constants'
 import log from '@main/utils/logger'
@@ -364,6 +364,7 @@ async function runUserContextUpdate(
   progress(`Sending aggregated profile to ${cfg.model}...`)
   const result = await generateText({
     model: provider.languageModel(cfg.model),
+    timeout: DEFAULT_REQUEST_TIMEOUT_MS,
     system: systemPrompt,
     prompt: userMessage,
   })

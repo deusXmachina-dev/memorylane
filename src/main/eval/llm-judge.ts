@@ -1,6 +1,6 @@
 import { generateText } from 'ai'
 import log from '@main/utils/logger'
-import type { InferenceProvider } from '../llm'
+import { DEFAULT_REQUEST_TIMEOUT_MS, type InferenceProvider } from '../llm'
 import { extractJsonObject } from '../services/task-miner/helpers'
 
 /** A user-message content part the judge prompt can carry (text, or an image). */
@@ -32,6 +32,7 @@ export async function callJsonJudge<T extends object>(params: {
   try {
     result = await generateText({
       model: params.provider.languageModel(params.model),
+      timeout: DEFAULT_REQUEST_TIMEOUT_MS,
       messages: [{ role: 'user', content: params.content }],
       abortSignal: params.signal,
     })
