@@ -34,35 +34,91 @@ const LOGIN_HOST_PREFIXES = [
   'login.',
   'logon.',
   'signin.',
+  'signon.',
   'sso.',
   'auth.',
+  'oauth.',
+  'openid.',
   'accounts.',
   'idp.',
+  'identity.',
+  'adfs.',
+  'sts.',
+  'passport.',
   'mfa.',
 ]
 
-const LOGIN_PATH_SEGMENTS = [
+const LOGIN_PATH_SEGMENTS = new Set([
   'login',
+  'login2',
+  'log-in',
+  'log_in',
   'logon',
+  'log-on',
   'signin',
-  'signon',
   'sign-in',
+  'sign_in',
+  'sign_in_with_password',
+  'signon',
   'sign-on',
-  'oauth',
+  'signup',
+  'sign-up',
+  'sign_up',
+  'register',
+  'registration',
+  'servicelogin',
+  'wp-login',
+  'j_security_check',
+  'auth',
+  'authn',
+  'authenticate',
+  'authentication',
   'authorize',
+  'authorization',
+  'oauth',
+  'oauth2',
+  'openid',
+  'openid-connect',
+  'oidc',
   'saml',
+  'saml2',
+  'samlsso',
   'sso',
+  'ssologin',
+  'adfs',
+  'sts',
+  'idp',
+  'consent',
   '2fa',
+  '2step',
   'mfa',
   'otp',
-  'reset-password',
-  'forgot-password',
+  'totp',
+  'u2f',
+  'webauthn',
+  'passkey',
+  'two-factor',
+  'twofactor',
+  'verify',
+  'verify-email',
+  'verification',
+  'challenge',
+  'password',
   'passwords',
-]
+  'change-password',
+  'new-password',
+  'reset-password',
+  'password-reset',
+  'resetpassword',
+  'forgot-password',
+  'forgotpassword',
+  'recover-password',
+  'credentials',
+])
 
 const REDIRECT_VALUE = /^(?:\/|https?:\/\/)/
 
-const PAGE_EXTENSION = /\.(?:aspx?|php\d?|html?|jsp|jspx|cgi|do|action)$/
+const PAGE_EXTENSION = /\.(?:aspx?|php\d?|phtml|x?html?|jspx?|jsf|cgi|cfm|esp|do|action)$/
 
 const LOGIN_TITLE_PHRASES = [
   'sign in',
@@ -131,7 +187,7 @@ function findLoginUrlMarker(url: string | undefined): string | null {
   const segments = parsed.pathname.split('/').filter(Boolean)
   for (const segment of segments) {
     const bare = segment.replace(PAGE_EXTENSION, '')
-    if (LOGIN_PATH_SEGMENTS.includes(bare)) {
+    if (LOGIN_PATH_SEGMENTS.has(bare)) {
       return `path=${bare}`
     }
   }
@@ -139,7 +195,7 @@ function findLoginUrlMarker(url: string | undefined): string | null {
   for (const [, value] of parsed.searchParams) {
     if (!REDIRECT_VALUE.test(value)) continue
     for (const token of value.split(/[^a-z0-9]+/)) {
-      if (LOGIN_PATH_SEGMENTS.includes(token)) {
+      if (LOGIN_PATH_SEGMENTS.has(token)) {
         return `redirect=${token}`
       }
     }

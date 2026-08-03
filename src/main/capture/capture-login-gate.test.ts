@@ -262,10 +262,60 @@ describe('capture login gate detection', () => {
     const match = getLoginScreenMatch({
       processName: 'Google Chrome',
       title: 'Sign in to Acme',
-      url: 'https://keycloak.acme.com/realms/acme/protocol/openid-connect/auth',
+      url: 'https://acme.com/portal',
     })
 
     expect(match).toBe('title=sign in')
+  })
+
+  it('matches a keycloak auth endpoint', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Acme',
+      url: 'https://keycloak.acme.com/realms/acme/protocol/openid-connect/auth',
+    })
+
+    expect(match).toBe('path=openid-connect')
+  })
+
+  it('matches a rails devise sign-in path', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Acme',
+      url: 'https://acme.com/users/sign_in',
+    })
+
+    expect(match).toBe('path=sign_in')
+  })
+
+  it('matches a wordpress login page', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Acme Blog',
+      url: 'https://acme.com/wp-login.php',
+    })
+
+    expect(match).toBe('path=wp-login')
+  })
+
+  it('matches a google service login', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Google',
+      url: 'https://accounts.google.com/ServiceLogin',
+    })
+
+    expect(match).toBe('host=accounts.')
+  })
+
+  it('matches an adfs endpoint', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Acme',
+      url: 'https://sts.acme.com/adfs/ls/?wa=wsignin1.0',
+    })
+
+    expect(match).toBe('host=sts.')
   })
 
   it('ignores a host whose first label merely starts with a marker', () => {
