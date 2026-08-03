@@ -9,9 +9,11 @@ import { createSdkProvider } from './adapters'
  * Issue #268 end to end, scaled to seconds: an endpoint that takes longer to
  * answer than undici's guard allows, driven through the real AI SDK path.
  * STALL_MS stands in for a local model still generating; the guards below stand
- * in for undici's 300s default and the configured task-mining deadline.
+ * in for undici's 300s default and the configured task-mining deadline. undici's
+ * timer wheel has a ~1s floor and a ~500ms tick, so the 500ms guard fires around
+ * 1s — the stall has to outlast that to be observable.
  */
-const STALL_MS = 2000
+const STALL_MS = 2500
 
 describe('LLM request deadline', () => {
   let server: Server

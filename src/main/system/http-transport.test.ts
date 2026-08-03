@@ -32,12 +32,16 @@ describe('configureHttpTransport', () => {
 
   // Scale model of issue #268 at 1s/2.5s instead of 300s/60min: a global
   // headers guard shorter than the work kills a request that is still running.
-  it('lifts a global headers guard that would kill a slow response', async () => {
+  // The two halves are separate tests so neither spends the other's budget.
+  it('a headers guard under the work kills a slow response', async () => {
     setGlobalDispatcher(new Agent({ headersTimeout: 500 }))
     await expect(fetch(url)).rejects.toMatchObject({
       cause: { code: 'UND_ERR_HEADERS_TIMEOUT' },
     })
+  })
 
+  it('lifts that guard so the same response arrives', async () => {
+    setGlobalDispatcher(new Agent({ headersTimeout: 500 }))
     configureHttpTransport()
     expect((await fetch(url)).status).toBe(200)
   })
