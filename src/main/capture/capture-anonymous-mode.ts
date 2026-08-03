@@ -8,15 +8,38 @@ export interface AnonymousModeWindowContext {
 const BROWSER_MARKERS = [
   'chrome',
   'chromium',
+  'thorium',
   'brave',
   'edge',
+  'iexplore',
   'vivaldi',
   'opera',
   'arc',
+  'comet',
+  'dia browser',
+  'sigmaos',
+  'wavebox',
+  'whale',
+  'yandex',
+  'maxthon',
+  'duckduckgo',
+  'ghostery',
   'safari',
+  'orion',
+  'kagi',
+  'epiphany',
+  'falkon',
+  'qutebrowser',
+  'midori',
   'firefox',
   'waterfox',
   'librewolf',
+  'floorp',
+  'mullvad',
+  'palemoon',
+  'pale moon',
+  'seamonkey',
+  'tor browser',
   'zen',
 ]
 
@@ -52,7 +75,7 @@ export function normalizeProcessName(value: string | undefined): string {
   return normalized
 }
 
-export function isLikelyBrowser(window: AnonymousModeWindowContext): boolean {
+function isLikelyBrowser(window: AnonymousModeWindowContext): boolean {
   const processName = normalizeProcessName(window.processName)
   const bundleId = normalize(window.bundleId)
 

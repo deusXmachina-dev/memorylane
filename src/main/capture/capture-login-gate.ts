@@ -1,4 +1,4 @@
-import { isLikelyBrowser, normalize, normalizeProcessName } from './capture-anonymous-mode'
+import { normalize, normalizeProcessName } from './capture-anonymous-mode'
 
 export interface LoginGateWindowContext {
   processName?: string
@@ -44,7 +44,6 @@ const LOGIN_HOST_PREFIXES = [
   'identity.',
   'adfs.',
   'sts.',
-  'passport.',
   'mfa.',
 ]
 
@@ -61,18 +60,10 @@ const LOGIN_PATH_SEGMENTS = new Set([
   'sign_in_with_password',
   'signon',
   'sign-on',
-  'signup',
-  'sign-up',
-  'sign_up',
-  'register',
-  'registration',
   'servicelogin',
   'wp-login',
   'j_security_check',
-  'auth',
-  'authn',
   'authenticate',
-  'authentication',
   'authorize',
   'authorization',
   'oauth',
@@ -88,7 +79,6 @@ const LOGIN_PATH_SEGMENTS = new Set([
   'adfs',
   'sts',
   'idp',
-  'consent',
   '2fa',
   '2step',
   'mfa',
@@ -99,10 +89,6 @@ const LOGIN_PATH_SEGMENTS = new Set([
   'passkey',
   'two-factor',
   'twofactor',
-  'verify',
-  'verify-email',
-  'verification',
-  'challenge',
   'password',
   'passwords',
   'change-password',
@@ -126,7 +112,6 @@ const LOGIN_TITLE_PHRASES = [
   'log in',
   'log on',
   'passkey',
-  'authenticate',
   'two-factor',
   'verification code',
   'enter your password',
@@ -245,8 +230,6 @@ export function getLoginScreenMatch(window: LoginGateWindowContext | undefined):
 
   const passwordManagerMarker = findPasswordManagerMarker(window)
   if (passwordManagerMarker !== null) return passwordManagerMarker
-
-  if (!isLikelyBrowser(window)) return null
 
   const urlMarker = findLoginUrlMarker(window.url)
   if (urlMarker !== null) return urlMarker

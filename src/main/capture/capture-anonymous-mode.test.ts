@@ -40,6 +40,16 @@ describe('capture anonymous mode detection', () => {
     expect(match).toBe('inprivate')
   })
 
+  it('matches a private window in a chromium-derived browser', () => {
+    const match = getAnonymousModeBrowserMatch({
+      processName: 'Comet',
+      bundleId: 'ai.perplexity.comet',
+      title: 'New Incognito Tab - Comet',
+    })
+
+    expect(match).toBe('incognito')
+  })
+
   it('ignores non-browser apps', () => {
     const match = getAnonymousModeBrowserMatch({
       processName: 'Terminal',

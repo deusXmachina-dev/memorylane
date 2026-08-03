@@ -210,6 +210,64 @@ describe('capture login gate detection', () => {
     expect(match).toBe('path=passwords')
   })
 
+  it('ignores an auth settings page in a product dashboard', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Authentication | Supabase',
+      url: 'https://supabase.com/dashboard/project/abc/auth/users',
+    })
+
+    expect(match).toBeNull()
+  })
+
+  it('ignores an app consent screen', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Acme wants access to your account',
+      url: 'https://acme.com/consent',
+    })
+
+    expect(match).toBeNull()
+  })
+
+  it('ignores a sign-up page', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Create your account',
+      url: 'https://acme.com/signup',
+    })
+
+    expect(match).toBeNull()
+  })
+
+  it('ignores an email verification page', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Confirm your email',
+      url: 'https://acme.com/verify-email',
+    })
+
+    expect(match).toBeNull()
+  })
+
+  it('matches a sign-in title in a browser it does not recognize', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Comet',
+      title: 'Sign in - Google Accounts - Comet',
+    })
+
+    expect(match).toBe('title=sign in')
+  })
+
+  it('matches a sign-in window inside a desktop app', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Slack',
+      title: 'Sign in | Slack',
+    })
+
+    expect(match).toBe('title=sign in')
+  })
+
   it('ignores login-like file names in non-browser apps', () => {
     const match = getLoginScreenMatch({
       processName: 'Code',
