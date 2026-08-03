@@ -68,6 +68,54 @@ describe('capture login gate detection', () => {
     expect(match).toBe('title=passkey')
   })
 
+  it('matches a logon title segment', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Logon',
+    })
+
+    expect(match).toBe('title=logon')
+  })
+
+  it('matches a log-on title phrase', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Log on to Acme Portal',
+    })
+
+    expect(match).toBe('title=log on')
+  })
+
+  it('matches a login path that carries a page extension', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Acme Portal',
+      url: 'https://portal.acme.com/logon.aspx',
+    })
+
+    expect(match).toBe('path=logon')
+  })
+
+  it('matches a php login page', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Acme',
+      url: 'https://acme.com/login.php',
+    })
+
+    expect(match).toBe('path=login')
+  })
+
+  it('ignores a blog url whose extension strip would still not match', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Logon tips',
+      url: 'https://example.com/blog/logon-tips.html',
+    })
+
+    expect(match).toBeNull()
+  })
+
   it('matches a login path inside a redirect query parameter', () => {
     const match = getLoginScreenMatch({
       processName: 'Google Chrome',

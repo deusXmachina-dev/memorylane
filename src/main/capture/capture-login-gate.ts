@@ -30,12 +30,24 @@ const PASSWORD_MANAGER_PROCESS_NAMES = [
   'keychain',
 ]
 
-const LOGIN_HOST_PREFIXES = ['login.', 'signin.', 'sso.', 'auth.', 'accounts.', 'idp.', 'mfa.']
+const LOGIN_HOST_PREFIXES = [
+  'login.',
+  'logon.',
+  'signin.',
+  'sso.',
+  'auth.',
+  'accounts.',
+  'idp.',
+  'mfa.',
+]
 
 const LOGIN_PATH_SEGMENTS = [
   'login',
+  'logon',
   'signin',
+  'signon',
   'sign-in',
+  'sign-on',
   'oauth',
   'authorize',
   'saml',
@@ -50,9 +62,13 @@ const LOGIN_PATH_SEGMENTS = [
 
 const REDIRECT_VALUE = /^(?:\/|https?:\/\/)/
 
+const PAGE_EXTENSION = /\.(?:aspx?|php\d?|html?|jsp|jspx|cgi|do|action)$/
+
 const LOGIN_TITLE_PHRASES = [
   'sign in',
+  'sign on',
   'log in',
+  'log on',
   'passkey',
   'authenticate',
   'two-factor',
@@ -62,7 +78,7 @@ const LOGIN_TITLE_PHRASES = [
   'single sign-on',
 ]
 
-const LOGIN_TITLE_SEGMENTS = ['login', 'signin']
+const LOGIN_TITLE_SEGMENTS = ['login', 'logon', 'signin', 'signon']
 
 const TITLE_SEPARATOR = /\s*[|•·—–]\s*|\s+-\s+/
 
@@ -114,8 +130,9 @@ function findLoginUrlMarker(url: string | undefined): string | null {
 
   const segments = parsed.pathname.split('/').filter(Boolean)
   for (const segment of segments) {
-    if (LOGIN_PATH_SEGMENTS.includes(segment)) {
-      return `path=${segment}`
+    const bare = segment.replace(PAGE_EXTENSION, '')
+    if (LOGIN_PATH_SEGMENTS.includes(bare)) {
+      return `path=${bare}`
     }
   }
 
