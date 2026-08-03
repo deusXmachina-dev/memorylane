@@ -127,10 +127,10 @@ export function ExclusionsManager({
         <div className="space-y-0.5">
           <div className="flex items-center gap-1.5">
             <p className="text-sm font-medium text-foreground">Block apps &amp; websites</p>
-            <HelpTooltip label="About privacy filtering" width="w-72">
-              Privacy filtering is best-effort. Because MemoryLane captures the whole screen, a
-              blocked app or site may still appear in screenshots if it&apos;s visible in the
-              background, during a window switch, or briefly during transitions.
+            <HelpTooltip label="What blocking covers" width="w-72">
+              Blocking follows the window you&apos;re in. MemoryLane sees the whole screen, so a
+              blocked app or site can still show up in the background, or for a moment while you
+              switch windows.
             </HelpTooltip>
           </div>
           <p className="text-xs text-muted-foreground">

@@ -239,6 +239,7 @@ export interface CaptureSettings {
   captureHotkeyAccelerator: string
   databaseExportDirectory: string
   excludePrivateBrowsing: boolean
+  excludeLoginScreens: boolean
   excludedApps: string[]
   excludedUrlPatterns: string[]
   urlMatchSchemaVersion?: number

@@ -8,15 +8,38 @@ export interface AnonymousModeWindowContext {
 const BROWSER_MARKERS = [
   'chrome',
   'chromium',
+  'thorium',
   'brave',
   'edge',
+  'iexplore',
   'vivaldi',
   'opera',
   'arc',
+  'comet',
+  'dia browser',
+  'sigmaos',
+  'wavebox',
+  'whale',
+  'yandex',
+  'maxthon',
+  'duckduckgo',
+  'ghostery',
   'safari',
+  'orion',
+  'kagi',
+  'epiphany',
+  'falkon',
+  'qutebrowser',
+  'midori',
   'firefox',
   'waterfox',
   'librewolf',
+  'floorp',
+  'mullvad',
+  'palemoon',
+  'pale moon',
+  'seamonkey',
+  'tor browser',
   'zen',
 ]
 
@@ -35,11 +58,11 @@ const ANONYMOUS_MODE_MARKERS = [
   'about:incognito',
 ]
 
-function normalize(value: string | undefined): string {
+export function normalize(value: string | undefined): string {
   return value?.trim().toLowerCase() ?? ''
 }
 
-function normalizeProcessName(value: string | undefined): string {
+export function normalizeProcessName(value: string | undefined): string {
   const normalized = normalize(value)
   if (normalized.endsWith('.exe')) {
     return normalized.slice(0, -4)

@@ -55,6 +55,7 @@ export interface MainRuntime {
     apps: string[]
     urlPatterns: string[]
     excludePrivateBrowsing: boolean
+    excludeLoginScreens: boolean
   }): void
   setManagedExclusions(managed: { apps: string[]; urlPatterns: string[] }): void
   purgeAll(): Promise<void>
@@ -69,6 +70,7 @@ export async function createMainRuntime(params: {
   excludedApps?: string[]
   excludedUrlPatterns?: string[]
   excludePrivateBrowsing?: boolean
+  excludeLoginScreens?: boolean
   deviceIdentity?: DeviceIdentity
   edition: AppEdition
   vendorCredentials: VendorCredentialsManager
@@ -200,6 +202,7 @@ export async function createMainRuntime(params: {
     initialExcludedApps: params.excludedApps,
     initialExcludedUrlPatterns: params.excludedUrlPatterns,
     initialExcludePrivateBrowsing: params.excludePrivateBrowsing,
+    initialExcludeLoginScreens: params.excludeLoginScreens,
     onPrivacyBlockingChanged: params.onPrivacyBlockingChanged,
     forwardInteraction: (event) => {
       // Dump only events that passed the blacklist — excluded window

@@ -107,6 +107,7 @@ describe('capture blacklist coordinator', () => {
       apps: ['keepassxc'],
       urlPatterns: [],
       excludePrivateBrowsing: true,
+      excludeLoginScreens: true,
     })
 
     expect(flushCount).toBe(1)
@@ -256,6 +257,7 @@ describe('capture blacklist coordinator', () => {
       apps: [],
       urlPatterns: [],
       excludePrivateBrowsing: false,
+      excludeLoginScreens: true,
     })
 
     const sameWindowAfterDisable = appChangeEvent('chrome', {
@@ -289,6 +291,120 @@ describe('capture blacklist coordinator', () => {
 
     expect(suppressionTransitions).toEqual([])
     expect(forwarded).toEqual([terminalEvent])
+  })
+
+  it('suppresses screenshots and flushes events on a login screen', () => {
+    const forwarded: InteractionContext[] = []
+    const suppressionTransitions: boolean[] = []
+    let flushCount = 0
+
+    const coordinator = createCaptureBlacklistCoordinator({
+      initialExcludedApps: [],
+      forwardInteraction: (event) => forwarded.push(event),
+      flushEvents: () => {
+        flushCount++
+      },
+      setScreenshotsSuppressed: (suppressed) => {
+        suppressionTransitions.push(suppressed)
+      },
+    })
+
+    coordinator.handleInteraction(
+      appChangeEvent('Google Chrome', {
+        title: 'Okta',
+        url: 'https://login.okta.com/app/dashboard',
+      }),
+    )
+    coordinator.handleInteraction({ type: 'keyboard', timestamp: Date.now(), keyCount: 4 })
+
+    expect(flushCount).toBe(1)
+    expect(suppressionTransitions).toEqual([true])
+    expect(forwarded).toHaveLength(0)
+  })
+
+  it('resumes after navigating from a login screen to a post-auth url in the same window', () => {
+    const forwarded: InteractionContext[] = []
+    const suppressionTransitions: boolean[] = []
+
+    const coordinator = createCaptureBlacklistCoordinator({
+      initialExcludedApps: [],
+      forwardInteraction: (event) => forwarded.push(event),
+      flushEvents: () => undefined,
+      setScreenshotsSuppressed: (suppressed) => {
+        suppressionTransitions.push(suppressed)
+      },
+    })
+
+    coordinator.handleInteraction(
+      appChangeEvent('Google Chrome', {
+        hwnd: '0x6B0A0A',
+        title: 'Sign in to GitHub',
+        url: 'https://github.com/session/new',
+      }),
+    )
+    const postAuthWindow = appChangeEvent('Google Chrome', {
+      hwnd: '0x6B0A0A',
+      title: 'Pull requests - GitHub',
+      url: 'https://github.com/pulls',
+    })
+    coordinator.handleInteraction(postAuthWindow)
+
+    expect(suppressionTransitions).toEqual([true, false])
+    expect(forwarded).toEqual([postAuthWindow])
+  })
+
+  it('leaves login screens captured when the exclusion starts disabled', () => {
+    const forwarded: InteractionContext[] = []
+    const suppressionTransitions: boolean[] = []
+
+    const coordinator = createCaptureBlacklistCoordinator({
+      initialExcludedApps: [],
+      initialExcludeLoginScreens: false,
+      forwardInteraction: (event) => forwarded.push(event),
+      flushEvents: () => undefined,
+      setScreenshotsSuppressed: (suppressed) => {
+        suppressionTransitions.push(suppressed)
+      },
+    })
+
+    const loginWindow = appChangeEvent('Google Chrome', {
+      title: 'Okta',
+      url: 'https://login.okta.com/',
+    })
+    coordinator.handleInteraction(loginWindow)
+
+    expect(suppressionTransitions).toEqual([])
+    expect(forwarded).toEqual([loginWindow])
+  })
+
+  it('lifts an active login-screen block when the exclusion is disabled', () => {
+    const forwarded: InteractionContext[] = []
+    const suppressionTransitions: boolean[] = []
+
+    const coordinator = createCaptureBlacklistCoordinator({
+      initialExcludedApps: [],
+      forwardInteraction: (event) => forwarded.push(event),
+      flushEvents: () => undefined,
+      setScreenshotsSuppressed: (suppressed) => {
+        suppressionTransitions.push(suppressed)
+      },
+    })
+
+    coordinator.handleInteraction(
+      appChangeEvent('Google Chrome', {
+        title: 'Okta',
+        url: 'https://login.okta.com/',
+      }),
+    )
+
+    coordinator.updateExclusions({
+      apps: [],
+      urlPatterns: [],
+      excludePrivateBrowsing: true,
+      excludeLoginScreens: false,
+    })
+
+    expect(suppressionTransitions).toEqual([true, false])
   })
 
   it('enforces org-managed app exclusions immediately when synced', () => {
@@ -329,6 +445,7 @@ describe('capture blacklist coordinator', () => {
       apps: ['signal'],
       urlPatterns: [],
       excludePrivateBrowsing: true,
+      excludeLoginScreens: true,
     })
 
     coordinator.handleInteraction(appChangeEvent('Slack'))

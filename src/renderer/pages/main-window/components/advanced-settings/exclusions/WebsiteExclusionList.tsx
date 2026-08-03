@@ -68,10 +68,10 @@ export function WebsiteExclusionList({
       title="Websites"
       titleHelp={
         <>
-          Enter a domain to block it and its subdomains — e.g.{' '}
-          <code className="font-medium">bank.com</code>. Wrap text in{' '}
-          <code className="font-medium">*</code> to match anywhere in a URL — e.g.{' '}
-          <code className="font-medium">*bank.com*</code>.
+          Type a site to block it and everything under it — e.g.{' '}
+          <code className="font-medium">bank.com</code>. Put <code className="font-medium">*</code>{' '}
+          around a word to block any address containing it — e.g.{' '}
+          <code className="font-medium">*bank*</code>.
         </>
       }
       icon={Globe}
