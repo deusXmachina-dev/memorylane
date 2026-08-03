@@ -1,4 +1,4 @@
-# MemoryLane v1.5.5-alpha.2
+# MemoryLane v1.5.5
 
 Sign-in screens are now skipped, configured LLM timeouts are finally honored, task durations go back to measured time, and the Gemini 2.5 defaults are retired ahead of their shutdown.
 
@@ -27,4 +27,4 @@ Sign-in screens are now skipped, configured LLM timeouts are finally honored, ta
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.4...v1.5.5-alpha.2
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.4...v1.5.5
