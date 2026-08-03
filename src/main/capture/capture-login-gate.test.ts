@@ -41,6 +41,88 @@ describe('capture login gate detection', () => {
     expect(match).toBe('title=sign in')
   })
 
+  it('matches a log-in title phrase in a browser', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Log in | Slack',
+    })
+
+    expect(match).toBe('title=log in')
+  })
+
+  it('matches a bare login title segment', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Login • Acme',
+    })
+
+    expect(match).toBe('title=login')
+  })
+
+  it('matches a passkey prompt title', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Use a saved passkey for example.com',
+    })
+
+    expect(match).toBe('title=passkey')
+  })
+
+  it('matches a login path inside a redirect query parameter', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Slack',
+      url: 'https://example-team.slack.com/?redir=%2Fssb%2Fsignin_redirect%3Fssb_vid%3Dredacted%26is_ssb_browser_signin%3D1',
+    })
+
+    expect(match).toBe('redirect=signin')
+  })
+
+  it('ignores a login search term in a non-redirect query parameter', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'search results',
+      url: 'https://example.com/search?q=login',
+    })
+
+    expect(match).toBeNull()
+  })
+
+  it('ignores a bare login word inside a longer title segment', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Login-screen capture gate by octocat · Pull Request #271 · example-org/example-repo',
+    })
+
+    expect(match).toBeNull()
+  })
+
+  it('ignores a mail thread that merely mentions a login', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Login for Linear - user@example.com - Example Mail',
+    })
+
+    expect(match).toBeNull()
+  })
+
+  it('ignores a passkey docs page', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Passkeys and security keys',
+    })
+
+    expect(match).toBeNull()
+  })
+
+  it('matches a password manager by process name when no bundle id is present', () => {
+    const match = getLoginScreenMatch({
+      processName: 'KeePassXC.exe',
+    })
+
+    expect(match).toBe('keepassxc')
+  })
+
   it('matches a password manager by bundle id outside a browser', () => {
     const match = getLoginScreenMatch({
       processName: '1Password',
@@ -112,8 +194,8 @@ describe('capture login gate detection', () => {
   it('ignores a host whose first label merely starts with a marker', () => {
     const match = getLoginScreenMatch({
       processName: 'Google Chrome',
-      title: 'Identity platform',
-      url: 'https://identity.example.com/profile',
+      title: 'Contributors',
+      url: 'https://authors.example.com/profile',
     })
 
     expect(match).toBeNull()

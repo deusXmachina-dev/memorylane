@@ -43,15 +43,23 @@ const LOGIN_PATH_SEGMENTS = [
   'forgot-password',
 ]
 
+const REDIRECT_VALUE = /^(?:\/|https?:\/\/)/
+
 const LOGIN_TITLE_PHRASES = [
   'sign in',
-  'log in to',
+  'log in',
+  'passkey',
+  'authenticate',
   'two-factor',
   'verification code',
   'enter your password',
   'authentication required',
   'single sign-on',
 ]
+
+const LOGIN_TITLE_SEGMENTS = ['login', 'signin']
+
+const TITLE_SEPARATOR = /\s*[|•·—–]\s*|\s+-\s+/
 
 function findPasswordManagerMarker(window: LoginGateWindowContext): string | null {
   const bundleId = normalize(window.bundleId)
@@ -106,6 +114,15 @@ function findLoginUrlMarker(url: string | undefined): string | null {
     }
   }
 
+  for (const [, value] of parsed.searchParams) {
+    if (!REDIRECT_VALUE.test(value)) continue
+    for (const token of value.split(/[^a-z0-9]+/)) {
+      if (LOGIN_PATH_SEGMENTS.includes(token)) {
+        return `redirect=${token}`
+      }
+    }
+  }
+
   return null
 }
 
@@ -132,6 +149,13 @@ function findLoginTitleMarker(title: string | undefined): string | null {
   for (const phrase of LOGIN_TITLE_PHRASES) {
     if (includesPhrase(normalized, phrase)) {
       return `title=${phrase}`
+    }
+  }
+
+  for (const part of normalized.split(TITLE_SEPARATOR)) {
+    const segment = part.trim()
+    if (LOGIN_TITLE_SEGMENTS.includes(segment)) {
+      return `title=${segment}`
     }
   }
 
