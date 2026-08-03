@@ -4,6 +4,7 @@ import { Switch } from '@components/ui/switch'
 import type { CaptureSettings } from '@types'
 import { formatHotkeyForDisplay, type HotkeyPlatform } from '../../hotkey-utils'
 import { ExclusionsManager } from './exclusions/ExclusionsManager'
+import { HelpTooltip } from './exclusions/HelpTooltip'
 import { SettingsRow } from './SettingsRow'
 import { SettingsSection } from './SettingsSection'
 
@@ -59,6 +60,13 @@ export function CapturePrivacySection({
 
         <SettingsRow
           label="Exclude private / incognito browsing"
+          help={
+            <HelpTooltip label="How private windows are spotted" width="w-72">
+              We match the names browsers commonly use — Incognito, InPrivate, Private Browsing.
+              Once a window matches, everything in it stays out for as long as it&apos;s open. A
+              browser that doesn&apos;t say so can slip through.
+            </HelpTooltip>
+          }
           description="Any private browser window is skipped automatically."
           control={
             <Switch
@@ -71,7 +79,14 @@ export function CapturePrivacySection({
 
         <SettingsRow
           label="Exclude sign-in screens"
-          description="Login and password pages are never captured."
+          help={
+            <HelpTooltip label="How sign-in screens are spotted" width="w-72">
+              We match commonly known sign-in pages — logins, single sign-on, password resets — plus
+              password manager apps. Capture picks up again by itself once you move on. An unusual
+              sign-in screen can slip through.
+            </HelpTooltip>
+          }
+          description="Browser sign-in pages and password managers are skipped."
           control={
             <Switch
               checked={form.excludeLoginScreens}
