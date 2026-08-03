@@ -353,6 +353,30 @@ describe('capture blacklist coordinator', () => {
     expect(forwarded).toEqual([postAuthWindow])
   })
 
+  it('leaves login screens captured when the exclusion starts disabled', () => {
+    const forwarded: InteractionContext[] = []
+    const suppressionTransitions: boolean[] = []
+
+    const coordinator = createCaptureBlacklistCoordinator({
+      initialExcludedApps: [],
+      initialExcludeLoginScreens: false,
+      forwardInteraction: (event) => forwarded.push(event),
+      flushEvents: () => undefined,
+      setScreenshotsSuppressed: (suppressed) => {
+        suppressionTransitions.push(suppressed)
+      },
+    })
+
+    const loginWindow = appChangeEvent('Google Chrome', {
+      title: 'Okta',
+      url: 'https://login.okta.com/',
+    })
+    coordinator.handleInteraction(loginWindow)
+
+    expect(suppressionTransitions).toEqual([])
+    expect(forwarded).toEqual([loginWindow])
+  })
+
   it('lifts an active login-screen block when the exclusion is disabled', () => {
     const forwarded: InteractionContext[] = []
     const suppressionTransitions: boolean[] = []

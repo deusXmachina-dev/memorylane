@@ -109,11 +109,28 @@ function findLoginUrlMarker(url: string | undefined): string | null {
   return null
 }
 
+function isWordCharacter(character: string | undefined): boolean {
+  if (character === undefined) return false
+  return character >= 'a' && character <= 'z' ? true : character >= '0' && character <= '9'
+}
+
+function includesPhrase(text: string, phrase: string): boolean {
+  let index = text.indexOf(phrase)
+  while (index !== -1) {
+    if (!isWordCharacter(text[index - 1]) && !isWordCharacter(text[index + phrase.length])) {
+      return true
+    }
+    index = text.indexOf(phrase, index + 1)
+  }
+
+  return false
+}
+
 function findLoginTitleMarker(title: string | undefined): string | null {
   const normalized = normalize(title)
 
   for (const phrase of LOGIN_TITLE_PHRASES) {
-    if (normalized.includes(phrase)) {
+    if (includesPhrase(normalized, phrase)) {
       return `title=${phrase}`
     }
   }

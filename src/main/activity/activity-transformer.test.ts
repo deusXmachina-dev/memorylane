@@ -85,17 +85,6 @@ function makeDeps() {
   return { stitcher, ocr, semantic, embedder }
 }
 
-function makeLoginActivity(frameCount: number): Activity {
-  return {
-    ...makeActivity(frameCount),
-    context: {
-      appName: 'Google Chrome',
-      windowTitle: 'Okta',
-      url: 'https://login.okta.com/',
-    },
-  }
-}
-
 const OUTPUT_DIR = '/output'
 
 describe('DefaultActivityTransformer', () => {
@@ -214,33 +203,6 @@ describe('DefaultActivityTransformer', () => {
     })
     expect(ocr.extractText).not.toHaveBeenCalled()
     expect(result.ocrText).toBe('')
-  })
-
-  describe('login-screen OCR skip', () => {
-    it('skips OCR for a login-context activity', async () => {
-      const { stitcher, ocr, semantic, embedder } = makeDeps()
-      const transformer = new DefaultActivityTransformer(stitcher, ocr, semantic, embedder, {
-        outputDir: OUTPUT_DIR,
-      })
-
-      const result = await transformer.transform(makeLoginActivity(3))
-
-      expect(ocr.extractText).not.toHaveBeenCalled()
-      expect(result.ocrText).toBe('')
-    })
-
-    it('runs OCR on a login-context activity when the exclusion getter returns false', async () => {
-      const { stitcher, ocr, semantic, embedder } = makeDeps()
-      const transformer = new DefaultActivityTransformer(stitcher, ocr, semantic, embedder, {
-        outputDir: OUTPUT_DIR,
-        getExcludeLoginScreens: () => false,
-      })
-
-      const result = await transformer.transform(makeLoginActivity(3))
-
-      expect(ocr.extractText).toHaveBeenCalledTimes(1)
-      expect(result.ocrText).toBe('ocr text')
-    })
   })
 
   describe('passive view (no clicks/keys/scrolls)', () => {

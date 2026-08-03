@@ -109,11 +109,20 @@ describe('capture login gate detection', () => {
     expect(match).toBe('title=sign in')
   })
 
-  it('ignores a language-code id subdomain', () => {
+  it('ignores a host whose first label merely starts with a marker', () => {
     const match = getLoginScreenMatch({
       processName: 'Google Chrome',
-      title: 'Kopi - Wikipedia',
-      url: 'https://id.wikipedia.org/wiki/Kopi',
+      title: 'Identity platform',
+      url: 'https://identity.example.com/profile',
+    })
+
+    expect(match).toBeNull()
+  })
+
+  it('ignores a title phrase that spans a word boundary', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Assign inventory - Warehouse',
     })
 
     expect(match).toBeNull()
