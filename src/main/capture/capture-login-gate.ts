@@ -15,6 +15,8 @@ const PASSWORD_MANAGER_BUNDLE_IDS = [
   'com.lastpass.lastpass',
   'com.dashlane.dashlanephonefinal',
   'in.sinew.enpass-desktop',
+  'com.apple.passwords',
+  'com.apple.keychainaccess',
 ]
 
 const PASSWORD_MANAGER_PROCESS_NAMES = [
@@ -24,6 +26,8 @@ const PASSWORD_MANAGER_PROCESS_NAMES = [
   'lastpass',
   'dashlane',
   'enpass',
+  'passwords',
+  'keychain',
 ]
 
 const LOGIN_HOST_PREFIXES = ['login.', 'signin.', 'sso.', 'auth.', 'accounts.', 'idp.', 'mfa.']
@@ -41,6 +45,7 @@ const LOGIN_PATH_SEGMENTS = [
   'otp',
   'reset-password',
   'forgot-password',
+  'passwords',
 ]
 
 const REDIRECT_VALUE = /^(?:\/|https?:\/\/)/

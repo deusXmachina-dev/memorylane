@@ -133,6 +133,35 @@ describe('capture login gate detection', () => {
     expect(match).toBe('com.1password.1password')
   })
 
+  it('matches the macOS Passwords app by bundle id', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Passwords',
+      bundleId: 'com.apple.Passwords',
+      title: 'Passwords',
+    })
+
+    expect(match).toBe('com.apple.passwords')
+  })
+
+  it('matches Keychain Access by process name', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Keychain Access',
+      title: 'Login Keychain',
+    })
+
+    expect(match).toBe('keychain')
+  })
+
+  it('matches the browser built-in password manager', () => {
+    const match = getLoginScreenMatch({
+      processName: 'Google Chrome',
+      title: 'Passwords - Settings',
+      url: 'chrome://settings/passwords',
+    })
+
+    expect(match).toBe('path=passwords')
+  })
+
   it('ignores login-like file names in non-browser apps', () => {
     const match = getLoginScreenMatch({
       processName: 'Code',
