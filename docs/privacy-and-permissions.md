@@ -14,7 +14,7 @@ MemoryLane captures your screen to give AI assistants context about what you're 
 
 **Privacy controls** let you exclude apps, window titles, and URLs by substring; the tray icon reflects privacy state. Two exclusions run on their own, both on by default and switchable in Settings → Privacy:
 
-- **Private / incognito browsing** — we match the names browsers commonly use (Incognito, InPrivate, Private Browsing). Once a window matches, everything in it stays out for as long as it's open. A browser that doesn't say so can slip through.
-- **Sign-in screens** — we match commonly known sign-in pages (logins, single sign-on, password resets) plus password manager apps. Capture picks up again by itself once you move on. An unusual sign-in screen can slip through — screens in languages other than English are not matched today.
+- **Private / incognito browsing** — we match the English names browsers commonly use (Incognito, InPrivate, Private Browsing). Once a window matches, everything in it stays out for as long as it's open. A browser that says so in another language, or not at all, can slip through.
+- **Sign-in screens** — we match common English sign-in pages (logins, single sign-on, password resets) plus password manager apps. Capture picks up again by itself once you move on. A screen in another language, or an unusual one, can slip through.
 
 > **Bottom line:** you are giving this app permission to see your screen and detect your input. All captured data is processed into text and stored locally. Screenshots are sent directly from your machine to the configured model endpoint (OpenRouter by default, or your custom provider). MemoryLane never proxies your capture payloads.

@@ -62,9 +62,9 @@ export function CapturePrivacySection({
           label="Exclude private / incognito browsing"
           help={
             <HelpTooltip label="How private windows are spotted" width="w-72">
-              We match the names browsers commonly use — Incognito, InPrivate, Private Browsing.
-              Once a window matches, everything in it stays out for as long as it&apos;s open. A
-              browser that doesn&apos;t say so can slip through.
+              We match the English names browsers commonly use — Incognito, InPrivate, Private
+              Browsing. Once a window matches, everything in it stays out for as long as it&apos;s
+              open. A browser that says so in another language, or not at all, can slip through.
             </HelpTooltip>
           }
           description="Any private browser window is skipped automatically."
@@ -81,9 +81,9 @@ export function CapturePrivacySection({
           label="Exclude sign-in screens"
           help={
             <HelpTooltip label="How sign-in screens are spotted" width="w-72">
-              We match commonly known sign-in pages — logins, single sign-on, password resets — plus
-              password manager apps. Capture picks up again by itself once you move on. An unusual
-              sign-in screen can slip through.
+              We match common English sign-in pages — logins, single sign-on, password resets — plus
+              password manager apps. Capture picks up again by itself once you move on. A screen in
+              another language, or an unusual one, can slip through.
             </HelpTooltip>
           }
           description="Browser sign-in pages and password managers are skipped."
