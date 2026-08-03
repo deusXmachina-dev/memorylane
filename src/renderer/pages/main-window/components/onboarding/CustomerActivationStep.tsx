@@ -18,7 +18,7 @@ export const PLANS: PlanConfig[] = [
   {
     id: 'explorer',
     name: 'Explorer',
-    price: '$50/mo',
+    price: '$100/mo',
     highlighted: true,
     features: ['Automation recommendations', 'No API keys needed', 'Data stored on your device'],
   },
