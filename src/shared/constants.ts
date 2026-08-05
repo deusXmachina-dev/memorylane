@@ -147,6 +147,8 @@ export const PATTERN_DETECTION_CONFIG = {
   // one is not a stalled one, so this sits far above the shared default rather
   // than failing work that would have landed. User-configurable via the
   // taskMiningRequestTimeoutMs setting (local endpoints can be far slower).
+  // Also governs the user-context profile call, which runs the same model on
+  // the same one-shot-batch shape.
   REQUEST_TIMEOUT_MS: 20 * 60_000,
 }
 

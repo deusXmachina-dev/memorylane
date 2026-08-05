@@ -184,7 +184,7 @@ export function AiModelsSection({
                     onCommit={(v) => onSettingCommit('activityRequestTimeoutMs', v)}
                   />
                   <SliderRow
-                    label="Task mining timeout"
+                    label="Task analysis timeout"
                     value={form.taskMiningRequestTimeoutMs}
                     min={60_000}
                     max={MAX_REQUEST_TIMEOUT_MS}
