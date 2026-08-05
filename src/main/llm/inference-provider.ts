@@ -44,11 +44,10 @@ export interface InferenceProviderOptions {
 }
 
 /**
- * Deadline for callers that emit a bounded response (a summary, a judgement, a
- * user-context blob) and finish in seconds. Pass it as `timeout` on the
- * generateText call. Callers whose output is genuinely long-running pass their
- * own — see the activityRequestTimeoutMs and taskMiningRequestTimeoutMs
- * settings.
+ * Deadline for callers that emit a bounded response (a summary, a judgement)
+ * and finish in seconds. Pass it as `timeout` on the generateText call.
+ * Callers whose output is genuinely long-running pass their own — see the
+ * activityRequestTimeoutMs and taskMiningRequestTimeoutMs settings.
  */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 3 * 60 * 1000
 
