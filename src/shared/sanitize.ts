@@ -9,7 +9,10 @@
  *
  * Rules are claimed in table order over the original text; the first rule to
  * claim a span wins and later rules cannot re-match it. `keep` rules claim a
- * span precisely so a looser rule below cannot redact it.
+ * span precisely so a looser rule below cannot redact it. Every labelled rule
+ * claims before any shape rule: a written label is stronger evidence than a
+ * checksum, so "Tax file number <n>" redacts even when <n> also satisfies the
+ * bare ACN check.
  */
 
 interface Rule {
@@ -109,17 +112,15 @@ const labelled = (labels: string, value: string): RegExp =>
 
 const NUMERIC_VALUE = '\\d[\\d \\-]{5,22}\\d'
 const ALNUM_VALUE =
-  '[A-Za-z0-9][A-Za-z0-9-]*(?:[ ][A-Za-z0-9-]*\\d[A-Za-z0-9-]*){0,4}(?:[ ][A-Za-z]\\b)?'
+  '[A-Za-z0-9-]*\\d[A-Za-z0-9-]*(?:[ ][A-Za-z0-9-]*\\d[A-Za-z0-9-]*){0,4}(?:[ ][A-Za-z]\\b)?'
 
 const DATE_LIKE =
   /^\d{4}([-/.])\d{1,2}(?:\1\d{1,2})?$|^\d{1,2}([./-])\s?\d{1,2}\2\s?\d{4}$|^\d{4}-\d{4}$/
 const DOTTED_QUAD = /^\d{1,3}(?:\.\d{1,3}){3}$/
 const GROUPED_AMOUNT = /^\d{1,3}(?: \d{3})+$/
 
-const RULES: Rule[] = [
-  { slot: '', keep: true, pattern: /\b\d{2} ?\d{3} ?\d{3} ?\d{3}\b/g, validate: passesAbn },
+const LABELLED_RULES: Rule[] = [
   { slot: '', keep: true, pattern: labelled('abn|australian business number', NUMERIC_VALUE) },
-  { slot: '', keep: true, pattern: /\b\d{3} ?\d{3} ?\d{3}\b/g, validate: passesAcn },
   { slot: '', keep: true, pattern: labelled('acn|australian company number', NUMERIC_VALUE) },
   { slot: '', keep: true, pattern: labelled('nzbn', NUMERIC_VALUE) },
   { slot: '', keep: true, pattern: /\bBSB:? ?\d{3}[- ]?\d{3}\b(?![- ]?\d)/gi },
@@ -157,8 +158,6 @@ const RULES: Rule[] = [
       /\b(?:employee|badge|worker|staff|emp)\s*(?:id|no|number)?\.?\s*[:#]?\s*((?=[A-Za-z0-9-]*\d{4})[A-Za-z0-9-]{4,})/gi,
   },
 
-  { slot: '[bank account]', pattern: /\b\d{2}-\d{4}-\d{7}-\d{2,3}\b/g },
-  { slot: '[bank account]', pattern: /\b\d{3}[- ]\d{3}[ ,/]+(\d{6,10})\b/g },
   {
     slot: '[bank account]',
     pattern: labelled(
@@ -169,29 +168,12 @@ const RULES: Rule[] = [
   },
   { slot: '[bank account]', pattern: labelled('iban|swift|bic', ALNUM_VALUE), validate: hasDigit },
 
-  {
-    slot: '[medicare number]',
-    pattern: /\b\d{4} ?\d{5} ?\d(?: ?\d)?\b/g,
-    validate: passesMedicare,
-  },
   { slot: '[medicare number]', pattern: labelled('medicare', NUMERIC_VALUE) },
   { slot: '[tax file number]', pattern: labelled('tfn|tax file', NUMERIC_VALUE) },
-  { slot: '[ird number]', pattern: /\b\d{2,3}[- ]\d{3}[- ]\d{3}\b/g, validate: passesIrd },
   { slot: '[ird number]', pattern: labelled('ird', NUMERIC_VALUE) },
   { slot: '[ird number]', pattern: labelled('gst', NUMERIC_VALUE), validate: passesIrd },
-  { slot: '[nhi number]', pattern: /\b[A-HJ-NP-Z]{3}\d{4}\b/g, validate: passesNhi },
   { slot: '[nhi number]', pattern: labelled('nhi', ALNUM_VALUE), validate: hasDigit },
 
-  {
-    slot: '[payment card]',
-    bounded: true,
-    pattern: /\b\d(?:[ -]?\d){12,18}\b/g,
-    validate: (v) => {
-      const d = digitsOf(v)
-      return d.length >= 13 && d.length <= 19 && passesLuhn(d)
-    },
-  },
-  { slot: '[id number]', pattern: /\b\d{3}[- ]\d{2}[- ]\d{4}\b/g },
   { slot: '[id number]', pattern: labelled('ssn|social security|taxpayer id', NUMERIC_VALUE) },
   {
     slot: '[id number]',
@@ -206,6 +188,34 @@ const RULES: Rule[] = [
     slot: '[phone number]',
     pattern: labelled('tel|telephone|phone|mobile|mob|cell|fax|direct line', NUMERIC_VALUE),
   },
+]
+
+const SHAPE_RULES: Rule[] = [
+  { slot: '', keep: true, pattern: /\b\d{2} ?\d{3} ?\d{3} ?\d{3}\b/g, validate: passesAbn },
+  { slot: '', keep: true, pattern: /\b\d{3} ?\d{3} ?\d{3}\b/g, validate: passesAcn },
+
+  { slot: '[bank account]', pattern: /\b\d{2}-\d{4}-\d{7}-\d{2,3}\b/g },
+  { slot: '[bank account]', pattern: /\b\d{3}[- ]\d{3}[ ,/]+(\d{6,10})\b/g },
+
+  {
+    slot: '[medicare number]',
+    pattern: /\b\d{4} ?\d{5} ?\d(?: ?\d)?\b/g,
+    validate: passesMedicare,
+  },
+  { slot: '[ird number]', pattern: /\b\d{2,3}[- ]\d{3}[- ]\d{3}\b/g, validate: passesIrd },
+  { slot: '[nhi number]', pattern: /\b[A-HJ-NP-Z]{3}\d{4}\b/g, validate: passesNhi },
+
+  {
+    slot: '[payment card]',
+    bounded: true,
+    pattern: /\b\d(?:[ -]?\d){12,18}\b/g,
+    validate: (v) => {
+      const d = digitsOf(v)
+      return d.length >= 13 && d.length <= 19 && passesLuhn(d)
+    },
+  },
+  { slot: '[id number]', pattern: /\b\d{3}[- ]\d{2}[- ]\d{4}\b/g },
+
   {
     slot: '[phone number]',
     bounded: true,
@@ -218,7 +228,7 @@ const RULES: Rule[] = [
   {
     slot: '[phone number]',
     bounded: true,
-    pattern: /\+?\d[\d\s().-]{5,22}\d/g,
+    pattern: /(?:\+\d|\(\d{2,4}\)|\b\d{3}[ .-]\d{3}[ .-]\d{2,4}\b)(?:[\d\s().-]{0,18}\d)?/g,
     validate: (v) => {
       if (/^[\d ]+$/.test(v)) return false
       const d = digitsOf(v)
@@ -226,6 +236,14 @@ const RULES: Rule[] = [
     },
   },
 ]
+
+const withIndices = (pattern: RegExp): RegExp =>
+  pattern.flags.includes('d') ? pattern : new RegExp(pattern.source, `${pattern.flags}d`)
+
+const RULES: Rule[] = [...LABELLED_RULES, ...SHAPE_RULES].map((rule) => ({
+  ...rule,
+  pattern: withIndices(rule.pattern),
+}))
 
 const isIdentifierBound = (s: string, start: number, end: number): boolean => {
   for (let i = start - 1; i >= 0 && /[\w-]/.test(s[i]); i--) {
@@ -258,8 +276,10 @@ export function scrubPII(text: string): string {
         rule.pattern.lastIndex++
         continue
       }
-      const matched = m[1] ?? m[0]
-      const start = m[1] === undefined ? m.index : m.index + m[0].indexOf(m[1])
+      const bounds = m.indices?.[1] ?? m.indices?.[0]
+      if (!bounds) continue
+      const [start] = bounds
+      const matched = text.slice(bounds[0], bounds[1])
       const value = matched.replace(/[.,;:!?]+$/, '') || matched
       const end = start + value.length
       if (overlaps(start, end)) continue

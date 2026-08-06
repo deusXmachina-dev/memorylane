@@ -94,7 +94,7 @@ describe('scrubPII — Australian identifiers', () => {
     expect(scrubPII('Passport PA0941234 expires soon')).toBe('Passport [id number] expires soon')
     expect(scrubPII('Drivers licence 04829173')).toBe('Drivers licence [id number]')
     expect(scrubPII('Centrelink CRN 203 456 789A is on file')).toBe(
-      'Centrelink [id number] is on file',
+      'Centrelink CRN [id number] is on file',
     )
   })
 
@@ -144,6 +144,14 @@ describe('scrubPII — company identifiers stay', () => {
   it('keeps a valid ABN even unlabelled, where a bare digit rule would redact it', () => {
     expect(scrubPII('supplier 51 824 753 556 approved')).toBe('supplier 51 824 753 556 approved')
   })
+
+  it('redacts a labelled identifier that also satisfies a company checksum', () => {
+    expect(passesTfn('100000182') && passesAcn('100000182')).toBe(true)
+    expect(scrubPII('Tax file number 100000182')).toBe('Tax file number [tax file number]')
+    expect(scrubPII('Tax file number 100 000 182')).toBe('Tax file number [tax file number]')
+    expect(passesAbn('51824753556')).toBe(true)
+    expect(scrubPII('Account number 51824753556')).toBe('Account number [bank account]')
+  })
 })
 
 describe('scrubPII — universal classes', () => {
@@ -172,6 +180,12 @@ describe('scrubPII — universal classes', () => {
       'Set password: [redacted password], then log in',
     )
     expect(scrubPII('api_key: 9f8e7d6c5b4a.')).toBe('api_key: [redacted secret].')
+  })
+
+  it('redacts the value, not the label, when the value repeats the label', () => {
+    expect(scrubPII('password: password')).toBe('password: [redacted password]')
+    expect(scrubPII('pass = pass')).toBe('pass = [redacted password]')
+    expect(scrubPII('api_key: api_key123')).toBe('api_key: [redacted secret]')
   })
 
   it('requires a valid Luhn before claiming a payment card', () => {
