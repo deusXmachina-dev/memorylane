@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { StorageService } from '../../storage'
 import type { ActivityEmbeddingService } from '@main/activity/activity-transformer-types'
 import type { PositionalAliases } from '@main/llm/id-codec'
+import { scrubPII } from '@/shared/sanitize'
 
 export function buildVerificationTools(
   storage: StorageService,
@@ -33,10 +34,10 @@ export function buildVerificationTools(
         return activities.map((a) => ({
           id: activityIds.encode(a.id),
           app: a.appName,
-          window_title: a.windowTitle,
+          window_title: scrubPII(a.windowTitle),
           time: new Date(a.startTimestamp).toISOString(),
-          summary: a.summary,
-          ocr_text: a.ocrText || '(no OCR text captured)',
+          summary: scrubPII(a.summary),
+          ocr_text: a.ocrText ? scrubPII(a.ocrText) : '(no OCR text captured)',
         }))
       },
     }),
@@ -58,10 +59,10 @@ export function buildVerificationTools(
         return results.map((a) => ({
           id: activityIds.encode(a.id),
           app: a.appName,
-          window_title: a.windowTitle,
+          window_title: scrubPII(a.windowTitle),
           time: new Date(a.startTimestamp).toISOString(),
           duration_min: Math.round((a.endTimestamp - a.startTimestamp) / 60000),
-          summary: a.summary,
+          summary: scrubPII(a.summary),
         }))
       },
     }),
@@ -94,11 +95,11 @@ export function buildVerificationTools(
         return activities.map((a) => ({
           id: activityIds.encode(a.id),
           app: a.appName,
-          window_title: a.windowTitle,
+          window_title: scrubPII(a.windowTitle),
           time: new Date(a.startTimestamp).toISOString(),
           end_time: new Date(a.endTimestamp).toISOString(),
           duration_min: Math.round((a.endTimestamp - a.startTimestamp) / 60000),
-          summary: a.summary,
+          summary: scrubPII(a.summary),
         }))
       },
     }),

@@ -67,6 +67,32 @@ describe('runDetection day commit', () => {
     deleteDbFiles(TEST_DB_PATH)
   })
 
+  it('scrubs secrets and phones from the scan prompt but keeps emails and names', async () => {
+    storage.activities.add({
+      id: 'act-pii',
+      appName: 'TestApp',
+      windowTitle: 'Call Jane Novak at +1 (555) 123-4567',
+      tld: null,
+      startTimestamp: dayStart(1) + 5000,
+      endTimestamp: dayStart(1) + 5500,
+      summary: 'Mailed jane.doe@acme.co the password: hunter42',
+      summaryModel: '',
+      ocrText: '',
+      vector: v(0.1),
+    })
+    mockedGenerateText.mockResolvedValue(scanResponse('[]'))
+
+    await runDetection(provider, storage, embedder, { lookbackDays: 1 })
+
+    const call = mockedGenerateText.mock.calls[0][0] as { prompt: string }
+    expect(call.prompt).not.toContain('555) 123-4567')
+    expect(call.prompt).not.toContain('hunter42')
+    expect(call.prompt).toContain('[phone number]')
+    expect(call.prompt).toContain('[redacted password]')
+    expect(call.prompt).toContain('Jane Novak')
+    expect(call.prompt).toContain('jane.doe@acme.co')
+  })
+
   it('throws after all scan attempts return unusable output, leaving the day uncommitted', async () => {
     mockedGenerateText.mockResolvedValue(scanResponse('not json at all'))
     const onCommit = vi.fn()

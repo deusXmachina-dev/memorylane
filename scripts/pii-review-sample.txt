@@ -1,0 +1,25 @@
+Kickoff notes — Verandah s.r.o. onboarding, 14 March
+
+Jana Prochazkova (jana.prochazkova@verandah.cz) confirmed the engagement scope this morning; Tomas Novak runs the discovery workshops and Petr Ungar covers the technical integration. Route invoicing questions to their finance lead, Martin Dvorak, on +420 777 123 456 or martin.dvorak@verandah.cz. Registered office: Vinohradska 1511/230, 100 00 Praha 10, company id 27082541, VAT CZ27082541. Escalation if Jana is unavailable: David Sedlak at david@bigcorp.io, external to Verandah, who must not receive the internal cost breakdown.
+
+Regional leads — introductions from the partner call
+
+Aleksandra Kowalczyk in Warsaw (a.kowalczyk@verandah.pl, +48 512 774 903) owns the Polish rollout; her PESEL on the contractor form reads 85042812345. Yuki Tanaka in Osaka (yuki.tanaka@verandah.jp, +81 90 1234 5678) handles APAC and files under My Number 1234 5678 9012. Rajesh Iyer in Bengaluru (r.iyer@verandah.in, +91 98450 12345) has PAN ABCDE1234F and Aadhaar 2345 6789 0123 on the vendor record. Fatima Al-Mansouri in Dubai (fatima@verandah.ae, +971 50 123 4567) signs off the Gulf entity, Emirates ID 784-1985-1234567-8. Sofia Rodriguez Garcia in Madrid (sofia.rodriguez@verandah.es, +34 612 345 678) holds NIE X1234567L. Bjorn Andersson in Stockholm (bjorn@verandah.se, +46 70 123 45 67) is personnummer 850412-1234. Mei-Ling Chen in Taipei and Kwame Osei in Accra join next quarter.
+
+Payment run — week 11
+
+Four transfers approved. The retainer goes to the Czech operating account 2901234567/2010 at Raiffeisenbank; the equipment invoice settles to IBAN CZ65 0800 0000 1920 0014 5399. The German subsidiary pays from IBAN DE89 3704 0044 0532 0130 00, the UK entity from GB82 WEST 1234 5698 7654 32, the Dutch office from NL91 ABNA 0417 1643 00, and the French branch from FR14 2004 1010 0505 0001 3M02 606. US payroll clears through routing 021000021, account 000123456789. Card on file for SaaS renewals is 4111 1111 1111 1111, expiry 04/28; backup corporate card 5555 5555 5555 4444. Total was 1 240 000 CZK against a 1 500 000 CZK budget, so we are 17% under. Invoices INV-2026-0417 through INV-2026-0420 sit in NetSuite under Payables > Verandah s.r.o.
+
+New hire packet — scanned, OCR captured
+
+Employee: Lucie Hrabalova. Employee ID: EMP-20419. Date of birth: 14.3.1988. Rodne cislo 885109/1234. Passport CZ1234567, valid to 2031-06-30. Drivers licence D1234567. Home address Krizikova 148/34, 186 00 Praha 8. Personal mobile 606 555 010, emergency contact 602 111 222. Payroll account 19-2000145399/0800. Starts 2026-04-01, needs Slack, NetSuite and VPN on day one. Temporary VPN password
+Summ3r!2026
+must be changed at first login. Her US counterpart Marcus Johnson has SSN 078-05-1120, tax id 12-3456789, and a UK colleague Priya Sharma with NI number QQ 12 34 56 C and NHS number 943 476 5919.
+
+Ops log — integration debugging
+
+Ticket DEU-205 blocked on activity 3f2a9c1e-7b44-4d0a-9e21-8c5f6b0d1234 in the miner. Pulled log bundle memorylane-2026-08-06T11-42-07.log from the box at 10.0.14.203:5432 and diffed against build v1.5.5-alpha.2, commit 67221f6. The sync job retried 4 times and processed 1 000 000 rows in 12 minutes before exit code 137 (OOM). Raised the container limit to 8192 MB and it cleared. Order #100482 in the test fixture still shows the wrong total; PR 273 was reopened to track it. Reference batch DE99 1234 5678 9012 3456 in the vendor export is a shipment code, not an account.
+
+Credentials found on screen during capture
+
+The OCR picked up a Stripe key sk-proj-9fA2kQ7ZxLm4vB0tRw8Nc1Ye in a terminal and a token ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4 in a config file. There was also AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG in an env file and api_key: 9f8e7d6c5b4a in a JSON payload. None of these should ever reach a prompt or a shared artifact. The Q3 2026 revenue figure of 12 500 EUR, the 15% growth rate, and the ¥3 200 000 Osaka forecast are ordinary business numbers and should survive untouched.

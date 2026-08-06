@@ -2,6 +2,7 @@ import { generateText } from 'ai'
 import type { InferenceProvider } from '@main/llm'
 import { extractJsonObject, formatApiError } from '../helpers'
 import { PATTERN_DETECTION_CONFIG } from '@/shared/constants'
+import { scrubPII } from '@/shared/sanitize'
 import type { ReviewInput, ReviewOutput } from './types'
 import { CLUSTERING_CONFIG } from './types'
 import {
@@ -18,6 +19,23 @@ export interface ReviewCallResult {
   mergesIncomplete?: boolean
 }
 
+function scrubReviewInputForPrompt(input: ReviewInput): ReviewInput {
+  return {
+    mergeCandidates: input.mergeCandidates,
+    clusters: input.clusters.map((cluster) => ({
+      ...cluster,
+      label: scrubPII(cluster.label),
+      members: cluster.members.map((member) => ({
+        ...member,
+        title: scrubPII(member.title),
+        subject: scrubPII(member.subject),
+        description: scrubPII(member.description),
+        ...(member.steps && { steps: member.steps.map(scrubPII) }),
+      })),
+    })),
+  }
+}
+
 /**
  * Attempts cover thrown errors too — a transient timeout on a long call must
  * not forfeit the whole pass. The last attempt rethrows so the caller's error
@@ -31,7 +49,7 @@ async function callReview(
   describe: (attempt: number) => string,
   progress?: ProgressCallback,
 ): Promise<ReviewCallResult> {
-  const { input: aliased, aliases } = aliasReviewInput(input)
+  const { input: aliased, aliases } = aliasReviewInput(scrubReviewInputForPrompt(input))
   const prompt = serializeReviewInput(aliased)
   const tokenUsage = { input: 0, output: 0 }
 

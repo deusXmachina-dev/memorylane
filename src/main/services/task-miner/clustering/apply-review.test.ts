@@ -496,7 +496,10 @@ describe('applyContent', () => {
             id: 'c1',
             label: 'Follow up',
             description: 'x',
-            steps: ['Open the thread in Gmail (mail.google.com)', 'Email jane@acme.co the recap'],
+            steps: [
+              'Open the thread in Gmail (mail.google.com)',
+              'Email jane@acme.co the recap, card 4111 1111 1111 1111',
+            ],
             variables: ['customer name'],
           },
         ],
@@ -506,7 +509,7 @@ describe('applyContent', () => {
 
     const cluster = storage.clusters.getById('c1')!
     expect(cluster.steps[0]).toBe('Open the thread in Gmail (mail.google.com)')
-    expect(cluster.steps[1]).toBe('Email [email address] the recap')
+    expect(cluster.steps[1]).toBe('Email jane@acme.co the recap, card [payment card]')
     expect(cluster.variables).toEqual(['customer name'])
   })
 

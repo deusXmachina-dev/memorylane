@@ -56,7 +56,8 @@
     "backfill-golden-tld": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/backfill-golden-tld.ts",
     "mcpb:pack": "npx @anthropic-ai/mcpb pack mcpb/",
     "cli:build": "cd packages/cli && npm run build",
-    "cli:link": "cd packages/cli && npm link"
+    "cli:link": "cd packages/cli && npm link",
+    "scrub-review": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/scrub-review.ts"
   },
   "keywords": [],
   "author": {

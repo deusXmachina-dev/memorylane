@@ -33,6 +33,12 @@ describe('buildScanSystemPrompt', () => {
     expect(prompt).toContain('describe only actions the cited activities evidence')
   })
 
+  it('forbids copying credentials or account numbers into any field', () => {
+    const prompt = buildScanSystemPrompt('Monday')
+    expect(prompt).toContain('Never copy credentials, passwords, API keys')
+    expect(prompt).toContain('[bank account]')
+  })
+
   it('instructs canonical, object-free titles', () => {
     const prompt = buildScanSystemPrompt('Monday')
     expect(prompt).toContain(
@@ -51,6 +57,12 @@ describe('buildGroundingSystemPrompt', () => {
     steps: ['admin.acme.com: create the tenant'],
     activity_ids: [UUID],
   }
+
+  it('forbids copying credentials from the OCR into any field', () => {
+    const prompt = buildGroundingSystemPrompt(candidate, ['admin.acme.com'], ['a1'])
+    expect(prompt).toContain('Never copy credentials, passwords, API keys')
+    expect(prompt).toContain('[redacted secret]')
+  })
 
   it('carries subject through the keep-JSON so scanOnly=false persists it', () => {
     expect(buildGroundingSystemPrompt(candidate, ['admin.acme.com'], ['a1'])).toContain('"subject"')
