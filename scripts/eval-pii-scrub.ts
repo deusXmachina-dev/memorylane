@@ -22,6 +22,8 @@ import { getDefaultDbPath, getModelCacheDir } from '../src/main/utils/paths'
 import {
   PII_PLANTS,
   CLEAN_CONTROLS,
+  KEEP_CATEGORIES,
+  GAP_CATEGORIES,
   type PiiCategory,
   type PiiPlant,
 } from '../src/main/eval/pii-fixture'
@@ -39,6 +41,10 @@ const CATEGORIES: PiiCategory[] = [
   'username',
   'password',
   'secret',
+  'tfn',
+  'medicare',
+  'ird',
+  'nhi',
 ]
 
 const CATEGORY_LABELS: Record<PiiCategory, string> = {
@@ -54,6 +60,10 @@ const CATEGORY_LABELS: Record<PiiCategory, string> = {
   username: 'user',
   password: 'pass',
   secret: 'secret',
+  tfn: 'tfn',
+  medicare: 'mcare',
+  ird: 'ird',
+  nhi: 'nhi',
 }
 
 const NER_MODELS: Record<string, { id: string; dtype: string }> = {
@@ -423,6 +433,20 @@ function leaked(output: string, pii: string): boolean {
   return false
 }
 
+/**
+ * Did the text around the planted value survive? A scrubber that deletes its
+ * surroundings removes the PII too, so a leak-only metric scores destruction as
+ * a pass. Checks a 20-char window either side of the plant.
+ */
+function damaged(text: string, pii: string, output: string): boolean {
+  for (const segment of text.split(pii)) {
+    const trimmed = segment.trim()
+    if (trimmed.length < 4) continue
+    if (!output.includes(trimmed.slice(0, 20))) return true
+  }
+  return false
+}
+
 interface CategoryResult {
   caught: number
   total: number
@@ -435,6 +459,9 @@ interface FixtureResult {
   caughtTotal: number
   plantTotal: number
   falsePositives: { id: string; kind: string; before: string; after: string }[]
+  wronglyRemoved: PiiPlant[]
+  damagedPlants: PiiPlant[]
+  knownGaps: number
   msPerText: number
   loadMs: number
   footprint: string
@@ -445,12 +472,30 @@ async function runOnFixture(scrubber: Scrubber): Promise<FixtureResult> {
   const byCategory = {} as Record<PiiCategory, CategoryResult>
   for (const c of CATEGORIES) byCategory[c] = { caught: 0, total: 0, missed: [] }
 
+  const wronglyRemoved: PiiPlant[] = []
+  const damagedPlants: PiiPlant[] = []
+  let knownGaps = 0
+
   const t0 = performance.now()
   for (const p of PII_PLANTS) {
     const out = await scrubber.scrub(p.text)
+
+    if (KEEP_CATEGORIES.has(p.category)) {
+      byCategory[p.category].total++
+      if (leaked(out, p.pii)) byCategory[p.category].caught++
+      else wronglyRemoved.push(p)
+      continue
+    }
+
+    if (GAP_CATEGORIES.has(p.category)) {
+      knownGaps++
+      continue
+    }
+
     byCategory[p.category].total++
     if (leaked(out, p.pii)) byCategory[p.category].missed.push(p)
     else byCategory[p.category].caught++
+    if (damaged(p.text, p.pii, out)) damagedPlants.push(p)
   }
 
   const falsePositives: FixtureResult['falsePositives'] = []
@@ -465,8 +510,11 @@ async function runOnFixture(scrubber: Scrubber): Promise<FixtureResult> {
     name: scrubber.name,
     byCategory,
     caughtTotal,
-    plantTotal: PII_PLANTS.length,
+    plantTotal: CATEGORIES.reduce((a, c) => a + byCategory[c].total, 0),
     falsePositives,
+    wronglyRemoved,
+    damagedPlants,
+    knownGaps,
     msPerText: elapsed / (PII_PLANTS.length + CLEAN_CONTROLS.length),
     loadMs: scrubber.loadMs,
     footprint: scrubber.footprint(),
@@ -621,6 +669,38 @@ function renderReport(results: FixtureResult[], dbResults: DbResult[], args: Cli
     )
   }
   lines.push('')
+
+  lines.push('## Preservation')
+  lines.push('')
+  lines.push(
+    'A leak count alone scores deletion as success. `damaged` counts plants where text around the ' +
+      'planted value did not survive; `wrongly removed` counts names and emails the policy keeps ' +
+      'but the scrubber took. Both are defects.',
+  )
+  lines.push('')
+  lines.push('| scrubber | damaged | wrongly removed | known gaps (not scored) |')
+  lines.push('|---|---|---|---|')
+  for (const r of results) {
+    lines.push(
+      `| ${r.name} | ${r.damagedPlants.length} | ${r.wronglyRemoved.length} | ${r.knownGaps} |`,
+    )
+  }
+  lines.push('')
+
+  const withDamage = results.filter((r) => r.damagedPlants.length || r.wronglyRemoved.length)
+  if (withDamage.length) {
+    for (const r of withDamage) {
+      lines.push(`### ${r.name} — preservation defects`)
+      lines.push('')
+      for (const p of r.damagedPlants) {
+        lines.push(`- damaged \`${p.id}\`: \`${p.text}\``)
+      }
+      for (const p of r.wronglyRemoved) {
+        lines.push(`- wrongly removed \`${p.id}\` (${p.category}): \`${p.pii}\``)
+      }
+      lines.push('')
+    }
+  }
 
   lines.push('## Load time and footprint')
   lines.push('')
