@@ -77,6 +77,19 @@ describe('scrubPII — Australian identifiers', () => {
     expect(scrubPII('BSB 062-000, account 12345678')).toBe('BSB 062-000, account [bank account]')
   })
 
+  it('redacts the account when only the BSB is labelled', () => {
+    expect(scrubPII('Remit to BSB 062-000, 12345678')).toBe('Remit to BSB 062-000, [bank account]')
+    expect(scrubPII('BSB 062-000 / 12345678')).toBe('BSB 062-000 / [bank account]')
+    expect(scrubPII('BSB 062-000 Acct 12345678')).toBe('BSB 062-000 Acct [bank account]')
+    expect(scrubPII('BSB 062-000 A/C 12345678')).toBe('BSB 062-000 A/C [bank account]')
+  })
+
+  it('keeps space-grouped money after a bank label', () => {
+    expect(scrubPII('Account 4 500 000 AUD in the ledger')).toBe(
+      'Account 4 500 000 AUD in the ledger',
+    )
+  })
+
   it('types passports, licences and Centrelink references', () => {
     expect(scrubPII('Passport PA0941234 expires soon')).toBe('Passport [id number] expires soon')
     expect(scrubPII('Drivers licence 04829173')).toBe('Drivers licence [id number]')
@@ -96,6 +109,11 @@ describe('scrubPII — New Zealand identifiers', () => {
   it('types IRD and NHI numbers', () => {
     expect(scrubPII('IRD 49-091-850')).toBe('IRD [ird number]')
     expect(scrubPII('NHI ZAC5361 on the referral')).toBe('NHI [nhi number] on the referral')
+  })
+
+  it('types a GST number but keeps a GST amount', () => {
+    expect(scrubPII('GST 49091850 filed')).toBe('GST [ird number] filed')
+    expect(scrubPII('GST 100 000 payable this quarter')).toBe('GST 100 000 payable this quarter')
   })
 
   it('detects an unlabelled IRD number by checksum and range', () => {
@@ -147,6 +165,13 @@ describe('scrubPII — universal classes', () => {
     )
     expect(scrubPII('DOB: 04/12/1985')).toBe('DOB: [redacted date of birth]')
     expect(scrubPII('Employee ID: EMP-04481')).toBe('Employee ID: [redacted employee id]')
+  })
+
+  it('leaves the sentence punctuation that follows a credential', () => {
+    expect(scrubPII('Set password: hunter42, then log in')).toBe(
+      'Set password: [redacted password], then log in',
+    )
+    expect(scrubPII('api_key: 9f8e7d6c5b4a.')).toBe('api_key: [redacted secret].')
   })
 
   it('requires a valid Luhn before claiming a payment card', () => {

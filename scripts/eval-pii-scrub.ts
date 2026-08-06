@@ -436,13 +436,21 @@ function leaked(output: string, pii: string): boolean {
 /**
  * Did the text around the planted value survive? A scrubber that deletes its
  * surroundings removes the PII too, so a leak-only metric scores destruction as
- * a pass. Checks a 20-char window either side of the plant.
+ * a pass. Checks the 20 chars adjacent to the plant on each side — the tail of
+ * what precedes it, the head of what follows — since that is what a mis-anchored
+ * span eats first.
  */
 function damaged(text: string, pii: string, output: string): boolean {
-  for (const segment of text.split(pii)) {
-    const trimmed = segment.trim()
+  const segments = text.split(pii)
+  for (let i = 0; i < segments.length; i++) {
+    const trimmed = segments[i].trim()
     if (trimmed.length < 4) continue
-    if (!output.includes(trimmed.slice(0, 20))) return true
+    const windows: string[] = []
+    if (i < segments.length - 1) windows.push(trimmed.slice(-20))
+    if (i > 0) windows.push(trimmed.slice(0, 20))
+    for (const w of windows) {
+      if (w.trim().length >= 4 && !output.includes(w)) return true
+    }
   }
   return false
 }

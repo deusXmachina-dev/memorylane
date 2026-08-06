@@ -114,6 +114,7 @@ const ALNUM_VALUE =
 const DATE_LIKE =
   /^\d{4}([-/.])\d{1,2}(?:\1\d{1,2})?$|^\d{1,2}([./-])\s?\d{1,2}\2\s?\d{4}$|^\d{4}-\d{4}$/
 const DOTTED_QUAD = /^\d{1,3}(?:\.\d{1,3}){3}$/
+const GROUPED_AMOUNT = /^\d{1,3}(?: \d{3})+$/
 
 const RULES: Rule[] = [
   { slot: '', keep: true, pattern: /\b\d{2} ?\d{3} ?\d{3} ?\d{3}\b/g, validate: passesAbn },
@@ -157,13 +158,14 @@ const RULES: Rule[] = [
   },
 
   { slot: '[bank account]', pattern: /\b\d{2}-\d{4}-\d{7}-\d{2,3}\b/g },
-  { slot: '[bank account]', pattern: /\b\d{3}[- ]\d{3}[ ,]+\d{6,10}\b/g },
+  { slot: '[bank account]', pattern: /\b\d{3}[- ]\d{3}[ ,/]+(\d{6,10})\b/g },
   {
     slot: '[bank account]',
     pattern: labelled(
-      'bsb(?: and)?(?: account)?|bank account|account|routing|aba',
+      'bsb(?: and)?(?: account)?|bank account|account|acct|acc|a/c|routing|aba',
       NUMERIC_VALUE,
     ),
+    validate: (v) => !GROUPED_AMOUNT.test(v.trim()),
   },
   { slot: '[bank account]', pattern: labelled('iban|swift|bic', ALNUM_VALUE), validate: hasDigit },
 
@@ -175,7 +177,8 @@ const RULES: Rule[] = [
   { slot: '[medicare number]', pattern: labelled('medicare', NUMERIC_VALUE) },
   { slot: '[tax file number]', pattern: labelled('tfn|tax file', NUMERIC_VALUE) },
   { slot: '[ird number]', pattern: /\b\d{2,3}[- ]\d{3}[- ]\d{3}\b/g, validate: passesIrd },
-  { slot: '[ird number]', pattern: labelled('ird|gst', NUMERIC_VALUE) },
+  { slot: '[ird number]', pattern: labelled('ird', NUMERIC_VALUE) },
+  { slot: '[ird number]', pattern: labelled('gst', NUMERIC_VALUE), validate: passesIrd },
   { slot: '[nhi number]', pattern: /\b[A-HJ-NP-Z]{3}\d{4}\b/g, validate: passesNhi },
   { slot: '[nhi number]', pattern: labelled('nhi', ALNUM_VALUE), validate: hasDigit },
 
@@ -255,8 +258,9 @@ export function scrubPII(text: string): string {
         rule.pattern.lastIndex++
         continue
       }
-      const value = m[1] ?? m[0]
+      const matched = m[1] ?? m[0]
       const start = m[1] === undefined ? m.index : m.index + m[0].indexOf(m[1])
+      const value = matched.replace(/[.,;:!?]+$/, '') || matched
       const end = start + value.length
       if (overlaps(start, end)) continue
       if (rule.validate && !rule.validate(value)) continue
