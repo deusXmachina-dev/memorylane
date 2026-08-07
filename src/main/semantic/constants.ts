@@ -37,20 +37,36 @@ export const MODEL_PRICING_USD_PER_MILLION: Record<
     completion_tokens_per_million: 1.5,
   },
   'deepseek/deepseek-v4-flash': {
+    input_tokens_per_million: 0.14,
+    completion_tokens_per_million: 0.28,
+  },
+  'deepseek/deepseek-v4-flash-0731': {
     input_tokens_per_million: 0.09,
     completion_tokens_per_million: 0.18,
   },
   'xiaomi/mimo-v2.5': {
-    input_tokens_per_million: 0.105,
+    input_tokens_per_million: 0.14,
     completion_tokens_per_million: 0.28,
   },
   'tencent/hy3-preview': {
     input_tokens_per_million: 0.063,
     completion_tokens_per_million: 0.21,
   },
+  'tencent/hy3': {
+    input_tokens_per_million: 0.132,
+    completion_tokens_per_million: 0.528,
+  },
+  'openai/gpt-5.6-luna': {
+    input_tokens_per_million: 0.1,
+    completion_tokens_per_million: 0.6,
+  },
+  'nex-agi/nex-n2-pro': {
+    input_tokens_per_million: 0.25,
+    completion_tokens_per_million: 1.0,
+  },
   'z-ai/glm-5.2': {
-    input_tokens_per_million: 0.93,
-    completion_tokens_per_million: 3.0,
+    input_tokens_per_million: 0.76,
+    completion_tokens_per_million: 2.42,
   },
   'moonshotai/kimi-k2.5': {
     input_tokens_per_million: 0.375,
