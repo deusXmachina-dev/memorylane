@@ -19,6 +19,26 @@ export type PiiCategory =
   | 'username'
   | 'password'
   | 'secret'
+  | 'tfn'
+  | 'medicare'
+  | 'ird'
+  | 'nhi'
+
+/**
+ * Categories the policy deliberately preserves. A plant in one of these must
+ * survive verbatim — names, emails and handles are the client-vs-internal
+ * signal that makes a sighting legible, so removing them is a defect, not a
+ * success. Usernames are credential material only on a login screen, and those
+ * are already excluded upstream by the capture gate.
+ */
+export const KEEP_CATEGORIES = new Set<PiiCategory>(['name', 'email', 'username'])
+
+/**
+ * Categories no deterministic rule can reach. Street addresses cannot be
+ * matched without also destroying every "Payables > Acme Corp" path. Reported
+ * as known gaps rather than scored as failures.
+ */
+export const GAP_CATEGORIES = new Set<PiiCategory>(['address'])
 
 export type TextShape = 'window_title' | 'summary' | 'ocr'
 
@@ -551,6 +571,58 @@ export const PII_PLANTS: PiiPlant[] = [
     `${GH_TOKEN} - Search results - 1Password`,
     GH_TOKEN,
   ),
+
+  plant('tfn-01', 'tfn', 'ocr', 'Tax file number 123 456 782\nStatus: verified', '123 456 782'),
+  plant('tfn-02', 'tfn', 'summary', 'Entered the TFN 123456782 into the onboarding form.', '123456782'),
+  plant('tfn-03', 'tfn', 'window_title', 'TFN declaration 876 543 210 - myGov', '876 543 210'),
+  plant('medicare-01', 'medicare', 'ocr', 'Medicare 2123 45670 1\nExpiry 09/29', '2123 45670 1'),
+  plant(
+    'medicare-02',
+    'medicare',
+    'summary',
+    'Copied the Medicare number 2428 77813 2 from the scanned card into the claim.',
+    '2428 77813 2',
+  ),
+  plant('medicare-03', 'medicare', 'ocr', 'Card shows 2123 45670 1 for the dependant', '2123 45670 1'),
+  plant('ird-01', 'ird', 'ocr', 'IRD number 49-091-850\nTax code M', '49-091-850'),
+  plant(
+    'ird-02',
+    'ird',
+    'summary',
+    'Filed the GST return against 136-410-132 for the March period.',
+    '136-410-132',
+  ),
+  plant('ird-03', 'ird', 'window_title', 'IRD 49091850 - myIR', '49091850'),
+  plant('nhi-01', 'nhi', 'ocr', 'NHI ZAC5361\nGP: Northcote Medical', 'ZAC5361'),
+  plant(
+    'nhi-02',
+    'nhi',
+    'summary',
+    'Looked up the patient by NHI ZZZ0016 before booking the referral.',
+    'ZZZ0016',
+  ),
+  plant(
+    'bank-08',
+    'bank',
+    'ocr',
+    'BSB 062-000\nAccount 12345678\nName: N Williams',
+    '12345678',
+  ),
+  plant(
+    'bank-09',
+    'bank',
+    'summary',
+    'Set up the supplier payment to 01-0123-0123456-00 in the banking portal.',
+    '01-0123-0123456-00',
+  ),
+  plant('phone-11', 'phone', 'ocr', 'Mobile: 0412 987 654\nAfter hours only', '0412 987 654'),
+  plant(
+    'phone-12',
+    'phone',
+    'summary',
+    'Rang the depot on +64 21 555 0134 to confirm the pallet count.',
+    '+64 21 555 0134',
+  ),
 ]
 
 function control(id: string, kind: string, text: string): CleanControl {
@@ -610,4 +682,12 @@ export const CLEAN_CONTROLS: CleanControl[] = [
   control('phone-like-01', 'misc', 'Error code 0x80070005 during the update rollback.'),
   control('title-01', 'misc', 'Quarterly business review agenda - Google Docs'),
   control('title-02', 'misc', 'Untitled spreadsheet - Google Sheets'),
+  control('abn-01', 'company_id', 'Harbourline Logistics Pty Ltd, ABN 51 824 753 556'),
+  control('abn-02', 'company_id', 'Supplier 51 824 753 556 approved for the panel.'),
+  control('acn-01', 'company_id', 'ACN 004 085 616 listed on the tax invoice.'),
+  control('nzbn-01', 'company_id', 'NZBN 9429041234567 registered in Auckland.'),
+  control('bsb-01', 'company_id', 'Remit to BSB 062-000 at the Sydney branch.'),
+  control('aunz-misc-01', 'misc', 'Reference batch 4820 1174 9930 2217 in the vendor export.'),
+  control('aunz-misc-02', 'misc', 'Container limit 8192 MB, exit code 137 on retry.'),
+  control('aunz-misc-03', 'misc', 'Invoice total 12 500 AUD, up 15% on Q3 2026.'),
 ]

@@ -69,7 +69,7 @@ Rules:
 - Cluster ids are short handles ("c1"). Copy them back exactly as given — never invent, renumber, or reformat one. A mis-copied id discards that verdict.
 - Do not mention counts, frequencies, or durations in labels/descriptions — those are computed separately.
 - When unsure of the kind, choose the non-eliminable reading — a wrongly promised automation costs more than a missed one.
-- steps and variables carry NO personal data: no real names, companies, emails, phone numbers, ids, or PII/PHI. When in doubt, replace the specific with a generic variable.
+- labels, descriptions, steps, and variables carry no personal identifying numbers: no tax file, Medicare, IRD or NHI numbers, bank accounts, card numbers, passports, licences, credentials, or phone numbers. Name the kind instead. People, companies and email addresses may be named — they are what makes a task legible. When in doubt about anything else, replace the specific with a generic variable.
 
 Output a single JSON object, no other text:
 

@@ -1,0 +1,25 @@
+Kickoff notes — Harbourline Logistics Pty Ltd, 14 March
+
+Sarah Chen (sarah.chen@harbourline.com.au) confirmed the engagement scope this morning; Tom Whitaker runs the discovery workshops and Petr Ungar covers the technical integration. Route invoicing questions to their finance lead, Marcus Boyd, on +61 412 345 678 or marcus.boyd@harbourline.com.au. Harbourline trades as ABN 51 824 753 556, ACN 004 085 616, registered at 12 Kent Street, Sydney NSW 2000. Escalation if Sarah is unavailable: Dave Sanderson at dave@thirdparty.io, external to Harbourline, who must not receive the internal cost breakdown.
+
+Regional leads — introductions from the partner call
+
+Aroha Ngata in Auckland (aroha.ngata@harbourline.co.nz, +64 21 555 0134) owns the New Zealand rollout; the NZ entity files under IRD 49-091-850 and NZBN 9429041234567. Wiremu Tane in Wellington (wiremu@harbourline.co.nz, 021 555 0198) covers South Island depots. On the Australian side, Priya Raman in Melbourne (priya.raman@harbourline.com.au, 03 9876 5432) and Jack O'Sullivan in Brisbane (jack.osullivan@harbourline.com.au, +61 7 3210 9876) run the eastern warehouses. Mei-Ling Chen joins the Perth team next quarter.
+
+New hire packet — scanned, OCR captured
+
+Employee: Nikau Williams. Employee ID: EMP-20419. Date of birth: 14.3.1988. Tax file number 123 456 782. Medicare 2123 45670 1. Passport PA0941234, valid to 2031-06-30. Drivers licence 04829173. Home address 8 Beach Road, Bondi NSW 2026. Personal mobile 0412 987 654, emergency contact +61 400 111 222. Salary goes to BSB 062-000, account 12345678. His NZ-based colleague Hemi Walker has IRD 136-410-132 and NHI ZAC5361, paid into 01-0123-0123456-00. Starts 2026-04-01, needs Slack, NetSuite and VPN on day one. Temporary VPN password
+Summ3r!2026
+must be changed at first login. Centrelink CRN 203 456 789A is on the transition form.
+
+Payment run — week 11
+
+Four transfers approved. The retainer settles to BSB 083-004, account 987654321 at NAB; the equipment invoice pays from Westpac BSB 032-002, account 445566778. Card on file for the SaaS renewals is 4111 1111 1111 1111, expiry 04/28; backup corporate card 5555 5555 5555 4444. The Auckland office pays suppliers from 12-3141-0123456-00. Total was 1 240 000 AUD against a 1 500 000 AUD budget, so we are 17% under. Invoices INV-2026-0417 through INV-2026-0420 sit in NetSuite under Payables > Harbourline Logistics.
+
+Ops log — integration debugging
+
+Ticket DEU-205 blocked on activity 3f2a9c1e-7b44-4d0a-9e21-8c5f6b0d1234 in the miner. Pulled log bundle memorylane-2026-08-06T11-42-07.log from the box at 10.0.14.203:5432 and diffed against build v1.5.5-alpha.2, commit 67221f6. The sync job retried 4 times and processed 1 000 000 rows in 12 minutes before exit code 137 (OOM). Raised the container limit to 8192 MB and it cleared. Order #100482 in the test fixture still shows the wrong total; PR 273 was reopened to track it. Reference batch 4820 1174 9930 2217 in the vendor export is a shipment code, not a card.
+
+Credentials found on screen during capture
+
+The OCR picked up a Stripe key sk-proj-9fA2kQ7ZxLm4vB0tRw8Nc1Ye in a terminal and a token ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4 in a config file. There was also AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG in an env file and api_key: 9f8e7d6c5b4a in a JSON payload. None of these should ever reach a prompt or a shared artifact. The Q3 2026 revenue figure of 12 500 AUD, the 15% growth rate, and the 8192 MB container limit are ordinary business numbers and should survive untouched.

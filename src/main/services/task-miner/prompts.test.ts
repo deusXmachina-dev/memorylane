@@ -33,6 +33,14 @@ describe('buildScanSystemPrompt', () => {
     expect(prompt).toContain('describe only actions the cited activities evidence')
   })
 
+  it('forbids identifying numbers but permits people, companies and emails', () => {
+    const prompt = buildScanSystemPrompt('Monday')
+    expect(prompt).toContain('Never copy a tax file number')
+    expect(prompt).toContain('[bank account]')
+    expect(prompt).toContain('[medicare number]')
+    expect(prompt).toContain('People, companies and email addresses belong in the output')
+  })
+
   it('instructs canonical, object-free titles', () => {
     const prompt = buildScanSystemPrompt('Monday')
     expect(prompt).toContain(
@@ -51,6 +59,13 @@ describe('buildGroundingSystemPrompt', () => {
     steps: ['admin.acme.com: create the tenant'],
     activity_ids: [UUID],
   }
+
+  it('forbids identifying numbers from the OCR but permits names and emails', () => {
+    const prompt = buildGroundingSystemPrompt(candidate, ['admin.acme.com'], ['a1'])
+    expect(prompt).toContain('never copy a tax file number')
+    expect(prompt).toContain('[redacted secret]')
+    expect(prompt).toContain('Names, companies and email addresses from the OCR are fine to use')
+  })
 
   it('carries subject through the keep-JSON so scanOnly=false persists it', () => {
     expect(buildGroundingSystemPrompt(candidate, ['admin.acme.com'], ['a1'])).toContain('"subject"')

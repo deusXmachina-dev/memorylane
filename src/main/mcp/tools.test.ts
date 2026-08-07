@@ -293,6 +293,44 @@ describe('pattern tools (task clusters)', () => {
       expect(text).toContain('Activity IDs: act-a, act-b')
     })
 
+    it('scrubs secrets and phones from sighting fields but keeps emails and IDs verbatim', async () => {
+      addClusterWithMembers(createCluster({ id: 'c1', label: 'Send report' }), [
+        createSighting({
+          id: 's1',
+          subject: 'jane.doe@acme.co',
+          description: 'Used password: hunter42 and called +1 (555) 123-4567',
+          activityIds: ['act-a1', 'act-b2'],
+        }),
+        createSighting({ id: 's2' }),
+      ])
+
+      const text = (await handlers.get('get_pattern_details')!({ patternId: 'c1' })).content[0].text
+      expect(text).not.toContain('hunter42')
+      expect(text).not.toContain('555) 123-4567')
+      expect(text).toContain('[redacted password]')
+      expect(text).toContain('[phone number]')
+      expect(text).toContain('jane.doe@acme.co')
+      expect(text).toContain('Activity IDs: act-a1, act-b2')
+    })
+
+    it('scrubs secrets from activity summaries and OCR in get_activity_details', async () => {
+      storage.activities.add(
+        createStoredActivity({
+          id: 'act-ocr',
+          summary: 'Logged in with password: hunter42',
+          ocrText: 'Username: jane.doe@acme.co\nAPI_KEY=9f8e7d6c5b4a\nCall 555-123-4567',
+        }),
+      )
+
+      const text = (await handlers.get('get_activity_details')!({ ids: ['act-ocr'] })).content[0]
+        .text
+      expect(text).not.toContain('hunter42')
+      expect(text).not.toContain('9f8e7d6c5b4a')
+      expect(text).not.toContain('555-123-4567')
+      expect(text).toContain('jane.doe@acme.co')
+      expect(text).toContain('ID: act-ocr')
+    })
+
     it('never prints raw member step text (steps are not scrubbed for egress)', async () => {
       addClusterWithMembers(createCluster({ id: 'c1', label: 'Daily standup notes' }), [
         createSighting({

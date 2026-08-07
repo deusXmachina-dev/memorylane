@@ -26,6 +26,7 @@ import {
 import { CLUSTER_VIEW_CONFIG } from '@/shared/constants'
 import type { ClusterInfo } from '../../shared/types'
 import log from '@main/utils/logger'
+import { scrubPII } from '@/shared/sanitize'
 
 export interface MCPServices {
   storage: StorageService
@@ -617,9 +618,11 @@ function formatClusterLine(c: ClusterInfo): string {
   }
   stats.push(`avg ${Math.round(c.avgActiveMin)} min/run`)
   if (c.lastSeenAt) stats.push(`last seen ${new Date(c.lastSeenAt).toLocaleString()}`)
-  const lines = [`- ${c.id} | ${c.title} [${c.apps.join(', ')}] (${stats.join(', ')})`]
-  if (c.description) lines.push(`  ${c.description}`)
-  if (c.mechanism) lines.push(`  Replace with: ${c.mechanism}`)
+  const lines = [
+    `- ${c.id} | ${scrubPII(c.title)} [${c.apps.join(', ')}] (${stats.join(', ')})`,
+  ]
+  if (c.description) lines.push(`  ${scrubPII(c.description)}`)
+  if (c.mechanism) lines.push(`  Replace with: ${scrubPII(c.mechanism)}`)
   return lines.join('\n')
 }
 
@@ -631,8 +634,8 @@ function formatClusterSightingLine(s: Sighting): string {
   const lines = [
     `- ${s.id} | ${start} -> ${end} | ~${activeMin} min active | [${s.apps.join(', ')}]`,
   ]
-  lines.push(`  ${title}`)
-  if (s.description) lines.push(`  ${s.description}`)
+  lines.push(`  ${scrubPII(title)}`)
+  if (s.description) lines.push(`  ${scrubPII(s.description)}`)
   lines.push(`  Activity IDs: ${s.activityIds.join(', ')}`)
   return lines.join('\n')
 }
@@ -830,7 +833,7 @@ async function handleGetUserContext(services: MCPServices | null) {
       content: [
         {
           type: 'text' as const,
-          text: `User profile (last updated: ${updatedAtStr}):\n\nShort summary:\n${ctx.shortSummary}\n\nDetailed summary:\n${ctx.detailedSummary}`,
+          text: `User profile (last updated: ${updatedAtStr}):\n\nShort summary:\n${scrubPII(ctx.shortSummary)}\n\nDetailed summary:\n${scrubPII(ctx.detailedSummary)}`,
         },
       ],
     }
@@ -881,8 +884,9 @@ async function handleGetActivityDetails(services: MCPServices | null, { ids }: {
         const timeStr = new Date(a.startTimestamp).toLocaleString()
         const endTimeStr = new Date(a.endTimestamp).toLocaleString()
         const appInfo = a.appName ? ` [${a.appName}]` : ''
-        const summaryLine = a.summary ? `\nSummary: ${a.summary}` : ''
-        return `ID: ${a.id}\n[${timeStr} → ${endTimeStr}]${appInfo}${summaryLine}\nOCR: ${a.ocrText}`
+        const summaryLine = a.summary ? `\nSummary: ${scrubPII(a.summary)}` : ''
+        const ocrText = a.ocrText ? scrubPII(a.ocrText) : a.ocrText
+        return `ID: ${a.id}\n[${timeStr} → ${endTimeStr}]${appInfo}${summaryLine}\nOCR: ${ocrText}`
       })
       .join('\n\n---\n\n')
 

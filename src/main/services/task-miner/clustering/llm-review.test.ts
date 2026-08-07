@@ -178,3 +178,43 @@ describe('runContentReview', () => {
     expect(mockedGenerateText).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('PII scrubbing', () => {
+  const memberInput = {
+    clusters: [
+      {
+        id: 'c1',
+        splittable: false,
+        label: '',
+        stats: { times_seen: 2, span_days: 3, median_active_min: 5 },
+        members: [
+          {
+            sighting_id: 's1',
+            title: 'Email jane.doe@acme.co the report',
+            subject: 'password: hunter42',
+            description: 'Sent the weekly report',
+            steps: ['mail.google.com: mail jane.doe@acme.co'],
+            apps: ['mail.google.com'],
+            active_min: 5,
+            date: '2026-07-30',
+          },
+        ],
+      },
+    ],
+    mergeCandidates: [] as [string, string][],
+  }
+
+  it('scrubs secrets from the prompt but keeps emails for context', async () => {
+    mockedGenerateText.mockResolvedValue({
+      text: '{"clusters":[]}',
+      usage: { inputTokens: 1, outputTokens: 1 },
+    } as never)
+
+    await runContentReview(provider, 'model', memberInput)
+
+    const call = mockedGenerateText.mock.calls[0][0] as { prompt: string }
+    expect(call.prompt).not.toContain('hunter42')
+    expect(call.prompt).toContain('[redacted password]')
+    expect(call.prompt).toContain('jane.doe@acme.co')
+  })
+})

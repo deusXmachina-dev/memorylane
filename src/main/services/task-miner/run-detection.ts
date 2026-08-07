@@ -23,6 +23,7 @@ import {
 } from './helpers'
 import { getDayBoundaries } from '@main/utils/day'
 import { deriveSightingApps } from '@/shared/app-utils'
+import { scrubPII } from '@/shared/sanitize'
 import { buildVerificationTools } from './tools'
 import { normalizeScanCandidates, normalizeSteps } from './candidate-normalizer'
 import { buildScanSystemPrompt, buildGroundingSystemPrompt } from './prompts'
@@ -113,12 +114,12 @@ export async function runDetection(
   // 2. User context (optional flavor for the scan)
   const userCtx = storage.userContext.get()
   const userContextStr = userCtx
-    ? `${userCtx.shortSummary}\n\n${userCtx.detailedSummary}`
+    ? scrubPII(`${userCtx.shortSummary}\n\n${userCtx.detailedSummary}`)
     : undefined
 
   // Canonical titles of established procedures, fed back so recurring work
   // reuses its name cross-day. Empty on fresh/eval DBs — section omitted.
-  const knownProcedures = getKnownProcedureTitles(storage)
+  const knownProcedures = getKnownProcedureTitles(storage).map(scrubPII)
 
   // =========================================================================
   // Phase 1: Scan — discover discrete task instances
@@ -128,7 +129,13 @@ export async function runDetection(
   // models mangle long opaque ids when citing them (dropping whole findings),
   // and short handles cut prompt tokens. Mapped back right after parsing.
   const activityIds = new PositionalAliases('a')
-  const serialized = serializeActivities(activities).map((row, i) => ({
+  const serialized = serializeActivities(
+    activities.map((a) => ({
+      ...a,
+      windowTitle: scrubPII(a.windowTitle),
+      summary: scrubPII(a.summary),
+    })),
+  ).map((row, i) => ({
     ...row,
     id: activityIds.encode(activities[i].id),
   }))
@@ -260,8 +267,15 @@ export async function runDetection(
       let parsed: Record<string, unknown> = {}
       if (!cfg.scanOnly) {
         const candidateActivities = storage.activities.getByIds(candidate.activity_ids)
+        const promptCandidate = {
+          ...candidate,
+          title: scrubPII(candidate.title),
+          subject: scrubPII(candidate.subject),
+          description: scrubPII(candidate.description),
+          steps: candidate.steps.map(scrubPII),
+        }
         const groundPrompt = buildGroundingSystemPrompt(
-          candidate,
+          promptCandidate,
           deriveSightingApps(candidateActivities),
           candidate.activity_ids.map((id) => activityIds.encode(id)),
         )
@@ -269,18 +283,18 @@ export async function runDetection(
         const enrichedActivities = candidateActivities.map((a) => ({
           id: activityIds.encode(a.id),
           app: a.appName,
-          window_title: a.windowTitle,
+          window_title: scrubPII(a.windowTitle),
           time: new Date(a.startTimestamp).toISOString(),
           end_time: new Date(a.endTimestamp).toISOString(),
-          summary: a.summary,
+          summary: scrubPII(a.summary),
         }))
 
         const candidateInput = `Investigate this candidate task:\n\n\`\`\`json\n${JSON.stringify(
           {
-            title: candidate.title,
-            subject: candidate.subject,
-            description: candidate.description,
-            steps: candidate.steps,
+            title: promptCandidate.title,
+            subject: promptCandidate.subject,
+            description: promptCandidate.description,
+            steps: promptCandidate.steps,
             activities: enrichedActivities,
           },
           null,

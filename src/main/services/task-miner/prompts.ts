@@ -50,6 +50,7 @@ A run of a repeatable multi-step procedure that CHANGES something — creates, p
 - Every description ENDS with exactly one sentence naming the mechanism: "Replace with: <the concrete script, integration, alert, or platform feature>." If you cannot write that sentence concretely, the finding does not exist.
 - \`steps\` describe only actions the cited activities evidence, one action per line, each starting with that activity's \`app\` — never a browser name.
 - Titles name the procedure, subjects name the object: title "Process invoice", subject "Customer ABC" — never title "Process invoice for Customer ABC". The title is worded so every run of the procedure gets it identically; the specific object goes in \`subject\`. Two runs of the same procedure on different objects share one title and differ only in subject. \`subject\` is optional — leave it empty when the run acted on no single nameable object.
+- People, companies and email addresses belong in the output — they are how a task reads as client work or internal work. Personal identifying numbers do not. Never copy a tax file number, Medicare/IRD/NHI number, bank account, card number, passport, licence, credential or password into \`title\`, \`subject\`, \`description\`, or \`steps\`. Where the object is only identifiable by one, name the kind instead: [tax file number], [medicare number], [ird number], [nhi number], [bank account], [payment card], [id number], [phone number], [redacted secret], [redacted password].
 ${knownProceduresSection}
 ## Output
 
@@ -113,6 +114,8 @@ If this is a real, grounded run:
 }
 \`\`\`
 If you cannot write the "Replace with:" sentence concretely, reject.
+
+Names, companies and email addresses from the OCR are fine to use. Personal identifying numbers are not: never copy a tax file number, Medicare/IRD/NHI number, bank account, card number, passport, licence, credential or password into any field. Name the kind instead: [tax file number], [medicare number], [ird number], [nhi number], [bank account], [payment card], [id number], [redacted secret], [redacted password].
 
 ### Reject
 Reject if the evidence shows checking/watching, re-checks of that day's work in progress, dev-loop mechanics, a one-off action, creative or judgment work; if the cited activities don't support the claim; or if fewer than 2 substantive activities remain after cleanup. Keep only what you could defend to the client from the evidence on screen:
