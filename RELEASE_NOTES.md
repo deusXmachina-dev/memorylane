@@ -1,18 +1,16 @@
-# MemoryLane v1.5.5
+# MemoryLane v1.5.6
 
-Sign-in screens are now skipped, configured LLM timeouts are finally honored, task durations go back to measured time, and the Gemini 2.5 defaults are retired ahead of their shutdown.
+Identifying numbers are now stripped before any text leaves for a model, and the user profile no longer times out against slow local models.
 
 ## What's Changed
 
-- **Sign-in screens are skipped**: browser sign-in pages, single sign-on and password reset flows, and password manager apps are no longer captured. On by default under Advanced options, and capture resumes by itself once you move on. Matching covers common English pages — a screen in another language, or an unusual one, can still slip through (#271).
-- **Configured LLM timeouts now hold**: the HTTP layer capped every request at 5 minutes beneath `fetch()`, below any setting, so a local model still generating was disconnected no matter what you configured. The deadline is now the caller's, with a global backstop above it. Errors also carry the underlying network code, so a stalled local model is distinguishable from a refused connection (#274).
-- **Task durations back to measured time**: v1.5.4 bridged gaps up to 5 minutes between a task's activities and counted them as active. On interleaved days the same minute was credited to several tasks at once — 1.68× inflated on a real database, with days claiming more task time than the machine captured all day. Duration is now the plain union of captured activity; the presence heartbeat already keeps read and think time inside it. Existing data is recalculated on upgrade, so averages come back down (#269).
-- **Reliable cluster merges**: the review calls served the model raw UUIDs, and one mangled character turned a merge the model proposed into a 30-day suppression of that pair. Review now uses the same short handles the scan has always used (#267).
-- **Gemini 2.5 retired from defaults**: Google discontinues Gemini 2.5 on Vertex endpoints on 2026-10-20. Vertex moves to `gemini-3.5-flash-lite` and the OpenRouter chain swaps in GA successors. Remembered model picks are overwritten on upgrade so no install is stranded on a retired id (#265).
-- **Explorer plan price**: the activation screen now shows $100/mo (#275).
+- **Identifying numbers scrubbed at every LLM and MCP seam**: tax file numbers, bank BSB and account numbers, Medicare and IRD numbers, credentials, and phone numbers are replaced with a placeholder before text reaches a model or an outside tool — task-mining scans, cluster review, the user profile, semantic search, and MCP responses. Names, companies and email addresses are deliberately kept: they are what make a task legible as client work. Screenshots and activity text stay unchanged on disk; scrubbing happens on the way out (#278).
+- **User profile no longer aborts at 3 minutes**: the profile builder sent a full multi-day activity summary in one call but capped it at a 3-minute deadline, so against a slow local model it failed on every scheduled run and never built. It now uses the same timeout as task mining, which the existing slider — relabelled "Task analysis timeout" — already controls (#277).
+- **Corrected model cost estimates**: the built-in price table was stale for several OpenRouter models, and four newly benchmarked models were missing from it entirely. Reported spend now matches what the app actually pays.
 
 ## Known Issues & Limitations
 
+- Postal addresses are not scrubbed — no reliable pattern separates them from ordinary navigation paths and page text.
 - Existing per-machine Windows installs (v1.3.x and earlier) are not removed automatically: uninstall MemoryLane from Program Files once (requires admin), then run the new setup.
 - Vertex managed-mode bearer tokens aren't refreshed in-flight — long-running operations that outlive the token TTL may see 401s until the next refresh cycle (DEU-84).
 - Windows OCR still depends on native OCR component availability.
@@ -27,4 +25,4 @@ Sign-in screens are now skipped, configured LLM timeouts are finally honored, ta
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.4...v1.5.5
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.5...v1.5.6

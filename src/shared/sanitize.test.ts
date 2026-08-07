@@ -117,9 +117,7 @@ describe('scrubPII — New Zealand identifiers', () => {
   })
 
   it('detects an unlabelled IRD number by checksum and range', () => {
-    expect(scrubPII('files under 136-410-132 this year')).toBe(
-      'files under [ird number] this year',
-    )
+    expect(scrubPII('files under 136-410-132 this year')).toBe('files under [ird number] this year')
   })
 
   it('types a New Zealand bank account', () => {
@@ -216,7 +214,9 @@ describe('scrubPII — what must survive', () => {
     expect(scrubPII('processed 1 000 000 rows in 4 steps')).toBe(
       'processed 1 000 000 rows in 4 steps',
     )
-    expect(scrubPII('Q3 2026 revenue 12 500 AUD, up 15%')).toBe('Q3 2026 revenue 12 500 AUD, up 15%')
+    expect(scrubPII('Q3 2026 revenue 12 500 AUD, up 15%')).toBe(
+      'Q3 2026 revenue 12 500 AUD, up 15%',
+    )
     expect(scrubPII('container limit 8192 MB, exit code 137')).toBe(
       'container limit 8192 MB, exit code 137',
     )

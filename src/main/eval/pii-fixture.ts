@@ -573,7 +573,13 @@ export const PII_PLANTS: PiiPlant[] = [
   ),
 
   plant('tfn-01', 'tfn', 'ocr', 'Tax file number 123 456 782\nStatus: verified', '123 456 782'),
-  plant('tfn-02', 'tfn', 'summary', 'Entered the TFN 123456782 into the onboarding form.', '123456782'),
+  plant(
+    'tfn-02',
+    'tfn',
+    'summary',
+    'Entered the TFN 123456782 into the onboarding form.',
+    '123456782',
+  ),
   plant('tfn-03', 'tfn', 'window_title', 'TFN declaration 876 543 210 - myGov', '876 543 210'),
   plant('medicare-01', 'medicare', 'ocr', 'Medicare 2123 45670 1\nExpiry 09/29', '2123 45670 1'),
   plant(
@@ -583,7 +589,13 @@ export const PII_PLANTS: PiiPlant[] = [
     'Copied the Medicare number 2428 77813 2 from the scanned card into the claim.',
     '2428 77813 2',
   ),
-  plant('medicare-03', 'medicare', 'ocr', 'Card shows 2123 45670 1 for the dependant', '2123 45670 1'),
+  plant(
+    'medicare-03',
+    'medicare',
+    'ocr',
+    'Card shows 2123 45670 1 for the dependant',
+    '2123 45670 1',
+  ),
   plant('ird-01', 'ird', 'ocr', 'IRD number 49-091-850\nTax code M', '49-091-850'),
   plant(
     'ird-02',
@@ -601,13 +613,7 @@ export const PII_PLANTS: PiiPlant[] = [
     'Looked up the patient by NHI ZZZ0016 before booking the referral.',
     'ZZZ0016',
   ),
-  plant(
-    'bank-08',
-    'bank',
-    'ocr',
-    'BSB 062-000\nAccount 12345678\nName: N Williams',
-    '12345678',
-  ),
+  plant('bank-08', 'bank', 'ocr', 'BSB 062-000\nAccount 12345678\nName: N Williams', '12345678'),
   plant(
     'bank-09',
     'bank',

@@ -618,9 +618,7 @@ function formatClusterLine(c: ClusterInfo): string {
   }
   stats.push(`avg ${Math.round(c.avgActiveMin)} min/run`)
   if (c.lastSeenAt) stats.push(`last seen ${new Date(c.lastSeenAt).toLocaleString()}`)
-  const lines = [
-    `- ${c.id} | ${scrubPII(c.title)} [${c.apps.join(', ')}] (${stats.join(', ')})`,
-  ]
+  const lines = [`- ${c.id} | ${scrubPII(c.title)} [${c.apps.join(', ')}] (${stats.join(', ')})`]
   if (c.description) lines.push(`  ${scrubPII(c.description)}`)
   if (c.mechanism) lines.push(`  Replace with: ${scrubPII(c.mechanism)}`)
   return lines.join('\n')
