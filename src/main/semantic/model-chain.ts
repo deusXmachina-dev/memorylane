@@ -130,6 +130,8 @@ export async function trySemanticModelChain(
           mode: params.mode,
           model,
           durationMs,
+          promptTokens: outcome.promptTokens,
+          completionTokens: outcome.completionTokens,
           promptChars: params.prompt.length,
           attemptsSoFar: params.diagnostics.attempts.length,
         }),
