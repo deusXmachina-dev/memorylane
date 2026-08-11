@@ -44,11 +44,25 @@ export function sanitizeMechanism(raw: ReviewClusterVerdict): string | null {
 
 const MAX_RECIPE_VARIABLES = 10
 
+const APP_PREFIX = /^(.{1,60}?): /
+
+export function carryAppPrefix(steps: string[]): string[] {
+  let current: string | null = null
+  return steps.map((step) => {
+    const prefix = APP_PREFIX.exec(step)?.[1]
+    if (prefix) {
+      current = prefix
+      return step
+    }
+    return current ? `${current}: ${step}` : step
+  })
+}
+
 /** Whitelist the LLM's recipe (shape, count/length caps) and scrub PII — the
  * recipe is copied out to external tools. */
 export function sanitizeRecipe(raw: ReviewClusterVerdict): ClusterRecipe {
   return {
-    steps: normalizeSteps(raw.steps, { transform: scrubPII }),
+    steps: normalizeSteps(carryAppPrefix(normalizeSteps(raw.steps, { transform: scrubPII }))),
     variables: normalizeSteps(raw.variables, { cap: MAX_RECIPE_VARIABLES, transform: scrubPII }),
   }
 }

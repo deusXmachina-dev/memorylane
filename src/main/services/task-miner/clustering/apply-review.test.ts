@@ -513,6 +513,60 @@ describe('applyContent', () => {
     expect(cluster.variables).toEqual(['customer name'])
   })
 
+  it('carries the app prefix forward onto steps that dropped it', () => {
+    seedCluster('c1', 100, ['s1', 's2'])
+
+    applyContent(
+      storage,
+      {
+        clusters: [
+          {
+            id: 'c1',
+            label: 'Provision tenant',
+            description: 'x',
+            steps: [
+              'MemoryLane Admin (enterprise.trymemorylane.com): open the Create tenant dialog',
+              'enter the tenant name and monthly spend limit',
+              'localhost:3000: submit tenant creation',
+              'navigate to the Users section',
+            ],
+            variables: [],
+          },
+        ],
+      },
+      new Set(['c1']),
+    )
+
+    expect(storage.clusters.getById('c1')!.steps).toEqual([
+      'MemoryLane Admin (enterprise.trymemorylane.com): open the Create tenant dialog',
+      'MemoryLane Admin (enterprise.trymemorylane.com): enter the tenant name and monthly spend limit',
+      'localhost:3000: submit tenant creation',
+      'localhost:3000: navigate to the Users section',
+    ])
+  })
+
+  it('leaves steps untouched when the first one carries no app', () => {
+    seedCluster('c1', 100, ['s1', 's2'])
+
+    applyContent(
+      storage,
+      {
+        clusters: [
+          {
+            id: 'c1',
+            label: 'Follow up',
+            description: 'x',
+            steps: ['open the thread', 'send the recap'],
+            variables: [],
+          },
+        ],
+      },
+      new Set(['c1']),
+    )
+
+    expect(storage.clusters.getById('c1')!.steps).toEqual(['open the thread', 'send the recap'])
+  })
+
   it('keeps an existing recipe when a relabel returns no steps', () => {
     seedCluster('c1', 100, ['s1', 's2'])
     storage.clusters.updateRecipe('c1', { steps: ['Old step'], variables: ['old'] })
