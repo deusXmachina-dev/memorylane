@@ -9,6 +9,7 @@ import type {
   ActivityVideoAsset,
 } from './activity-transformer-types'
 import type { Frame } from '@main/recorder/screen-capturer'
+import { ACTIVITY_CONFIG } from '@constants'
 import log from '@main/utils/logger'
 
 vi.mock('@main/utils/logger', () => ({
@@ -37,11 +38,12 @@ function makeFrame(index: number): ActivityFrame {
 function makeActivity(
   frameCount: number,
   interactions: Activity['interactions'] = [{ type: 'click', timestamp: 1500 }],
+  durationMs = 1000,
 ): Activity {
   return {
     id: 'activity-1',
     startTimestamp: 1000,
-    endTimestamp: 2000,
+    endTimestamp: 1000 + durationMs,
     context: {
       appName: 'Code',
       bundleId: 'com.microsoft.VSCode',
@@ -234,14 +236,79 @@ describe('DefaultActivityTransformer', () => {
       expect(result.ocrText).toBe('ocr text')
     })
 
-    it('still stitches video so the activity remains viewable', async () => {
+    it('skips the stitch — the video is only ever used to summarize', async () => {
       const { stitcher, ocr, semantic, embedder } = makeDeps()
       const transformer = new DefaultActivityTransformer(stitcher, ocr, semantic, embedder, {
         outputDir: OUTPUT_DIR,
       })
 
       await transformer.transform(makeActivity(3, []))
+      expect(stitcher.stitch).not.toHaveBeenCalled()
+    })
+
+    it('records a passive outcome on the summary-mode tracker', async () => {
+      const { stitcher, ocr, semantic, embedder } = makeDeps()
+      const summaryModeTracker = { record: vi.fn() }
+      const transformer = new DefaultActivityTransformer(stitcher, ocr, semantic, embedder, {
+        outputDir: OUTPUT_DIR,
+        summaryModeTracker,
+      })
+
+      await transformer.transform(makeActivity(3, []))
+
+      expect(summaryModeTracker.record).toHaveBeenCalledExactlyOnceWith({
+        mode: 'passive',
+        reason: 'passive',
+        failureDetail: '',
+      })
+    })
+
+    it('leaves the LLM path to record its own outcome', async () => {
+      const { stitcher, ocr, semantic, embedder } = makeDeps()
+      const summaryModeTracker = { record: vi.fn() }
+      const transformer = new DefaultActivityTransformer(stitcher, ocr, semantic, embedder, {
+        outputDir: OUTPUT_DIR,
+        summaryModeTracker,
+      })
+
+      await transformer.transform(makeActivity(3))
+
+      expect(summaryModeTracker.record).not.toHaveBeenCalled()
+    })
+
+    it('sends a passive view past the duration threshold to the LLM', async () => {
+      const { stitcher, ocr, semantic, embedder } = makeDeps()
+      const summaryModeTracker = { record: vi.fn() }
+      const transformer = new DefaultActivityTransformer(stitcher, ocr, semantic, embedder, {
+        outputDir: OUTPUT_DIR,
+        summaryModeTracker,
+      })
+
+      const activity = makeActivity(3, [], ACTIVITY_CONFIG.HEURISTIC_SUMMARY_MAX_DURATION_MS)
+      const result = await transformer.transform(activity)
+
       expect(stitcher.stitch).toHaveBeenCalledOnce()
+      expect(semantic.summarizeFromVideo).toHaveBeenCalledWith({
+        activity,
+        videoPath: '/output/activity-1.mp4',
+      })
+      expect(result.summary).toBe('A summary of the activity')
+      expect(result.summaryModel).toBe('test-model')
+      expect(summaryModeTracker.record).not.toHaveBeenCalled()
+    })
+
+    it('keeps the cheap label just under the duration threshold', async () => {
+      const { stitcher, ocr, semantic, embedder } = makeDeps()
+      const transformer = new DefaultActivityTransformer(stitcher, ocr, semantic, embedder, {
+        outputDir: OUTPUT_DIR,
+      })
+
+      const result = await transformer.transform(
+        makeActivity(3, [], ACTIVITY_CONFIG.HEURISTIC_SUMMARY_MAX_DURATION_MS - 1),
+      )
+
+      expect(semantic.summarizeFromVideo).not.toHaveBeenCalled()
+      expect(result.summaryModel).toBe('heuristic:viewed')
     })
 
     it('sends scroll-only activities to the LLM (scroll is engagement, not passive)', async () => {

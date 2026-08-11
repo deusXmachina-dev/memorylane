@@ -1,5 +1,6 @@
 import type { InteractionContext } from '../../shared/types'
 import type { Activity } from '@main/activity/activity-types'
+import { isPassiveView } from '@main/activity/passive-view'
 import { scrubPII } from '@/shared/sanitize'
 import type { SemanticMode } from './types'
 
@@ -32,6 +33,10 @@ export function buildSemanticPrompt(
     '- Match verb intensity to evidence: browsing/reviewing (no visible edits) -> "browsed," "reviewed," "checked." Light editing (small visible changes) -> "tweaked," "adjusted." Active work (sustained edits, new code, debugging) -> "implemented," "debugged," "refactored." Evidence of editing = visible changed lines, new code, or diff markers.\n'
   prompt +=
     '- Do NOT exaggerate. Switching files/tabs = browsing, not editing. Opening a file/page = reviewing, not working on it.\n'
+  if (isPassiveView(activity)) {
+    prompt +=
+      '- The user did not click, type, or scroll in this window. Describe what was on screen and what changed on its own. NEVER imply edits, authorship, or actions taken.\n'
+  }
   prompt +=
     '- Distinguish preparation from completion. Seeing a form, dialog, or compose window being filled out is NOT evidence it was submitted. Without visible confirmation (success toast, page redirect, confirmation screen), use preparatory verbs like "started," "drafted," "filled out," "was setting up" — NOT completion verbs like "sent," "submitted," "invited," "created."\n'
   prompt +=

@@ -84,6 +84,9 @@ export const ACTIVITY_CONFIG = {
   MAX_ACTIVITY_DURATION_MS: 5 * 60 * 1000, // Force-split after 5 minutes
   MAX_SCREENSHOTS_FOR_LLM: 6, // Max images sent to LLM
   SEMANTIC_REQUEST_TIMEOUT_MS: 120_000, // Per-model semantic request timeout
+  // A no-input view shorter than this is labelled "Viewed <title>" without an
+  // LLM call; longer ones are real sits (a call, a long read) and get summarized.
+  HEURISTIC_SUMMARY_MAX_DURATION_MS: 60_000,
 }
 
 export const LLM_HEALTH_CONFIG = {

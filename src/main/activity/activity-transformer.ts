@@ -8,11 +8,15 @@ import type {
   ActivityEmbeddingService,
 } from './activity-transformer-types'
 import type { SemanticPipelinePreference } from '@main/semantic/activity-semantic-service'
+import type { SummaryModeTrackerLike } from '@main/semantic/types'
+import { isPassiveView } from './passive-view'
+import { ACTIVITY_CONFIG } from '@constants'
 import log from '@main/utils/logger'
 
 export interface DefaultActivityTransformerConfig {
   outputDir: string
   getPipelinePreference?: () => SemanticPipelinePreference
+  summaryModeTracker?: SummaryModeTrackerLike
 }
 
 const OCR_FRAME_POSITION_FROM_END = 5
@@ -36,10 +40,12 @@ export class DefaultActivityTransformer implements ActivityTransformer {
       timestamp: f.frame.timestamp,
     }))
 
-    const shouldStitchVideo = this.config.getPipelinePreference?.() !== 'image'
-    const outputPath = shouldStitchVideo ? `${this.config.outputDir}/${activity.id}.mp4` : undefined
+    const durationMs = activity.endTimestamp - activity.startTimestamp
+    const useHeuristic =
+      isPassiveView(activity) && durationMs < ACTIVITY_CONFIG.HEURISTIC_SUMMARY_MAX_DURATION_MS
 
-    const passiveView = this.isPassiveView(activity)
+    const shouldStitchVideo = !useHeuristic && this.config.getPipelinePreference?.() !== 'image'
+    const outputPath = shouldStitchVideo ? `${this.config.outputDir}/${activity.id}.mp4` : undefined
 
     const [videoAsset, ocrText] = await Promise.all([
       shouldStitchVideo && outputPath
@@ -48,12 +54,12 @@ export class DefaultActivityTransformer implements ActivityTransformer {
       this.extractOcrText(activity),
     ])
 
-    // A passive view (no clicks/keystrokes/scrolls — only app focus, or nothing)
-    // carries little narrative for an LLM to summarize, so skip the expensive
-    // inference and label it from its on-screen context. We embed its OCR'd
-    // contents rather than the "Viewed X" label so it stays findable by what was
-    // actually on screen.
-    const { summary, summaryModel, textToEmbed } = passiveView
+    // A short passive view (no clicks/keystrokes/scrolls — only app focus, or
+    // nothing) carries little narrative for an LLM to summarize, so skip the
+    // expensive inference and label it from its on-screen context. We embed its
+    // OCR'd contents rather than the "Viewed X" label so it stays findable by
+    // what was actually on screen.
+    const { summary, summaryModel, textToEmbed } = useHeuristic
       ? this.buildPassiveSummary(activity, ocrText)
       : await this.buildSemanticSummary(activity, videoAsset?.videoPath, ocrText)
 
@@ -109,24 +115,15 @@ export class DefaultActivityTransformer implements ActivityTransformer {
   ): { summary: string; summaryModel: string; textToEmbed: string } {
     const { windowTitle, tld, appName } = activity.context
     const label = windowTitle?.trim() || tld || appName
+    this.config.summaryModeTracker?.record({
+      mode: 'passive',
+      reason: 'passive',
+      failureDetail: '',
+    })
     return {
       summary: `Viewed ${label}`,
       summaryModel: HEURISTIC_VIEWED_MODEL,
       textToEmbed: ocrText || `Viewed ${label}`,
     }
-  }
-
-  /**
-   * A view with no clicks, keystrokes, or scrolls — only app focus, presence
-   * heartbeats, or nothing. Defined as the absence of active-engagement events
-   * so synthetic 'presence' keep-alives don't push a read onto the LLM path.
-   */
-  private isPassiveView(activity: Activity): boolean {
-    return !activity.interactions.some(
-      (interaction) =>
-        interaction.type === 'click' ||
-        interaction.type === 'keyboard' ||
-        interaction.type === 'scroll',
-    )
   }
 }

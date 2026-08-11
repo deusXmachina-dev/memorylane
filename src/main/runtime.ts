@@ -166,6 +166,7 @@ export async function createMainRuntime(params: {
     {
       outputDir,
       getPipelinePreference: () => semanticService.getPipelinePreference(),
+      summaryModeTracker,
     },
   )
   const sink = new SqliteActivitySink(storage.activities)
