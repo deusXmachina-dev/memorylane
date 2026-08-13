@@ -122,6 +122,7 @@ module.exports = {
     artifactName: '${productName}-Setup.${ext}',
     oneClick: true,
     perMachine: false,
+    include: 'build/installer.nsh',
   },
   msi: {
     perMachine: true,
