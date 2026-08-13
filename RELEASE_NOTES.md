@@ -1,17 +1,17 @@
-# MemoryLane v1.5.6
+# MemoryLane v1.5.7-alpha.1
 
-Identifying numbers are now stripped before any text leaves for a model, and the user profile no longer times out against slow local models.
+Windows upgrades now remove the orphaned per-machine install, and long unattended views get a real summary instead of "Viewed X".
 
 ## What's Changed
 
-- **Identifying numbers scrubbed at every LLM and MCP seam**: tax file numbers, bank BSB and account numbers, Medicare and IRD numbers, credentials, and phone numbers are replaced with a placeholder before text reaches a model or an outside tool — task-mining scans, cluster review, the user profile, semantic search, and MCP responses. Names, companies and email addresses are deliberately kept: they are what make a task legible as client work. Screenshots and activity text stay unchanged on disk; scrubbing happens on the way out (#278).
-- **User profile no longer aborts at 3 minutes**: the profile builder sent a full multi-day activity summary in one call but capped it at a 3-minute deadline, so against a slow local model it failed on every scheduled run and never built. It now uses the same timeout as task mining, which the existing slider — relabelled "Task analysis timeout" — already controls (#277).
-- **Corrected model cost estimates**: the built-in price table was stale for several OpenRouter models, and four newly benchmarked models were missing from it entirely. Reported spend now matches what the app actually pays.
+- **Old per-machine Windows install removed on upgrade**: builds up to v1.4.0-alpha.4 installed to Program Files. The per-user installer only checks HKCU, so it installed beside the old copy and both ran against the same app data — double capture and double spend. Setup now finds the per-machine install and runs its uninstaller first, and re-registers autostart when the executable moves. The eviction needs one admin prompt; declining it lets the install proceed and the prompt returns next time you run setup by hand (#283).
+- **Long passive views are summarised properly**: a view with no input was labelled from its window title alone, so minutes spent in a call, watching an agent, or reading turned into "Viewed Claude". Past 60 seconds these now take the normal semantic path, and the model is told no click, type or scroll happened so a long read isn't reported as authorship (#281).
+- **Recipe steps keep the app name**: cluster review dropped the `<app>: action` prefix on runs of steps inside one app, leaving the app visible on the first line only (#282).
+- **Token counts in the summary log line**: prompt and completion tokens were parsed but never logged, so generation speed couldn't be computed from a log bundle (#280).
 
 ## Known Issues & Limitations
 
 - Postal addresses are not scrubbed — no reliable pattern separates them from ordinary navigation paths and page text.
-- Existing per-machine Windows installs (v1.3.x and earlier) are not removed automatically: uninstall MemoryLane from Program Files once (requires admin), then run the new setup.
 - Vertex managed-mode bearer tokens aren't refreshed in-flight — long-running operations that outlive the token TTL may see 401s until the next refresh cycle (DEU-84).
 - Windows OCR still depends on native OCR component availability.
 - Intel macOS is not yet officially supported.
@@ -25,4 +25,4 @@ Identifying numbers are now stripped before any text leaves for a model, and the
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.5...v1.5.6
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.6...v1.5.7-alpha.1
