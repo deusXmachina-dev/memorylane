@@ -2,7 +2,8 @@ import type { SemanticRunDiagnostics } from './types'
 
 /**
  * The summarization outcome persisted per activity (mirrors summary_model):
- *  - `mode`: which pipeline produced the summary ('video' | 'snapshot' | '').
+ *  - `mode`: which pipeline produced the summary ('video' | 'snapshot' | ''),
+ *    or 'passive' for the no-LLM heuristic path stamped by the transformer.
  *  - `reason`: a canonical, queryable category for WHY that mode was chosen —
  *    for fallbacks this is the video-failure cause (video_timeout, etc.).
  *  - `failureDetail`: the raw error string of the deciding failed video attempt

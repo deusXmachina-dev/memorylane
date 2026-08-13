@@ -16,7 +16,7 @@ import type { SummaryOutcome } from '../semantic/summary-reason'
 export interface SummaryModeStats {
   /** Total semantic-summary outcomes recorded. */
   total: number
-  /** Count per pipeline that produced the summary: 'video' | 'snapshot' | ''. */
+  /** Count per pipeline that produced the summary: 'video' | 'snapshot' | 'passive' | ''. */
   byMode: Record<string, number>
   /** Count per canonical reason ('video', 'video_timeout', 'not_configured', …). */
   byReason: Record<string, number>
