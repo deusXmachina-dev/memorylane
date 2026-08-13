@@ -11,10 +11,7 @@ vi.mock('@main/system/edition', () => ({
 
 const mocks = vi.hoisted(() => ({
   isPackaged: true,
-  loginItem: { openAtLogin: false } as {
-    openAtLogin: boolean
-    executableWillLaunchAtLogin?: boolean
-  },
+  getLoginItemSettings: vi.fn(() => ({ openAtLogin: false, executableWillLaunchAtLogin: false })),
 }))
 
 vi.mock('electron', () => ({
@@ -22,7 +19,7 @@ vi.mock('electron', () => ({
     get isPackaged() {
       return mocks.isPackaged
     },
-    getLoginItemSettings: () => mocks.loginItem,
+    getLoginItemSettings: mocks.getLoginItemSettings,
     setLoginItemSettings: vi.fn(),
   },
 }))
@@ -36,7 +33,7 @@ describe('shouldSyncAutoStartOnStartup', () => {
 
   beforeEach(() => {
     mocks.isPackaged = true
-    mocks.loginItem = { openAtLogin: false }
+    mocks.getLoginItemSettings.mockClear()
     setPlatform('win32')
   })
 
@@ -45,42 +42,34 @@ describe('shouldSyncAutoStartOnStartup', () => {
   })
 
   it('syncs on first run', () => {
-    expect(shouldSyncAutoStartOnStartup(false, true)).toBe(true)
+    expect(shouldSyncAutoStartOnStartup('')).toBe(true)
   })
 
-  it('does not sync once initialized and the login item matches the setting', () => {
-    mocks.loginItem = { openAtLogin: true }
-    expect(shouldSyncAutoStartOnStartup(true, true)).toBe(false)
+  it('does not sync once synced for this executable', () => {
+    expect(shouldSyncAutoStartOnStartup(process.execPath)).toBe(false)
   })
 
-  it('re-syncs when the login item no longer points at this executable', () => {
-    mocks.loginItem = { openAtLogin: false }
-    expect(shouldSyncAutoStartOnStartup(true, true)).toBe(true)
+  it('re-syncs once after the per-machine install is evicted', () => {
+    expect(shouldSyncAutoStartOnStartup('C:\\Program Files\\MemoryLane\\MemoryLane.exe')).toBe(true)
   })
 
   it('leaves an entry the user switched off in Task Manager alone', () => {
-    mocks.loginItem = { openAtLogin: true, executableWillLaunchAtLogin: false }
-    expect(shouldSyncAutoStartOnStartup(true, true)).toBe(false)
+    expect(shouldSyncAutoStartOnStartup(process.execPath)).toBe(false)
+    expect(mocks.getLoginItemSettings).not.toHaveBeenCalled()
   })
 
-  it('re-syncs when a stale login item outlives a disabled setting', () => {
-    mocks.loginItem = { openAtLogin: true }
-    expect(shouldSyncAutoStartOnStartup(true, false)).toBe(true)
-  })
-
-  it('does not re-sync when autostart is off', () => {
-    mocks.loginItem = { openAtLogin: false }
-    expect(shouldSyncAutoStartOnStartup(true, false)).toBe(false)
-  })
-
-  it('ignores the windows check on macOS', () => {
+  it('re-syncs on macOS when the app bundle moved', () => {
     setPlatform('darwin')
-    mocks.loginItem = { openAtLogin: false }
-    expect(shouldSyncAutoStartOnStartup(true, true)).toBe(false)
+    expect(shouldSyncAutoStartOnStartup('/Users/someone/Downloads/MemoryLane.app')).toBe(true)
+  })
+
+  it('does not re-sync on macOS once synced', () => {
+    setPlatform('darwin')
+    expect(shouldSyncAutoStartOnStartup(process.execPath)).toBe(false)
   })
 
   it('never syncs in development', () => {
     mocks.isPackaged = false
-    expect(shouldSyncAutoStartOnStartup(false, true)).toBe(false)
+    expect(shouldSyncAutoStartOnStartup('')).toBe(false)
   })
 })

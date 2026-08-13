@@ -3,12 +3,12 @@ import * as path from 'path'
 import log from '@main/utils/logger'
 
 interface CaptureState {
-  autoStartInitialized: boolean
+  autoStartSyncedExecPath: string
   captureEnabled: boolean
 }
 
 const DEFAULTS: CaptureState = {
-  autoStartInitialized: false,
+  autoStartSyncedExecPath: '',
   captureEnabled: false,
 }
 
@@ -54,15 +54,15 @@ export class CaptureStateManager {
     }
   }
 
-  public isAutoStartInitialized(): boolean {
-    return this.state.autoStartInitialized
+  public getAutoStartSyncedExecPath(): string {
+    return this.state.autoStartSyncedExecPath
   }
 
-  public setAutoStartInitialized(initialized: boolean): void {
-    this.state = { ...this.state, autoStartInitialized: initialized }
+  public setAutoStartSyncedExecPath(execPath: string): void {
+    this.state = { ...this.state, autoStartSyncedExecPath: execPath }
     try {
       fs.writeFileSync(this.statePath, JSON.stringify(this.state, null, 2))
-      log.info(`[CaptureState] Auto-start initialized set to ${initialized}`)
+      log.info(`[CaptureState] Auto-start synced for ${execPath}`)
     } catch (error) {
       log.error('[CaptureState] Failed to save state:', error)
       throw error

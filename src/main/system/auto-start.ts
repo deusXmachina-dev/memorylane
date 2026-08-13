@@ -17,21 +17,12 @@ function launchAgentOwnsAutoStart(): boolean {
   return process.platform === 'darwin' && loadAppEditionConfig().edition === 'enterprise'
 }
 
-function windowsLoginItemOutOfSync(enabled: boolean): boolean {
-  if (process.platform !== 'win32') return false
-  const settings = app.getLoginItemSettings({
-    path: process.execPath,
-    args: WINDOWS_LOGIN_ITEM_ARGS,
-  })
-  return settings.openAtLogin !== enabled
-}
-
 // Mac enterprise re-syncs every startup, not just once: installs upgraded from
 // pre-LaunchAgent builds carry a stale login item that sync removes.
-export function shouldSyncAutoStartOnStartup(isInitialized: boolean, enabled: boolean): boolean {
+export function shouldSyncAutoStartOnStartup(syncedExecPath: string): boolean {
   if (!isSupportedPlatform() || !app.isPackaged) return false
-  if (!isInitialized || launchAgentOwnsAutoStart()) return true
-  return windowsLoginItemOutOfSync(enabled)
+  if (launchAgentOwnsAutoStart()) return true
+  return syncedExecPath !== process.execPath
 }
 
 export function shouldStartHiddenOnLaunch(): boolean {

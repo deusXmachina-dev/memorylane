@@ -4,6 +4,7 @@
   ${if} $R6 != ""
     ReadRegStr $R9 HKCU "${INSTALL_REGISTRY_KEY}" PerMachineEvictionVersion
     ${if} $R9 != "${VERSION}"
+    ${orifnot} ${Silent}
       WriteRegStr HKCU "${INSTALL_REGISTRY_KEY}" PerMachineEvictionVersion "${VERSION}"
       Push "$R6"
       Call GetInQuotes
@@ -20,7 +21,7 @@
         ${endif}
         InitPluginsDir
         CopyFiles /SILENT "$R7" "$PLUGINSDIR\per-machine-uninstaller.exe"
-        ExecShellWait "runas" "$PLUGINSDIR\per-machine-uninstaller.exe" '/S /KEEP_APP_DATA /allusers --updated _?=$R8' SW_HIDE
+        ExecShellWait "runas" "$PLUGINSDIR\per-machine-uninstaller.exe" '/S /allusers _?=$R8' SW_HIDE
       ${endif}
       ClearErrors
     ${endif}
