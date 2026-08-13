@@ -244,9 +244,9 @@ app.on('ready', async () => {
   captureSettingsManager.applyToConstants()
   const initialCaptureSettings = captureSettingsManager.get()
 
-  if (shouldSyncAutoStartOnStartup(captureStateManager.isAutoStartInitialized())) {
+  if (shouldSyncAutoStartOnStartup(captureStateManager.getAutoStartSyncedExecPath())) {
     syncAutoStartSetting(initialCaptureSettings.autoStartEnabled)
-    captureStateManager.setAutoStartInitialized(true)
+    captureStateManager.setAutoStartSyncedExecPath(process.execPath)
   }
 
   const { setupTray, updateTrayMenu, setPrivacyBlockedState } = await import('./ui/tray')

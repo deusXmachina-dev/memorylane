@@ -19,9 +19,10 @@ function launchAgentOwnsAutoStart(): boolean {
 
 // Mac enterprise re-syncs every startup, not just once: installs upgraded from
 // pre-LaunchAgent builds carry a stale login item that sync removes.
-export function shouldSyncAutoStartOnStartup(isInitialized: boolean): boolean {
+export function shouldSyncAutoStartOnStartup(syncedExecPath: string): boolean {
   if (!isSupportedPlatform() || !app.isPackaged) return false
-  return !isInitialized || launchAgentOwnsAutoStart()
+  if (launchAgentOwnsAutoStart()) return true
+  return syncedExecPath !== process.execPath
 }
 
 export function shouldStartHiddenOnLaunch(): boolean {
