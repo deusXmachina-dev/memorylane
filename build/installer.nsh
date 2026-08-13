@@ -2,10 +2,10 @@
 !macro customInit
   ReadRegStr $R6 HKLM "${UNINSTALL_REGISTRY_KEY}" UninstallString
   ${if} $R6 != ""
-    ReadRegStr $R9 HKCU "${INSTALL_REGISTRY_KEY}" PerMachineEvictionVersion
+    ReadRegStr $R9 HKCU "Software\${APP_GUID} Eviction" PerMachineEvictionVersion
     ${if} $R9 != "${VERSION}"
     ${orifnot} ${Silent}
-      WriteRegStr HKCU "${INSTALL_REGISTRY_KEY}" PerMachineEvictionVersion "${VERSION}"
+      WriteRegStr HKCU "Software\${APP_GUID} Eviction" PerMachineEvictionVersion "${VERSION}"
       Push "$R6"
       Call GetInQuotes
       Pop $R7
