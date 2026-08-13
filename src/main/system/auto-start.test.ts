@@ -11,7 +11,10 @@ vi.mock('@main/system/edition', () => ({
 
 const mocks = vi.hoisted(() => ({
   isPackaged: true,
-  loginItem: { openAtLogin: false, executableWillLaunchAtLogin: false },
+  loginItem: { openAtLogin: false } as {
+    openAtLogin: boolean
+    executableWillLaunchAtLogin?: boolean
+  },
 }))
 
 vi.mock('electron', () => ({
@@ -33,7 +36,7 @@ describe('shouldSyncAutoStartOnStartup', () => {
 
   beforeEach(() => {
     mocks.isPackaged = true
-    mocks.loginItem = { openAtLogin: false, executableWillLaunchAtLogin: false }
+    mocks.loginItem = { openAtLogin: false }
     setPlatform('win32')
   })
 
@@ -42,32 +45,42 @@ describe('shouldSyncAutoStartOnStartup', () => {
   })
 
   it('syncs on first run', () => {
-    expect(shouldSyncAutoStartOnStartup(false)).toBe(true)
+    expect(shouldSyncAutoStartOnStartup(false, true)).toBe(true)
   })
 
-  it('does not sync once initialized and the login item points at this executable', () => {
-    mocks.loginItem = { openAtLogin: true, executableWillLaunchAtLogin: true }
-    expect(shouldSyncAutoStartOnStartup(true)).toBe(false)
+  it('does not sync once initialized and the login item matches the setting', () => {
+    mocks.loginItem = { openAtLogin: true }
+    expect(shouldSyncAutoStartOnStartup(true, true)).toBe(false)
   })
 
-  it('re-syncs when the login item points at another executable', () => {
+  it('re-syncs when the login item no longer points at this executable', () => {
+    mocks.loginItem = { openAtLogin: false }
+    expect(shouldSyncAutoStartOnStartup(true, true)).toBe(true)
+  })
+
+  it('leaves an entry the user switched off in Task Manager alone', () => {
     mocks.loginItem = { openAtLogin: true, executableWillLaunchAtLogin: false }
-    expect(shouldSyncAutoStartOnStartup(true)).toBe(true)
+    expect(shouldSyncAutoStartOnStartup(true, true)).toBe(false)
+  })
+
+  it('re-syncs when a stale login item outlives a disabled setting', () => {
+    mocks.loginItem = { openAtLogin: true }
+    expect(shouldSyncAutoStartOnStartup(true, false)).toBe(true)
   })
 
   it('does not re-sync when autostart is off', () => {
-    mocks.loginItem = { openAtLogin: false, executableWillLaunchAtLogin: false }
-    expect(shouldSyncAutoStartOnStartup(true)).toBe(false)
+    mocks.loginItem = { openAtLogin: false }
+    expect(shouldSyncAutoStartOnStartup(true, false)).toBe(false)
   })
 
   it('ignores the windows check on macOS', () => {
     setPlatform('darwin')
-    mocks.loginItem = { openAtLogin: true, executableWillLaunchAtLogin: false }
-    expect(shouldSyncAutoStartOnStartup(true)).toBe(false)
+    mocks.loginItem = { openAtLogin: false }
+    expect(shouldSyncAutoStartOnStartup(true, true)).toBe(false)
   })
 
   it('never syncs in development', () => {
     mocks.isPackaged = false
-    expect(shouldSyncAutoStartOnStartup(false)).toBe(false)
+    expect(shouldSyncAutoStartOnStartup(false, true)).toBe(false)
   })
 })

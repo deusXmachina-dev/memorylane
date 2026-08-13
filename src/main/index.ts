@@ -244,7 +244,12 @@ app.on('ready', async () => {
   captureSettingsManager.applyToConstants()
   const initialCaptureSettings = captureSettingsManager.get()
 
-  if (shouldSyncAutoStartOnStartup(captureStateManager.isAutoStartInitialized())) {
+  if (
+    shouldSyncAutoStartOnStartup(
+      captureStateManager.isAutoStartInitialized(),
+      initialCaptureSettings.autoStartEnabled,
+    )
+  ) {
     syncAutoStartSetting(initialCaptureSettings.autoStartEnabled)
     captureStateManager.setAutoStartInitialized(true)
   }

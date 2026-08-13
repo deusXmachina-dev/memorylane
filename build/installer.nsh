@@ -1,17 +1,28 @@
 !ifndef INSTALL_MODE_PER_ALL_USERS
 !macro customInit
-  ReadRegStr $R6 HKLM "${INSTALL_REGISTRY_KEY}" InstallLocation
+  ReadRegStr $R6 HKLM "${UNINSTALL_REGISTRY_KEY}" UninstallString
   ${if} $R6 != ""
-    StrCpy $R7 "$R6\${UNINSTALL_FILENAME}"
-    ${if} ${FileExists} "$R7"
-      InitPluginsDir
-      StrCpy $R8 "$PLUGINSDIR\per-machine-uninstaller.exe"
-      CopyFiles /SILENT "$R7" "$R8"
-      ExecShellWait "runas" "$R8" '/S /KEEP_APP_DATA /allusers --updated _?=$R6' SW_HIDE
+    ReadRegStr $R9 HKCU "${INSTALL_REGISTRY_KEY}" PerMachineEvictionVersion
+    ${if} $R9 != "${VERSION}"
+      WriteRegStr HKCU "${INSTALL_REGISTRY_KEY}" PerMachineEvictionVersion "${VERSION}"
+      Push "$R6"
+      Call GetInQuotes
+      Pop $R7
+      ${if} $R7 == ""
+        StrCpy $R7 "$R6"
+      ${endif}
+      ${if} ${FileExists} "$R7"
+        ReadRegStr $R8 HKLM "${INSTALL_REGISTRY_KEY}" InstallLocation
+        ${if} $R8 == ""
+          Push "$R7"
+          Call GetFileParent
+          Pop $R8
+        ${endif}
+        InitPluginsDir
+        CopyFiles /SILENT "$R7" "$PLUGINSDIR\per-machine-uninstaller.exe"
+        ExecShellWait "runas" "$PLUGINSDIR\per-machine-uninstaller.exe" '/S /KEEP_APP_DATA /allusers --updated _?=$R8' SW_HIDE
+      ${endif}
       ClearErrors
-    ${else}
-      DeleteRegKey HKLM "${INSTALL_REGISTRY_KEY}"
-      DeleteRegKey HKLM "${UNINSTALL_REGISTRY_KEY}"
     ${endif}
   ${endif}
 !macroend
