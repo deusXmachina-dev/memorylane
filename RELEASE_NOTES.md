@@ -1,4 +1,4 @@
-# MemoryLane v1.5.7-alpha.1
+# MemoryLane v1.5.7
 
 Windows upgrades now remove the orphaned per-machine install, and long unattended views get a real summary instead of "Viewed X".
 
@@ -25,4 +25,4 @@ Windows upgrades now remove the orphaned per-machine install, and long unattende
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.6...v1.5.7-alpha.1
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.6...v1.5.7
