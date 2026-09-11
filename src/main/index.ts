@@ -10,7 +10,7 @@
 // runtime → embedding → @huggingface/transformers during static import resolution.
 import '@main/system/onnxruntime-path-fix'
 
-import { app, globalShortcut } from 'electron'
+import { app, globalShortcut, net } from 'electron'
 import path from 'node:path'
 import { config as loadEnv } from 'dotenv'
 import {
@@ -23,7 +23,12 @@ import { createCaptureCoordinator } from '@main/capture/capture-orchestrator'
 import { createCaptureHotkeyManager } from '@main/capture/capture-hotkey-manager'
 import log from '@main/utils/logger'
 import '@main/utils/logger-electron'
-import { startPowerMonitoring, shouldPause } from '@main/monitoring/power-monitor'
+import {
+  getLastSuspendAt,
+  isSuspended,
+  shouldPause,
+  startPowerMonitoring,
+} from '@main/monitoring/power-monitor'
 import { configureHttpTransport } from '@main/system/http-transport'
 import { CaptureStateManager } from './settings/capture-state-manager'
 import { CaptureSettingsManager } from './settings/capture-settings-manager'
@@ -374,7 +379,11 @@ app.on('ready', async () => {
   userContextBuilder = new UserContextBuilder(runtime.storage, runtime.inferenceProvider)
   // The scheduled analyzer (mining + clustering). Uses the patternDetection*
   // capture settings for enable state and model.
-  taskMiner = new TaskMiner(runtime.storage, runtime.inferenceProvider, runtime.mlWorker)
+  taskMiner = new TaskMiner(runtime.storage, runtime.inferenceProvider, runtime.mlWorker, {
+    isSuspended,
+    isOnline: () => net.isOnline(),
+    lastSuspendAt: getLastSuspendAt,
+  })
   taskMiner.setEnabled(settings.patternDetectionEnabled)
   pushModelSelections(
     {
@@ -591,6 +600,7 @@ app.on('ready', async () => {
       // Catch up uploads on wake — the 24h interval doesn't survive sleep.
       databaseUploadSync?.scheduleUploadIfStale('resume')
       logUploadSync?.requestSync('resume')
+      taskMiner?.kick()
     },
   })
 

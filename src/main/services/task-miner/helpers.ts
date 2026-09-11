@@ -1,4 +1,8 @@
-import { networkErrorCode } from '@main/utils/network-error'
+import {
+  describeNetworkError,
+  isPreRequestNetworkError,
+  networkErrorCode,
+} from '@main/utils/network-error'
 import type { ActivityDetail } from '../../storage'
 
 interface TimeBounded {
@@ -128,4 +132,15 @@ export function formatApiError(error: unknown): string {
   }
   if (error instanceof Error) return error.message + suffix
   return String(error) + suffix
+}
+
+/** A connectivity failure that shouldn't cost a mining attempt. */
+export function isUnspentNetworkFailure(
+  error: unknown,
+  claimedAt: number,
+  lastSuspendAt: number,
+): boolean {
+  if (describeNetworkError(error) === null) return false
+  // A reset or timeout while awake may have cost tokens, or mean the day is too big.
+  return isPreRequestNetworkError(error) || lastSuspendAt > claimedAt
 }

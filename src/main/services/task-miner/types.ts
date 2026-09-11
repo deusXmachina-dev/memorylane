@@ -82,6 +82,22 @@ export interface MiningRunResult {
 
 export type ProgressCallback = (message: string) => void
 
+export type SweepAbortReason = 'failures' | 'rate-limit' | 'offline'
+
+/** Host signals the scheduled miner gates on; the app wires the power monitor, tests fake them. */
+export interface MinerEnvironment {
+  isSuspended(): boolean
+  isOnline(): boolean
+  /** Epoch ms of the last system suspend, 0 if none since launch. */
+  lastSuspendAt(): number
+}
+
+export const DEFAULT_MINER_ENVIRONMENT: MinerEnvironment = {
+  isSuspended: () => false,
+  isOnline: () => true,
+  lastSuspendAt: () => 0,
+}
+
 /** Outcome of a one-time multi-day backfill (see TaskMiner.backfill). */
 export interface BackfillSummary {
   daysMined: number
@@ -89,8 +105,8 @@ export interface BackfillSummary {
   daysFailed: number
   /** The sweep stopped early and gated the next one. */
   aborted?: boolean
-  /** Why it stopped: day failures with no success between them, or a throttling provider. */
-  abortReason?: 'failures' | 'rate-limit'
+  /** Why it stopped: day failures with no success between them, a throttling provider, or no network. */
+  abortReason?: SweepAbortReason
   /** The single clustering pass run after all days are mined. */
   clustering?: ClusteringRunSummary
   /** Set when the backfill did not run at all because a guard tripped. */

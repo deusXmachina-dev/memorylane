@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { APICallError } from 'ai'
 import {
   describeNetworkError,
+  isPreRequestNetworkError,
   networkErrorCode,
   NetworkError,
   toUserFacingError,
@@ -106,5 +108,29 @@ describe('toUserFacingError', () => {
   it('returns non-network errors unchanged', () => {
     const original = new Error('Invalid activation code')
     expect(toUserFacingError(original)).toBe(original)
+  })
+})
+
+describe('isPreRequestNetworkError', () => {
+  it('is true when the request never left the machine', () => {
+    const dns = new APICallError({
+      message: 'Cannot connect to API: getaddrinfo ENOTFOUND openrouter.ai',
+      url: 'https://openrouter.ai/api/v1/chat/completions',
+      requestBodyValues: {},
+      cause: fetchFailed('ENOTFOUND'),
+      isRetryable: true,
+    })
+    expect(isPreRequestNetworkError(dns)).toBe(true)
+    expect(isPreRequestNetworkError(fetchFailed('ECONNREFUSED'))).toBe(true)
+    expect(isPreRequestNetworkError(fetchFailed('UNABLE_TO_GET_ISSUER_CERT_LOCALLY'))).toBe(true)
+    expect(isPreRequestNetworkError(fetchFailed())).toBe(true)
+  })
+
+  it('is false once the request may have reached the provider', () => {
+    const deadline = new DOMException('The operation was aborted due to timeout', 'TimeoutError')
+    expect(isPreRequestNetworkError(fetchFailed('ECONNRESET'))).toBe(false)
+    expect(isPreRequestNetworkError(fetchFailed('UND_ERR_HEADERS_TIMEOUT'))).toBe(false)
+    expect(isPreRequestNetworkError(deadline)).toBe(false)
+    expect(isPreRequestNetworkError(new Error('boom'))).toBe(false)
   })
 })

@@ -14,6 +14,13 @@ const TIMEOUT_CODES = new Set([
   'UND_ERR_HEADERS_TIMEOUT',
   'UND_ERR_BODY_TIMEOUT',
 ])
+const PRE_REQUEST_CODES = new Set([
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+])
 
 function isTlsCode(code: string): boolean {
   return (
@@ -40,6 +47,13 @@ export function networkErrorCode(error: unknown): string | undefined {
         : current.cause
   }
   return undefined
+}
+
+/** True when the request never left the machine: DNS, refused, unreachable, or TLS setup. */
+export function isPreRequestNetworkError(error: unknown): boolean {
+  const code = networkErrorCode(error)
+  if (code !== undefined) return PRE_REQUEST_CODES.has(code) || isTlsCode(code)
+  return error instanceof TypeError && error.message.toLowerCase().includes('fetch')
 }
 
 /**
