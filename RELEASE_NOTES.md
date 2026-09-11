@@ -1,10 +1,10 @@
-# MemoryLane v1.5.8
+# MemoryLane v1.5.9
 
-Task mining no longer gives up on a day because a closed laptop woke overnight without network.
+Task mining waits for a connection instead of failing days while offline.
 
 ## What's Changed
 
-- **Overnight dark wakes no longer fail mining days**: a closed laptop briefly wakes with no network, and the overdue sweep claimed yesterday in those windows — three failed requests marked the day failed for good. Scheduled sweeps now stand down while suspended or offline, network errors across a suspend or during a confirmed outage don't spend attempts, and resuming kicks the miner. Local models keep mining offline. Days already failed this way are re-opened (#285).
+- **No connection, no mining**: before claiming a day, scheduled sweeps check that the provider's host resolves. A laptop that wakes before Wi-Fi reconnects no longer spends attempts. Local models still mine offline (#286).
 
 ## Known Issues & Limitations
 
@@ -22,4 +22,4 @@ Task mining no longer gives up on a day because a closed laptop woke overnight w
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.7...v1.5.8
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.8...v1.5.9
