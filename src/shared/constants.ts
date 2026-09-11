@@ -187,6 +187,7 @@ export const TASK_BACKFILL = {
   DAY_COOLDOWN_MAX_MS: 30 * 60_000,
   SWEEP_MAX_CONSECUTIVE_FAILURES: 3,
   SWEEP_ABORT_BACKOFF_MS: 10 * 60_000,
+  RESOLVE_TIMEOUT_MS: 5_000,
   // Days scanned at once, only while more than CLUSTER_EVERY_DAYS days are
   // pending (first launch, gap-fill). A daily sweep stays serial. Matches
   // CLUSTER_EVERY_DAYS so a wave is one round of scans, not a round plus a

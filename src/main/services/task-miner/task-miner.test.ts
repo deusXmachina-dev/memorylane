@@ -691,6 +691,35 @@ describe('TaskMiner sweep', () => {
     expect(storage.miningDays.getAll().every((d) => d.status === 'completed')).toBe(true)
   })
 
+  it('scheduleRun skips the host lookup for an IP-literal endpoint', async () => {
+    const lookup = vi.fn<(host: string) => Promise<boolean>>(async () => false)
+    minerWith({ resolves: lookup }, providerFor('openai-compatible', 'http://[fd12::10]:11434/v1'))
+    seedDays(2)
+    seedFiller()
+
+    miner.scheduleRun()
+    await drain()
+
+    expect(lookup).not.toHaveBeenCalled()
+    expect(storage.miningDays.getAll().every((d) => d.status === 'completed')).toBe(true)
+  })
+
+  it('scheduleRun gives up on a hung host lookup and frees the miner', async () => {
+    useFakeClockAtNoon()
+    minerWith({ resolves: () => new Promise<boolean>(() => {}) })
+    seedDays(2)
+    seedFiller()
+
+    miner.scheduleRun()
+    expect(miner.isBusy()).toBe(true)
+    await vi.advanceTimersByTimeAsync(TASK_BACKFILL.RESOLVE_TIMEOUT_MS)
+
+    expect(miner.isBusy()).toBe(false)
+    expect(mockedRunDetection).not.toHaveBeenCalled()
+    const all = storage.miningDays.getAll()
+    expect(all.every((d) => d.status === 'pending' && d.attempts === 0)).toBe(true)
+  })
+
   it('kick() polls early once started and is a no-op before', async () => {
     useFakeClockAtNoon()
     seedDays(2)
