@@ -9,6 +9,7 @@ let onResumeCallback: PowerStateCallback | null = null
 let screenLocked = false
 let suspended = false
 let onBattery = false
+let lastSuspendAt = 0
 
 export function shouldPause(): boolean {
   return screenLocked || suspended
@@ -16,6 +17,16 @@ export function shouldPause(): boolean {
 
 export function shouldThrottle(): boolean {
   return onBattery
+}
+
+/** Still true through a macOS dark wake, which runs timers without emitting 'resume'. */
+export function isSuspended(): boolean {
+  return suspended
+}
+
+/** Epoch ms of the last system suspend, 0 if none since launch. */
+export function getLastSuspendAt(): number {
+  return lastSuspendAt
 }
 
 /** Seconds since the last system-wide user input (mouse move counts), per the OS. */
@@ -59,6 +70,7 @@ export function startPowerMonitoring(opts: {
   powerMonitor.on('suspend', () => {
     log.info('[Power] System suspended')
     suspended = true
+    lastSuspendAt = Date.now()
     emitIfNeeded()
   })
 

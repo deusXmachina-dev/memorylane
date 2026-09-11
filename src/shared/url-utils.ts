@@ -117,3 +117,14 @@ export function isSameRegistrableDomain(a: string, b: string): boolean {
   if (aHost === null || bHost === null) return false
   return registrableDomain(aHost) === registrableDomain(bHost)
 }
+
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
+
+export function isLoopbackHost(hostname: string): boolean {
+  return LOOPBACK_HOSTS.has(hostname)
+}
+
+export function isLoopbackUrl(url: string): boolean {
+  const host = hostnameOf(url)
+  return host !== null && isLoopbackHost(host)
+}

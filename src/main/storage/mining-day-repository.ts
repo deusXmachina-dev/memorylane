@@ -119,8 +119,8 @@ export class MiningDayRepository {
   }
 
   /**
-   * Hand a claimed day back unspent: the provider throttled us, so the day
-   * never got a real attempt. Refunds the claim's attempt increment and leaves
+   * Hand a claimed day back unspent: the provider throttled us or the network
+   * was down, so the day never got a real attempt. Refunds the claim's attempt increment and leaves
    * it immediately claimable — the sweep-level backoff does the waiting.
    */
   releaseClaim(day: string, error: string): void {

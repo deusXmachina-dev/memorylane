@@ -11,7 +11,9 @@ import { PATTERN_DETECTION_CONFIG, TASK_BACKFILL } from '../../../shared/constan
 import { TaskMiner } from '.'
 import { runDetection } from './run-detection'
 import { runClustering } from './clustering'
-import type { MinerEmbedder } from './types'
+import type { MinerEmbedder, MinerEnvironment } from './types'
+import { DEFAULT_MINER_ENVIRONMENT } from './types'
+import log from '@main/utils/logger'
 
 vi.mock('./run-detection', () => ({ runDetection: vi.fn() }))
 vi.mock('./clustering', () => ({ runClustering: vi.fn(async () => ({})) }))
@@ -19,8 +21,12 @@ vi.mock('./clustering', () => ({ runClustering: vi.fn(async () => ({})) }))
 const mockedRunDetection = vi.mocked(runDetection)
 const mockedRunClustering = vi.mocked(runClustering)
 
-const providerFor = (vendor: Vendor) =>
-  ({ isConfigured: () => true, getActiveVendor: () => vendor }) as InferenceProvider
+const providerFor = (vendor: Vendor, baseURL = 'https://provider.test/v1') =>
+  ({
+    isConfigured: () => true,
+    getActiveVendor: () => vendor,
+    getRouteSnapshot: () => ({ vendor, baseURL, apiKey: 'test' }),
+  }) as InferenceProvider
 const configuredProvider = providerFor('openrouter')
 const embedder: MinerEmbedder = {
   embed: async () => [0.1, 0.2, 0.3],
@@ -485,6 +491,178 @@ describe('TaskMiner sweep', () => {
     // The days are claimable again immediately; the sweep-level backoff waits.
     miner.scheduleRun()
     expect(miner.isBusy()).toBe(false)
+  })
+
+  const localProvider = providerFor('openai-compatible', 'http://localhost:11434/v1')
+  const minerWith = (env: Partial<MinerEnvironment>, provider = configuredProvider): void => {
+    miner = new TaskMiner(storage, provider, embedder, {
+      ...DEFAULT_MINER_ENVIRONMENT,
+      ...env,
+    })
+    miner.updateModel('test/model')
+  }
+  const dnsFailure = (): APICallError =>
+    new APICallError({
+      message: 'Cannot connect to API: getaddrinfo ENOTFOUND openrouter.ai',
+      url: 'https://openrouter.ai/api/v1/chat/completions',
+      requestBodyValues: {},
+      cause: Object.assign(new Error('getaddrinfo ENOTFOUND openrouter.ai'), { code: 'ENOTFOUND' }),
+      isRetryable: true,
+    })
+  const deadline = (): DOMException =>
+    new DOMException('The operation was aborted due to timeout', 'TimeoutError')
+
+  it('hands a day back unspent when the network drops mid-sweep', async () => {
+    useFakeClockAtNoon()
+    let online = true
+    minerWith({ isOnline: () => online })
+    seedDays(TASK_BACKFILL.CLUSTER_EVERY_DAYS + 3)
+    seedFiller()
+    mockedRunDetection.mockImplementation(async () => {
+      online = false
+      throw dnsFailure()
+    })
+
+    const summary = await miner.sweepNow(configuredProvider)
+
+    expect(summary).toMatchObject({
+      daysMined: 0,
+      daysFailed: 0,
+      aborted: true,
+      abortReason: 'offline',
+    })
+    const all = storage.miningDays.getAll()
+    expect(all.every((d) => d.status === 'pending' && d.attempts === 0)).toBe(true)
+    expect(storage.miningDays.countByStatus().running).toBe(0)
+    expect(mockedRunClustering).not.toHaveBeenCalled()
+
+    online = true
+    miner.scheduleRun()
+    expect(miner.isBusy()).toBe(false)
+
+    vi.advanceTimersByTime(TASK_BACKFILL.SWEEP_ABORT_BACKOFF_MS)
+    mockedRunDetection.mockImplementation(commitDay)
+    miner.scheduleRun()
+    expect(miner.isBusy()).toBe(true)
+    await drain()
+    expect(storage.miningDays.getAll().every((d) => d.status === 'completed')).toBe(true)
+  })
+
+  it.each([
+    ['deadline', deadline],
+    ['DNS failure', dnsFailure],
+  ])('a %s while awake and online spends the attempt', async (_, failure) => {
+    useFakeClockAtNoon()
+    seedDays(2)
+    mockedRunDetection.mockRejectedValueOnce(failure())
+
+    const summary = await miner.sweepNow(configuredProvider)
+
+    expect(summary).toMatchObject({ daysMined: 1, daysFailed: 1, aborted: false })
+    const failed = storage.miningDays.getAll().find((d) => d.status === 'pending')
+    expect(failed?.attempts).toBe(1)
+    expect(failed?.nextAttemptAt).toBe(Date.now() + TASK_BACKFILL.DAY_COOLDOWN_INITIAL_MS)
+  })
+
+  it('scheduleRun mines a local endpoint while offline', async () => {
+    minerWith({ isOnline: () => false }, localProvider)
+    seedDays(2)
+    seedFiller()
+
+    miner.scheduleRun()
+
+    expect(miner.isBusy()).toBe(true)
+    await drain()
+  })
+
+  it('a refused local endpoint spends the attempt while offline', async () => {
+    useFakeClockAtNoon()
+    minerWith({ isOnline: () => false }, localProvider)
+    seedDays(2)
+    mockedRunDetection.mockRejectedValueOnce(
+      new TypeError('fetch failed', {
+        cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:11434'), {
+          code: 'ECONNREFUSED',
+        }),
+      }),
+    )
+
+    const summary = await miner.sweepNow(localProvider)
+
+    expect(summary).toMatchObject({ daysMined: 1, daysFailed: 1, aborted: false })
+  })
+
+  it('a deadline hit across a sleep is refunded', async () => {
+    useFakeClockAtNoon()
+    let suspendAt = 0
+    minerWith({ lastSuspendAt: () => suspendAt })
+    seedDays(2)
+    mockedRunDetection.mockImplementationOnce(async () => {
+      vi.setSystemTime(Date.now() + 60_000)
+      suspendAt = Date.now()
+      throw deadline()
+    })
+
+    const summary = await miner.sweepNow(configuredProvider)
+
+    expect(summary).toMatchObject({ daysFailed: 0, aborted: true, abortReason: 'offline' })
+    const all = storage.miningDays.getAll()
+    expect(all.every((d) => d.status === 'pending' && d.attempts === 0)).toBe(true)
+  })
+
+  it('scheduleRun stands down while the system is suspended, logging it once', async () => {
+    let suspended = true
+    minerWith({ isSuspended: () => suspended })
+    seedDays(2)
+    seedFiller()
+    const info = vi.spyOn(log, 'info')
+
+    miner.scheduleRun()
+    miner.scheduleRun()
+
+    expect(miner.isBusy()).toBe(false)
+    expect(storage.miningDays.getAll()).toEqual([])
+    expect(info.mock.calls.filter(([msg]) => /suspended/.test(String(msg)))).toHaveLength(1)
+    info.mockRestore()
+
+    suspended = false
+    miner.scheduleRun()
+    expect(miner.isBusy()).toBe(true)
+    await drain()
+  })
+
+  it('scheduleRun stands down while offline, logging it once', async () => {
+    let online = false
+    minerWith({ isOnline: () => online })
+    seedDays(2)
+    seedFiller()
+    const info = vi.spyOn(log, 'info')
+
+    miner.scheduleRun()
+    miner.scheduleRun()
+
+    expect(miner.isBusy()).toBe(false)
+    expect(info.mock.calls.filter(([msg]) => /No network/.test(String(msg)))).toHaveLength(1)
+    info.mockRestore()
+
+    online = true
+    miner.scheduleRun()
+    expect(miner.isBusy()).toBe(true)
+    await drain()
+  })
+
+  it('kick() polls early once started and is a no-op before', async () => {
+    useFakeClockAtNoon()
+    seedDays(2)
+    seedFiller()
+
+    miner.kick()
+    expect(miner.isBusy()).toBe(false)
+
+    miner.startup()
+    miner.kick()
+    expect(miner.isBusy()).toBe(true)
+    await drain()
   })
 
   it('successes reset the shared failure count between waves', async () => {

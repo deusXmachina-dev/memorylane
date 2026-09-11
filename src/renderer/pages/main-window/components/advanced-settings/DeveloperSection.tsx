@@ -76,6 +76,13 @@ function TaskMaintenanceSection({ api }: { api: MainWindowAPI }): React.JSX.Elem
       )
       return
     }
+    if (s?.abortReason === 'offline') {
+      toast.warning(
+        `Re-mined ${s.daysMined} day(s), then stopped: no network. Mining resumes shortly.`,
+        { id: 'wipe-remine' },
+      )
+      return
+    }
     if (s?.abortReason === 'rate-limit') {
       toast.warning(
         `Re-mined ${s.daysMined} day(s), then stopped: provider rate limited. Mining resumes shortly.`,

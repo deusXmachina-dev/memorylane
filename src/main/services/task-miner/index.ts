@@ -19,7 +19,8 @@
  * whenever the ledger has claimable pending days. A failed day cools down
  * individually (escalating per-day cooldown) while the sweep continues past
  * it; only consecutive failures — a provider outage, not one bad day — abort
- * the sweep and gate the next one.
+ * the sweep and gate the next one. Scheduled sweeps stand down while the
+ * system is suspended or offline, so a lid-closed night costs no attempts.
  */
 
 import type { StorageService } from '../../storage'
@@ -27,6 +28,8 @@ import type { InferenceProvider } from '../../llm'
 import { PATTERN_DETECTION_CONFIG, TASK_BACKFILL } from '../../../shared/constants'
 import log from '@main/utils/logger'
 import { formatApiError } from './helpers'
+import { describeNetworkError } from '@main/utils/network-error'
+import { isLoopbackUrl } from '@/shared/url-utils'
 import { extractHttpStatus, isThrottleStatus } from '@main/semantic/error-classify'
 import { getDayBoundaries } from '@main/utils/day'
 import type {
@@ -35,13 +38,15 @@ import type {
   ProgressCallback,
   BackfillSummary,
   MinerEmbedder,
+  MinerEnvironment,
+  SweepAbortReason,
 } from './types'
-import { DEFAULT_MINER_CONFIG } from './types'
+import { DEFAULT_MINER_CONFIG, DEFAULT_MINER_ENVIRONMENT } from './types'
 import { runDetection } from './run-detection'
 import { runClustering } from './clustering'
 import type { ClusteringRunSummary } from './clustering'
 
-export type { TaskMinerConfig, MiningRunResult, ProgressCallback }
+export type { TaskMinerConfig, MiningRunResult, ProgressCallback, MinerEnvironment }
 export type { ClusteringRunSummary }
 export { DEFAULT_MINER_CONFIG }
 
@@ -66,6 +71,7 @@ export class TaskMiner {
     private readonly storage: StorageService,
     private readonly provider: InferenceProvider | undefined,
     private readonly embedder: MinerEmbedder,
+    private readonly env: MinerEnvironment = DEFAULT_MINER_ENVIRONMENT,
   ) {}
 
   setEnabled(enabled: boolean): void {
@@ -121,6 +127,11 @@ export class TaskMiner {
     }
   }
 
+  /** Poll now instead of on the next tick (e.g. on wake); a no-op before startup(). */
+  kick(): void {
+    if (this.pollTimer) this.scheduleRun()
+  }
+
   /**
    * Start a sweep now if the guards and the failure backoff allow it. Runs on
    * every poll tick; safe to call from anywhere.
@@ -129,9 +140,19 @@ export class TaskMiner {
     if (!this.enabled) return
     if (this.running) return
     if (Date.now() < this.nextAttemptAt) return
+    // No 'resume' fires for a macOS dark wake, so this holds all night.
+    if (this.env.isSuspended()) {
+      this.logSkip('suspended', 'System suspended, skipping')
+      return
+    }
 
     if (!this.provider || !this.provider.isConfigured()) {
       this.logSkip('no-provider', 'No inference provider configured, skipping')
+      return
+    }
+
+    if (this.isOffline(this.provider)) {
+      this.logSkip('offline', 'No network, skipping')
       return
     }
 
@@ -165,6 +186,12 @@ export class TaskMiner {
 
     this.lastSkipKey = null
     void this.sweep(this.provider)
+  }
+
+  private isOffline(provider: InferenceProvider): boolean {
+    if (this.env.isOnline()) return false
+    const baseURL = provider.getRouteSnapshot()?.baseURL
+    return !baseURL || !isLoopbackUrl(baseURL)
   }
 
   private logSkip(key: string, message: string): void {
@@ -211,7 +238,7 @@ export class TaskMiner {
    * cleanly. A failed day records the attempt and cools down individually
    * while the sweep continues with the next day; once its attempts are
    * exhausted the claim skips past it for good. Failures with no success in
-   * between abort the sweep and gate the next one. A throttled day, or one
+   * between abort the sweep and gate the next one. A throttled or offline day, or one
    * still in flight when the sweep aborts, is handed back unspent instead —
    * so what a provider outage costs in attempts doesn't scale with concurrency.
    *
@@ -241,7 +268,7 @@ export class TaskMiner {
       let didWork = false
       let failuresSinceSuccess = 0
       let aborted = false
-      let abortReason: 'failures' | 'rate-limit' | undefined
+      let abortReason: SweepAbortReason | undefined
       let clustering: ClusteringRunSummary | undefined
 
       const concurrency =
@@ -253,6 +280,7 @@ export class TaskMiner {
       const mineDay = async (claim: { day: string; attempts: number }): Promise<void> => {
         // Push the claim so the banner's currentDay is live while the day mines.
         this.emitStatus()
+        const claimedAt = Date.now()
         const back = this.daysAgo(claim.day)
         const { start, end } = getDayBoundaries(back)
 
@@ -284,16 +312,24 @@ export class TaskMiner {
         } catch (error) {
           const message = formatApiError(error)
           const throttled = isThrottleStatus(extractHttpStatus(error))
-          // Neither a throttled day nor a day whose siblings already stopped the
-          // sweep is a bad day, so both go back unspent. That keeps the attempts
-          // burned by an outage at SWEEP_MAX_CONSECUTIVE_FAILURES no matter what
-          // concurrency the wave ran at.
-          if (throttled || aborted) {
+          const offline =
+            !throttled &&
+            (this.env.lastSuspendAt() > claimedAt || this.isOffline(provider)) &&
+            describeNetworkError(error) !== null
+          // Neither a throttled or offline day nor a day whose siblings already
+          // stopped the sweep is a bad day, so all go back unspent. That keeps the
+          // attempts burned by an outage at SWEEP_MAX_CONSECUTIVE_FAILURES no matter
+          // what concurrency the wave ran at.
+          if (throttled || offline || aborted) {
             this.storage.miningDays.releaseClaim(claim.day, message)
-            const cause = throttled ? 'provider throttled' : 'sweep already stopping'
-            if (throttled && !aborted) {
+            const cause = throttled
+              ? 'provider throttled'
+              : offline
+                ? 'offline'
+                : 'sweep already stopping'
+            if ((throttled || offline) && !aborted) {
               aborted = true
-              abortReason = 'rate-limit'
+              abortReason = throttled ? 'rate-limit' : 'offline'
             }
             log.warn(`[TaskMiner] Day ${claim.day} deferred unspent, ${cause}: ${message}`)
           } else {
@@ -374,11 +410,13 @@ export class TaskMiner {
       if (aborted) {
         this.nextAttemptAt = Date.now() + TASK_BACKFILL.SWEEP_ABORT_BACKOFF_MS
         const retryIn = `retry in ${Math.round(TASK_BACKFILL.SWEEP_ABORT_BACKOFF_MS / 60_000)}m`
-        log.info(
+        const why =
           abortReason === 'rate-limit'
-            ? `[TaskMiner] Sweep stopped: provider throttled; ${retryIn}`
-            : `[TaskMiner] Sweep aborted after ${failuresSinceSuccess} failures with no success; ${retryIn}`,
-        )
+            ? 'stopped: provider throttled'
+            : abortReason === 'offline'
+              ? 'stopped: offline'
+              : `aborted after ${failuresSinceSuccess} failures with no success`
+        log.info(`[TaskMiner] Sweep ${why}; ${retryIn}`)
       } else {
         this.resetBackoff()
       }
