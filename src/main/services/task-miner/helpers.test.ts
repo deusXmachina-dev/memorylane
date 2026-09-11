@@ -1,11 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { APICallError } from 'ai'
-import {
-  computeEpisodeWindow,
-  formatApiError,
-  isUnspentNetworkFailure,
-  tryExtractJsonArray,
-} from './helpers'
+import { computeEpisodeWindow, formatApiError, tryExtractJsonArray } from './helpers'
 
 describe('computeEpisodeWindow', () => {
   it('derives the window from min start / max end and sums active time', () => {
@@ -173,43 +167,6 @@ describe('formatApiError', () => {
     expect(formatApiError(new Error('boom'))).toBe('boom')
     expect(formatApiError({ error: { message: 'bad request', code: 400 } })).toBe(
       'bad request code=400',
-    )
-  })
-})
-
-describe('isUnspentNetworkFailure', () => {
-  const CLAIMED_AT = 1_000
-  const withCode = (code: string): TypeError =>
-    new TypeError('fetch failed', { cause: Object.assign(new Error(code), { code }) })
-  const deadline = (): DOMException =>
-    new DOMException('The operation was aborted due to timeout', 'TimeoutError')
-
-  it('refunds a failure where the request never left the machine', () => {
-    expect(isUnspentNetworkFailure(withCode('ENOTFOUND'), CLAIMED_AT, 0)).toBe(true)
-    expect(isUnspentNetworkFailure(new TypeError('fetch failed'), CLAIMED_AT, 0)).toBe(true)
-  })
-
-  it('spends a timeout or reset while the system stayed awake', () => {
-    expect(isUnspentNetworkFailure(deadline(), CLAIMED_AT, 0)).toBe(false)
-    expect(isUnspentNetworkFailure(deadline(), CLAIMED_AT, CLAIMED_AT)).toBe(false)
-    expect(isUnspentNetworkFailure(withCode('ECONNRESET'), CLAIMED_AT, 0)).toBe(false)
-  })
-
-  it('refunds a timeout or reset when the system slept mid-request', () => {
-    expect(isUnspentNetworkFailure(deadline(), CLAIMED_AT, CLAIMED_AT + 1)).toBe(true)
-    expect(isUnspentNetworkFailure(withCode('ECONNRESET'), CLAIMED_AT, CLAIMED_AT + 1)).toBe(true)
-  })
-
-  it('ignores errors that are not transport failures', () => {
-    const throttled = new APICallError({
-      message: 'rate limited',
-      url: 'https://provider.test',
-      requestBodyValues: {},
-      statusCode: 429,
-    })
-    expect(isUnspentNetworkFailure(throttled, CLAIMED_AT, CLAIMED_AT + 1)).toBe(false)
-    expect(isUnspentNetworkFailure(new Error('provider down'), CLAIMED_AT, CLAIMED_AT + 1)).toBe(
-      false,
     )
   })
 })

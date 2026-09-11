@@ -21,8 +21,12 @@ vi.mock('./clustering', () => ({ runClustering: vi.fn(async () => ({})) }))
 const mockedRunDetection = vi.mocked(runDetection)
 const mockedRunClustering = vi.mocked(runClustering)
 
-const providerFor = (vendor: Vendor) =>
-  ({ isConfigured: () => true, getActiveVendor: () => vendor }) as InferenceProvider
+const providerFor = (vendor: Vendor, baseURL = 'https://provider.test/v1') =>
+  ({
+    isConfigured: () => true,
+    getActiveVendor: () => vendor,
+    getRouteSnapshot: () => ({ vendor, baseURL, apiKey: 'test' }),
+  }) as InferenceProvider
 const configuredProvider = providerFor('openrouter')
 const embedder: MinerEmbedder = {
   embed: async () => [0.1, 0.2, 0.3],
@@ -489,8 +493,9 @@ describe('TaskMiner sweep', () => {
     expect(miner.isBusy()).toBe(false)
   })
 
-  const minerWith = (env: Partial<MinerEnvironment>): void => {
-    miner = new TaskMiner(storage, configuredProvider, embedder, {
+  const localProvider = providerFor('openai-compatible', 'http://localhost:11434/v1')
+  const minerWith = (env: Partial<MinerEnvironment>, provider = configuredProvider): void => {
+    miner = new TaskMiner(storage, provider, embedder, {
       ...DEFAULT_MINER_ENVIRONMENT,
       ...env,
     })
@@ -507,11 +512,16 @@ describe('TaskMiner sweep', () => {
   const deadline = (): DOMException =>
     new DOMException('The operation was aborted due to timeout', 'TimeoutError')
 
-  it('hands an offline day back unspent and stops the sweep', async () => {
+  it('hands a day back unspent when the network drops mid-sweep', async () => {
     useFakeClockAtNoon()
+    let online = true
+    minerWith({ isOnline: () => online })
     seedDays(TASK_BACKFILL.CLUSTER_EVERY_DAYS + 3)
     seedFiller()
-    mockedRunDetection.mockRejectedValue(dnsFailure())
+    mockedRunDetection.mockImplementation(async () => {
+      online = false
+      throw dnsFailure()
+    })
 
     const summary = await miner.sweepNow(configuredProvider)
 
@@ -521,12 +531,12 @@ describe('TaskMiner sweep', () => {
       aborted: true,
       abortReason: 'offline',
     })
-    // A dark wake has no network; failing there must not march days to terminal `failed`.
     const all = storage.miningDays.getAll()
     expect(all.every((d) => d.status === 'pending' && d.attempts === 0)).toBe(true)
     expect(storage.miningDays.countByStatus().running).toBe(0)
     expect(mockedRunClustering).not.toHaveBeenCalled()
 
+    online = true
     miner.scheduleRun()
     expect(miner.isBusy()).toBe(false)
 
@@ -538,10 +548,13 @@ describe('TaskMiner sweep', () => {
     expect(storage.miningDays.getAll().every((d) => d.status === 'completed')).toBe(true)
   })
 
-  it('a deadline hit while awake spends the attempt', async () => {
+  it.each([
+    ['deadline', deadline],
+    ['DNS failure', dnsFailure],
+  ])('a %s while awake and online spends the attempt', async (_, failure) => {
     useFakeClockAtNoon()
     seedDays(2)
-    mockedRunDetection.mockRejectedValueOnce(deadline())
+    mockedRunDetection.mockRejectedValueOnce(failure())
 
     const summary = await miner.sweepNow(configuredProvider)
 
@@ -549,6 +562,34 @@ describe('TaskMiner sweep', () => {
     const failed = storage.miningDays.getAll().find((d) => d.status === 'pending')
     expect(failed?.attempts).toBe(1)
     expect(failed?.nextAttemptAt).toBe(Date.now() + TASK_BACKFILL.DAY_COOLDOWN_INITIAL_MS)
+  })
+
+  it('scheduleRun mines a local endpoint while offline', async () => {
+    minerWith({ isOnline: () => false }, localProvider)
+    seedDays(2)
+    seedFiller()
+
+    miner.scheduleRun()
+
+    expect(miner.isBusy()).toBe(true)
+    await drain()
+  })
+
+  it('a refused local endpoint spends the attempt while offline', async () => {
+    useFakeClockAtNoon()
+    minerWith({ isOnline: () => false }, localProvider)
+    seedDays(2)
+    mockedRunDetection.mockRejectedValueOnce(
+      new TypeError('fetch failed', {
+        cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:11434'), {
+          code: 'ECONNREFUSED',
+        }),
+      }),
+    )
+
+    const summary = await miner.sweepNow(localProvider)
+
+    expect(summary).toMatchObject({ daysMined: 1, daysFailed: 1, aborted: false })
   })
 
   it('a deadline hit across a sleep is refunded', async () => {

@@ -3,7 +3,7 @@ import * as path from 'path'
 import log from '@main/utils/logger'
 import type { Vendor, VendorCredentials, VendorStatus } from '../../shared/types'
 import { VENDORS } from '../../shared/types'
-import { isPrivateNetworkHost, registrableDomain } from '../../shared/url-utils'
+import { isLoopbackHost, isPrivateNetworkHost, registrableDomain } from '../../shared/url-utils'
 
 interface SafeStorageLike {
   isEncryptionAvailable(): boolean
@@ -404,8 +404,6 @@ function maskKey(key: string): string {
   return `${key.substring(0, 7)}...${key.substring(key.length - 4)}`
 }
 
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
-
 /**
  * Native vendors with a known API host. A user-supplied `baseURL` for these
  * vendors must share this registrable domain — otherwise the override would
@@ -460,7 +458,7 @@ export function validateVendorBaseURL(value: unknown, vendor?: Vendor): string {
     return trimmed
   }
   if (url.protocol === 'http:') {
-    if (LOOPBACK_HOSTS.has(url.hostname) || isPrivateNetworkHost(url.hostname)) {
+    if (isLoopbackHost(url.hostname) || isPrivateNetworkHost(url.hostname)) {
       return trimmed
     }
     throw new Error('Invalid baseURL: http is only allowed for localhost and private networks')

@@ -27,7 +27,9 @@ import type { StorageService } from '../../storage'
 import type { InferenceProvider } from '../../llm'
 import { PATTERN_DETECTION_CONFIG, TASK_BACKFILL } from '../../../shared/constants'
 import log from '@main/utils/logger'
-import { formatApiError, isUnspentNetworkFailure } from './helpers'
+import { formatApiError } from './helpers'
+import { describeNetworkError } from '@main/utils/network-error'
+import { isLoopbackUrl } from '@/shared/url-utils'
 import { extractHttpStatus, isThrottleStatus } from '@main/semantic/error-classify'
 import { getDayBoundaries } from '@main/utils/day'
 import type {
@@ -143,13 +145,14 @@ export class TaskMiner {
       this.logSkip('suspended', 'System suspended, skipping')
       return
     }
-    if (!this.env.isOnline()) {
-      this.logSkip('offline', 'No network, skipping')
-      return
-    }
 
     if (!this.provider || !this.provider.isConfigured()) {
       this.logSkip('no-provider', 'No inference provider configured, skipping')
+      return
+    }
+
+    if (this.isOffline(this.provider)) {
+      this.logSkip('offline', 'No network, skipping')
       return
     }
 
@@ -183,6 +186,12 @@ export class TaskMiner {
 
     this.lastSkipKey = null
     void this.sweep(this.provider)
+  }
+
+  private isOffline(provider: InferenceProvider): boolean {
+    if (this.env.isOnline()) return false
+    const baseURL = provider.getRouteSnapshot()?.baseURL
+    return !baseURL || !isLoopbackUrl(baseURL)
   }
 
   private logSkip(key: string, message: string): void {
@@ -304,7 +313,9 @@ export class TaskMiner {
           const message = formatApiError(error)
           const throttled = isThrottleStatus(extractHttpStatus(error))
           const offline =
-            !throttled && isUnspentNetworkFailure(error, claimedAt, this.env.lastSuspendAt())
+            !throttled &&
+            (this.env.lastSuspendAt() > claimedAt || this.isOffline(provider)) &&
+            describeNetworkError(error) !== null
           // Neither a throttled or offline day nor a day whose siblings already
           // stopped the sweep is a bad day, so all go back unspent. That keeps the
           // attempts burned by an outage at SWEEP_MAX_CONSECUTIVE_FAILURES no matter
