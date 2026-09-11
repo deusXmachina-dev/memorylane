@@ -23,6 +23,7 @@
  * system is suspended or offline, so a lid-closed night costs no attempts.
  */
 
+import { isIP } from 'node:net'
 import type { StorageService } from '../../storage'
 import type { InferenceProvider } from '../../llm'
 import { PATTERN_DETECTION_CONFIG, TASK_BACKFILL } from '../../../shared/constants'
@@ -184,8 +185,45 @@ export class TaskMiner {
       return
     }
 
+    void this.sweepIfResolvable(this.provider)
+  }
+
+  private async sweepIfResolvable(provider: InferenceProvider): Promise<void> {
+    const host = this.remoteHost(provider)
+    if (host) {
+      this.running = true
+      let resolves = false
+      try {
+        resolves = await this.resolvesWithinTimeout(host)
+      } finally {
+        this.running = false
+      }
+      if (!resolves) {
+        this.logSkip('unresolved', `Can't resolve ${host}, skipping`)
+        return
+      }
+    }
     this.lastSkipKey = null
-    void this.sweep(this.provider)
+    await this.sweep(provider)
+  }
+
+  private resolvesWithinTimeout(host: string): Promise<boolean> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeout = new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), TASK_BACKFILL.RESOLVE_TIMEOUT_MS)
+    })
+    return Promise.race([this.env.resolves(host), timeout]).finally(() => clearTimeout(timer))
+  }
+
+  private remoteHost(provider: InferenceProvider): string | null {
+    const baseURL = provider.getRouteSnapshot()?.baseURL
+    if (!baseURL || isLoopbackUrl(baseURL)) return null
+    try {
+      const host = new URL(baseURL).hostname.replace(/^\[(.*)\]$/, '$1')
+      return isIP(host) ? null : host
+    } catch {
+      return null
+    }
   }
 
   private isOffline(provider: InferenceProvider): boolean {

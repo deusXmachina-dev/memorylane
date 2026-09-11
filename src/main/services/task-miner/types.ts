@@ -90,12 +90,14 @@ export interface MinerEnvironment {
   isOnline(): boolean
   /** Epoch ms of the last system suspend, 0 if none since launch. */
   lastSuspendAt(): number
+  resolves(host: string): Promise<boolean>
 }
 
 export const DEFAULT_MINER_ENVIRONMENT: MinerEnvironment = {
   isSuspended: () => false,
   isOnline: () => true,
   lastSuspendAt: () => 0,
+  resolves: async () => true,
 }
 
 /** Outcome of a one-time multi-day backfill (see TaskMiner.backfill). */
