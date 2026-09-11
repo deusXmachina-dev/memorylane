@@ -184,8 +184,36 @@ export class TaskMiner {
       return
     }
 
+    void this.sweepIfResolvable(this.provider)
+  }
+
+  private async sweepIfResolvable(provider: InferenceProvider): Promise<void> {
+    const host = this.remoteHost(provider)
+    if (host) {
+      this.running = true
+      let resolves = false
+      try {
+        resolves = await this.env.resolves(host)
+      } finally {
+        this.running = false
+      }
+      if (!resolves) {
+        this.logSkip('unresolved', `Can't resolve ${host}, skipping`)
+        return
+      }
+    }
     this.lastSkipKey = null
-    void this.sweep(this.provider)
+    await this.sweep(provider)
+  }
+
+  private remoteHost(provider: InferenceProvider): string | null {
+    const baseURL = provider.getRouteSnapshot()?.baseURL
+    if (!baseURL || isLoopbackUrl(baseURL)) return null
+    try {
+      return new URL(baseURL).hostname
+    } catch {
+      return null
+    }
   }
 
   private isOffline(provider: InferenceProvider): boolean {

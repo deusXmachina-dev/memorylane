@@ -651,6 +651,46 @@ describe('TaskMiner sweep', () => {
     await drain()
   })
 
+  it("scheduleRun stands down while the provider host doesn't resolve, logging it once", async () => {
+    let resolves = false
+    const lookup = vi.fn<(host: string) => Promise<boolean>>(async () => resolves)
+    minerWith({ resolves: lookup })
+    seedDays(2)
+    seedFiller()
+    const info = vi.spyOn(log, 'info')
+
+    miner.scheduleRun()
+    await drain()
+    miner.scheduleRun()
+    await drain()
+
+    expect(lookup).toHaveBeenCalledWith('provider.test')
+    expect(mockedRunDetection).not.toHaveBeenCalled()
+    const all = storage.miningDays.getAll()
+    expect(all).toHaveLength(2)
+    expect(all.every((d) => d.status === 'pending' && d.attempts === 0)).toBe(true)
+    expect(info.mock.calls.filter(([msg]) => /Can't resolve/.test(String(msg)))).toHaveLength(1)
+    info.mockRestore()
+
+    resolves = true
+    miner.scheduleRun()
+    await drain()
+    expect(storage.miningDays.getAll().every((d) => d.status === 'completed')).toBe(true)
+  })
+
+  it('scheduleRun skips the host lookup for a local endpoint', async () => {
+    const lookup = vi.fn<(host: string) => Promise<boolean>>(async () => false)
+    minerWith({ resolves: lookup }, localProvider)
+    seedDays(2)
+    seedFiller()
+
+    miner.scheduleRun()
+    await drain()
+
+    expect(lookup).not.toHaveBeenCalled()
+    expect(storage.miningDays.getAll().every((d) => d.status === 'completed')).toBe(true)
+  })
+
   it('kick() polls early once started and is a no-op before', async () => {
     useFakeClockAtNoon()
     seedDays(2)

@@ -12,6 +12,7 @@ import '@main/system/onnxruntime-path-fix'
 
 import { app, globalShortcut, net } from 'electron'
 import path from 'node:path'
+import { lookup } from 'node:dns/promises'
 import { config as loadEnv } from 'dotenv'
 import {
   AUTO_START_HIDDEN_ARG,
@@ -383,6 +384,11 @@ app.on('ready', async () => {
     isSuspended,
     isOnline: () => net.isOnline(),
     lastSuspendAt: getLastSuspendAt,
+    resolves: (host) =>
+      lookup(host).then(
+        () => true,
+        () => false,
+      ),
   })
   taskMiner.setEnabled(settings.patternDetectionEnabled)
   pushModelSelections(
