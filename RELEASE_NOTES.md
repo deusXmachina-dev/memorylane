@@ -1,4 +1,4 @@
-# MemoryLane v1.5.8-alpha.1
+# MemoryLane v1.5.8
 
 Task mining no longer gives up on a day because a closed laptop woke overnight without network.
 
@@ -22,4 +22,4 @@ Task mining no longer gives up on a day because a closed laptop woke overnight w
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.7...v1.5.8-alpha.1
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.7...v1.5.8
