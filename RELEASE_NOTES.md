@@ -1,13 +1,10 @@
-# MemoryLane v1.5.7
+# MemoryLane v1.5.8-alpha.1
 
-Windows upgrades now remove the orphaned per-machine install, and long unattended views get a real summary instead of "Viewed X".
+Task mining no longer gives up on a day because a closed laptop woke overnight without network.
 
 ## What's Changed
 
-- **Old per-machine Windows install removed on upgrade**: builds up to v1.4.0-alpha.4 installed to Program Files. The per-user installer only checks HKCU, so it installed beside the old copy and both ran against the same app data — double capture and double spend. Setup now finds the per-machine install and runs its uninstaller first, and re-registers autostart when the executable moves. The eviction needs one admin prompt; declining it lets the install proceed and the prompt returns next time you run setup by hand (#283).
-- **Long passive views are summarised properly**: a view with no input was labelled from its window title alone, so minutes spent in a call, watching an agent, or reading turned into "Viewed Claude". Past 60 seconds these now take the normal semantic path, and the model is told no click, type or scroll happened so a long read isn't reported as authorship (#281).
-- **Recipe steps keep the app name**: cluster review dropped the `<app>: action` prefix on runs of steps inside one app, leaving the app visible on the first line only (#282).
-- **Token counts in the summary log line**: prompt and completion tokens were parsed but never logged, so generation speed couldn't be computed from a log bundle (#280).
+- **Overnight dark wakes no longer fail mining days**: a closed laptop briefly wakes with no network, and the overdue sweep claimed yesterday in those windows — three failed requests marked the day failed for good. Scheduled sweeps now stand down while suspended or offline, network errors across a suspend or during a confirmed outage don't spend attempts, and resuming kicks the miner. Local models keep mining offline. Days already failed this way are re-opened (#285).
 
 ## Known Issues & Limitations
 
@@ -25,4 +22,4 @@ Windows upgrades now remove the orphaned per-machine install, and long unattende
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.6...v1.5.7
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.7...v1.5.8-alpha.1
