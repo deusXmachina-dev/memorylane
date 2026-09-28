@@ -602,7 +602,8 @@ describe('TaskMiner sweep', () => {
     seedDays(2)
     mockedRunDetection.mockImplementationOnce(async () => {
       vi.setSystemTime(Date.now() + 60_000)
-      host.suspendedAt = Date.now()
+      host.suspend(Date.now())
+      host.resume()
       throw deadline()
     })
 
@@ -615,7 +616,7 @@ describe('TaskMiner sweep', () => {
 
   it('scheduleRun stands down while the system is suspended, logging it once', async () => {
     const host = minerWith()
-    host.suspended = true
+    host.suspend()
     seedDays(2)
     seedFiller()
     const info = vi.spyOn(log, 'info')
@@ -628,7 +629,7 @@ describe('TaskMiner sweep', () => {
     expect(info.mock.calls.filter(([msg]) => /suspended/.test(String(msg)))).toHaveLength(1)
     info.mockRestore()
 
-    host.suspended = false
+    host.resume()
     miner.scheduleRun()
     expect(miner.isBusy()).toBe(true)
     await drain()

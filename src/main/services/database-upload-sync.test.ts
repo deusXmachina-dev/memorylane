@@ -649,7 +649,7 @@ describe('DatabaseUploadSync', () => {
     const fetchMock = mockFetchResponse(201, { ok: true, upload_id: 'up_1', checksum_sha256: 'x' })
     globalThis.fetch = fetchMock
     const host = new ManualHostEnvironment()
-    host.suspended = true
+    host.suspend()
     const { sync, backupToFile } = syncWith(host, { intervalMs: 1000 })
 
     sync.start()
@@ -702,7 +702,7 @@ describe('DatabaseUploadSync', () => {
 
     sync.start()
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-    expect(host.suspendListeners.size).toBe(1)
+    expect(host.suspendListenerCount).toBe(1)
 
     host.suspend()
     await sync.stop()
@@ -711,7 +711,7 @@ describe('DatabaseUploadSync', () => {
     expect(recordUploadAt).not.toHaveBeenCalled()
     expect(errorLog).not.toHaveBeenCalled()
     expect(infoLog.mock.calls.some(([msg]) => /deferred/.test(String(msg)))).toBe(true)
-    expect(host.suspendListeners.size).toBe(0)
+    expect(host.suspendListenerCount).toBe(0)
     errorLog.mockRestore()
     infoLog.mockRestore()
   })
@@ -739,14 +739,14 @@ describe('DatabaseUploadSync', () => {
     const fetchMock = mockFetchResponse(201, { ok: true, upload_id: 'up_1', checksum_sha256: 'x' })
     globalThis.fetch = fetchMock
     const host = new ManualHostEnvironment()
-    host.suspended = true
+    host.suspend()
     const { sync, backupToFile } = syncWith(host, { intervalMs: 1000 })
 
     sync.start()
     await vi.advanceTimersByTimeAsync(1000)
     expect(backupToFile).not.toHaveBeenCalled()
 
-    host.suspended = false
+    host.resume()
     sync.scheduleUploadIfStale('resume')
     await vi.advanceTimersByTimeAsync(0)
     await sync.stop()

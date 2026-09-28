@@ -1,10 +1,95 @@
+import type { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AWAKE_CHECK_DELAYS_MS, ManualHostEnvironment } from './host-environment'
+import { AWAKE_CHECK_DELAYS_MS, HostEnvironment, ManualHostEnvironment } from './host-environment'
+
+vi.mock('electron', async () => {
+  const { EventEmitter } = await import('node:events')
+  const powerMonitor = Object.assign(new EventEmitter(), {
+    isOnBatteryPower: () => false,
+    getSystemIdleTime: () => 0,
+  })
+  return { powerMonitor, net: { isOnline: () => true } }
+})
+vi.mock('@main/utils/logger', () => ({
+  default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}))
 
 const fetchFailed = (): TypeError =>
   new TypeError('fetch failed', {
     cause: Object.assign(new Error('getaddrinfo ENOTFOUND backend.test'), { code: 'ENOTFOUND' }),
   })
+
+describe('power events', () => {
+  const started = async (onPauseChange = vi.fn()) => {
+    const emitter = (await import('electron')).powerMonitor as unknown as EventEmitter
+    emitter.removeAllListeners()
+    const host = new HostEnvironment()
+    host.start(onPauseChange)
+    return { host, emitter, onPauseChange }
+  }
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('starts awake with no suspend recorded', async () => {
+    const { host } = await started()
+    expect(host.isSuspended()).toBe(false)
+    expect(host.lastSuspendAt()).toBe(0)
+    expect(host.shouldPause()).toBe(false)
+  })
+
+  it('suspend sets the flag, records when it happened and pauses', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-10T07:03:30Z'))
+    const { host, emitter, onPauseChange } = await started()
+    emitter.emit('suspend')
+    expect(host.isSuspended()).toBe(true)
+    expect(host.lastSuspendAt()).toBe(Date.parse('2026-09-10T07:03:30Z'))
+    expect(onPauseChange).toHaveBeenLastCalledWith(true)
+  })
+
+  it('resume clears the flag but keeps the suspend time', async () => {
+    const { host, emitter, onPauseChange } = await started()
+    emitter.emit('suspend')
+    const at = host.lastSuspendAt()
+    emitter.emit('resume')
+    expect(host.isSuspended()).toBe(false)
+    expect(host.lastSuspendAt()).toBe(at)
+    expect(onPauseChange).toHaveBeenLastCalledWith(false)
+  })
+
+  it('a locked screen pauses until unlocked', async () => {
+    const { host, emitter, onPauseChange } = await started()
+    emitter.emit('lock-screen')
+    expect(host.shouldPause()).toBe(true)
+    expect(onPauseChange).toHaveBeenLastCalledWith(true)
+    emitter.emit('unlock-screen')
+    expect(host.shouldPause()).toBe(false)
+    expect(onPauseChange).toHaveBeenLastCalledWith(false)
+  })
+
+  it('onSuspend and onResume listeners fire until unsubscribed', async () => {
+    const { host, emitter } = await started()
+    const onSuspend = vi.fn()
+    const onResume = vi.fn()
+    const offSuspend = host.onSuspend(onSuspend)
+    const offResume = host.onResume(onResume)
+
+    emitter.emit('suspend')
+    expect(onSuspend).toHaveBeenCalledTimes(1)
+    expect(onResume).not.toHaveBeenCalled()
+    emitter.emit('resume')
+    expect(onResume).toHaveBeenCalledTimes(1)
+
+    offSuspend()
+    offResume()
+    emitter.emit('suspend')
+    emitter.emit('resume')
+    expect(onSuspend).toHaveBeenCalledTimes(1)
+    expect(onResume).toHaveBeenCalledTimes(1)
+  })
+})
 
 describe('standDownReason', () => {
   it('is null on an awake, online host', () => {
@@ -13,7 +98,7 @@ describe('standDownReason', () => {
 
   it('reports suspended ahead of offline', () => {
     const host = new ManualHostEnvironment()
-    host.suspended = true
+    host.suspend()
     host.online = false
     expect(host.standDownReason('https://backend.test/')).toBe('suspended')
   })
@@ -33,10 +118,17 @@ describe('standDownReason', () => {
 })
 
 describe('interruptedBy', () => {
-  it('is false for a non-network error even across a suspend', () => {
+  const sleptAt = (at: number): ManualHostEnvironment => {
     const host = new ManualHostEnvironment()
-    host.suspendedAt = 2_000
-    expect(host.interruptedBy(1_000, 'https://backend.test/', new Error('HTTP 500'))).toBe(false)
+    host.suspend(at)
+    host.resume()
+    return host
+  }
+
+  it('is false for a non-network error even across a suspend', () => {
+    expect(
+      sleptAt(2_000).interruptedBy(1_000, 'https://backend.test/', new Error('HTTP 500')),
+    ).toBe(false)
   })
 
   it('is false for a network error with no suspend and the host online', () => {
@@ -46,15 +138,11 @@ describe('interruptedBy', () => {
   })
 
   it('is true for a network error after a suspend that followed the start', () => {
-    const host = new ManualHostEnvironment()
-    host.suspendedAt = 2_000
-    expect(host.interruptedBy(1_000, 'https://backend.test/', fetchFailed())).toBe(true)
+    expect(sleptAt(2_000).interruptedBy(1_000, 'https://backend.test/', fetchFailed())).toBe(true)
   })
 
   it('ignores a suspend that predates the start', () => {
-    const host = new ManualHostEnvironment()
-    host.suspendedAt = 500
-    expect(host.interruptedBy(1_000, 'https://backend.test/', fetchFailed())).toBe(false)
+    expect(sleptAt(500).interruptedBy(1_000, 'https://backend.test/', fetchFailed())).toBe(false)
   })
 
   it('is true for a network error while the host reports offline', () => {
@@ -65,7 +153,7 @@ describe('interruptedBy', () => {
 
   it('treats an abort as a network error', () => {
     const host = new ManualHostEnvironment()
-    host.suspended = true
+    host.suspend()
     const abort = new DOMException('System suspended', 'AbortError')
     expect(host.interruptedBy(1_000, 'https://backend.test/', abort)).toBe(true)
   })
@@ -76,7 +164,7 @@ describe('suspendSignal', () => {
     const host = new ManualHostEnvironment()
     const { signal, release } = host.suspendSignal()
     expect(signal.aborted).toBe(false)
-    expect(host.suspendListeners.size).toBe(1)
+    expect(host.suspendListenerCount).toBe(1)
 
     host.suspend()
     expect(signal.aborted).toBe(true)
@@ -84,7 +172,7 @@ describe('suspendSignal', () => {
     expect((signal.reason as DOMException).name).toBe('AbortError')
 
     release()
-    expect(host.suspendListeners.size).toBe(0)
+    expect(host.suspendListenerCount).toBe(0)
   })
 })
 
@@ -190,6 +278,6 @@ describe('onAwake', () => {
     unsubscribe()
     vi.advanceTimersByTime(first + second + third)
     expect(listener).not.toHaveBeenCalled()
-    expect(host.resumeListeners.size).toBe(0)
+    expect(host.resumeListenerCount).toBe(0)
   })
 })

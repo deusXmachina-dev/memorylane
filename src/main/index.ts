@@ -23,7 +23,6 @@ import { createCaptureCoordinator } from '@main/capture/capture-orchestrator'
 import { createCaptureHotkeyManager } from '@main/capture/capture-hotkey-manager'
 import log from '@main/utils/logger'
 import '@main/utils/logger-electron'
-import { shouldPause, startPowerMonitoring } from '@main/monitoring/power-monitor'
 import { configureHttpTransport } from '@main/system/http-transport'
 import { CaptureStateManager } from './settings/capture-state-manager'
 import { CaptureSettingsManager } from './settings/capture-settings-manager'
@@ -410,10 +409,11 @@ app.on('ready', async () => {
   }
   remoteModelConfig.start()
 
+  const host = runtime.host
   const captureCoordinator = createCaptureCoordinator({
     capture: runtime.capture,
     captureStateManager,
-    isPaused: shouldPause,
+    isPaused: () => host.shouldPause(),
     userContextBuilder,
     onStateChanged: () => {
       void updateTrayMenu()
@@ -584,19 +584,17 @@ app.on('ready', async () => {
     log.warn(hotkeyResult.error)
   }
 
-  startPowerMonitoring({
-    onPause: () => {
-      if (!runtime?.capture.isCapturingNow()) return
-
-      void runtime.capture.forceClose()
-      log.info('[Main] Pausing capture (power state: locked/suspended)')
-      runtime.capture.stopCapture()
-    },
-    onResume: () => {
+  host.start((pause) => {
+    if (!pause) {
       captureCoordinator.resumeCaptureIfDesired('resume')
-    },
+      return
+    }
+    if (!runtime?.capture.isCapturingNow()) return
+    void runtime.capture.forceClose()
+    log.info('[Main] Pausing capture (power state: locked/suspended)')
+    runtime.capture.stopCapture()
   })
-  runtime.host.onAwake(() => {
+  host.onAwake(() => {
     databaseUploadSync?.scheduleUploadIfStale('resume')
     logUploadSync?.requestSync('resume')
     taskMiner?.kick()
