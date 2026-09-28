@@ -10,6 +10,8 @@ Install from the GitHub Marketplace:
 deusxmachina-dev/memorylane
 ```
 
+The plugin has no MCP server of its own. Its skills use the `memorylane` connector set up in step 2.
+
 <details>
 <summary><h2>2a. Analyzing your own data (MemoryLane desktop app installed)</h2></summary>
 
@@ -18,6 +20,8 @@ deusxmachina-dev/memorylane
 ![Integrations settings](../../assets/readme/integrations-add-to-claude.png)
 
 2. Restart Claude Desktop.
+
+If a skill reports the MemoryLane tools are unavailable, open **Integrations** and click **Reconnect**.
 
 </details>
 
