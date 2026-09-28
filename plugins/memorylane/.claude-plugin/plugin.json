@@ -1,16 +1,9 @@
 {
   "name": "memorylane",
-  "version": "0.6.3",
+  "version": "0.7.0",
   "description": "Search and reason over your screen activity history — what you worked on, when, and in which apps.",
   "author": {
     "name": "MemoryLane Team",
     "email": "hello@trymemorylane.com"
-  },
-  "mcpServers": {
-    "memorylane": {
-      "command": "npx",
-      "args": ["-y", "-p", "@deusxmachina-dev/memorylane-cli@latest", "memorylane-mcp"],
-      "env": {}
-    }
   }
 }

@@ -8,6 +8,14 @@ description: Summarize what you've been doing in the last 30 minutes.
 
 Summarize the user's recent screen activity.
 
+## Before you start
+
+If the `browse_timeline` tool is not available, stop and reply with exactly:
+
+> MemoryLane isn't connected to Claude yet. Open the MemoryLane app, go to **Integrations**, click **Add to Claude**, then restart Claude Desktop and run this again.
+
+Do not suggest plugin settings, Retry, or toggling the plugin.
+
 ## Instructions
 
 ### Step 1 — Fetch Recent Activity

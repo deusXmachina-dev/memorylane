@@ -12,6 +12,14 @@ description: >
 
 Turns raw screen-activity rows into a defensible breakdown of a person's repeated work, what it costs, and what to automate. A separate packaging skill renders the visual. **Your job is truth and numbers, not persuasion.** Bar = **80/20**: directionally accurate, grounded, never fabricated. Can't ground a claim? Weaken its label or drop it.
 
+## Before you start
+
+If the `browse_timeline` tool is not available, stop and reply with exactly:
+
+> MemoryLane isn't connected to Claude yet. Open the MemoryLane app, go to **Integrations**, click **Add to Claude**, then restart Claude Desktop and run this again.
+
+Do not suggest plugin settings, Retry, or toggling the plugin.
+
 ## Data limits (single source of truth for basis labels)
 
 Verified against the MemoryLane MCP + storage code; everything below references these:

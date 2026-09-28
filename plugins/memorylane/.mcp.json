@@ -1,7 +1,0 @@
-{
-  "memorylane": {
-    "command": "npx",
-    "args": ["-y", "-p", "@deusxmachina-dev/memorylane-cli@latest", "memorylane-mcp"],
-    "env": {}
-  }
-}

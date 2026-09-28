@@ -8,6 +8,14 @@ description: Generate a process description document as a downloadable PDF from 
 
 Generate a shareable process briefing from a detected pattern or user-described workflow — a visual process map, step-by-step walkthrough, occurrence stats, and improvement opportunities. Output is a downloadable PDF.
 
+## Before you start
+
+If the `browse_timeline` tool is not available, stop and reply with exactly:
+
+> MemoryLane isn't connected to Claude yet. Open the MemoryLane app, go to **Integrations**, click **Add to Claude**, then restart Claude Desktop and run this again.
+
+Do not suggest plugin settings, Retry, or toggling the plugin.
+
 ## The Goal
 
 A PDD is a **process briefing document** — not a corporate BPM artifact with swim lanes and BPMN notation. It's the document you wish existed when you joined a team: "here's how we actually do X, step by step, with the apps involved, how long it takes, and what varies each time."
