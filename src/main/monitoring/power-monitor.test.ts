@@ -49,4 +49,17 @@ describe('power monitor suspend tracking', () => {
     expect(pm.isSuspended()).toBe(false)
     expect(pm.getLastSuspendAt()).toBe(at)
   })
+
+  it('onSuspend listeners fire on suspend until unsubscribed', () => {
+    const listener = vi.fn()
+    const unsubscribe = pm.onSuspend(listener)
+
+    emitter.emit('suspend')
+    expect(listener).toHaveBeenCalledTimes(1)
+
+    unsubscribe()
+    emitter.emit('resume')
+    emitter.emit('suspend')
+    expect(listener).toHaveBeenCalledTimes(1)
+  })
 })

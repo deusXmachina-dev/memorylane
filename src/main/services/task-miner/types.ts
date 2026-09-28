@@ -84,22 +84,6 @@ export type ProgressCallback = (message: string) => void
 
 export type SweepAbortReason = 'failures' | 'rate-limit' | 'offline'
 
-/** Host signals the scheduled miner gates on; the app wires the power monitor, tests fake them. */
-export interface MinerEnvironment {
-  isSuspended(): boolean
-  isOnline(): boolean
-  /** Epoch ms of the last system suspend, 0 if none since launch. */
-  lastSuspendAt(): number
-  resolves(host: string): Promise<boolean>
-}
-
-export const DEFAULT_MINER_ENVIRONMENT: MinerEnvironment = {
-  isSuspended: () => false,
-  isOnline: () => true,
-  lastSuspendAt: () => 0,
-  resolves: async () => true,
-}
-
 /** Outcome of a one-time multi-day backfill (see TaskMiner.backfill). */
 export interface BackfillSummary {
   daysMined: number

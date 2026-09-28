@@ -29,8 +29,13 @@ import type { InferenceProvider } from '../../llm'
 import { PATTERN_DETECTION_CONFIG, TASK_BACKFILL } from '../../../shared/constants'
 import log from '@main/utils/logger'
 import { formatApiError } from './helpers'
-import { describeNetworkError } from '@main/utils/network-error'
 import { isLoopbackUrl } from '@/shared/url-utils'
+import {
+  DEFAULT_HOST_ENVIRONMENT,
+  interruptedByHost,
+  standDownReason,
+  type HostEnvironment,
+} from '@main/monitoring/host-environment'
 import { extractHttpStatus, isThrottleStatus } from '@main/semantic/error-classify'
 import { getDayBoundaries } from '@main/utils/day'
 import type {
@@ -39,15 +44,14 @@ import type {
   ProgressCallback,
   BackfillSummary,
   MinerEmbedder,
-  MinerEnvironment,
   SweepAbortReason,
 } from './types'
-import { DEFAULT_MINER_CONFIG, DEFAULT_MINER_ENVIRONMENT } from './types'
+import { DEFAULT_MINER_CONFIG } from './types'
 import { runDetection } from './run-detection'
 import { runClustering } from './clustering'
 import type { ClusteringRunSummary } from './clustering'
 
-export type { TaskMinerConfig, MiningRunResult, ProgressCallback, MinerEnvironment }
+export type { TaskMinerConfig, MiningRunResult, ProgressCallback }
 export type { ClusteringRunSummary }
 export { DEFAULT_MINER_CONFIG }
 
@@ -72,7 +76,7 @@ export class TaskMiner {
     private readonly storage: StorageService,
     private readonly provider: InferenceProvider | undefined,
     private readonly embedder: MinerEmbedder,
-    private readonly env: MinerEnvironment = DEFAULT_MINER_ENVIRONMENT,
+    private readonly env: HostEnvironment = DEFAULT_HOST_ENVIRONMENT,
   ) {}
 
   setEnabled(enabled: boolean): void {
@@ -142,18 +146,18 @@ export class TaskMiner {
     if (this.running) return
     if (Date.now() < this.nextAttemptAt) return
     // No 'resume' fires for a macOS dark wake, so this holds all night.
-    if (this.env.isSuspended()) {
+    const standDown = standDownReason(this.env, this.provider?.getRouteSnapshot()?.baseURL)
+    if (standDown === 'suspended') {
       this.logSkip('suspended', 'System suspended, skipping')
+      return
+    }
+    if (standDown === 'offline') {
+      this.logSkip('offline', 'No network, skipping')
       return
     }
 
     if (!this.provider || !this.provider.isConfigured()) {
       this.logSkip('no-provider', 'No inference provider configured, skipping')
-      return
-    }
-
-    if (this.isOffline(this.provider)) {
-      this.logSkip('offline', 'No network, skipping')
       return
     }
 
@@ -224,12 +228,6 @@ export class TaskMiner {
     } catch {
       return null
     }
-  }
-
-  private isOffline(provider: InferenceProvider): boolean {
-    if (this.env.isOnline()) return false
-    const baseURL = provider.getRouteSnapshot()?.baseURL
-    return !baseURL || !isLoopbackUrl(baseURL)
   }
 
   private logSkip(key: string, message: string): void {
@@ -352,8 +350,7 @@ export class TaskMiner {
           const throttled = isThrottleStatus(extractHttpStatus(error))
           const offline =
             !throttled &&
-            (this.env.lastSuspendAt() > claimedAt || this.isOffline(provider)) &&
-            describeNetworkError(error) !== null
+            interruptedByHost(this.env, claimedAt, provider.getRouteSnapshot()?.baseURL, error)
           // Neither a throttled or offline day nor a day whose siblings already
           // stopped the sweep is a bad day, so all go back unspent. That keeps the
           // attempts burned by an outage at SWEEP_MAX_CONSECUTIVE_FAILURES no matter

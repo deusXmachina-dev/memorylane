@@ -10,6 +10,7 @@ let screenLocked = false
 let suspended = false
 let onBattery = false
 let lastSuspendAt = 0
+const suspendListeners = new Set<() => void>()
 
 export function shouldPause(): boolean {
   return screenLocked || suspended
@@ -27,6 +28,13 @@ export function isSuspended(): boolean {
 /** Epoch ms of the last system suspend, 0 if none since launch. */
 export function getLastSuspendAt(): number {
   return lastSuspendAt
+}
+
+export function onSuspend(listener: () => void): () => void {
+  suspendListeners.add(listener)
+  return () => {
+    suspendListeners.delete(listener)
+  }
 }
 
 /** Seconds since the last system-wide user input (mouse move counts), per the OS. */
@@ -71,6 +79,7 @@ export function startPowerMonitoring(opts: {
     log.info('[Power] System suspended')
     suspended = true
     lastSuspendAt = Date.now()
+    for (const listener of suspendListeners) listener()
     emitIfNeeded()
   })
 

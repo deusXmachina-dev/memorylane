@@ -11,8 +11,8 @@ import { PATTERN_DETECTION_CONFIG, TASK_BACKFILL } from '../../../shared/constan
 import { TaskMiner } from '.'
 import { runDetection } from './run-detection'
 import { runClustering } from './clustering'
-import type { MinerEmbedder, MinerEnvironment } from './types'
-import { DEFAULT_MINER_ENVIRONMENT } from './types'
+import type { MinerEmbedder } from './types'
+import { DEFAULT_HOST_ENVIRONMENT, type HostEnvironment } from '@main/monitoring/host-environment'
 import log from '@main/utils/logger'
 
 vi.mock('./run-detection', () => ({ runDetection: vi.fn() }))
@@ -494,9 +494,9 @@ describe('TaskMiner sweep', () => {
   })
 
   const localProvider = providerFor('openai-compatible', 'http://localhost:11434/v1')
-  const minerWith = (env: Partial<MinerEnvironment>, provider = configuredProvider): void => {
+  const minerWith = (env: Partial<HostEnvironment>, provider = configuredProvider): void => {
     miner = new TaskMiner(storage, provider, embedder, {
-      ...DEFAULT_MINER_ENVIRONMENT,
+      ...DEFAULT_HOST_ENVIRONMENT,
       ...env,
     })
     miner.updateModel('test/model')

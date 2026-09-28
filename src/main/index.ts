@@ -27,9 +27,11 @@ import '@main/utils/logger-electron'
 import {
   getLastSuspendAt,
   isSuspended,
+  onSuspend,
   shouldPause,
   startPowerMonitoring,
 } from '@main/monitoring/power-monitor'
+import type { HostEnvironment } from '@main/monitoring/host-environment'
 import { configureHttpTransport } from '@main/system/http-transport'
 import { CaptureStateManager } from './settings/capture-state-manager'
 import { CaptureSettingsManager } from './settings/capture-settings-manager'
@@ -336,6 +338,18 @@ app.on('ready', async () => {
   })
   deviceReportSync.start()
 
+  const hostEnvironment: HostEnvironment = {
+    isSuspended,
+    isOnline: () => net.isOnline(),
+    lastSuspendAt: getLastSuspendAt,
+    resolves: (host) =>
+      lookup(host).then(
+        () => true,
+        () => false,
+      ),
+    onSuspend,
+  }
+
   if (editionConfig.edition === 'enterprise') {
     databaseUploadSync = new DatabaseUploadSync({
       storage: runtime.storage,
@@ -349,6 +363,7 @@ app.on('ready', async () => {
       getBackendUrl: () => ENTERPRISE_BACKEND_CONFIG.BACKEND_URL,
       getLastUploadAt: () => runtime?.storage.uploadRuns.getLastRunTimestamp() ?? null,
       recordUploadAt: (ts) => runtime?.storage.uploadRuns.record(ts),
+      env: hostEnvironment,
     })
     databaseUploadSync.start()
 
@@ -380,16 +395,12 @@ app.on('ready', async () => {
   userContextBuilder = new UserContextBuilder(runtime.storage, runtime.inferenceProvider)
   // The scheduled analyzer (mining + clustering). Uses the patternDetection*
   // capture settings for enable state and model.
-  taskMiner = new TaskMiner(runtime.storage, runtime.inferenceProvider, runtime.mlWorker, {
-    isSuspended,
-    isOnline: () => net.isOnline(),
-    lastSuspendAt: getLastSuspendAt,
-    resolves: (host) =>
-      lookup(host).then(
-        () => true,
-        () => false,
-      ),
-  })
+  taskMiner = new TaskMiner(
+    runtime.storage,
+    runtime.inferenceProvider,
+    runtime.mlWorker,
+    hostEnvironment,
+  )
   taskMiner.setEnabled(settings.patternDetectionEnabled)
   pushModelSelections(
     {
