@@ -3,7 +3,7 @@ import * as zlib from 'zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DatabaseUploadSync } from './database-upload-sync'
 import log from '@main/utils/logger'
-import { DEFAULT_HOST_ENVIRONMENT, type HostEnvironment } from '@main/monitoring/host-environment'
+import { ManualHostEnvironment } from '@main/monitoring/host-environment'
 
 // The real prep runs in a utilityProcess (electron) and does SQLite work;
 // stub it with an in-process gzip of the backup file so the upload flow stays
@@ -623,7 +623,7 @@ describe('DatabaseUploadSync', () => {
   })
 
   const syncWith = (
-    env: Partial<HostEnvironment>,
+    host: ManualHostEnvironment,
     overrides: { recordUploadAt?: (ts: number) => void; intervalMs?: number } = {},
   ) => {
     const backupToFile = vi.fn(async (dest: string) => {
@@ -639,7 +639,7 @@ describe('DatabaseUploadSync', () => {
       getLastUploadAt: () => null,
       recordUploadAt: overrides.recordUploadAt ?? (() => {}),
       intervalMs: overrides.intervalMs,
-      env: { ...DEFAULT_HOST_ENVIRONMENT, ...env },
+      env: host,
     })
     return { sync, backupToFile }
   }
@@ -648,7 +648,9 @@ describe('DatabaseUploadSync', () => {
     vi.useFakeTimers()
     const fetchMock = mockFetchResponse(201, { ok: true, upload_id: 'up_1', checksum_sha256: 'x' })
     globalThis.fetch = fetchMock
-    const { sync, backupToFile } = syncWith({ isSuspended: () => true }, { intervalMs: 1000 })
+    const host = new ManualHostEnvironment()
+    host.suspended = true
+    const { sync, backupToFile } = syncWith(host, { intervalMs: 1000 })
 
     sync.start()
     await vi.advanceTimersByTimeAsync(0)
@@ -662,7 +664,9 @@ describe('DatabaseUploadSync', () => {
   it('skips scheduled uploads while offline', async () => {
     const fetchMock = mockFetchResponse(201, { ok: true, upload_id: 'up_1', checksum_sha256: 'x' })
     globalThis.fetch = fetchMock
-    const { sync, backupToFile } = syncWith({ isOnline: () => false })
+    const host = new ManualHostEnvironment()
+    host.online = false
+    const { sync, backupToFile } = syncWith(host)
 
     sync.start()
     await sync.stop()
@@ -674,15 +678,16 @@ describe('DatabaseUploadSync', () => {
   it('a manual trigger ignores the suspended and offline gates', async () => {
     const fetchMock = mockFetchResponse(201, { ok: true, upload_id: 'up_1', checksum_sha256: 'x' })
     globalThis.fetch = fetchMock
-    const { sync } = syncWith({ isOnline: () => false })
+    const host = new ManualHostEnvironment()
+    host.online = false
+    const { sync } = syncWith(host)
 
     expect(await sync.triggerUpload()).toEqual({ success: true })
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('aborts the transfer on suspend and treats it as not attempted', async () => {
-    const listeners = new Set<() => void>()
-    let suspended = false
+    const host = new ManualHostEnvironment()
     const fetchMock = vi.fn<typeof fetch>(
       (_url, init) =>
         new Promise((_resolve, reject) => {
@@ -693,32 +698,20 @@ describe('DatabaseUploadSync', () => {
     const recordUploadAt = vi.fn()
     const errorLog = vi.spyOn(log, 'error').mockImplementation(() => {})
     const infoLog = vi.spyOn(log, 'info').mockImplementation(() => {})
-    const { sync, backupToFile } = syncWith(
-      {
-        isSuspended: () => suspended,
-        onSuspend: (listener) => {
-          listeners.add(listener)
-          return () => {
-            listeners.delete(listener)
-          }
-        },
-      },
-      { recordUploadAt },
-    )
+    const { sync, backupToFile } = syncWith(host, { recordUploadAt })
 
     sync.start()
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
-    expect(listeners.size).toBe(1)
+    expect(host.suspendListeners.size).toBe(1)
 
-    suspended = true
-    for (const listener of listeners) listener()
+    host.suspend()
     await sync.stop()
 
     expect(backupToFile).toHaveBeenCalledTimes(1)
     expect(recordUploadAt).not.toHaveBeenCalled()
     expect(errorLog).not.toHaveBeenCalled()
     expect(infoLog.mock.calls.some(([msg]) => /deferred/.test(String(msg)))).toBe(true)
-    expect(listeners.size).toBe(0)
+    expect(host.suspendListeners.size).toBe(0)
     errorLog.mockRestore()
     infoLog.mockRestore()
   })
@@ -732,7 +725,7 @@ describe('DatabaseUploadSync', () => {
       })
     })
     const errorLog = vi.spyOn(log, 'error').mockImplementation(() => {})
-    const { sync } = syncWith({})
+    const { sync } = syncWith(new ManualHostEnvironment())
 
     sync.start()
     await sync.stop()
@@ -745,14 +738,15 @@ describe('DatabaseUploadSync', () => {
     vi.useFakeTimers()
     const fetchMock = mockFetchResponse(201, { ok: true, upload_id: 'up_1', checksum_sha256: 'x' })
     globalThis.fetch = fetchMock
-    let suspended = true
-    const { sync, backupToFile } = syncWith({ isSuspended: () => suspended }, { intervalMs: 1000 })
+    const host = new ManualHostEnvironment()
+    host.suspended = true
+    const { sync, backupToFile } = syncWith(host, { intervalMs: 1000 })
 
     sync.start()
     await vi.advanceTimersByTimeAsync(1000)
     expect(backupToFile).not.toHaveBeenCalled()
 
-    suspended = false
+    host.suspended = false
     sync.scheduleUploadIfStale('resume')
     await vi.advanceTimersByTimeAsync(0)
     await sync.stop()

@@ -30,12 +30,7 @@ import { PATTERN_DETECTION_CONFIG, TASK_BACKFILL } from '../../../shared/constan
 import log from '@main/utils/logger'
 import { formatApiError } from './helpers'
 import { isLoopbackUrl } from '@/shared/url-utils'
-import {
-  DEFAULT_HOST_ENVIRONMENT,
-  interruptedByHost,
-  standDownReason,
-  type HostEnvironment,
-} from '@main/monitoring/host-environment'
+import { HostEnvironment, ManualHostEnvironment } from '@main/monitoring/host-environment'
 import { extractHttpStatus, isThrottleStatus } from '@main/semantic/error-classify'
 import { getDayBoundaries } from '@main/utils/day'
 import type {
@@ -76,7 +71,7 @@ export class TaskMiner {
     private readonly storage: StorageService,
     private readonly provider: InferenceProvider | undefined,
     private readonly embedder: MinerEmbedder,
-    private readonly env: HostEnvironment = DEFAULT_HOST_ENVIRONMENT,
+    private readonly env: HostEnvironment = new ManualHostEnvironment(),
   ) {}
 
   setEnabled(enabled: boolean): void {
@@ -146,18 +141,18 @@ export class TaskMiner {
     if (this.running) return
     if (Date.now() < this.nextAttemptAt) return
     // No 'resume' fires for a macOS dark wake, so this holds all night.
-    const standDown = standDownReason(this.env, this.provider?.getRouteSnapshot()?.baseURL)
-    if (standDown === 'suspended') {
+    if (this.env.isSuspended()) {
       this.logSkip('suspended', 'System suspended, skipping')
-      return
-    }
-    if (standDown === 'offline') {
-      this.logSkip('offline', 'No network, skipping')
       return
     }
 
     if (!this.provider || !this.provider.isConfigured()) {
       this.logSkip('no-provider', 'No inference provider configured, skipping')
+      return
+    }
+
+    if (this.env.standDownReason(this.provider.getRouteSnapshot()?.baseURL) === 'offline') {
+      this.logSkip('offline', 'No network, skipping')
       return
     }
 
@@ -350,7 +345,7 @@ export class TaskMiner {
           const throttled = isThrottleStatus(extractHttpStatus(error))
           const offline =
             !throttled &&
-            interruptedByHost(this.env, claimedAt, provider.getRouteSnapshot()?.baseURL, error)
+            this.env.interruptedBy(claimedAt, provider.getRouteSnapshot()?.baseURL, error)
           // Neither a throttled or offline day nor a day whose siblings already
           // stopped the sweep is a bad day, so all go back unspent. That keeps the
           // attempts burned by an outage at SWEEP_MAX_CONSECUTIVE_FAILURES no matter

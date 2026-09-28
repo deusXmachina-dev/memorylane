@@ -11,6 +11,7 @@ let suspended = false
 let onBattery = false
 let lastSuspendAt = 0
 const suspendListeners = new Set<() => void>()
+const resumeListeners = new Set<() => void>()
 
 export function shouldPause(): boolean {
   return screenLocked || suspended
@@ -34,6 +35,13 @@ export function onSuspend(listener: () => void): () => void {
   suspendListeners.add(listener)
   return () => {
     suspendListeners.delete(listener)
+  }
+}
+
+export function onResume(listener: () => void): () => void {
+  resumeListeners.add(listener)
+  return () => {
+    resumeListeners.delete(listener)
   }
 }
 
@@ -86,6 +94,7 @@ export function startPowerMonitoring(opts: {
   powerMonitor.on('resume', () => {
     log.info('[Power] System resumed')
     suspended = false
+    for (const listener of resumeListeners) listener()
     emitIfNeeded()
   })
 

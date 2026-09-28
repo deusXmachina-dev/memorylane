@@ -12,7 +12,7 @@ import { TaskMiner } from '.'
 import { runDetection } from './run-detection'
 import { runClustering } from './clustering'
 import type { MinerEmbedder } from './types'
-import { DEFAULT_HOST_ENVIRONMENT, type HostEnvironment } from '@main/monitoring/host-environment'
+import { ManualHostEnvironment } from '@main/monitoring/host-environment'
 import log from '@main/utils/logger'
 
 vi.mock('./run-detection', () => ({ runDetection: vi.fn() }))
@@ -494,12 +494,13 @@ describe('TaskMiner sweep', () => {
   })
 
   const localProvider = providerFor('openai-compatible', 'http://localhost:11434/v1')
-  const minerWith = (env: Partial<HostEnvironment>, provider = configuredProvider): void => {
-    miner = new TaskMiner(storage, provider, embedder, {
-      ...DEFAULT_HOST_ENVIRONMENT,
-      ...env,
-    })
+  const minerWith = (
+    provider = configuredProvider,
+    host = new ManualHostEnvironment(),
+  ): ManualHostEnvironment => {
+    miner = new TaskMiner(storage, provider, embedder, host)
     miner.updateModel('test/model')
+    return host
   }
   const dnsFailure = (): APICallError =>
     new APICallError({
@@ -514,12 +515,11 @@ describe('TaskMiner sweep', () => {
 
   it('hands a day back unspent when the network drops mid-sweep', async () => {
     useFakeClockAtNoon()
-    let online = true
-    minerWith({ isOnline: () => online })
+    const host = minerWith()
     seedDays(TASK_BACKFILL.CLUSTER_EVERY_DAYS + 3)
     seedFiller()
     mockedRunDetection.mockImplementation(async () => {
-      online = false
+      host.online = false
       throw dnsFailure()
     })
 
@@ -536,7 +536,7 @@ describe('TaskMiner sweep', () => {
     expect(storage.miningDays.countByStatus().running).toBe(0)
     expect(mockedRunClustering).not.toHaveBeenCalled()
 
-    online = true
+    host.online = true
     miner.scheduleRun()
     expect(miner.isBusy()).toBe(false)
 
@@ -565,7 +565,9 @@ describe('TaskMiner sweep', () => {
   })
 
   it('scheduleRun mines a local endpoint while offline', async () => {
-    minerWith({ isOnline: () => false }, localProvider)
+    const offline = new ManualHostEnvironment()
+    offline.online = false
+    minerWith(localProvider, offline)
     seedDays(2)
     seedFiller()
 
@@ -577,7 +579,9 @@ describe('TaskMiner sweep', () => {
 
   it('a refused local endpoint spends the attempt while offline', async () => {
     useFakeClockAtNoon()
-    minerWith({ isOnline: () => false }, localProvider)
+    const offline = new ManualHostEnvironment()
+    offline.online = false
+    minerWith(localProvider, offline)
     seedDays(2)
     mockedRunDetection.mockRejectedValueOnce(
       new TypeError('fetch failed', {
@@ -594,12 +598,11 @@ describe('TaskMiner sweep', () => {
 
   it('a deadline hit across a sleep is refunded', async () => {
     useFakeClockAtNoon()
-    let suspendAt = 0
-    minerWith({ lastSuspendAt: () => suspendAt })
+    const host = minerWith()
     seedDays(2)
     mockedRunDetection.mockImplementationOnce(async () => {
       vi.setSystemTime(Date.now() + 60_000)
-      suspendAt = Date.now()
+      host.suspendedAt = Date.now()
       throw deadline()
     })
 
@@ -611,8 +614,8 @@ describe('TaskMiner sweep', () => {
   })
 
   it('scheduleRun stands down while the system is suspended, logging it once', async () => {
-    let suspended = true
-    minerWith({ isSuspended: () => suspended })
+    const host = minerWith()
+    host.suspended = true
     seedDays(2)
     seedFiller()
     const info = vi.spyOn(log, 'info')
@@ -625,15 +628,15 @@ describe('TaskMiner sweep', () => {
     expect(info.mock.calls.filter(([msg]) => /suspended/.test(String(msg)))).toHaveLength(1)
     info.mockRestore()
 
-    suspended = false
+    host.suspended = false
     miner.scheduleRun()
     expect(miner.isBusy()).toBe(true)
     await drain()
   })
 
   it('scheduleRun stands down while offline, logging it once', async () => {
-    let online = false
-    minerWith({ isOnline: () => online })
+    const host = minerWith()
+    host.online = false
     seedDays(2)
     seedFiller()
     const info = vi.spyOn(log, 'info')
@@ -645,16 +648,16 @@ describe('TaskMiner sweep', () => {
     expect(info.mock.calls.filter(([msg]) => /No network/.test(String(msg)))).toHaveLength(1)
     info.mockRestore()
 
-    online = true
+    host.online = true
     miner.scheduleRun()
     expect(miner.isBusy()).toBe(true)
     await drain()
   })
 
   it("scheduleRun stands down while the provider host doesn't resolve, logging it once", async () => {
-    let resolves = false
-    const lookup = vi.fn<(host: string) => Promise<boolean>>(async () => resolves)
-    minerWith({ resolves: lookup })
+    const host = minerWith()
+    host.resolvable = false
+    const lookup = vi.spyOn(host, 'resolves')
     seedDays(2)
     seedFiller()
     const info = vi.spyOn(log, 'info')
@@ -672,15 +675,16 @@ describe('TaskMiner sweep', () => {
     expect(info.mock.calls.filter(([msg]) => /Can't resolve/.test(String(msg)))).toHaveLength(1)
     info.mockRestore()
 
-    resolves = true
+    host.resolvable = true
     miner.scheduleRun()
     await drain()
     expect(storage.miningDays.getAll().every((d) => d.status === 'completed')).toBe(true)
   })
 
   it('scheduleRun skips the host lookup for a local endpoint', async () => {
-    const lookup = vi.fn<(host: string) => Promise<boolean>>(async () => false)
-    minerWith({ resolves: lookup }, localProvider)
+    const host = minerWith(localProvider)
+    host.resolvable = false
+    const lookup = vi.spyOn(host, 'resolves')
     seedDays(2)
     seedFiller()
 
@@ -692,8 +696,9 @@ describe('TaskMiner sweep', () => {
   })
 
   it('scheduleRun skips the host lookup for an IP-literal endpoint', async () => {
-    const lookup = vi.fn<(host: string) => Promise<boolean>>(async () => false)
-    minerWith({ resolves: lookup }, providerFor('openai-compatible', 'http://[fd12::10]:11434/v1'))
+    const host = minerWith(providerFor('openai-compatible', 'http://[fd12::10]:11434/v1'))
+    host.resolvable = false
+    const lookup = vi.spyOn(host, 'resolves')
     seedDays(2)
     seedFiller()
 
@@ -706,7 +711,8 @@ describe('TaskMiner sweep', () => {
 
   it('scheduleRun gives up on a hung host lookup and frees the miner', async () => {
     useFakeClockAtNoon()
-    minerWith({ resolves: () => new Promise<boolean>(() => {}) })
+    const host = minerWith()
+    vi.spyOn(host, 'resolves').mockReturnValue(new Promise<boolean>(() => {}))
     seedDays(2)
     seedFiller()
 

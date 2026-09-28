@@ -10,9 +10,8 @@
 // runtime → embedding → @huggingface/transformers during static import resolution.
 import '@main/system/onnxruntime-path-fix'
 
-import { app, globalShortcut, net } from 'electron'
+import { app, globalShortcut } from 'electron'
 import path from 'node:path'
-import { lookup } from 'node:dns/promises'
 import { config as loadEnv } from 'dotenv'
 import {
   AUTO_START_HIDDEN_ARG,
@@ -24,14 +23,7 @@ import { createCaptureCoordinator } from '@main/capture/capture-orchestrator'
 import { createCaptureHotkeyManager } from '@main/capture/capture-hotkey-manager'
 import log from '@main/utils/logger'
 import '@main/utils/logger-electron'
-import {
-  getLastSuspendAt,
-  isSuspended,
-  onSuspend,
-  shouldPause,
-  startPowerMonitoring,
-} from '@main/monitoring/power-monitor'
-import type { HostEnvironment } from '@main/monitoring/host-environment'
+import { shouldPause, startPowerMonitoring } from '@main/monitoring/power-monitor'
 import { configureHttpTransport } from '@main/system/http-transport'
 import { CaptureStateManager } from './settings/capture-state-manager'
 import { CaptureSettingsManager } from './settings/capture-settings-manager'
@@ -338,18 +330,6 @@ app.on('ready', async () => {
   })
   deviceReportSync.start()
 
-  const hostEnvironment: HostEnvironment = {
-    isSuspended,
-    isOnline: () => net.isOnline(),
-    lastSuspendAt: getLastSuspendAt,
-    resolves: (host) =>
-      lookup(host).then(
-        () => true,
-        () => false,
-      ),
-    onSuspend,
-  }
-
   if (editionConfig.edition === 'enterprise') {
     databaseUploadSync = new DatabaseUploadSync({
       storage: runtime.storage,
@@ -363,7 +343,7 @@ app.on('ready', async () => {
       getBackendUrl: () => ENTERPRISE_BACKEND_CONFIG.BACKEND_URL,
       getLastUploadAt: () => runtime?.storage.uploadRuns.getLastRunTimestamp() ?? null,
       recordUploadAt: (ts) => runtime?.storage.uploadRuns.record(ts),
-      env: hostEnvironment,
+      env: runtime.host,
     })
     databaseUploadSync.start()
 
@@ -399,7 +379,7 @@ app.on('ready', async () => {
     runtime.storage,
     runtime.inferenceProvider,
     runtime.mlWorker,
-    hostEnvironment,
+    runtime.host,
   )
   taskMiner.setEnabled(settings.patternDetectionEnabled)
   pushModelSelections(
@@ -614,11 +594,12 @@ app.on('ready', async () => {
     },
     onResume: () => {
       captureCoordinator.resumeCaptureIfDesired('resume')
-      // Catch up uploads on wake — the 24h interval doesn't survive sleep.
-      databaseUploadSync?.scheduleUploadIfStale('resume')
-      logUploadSync?.requestSync('resume')
-      taskMiner?.kick()
     },
+  })
+  runtime.host.onAwake(() => {
+    databaseUploadSync?.scheduleUploadIfStale('resume')
+    logUploadSync?.requestSync('resume')
+    taskMiner?.kick()
   })
 
   log.info(

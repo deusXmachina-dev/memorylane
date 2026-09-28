@@ -32,6 +32,8 @@ import {
 } from '@main/capture/capture-controller'
 import { PresenceMonitor } from '@main/monitoring/presence-monitor'
 import { getSystemIdleSeconds, shouldPause } from '@main/monitoring/power-monitor'
+import type { HostEnvironment } from '@main/monitoring/host-environment'
+import { ElectronHostEnvironment } from '@main/monitoring/electron-host-environment'
 import { PRESENCE_MONITOR_CONFIG } from '../shared/constants'
 import { EvalRecorder } from './eval/eval-recorder'
 import { EvalFixtureStore } from './eval/eval-fixture-store'
@@ -40,6 +42,7 @@ import { MlWorkerClient } from './services/ml-worker-client'
 
 export interface MainRuntime {
   capture: RuntimeCapture
+  host: HostEnvironment
   storage: StorageService
   mlWorker: MlWorkerClient
   usageTracker: UsageTracker
@@ -242,6 +245,7 @@ export async function createMainRuntime(params: {
 
   return {
     capture,
+    host: new ElectronHostEnvironment(),
     storage,
     mlWorker,
     usageTracker,

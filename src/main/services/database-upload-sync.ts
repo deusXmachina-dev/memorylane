@@ -5,13 +5,7 @@ import log from '@main/utils/logger'
 import { isSameDay } from '@main/utils/day'
 import { type StripOptions } from './strip-database-for-upload'
 import { BACKEND_UPLOAD_TIMEOUT_MS } from '../../shared/constants'
-import {
-  DEFAULT_HOST_ENVIRONMENT,
-  interruptedByHost,
-  standDownReason,
-  suspendSignal,
-  type HostEnvironment,
-} from '@main/monitoring/host-environment'
+import { HostEnvironment, ManualHostEnvironment } from '@main/monitoring/host-environment'
 
 // Poll cadence, NOT the upload frequency. We check hourly whether today's
 // upload has happened yet; the isSameDay gate deduplicates to exactly one
@@ -82,7 +76,7 @@ export class DatabaseUploadSync {
     this.recordUploadAt = params.recordUploadAt
     this.intervalMs = params.intervalMs ?? DEFAULT_CHECK_INTERVAL_MS
     this.prepareUpload = params.prepareUpload ?? defaultPrepareUpload
-    this.env = params.env ?? DEFAULT_HOST_ENVIRONMENT
+    this.env = params.env ?? new ManualHostEnvironment()
   }
 
   public start(): void {
@@ -180,7 +174,7 @@ export class DatabaseUploadSync {
         log.debug(`[DatabaseUploadSync] Skipping upload (${reason}) — already uploaded today`)
         return
       }
-      const standDown = standDownReason(this.env, this.getBackendUrl())
+      const standDown = this.env.standDownReason(this.getBackendUrl())
       if (standDown !== null) {
         log.info(`[DatabaseUploadSync] Skipping upload (${reason}) — ${standDown}`)
         return
@@ -193,7 +187,7 @@ export class DatabaseUploadSync {
     }
 
     const startedAt = Date.now()
-    const suspend = suspendSignal(this.env)
+    const suspend = this.env.suspendSignal()
     const tempPath = path.join(os.tmpdir(), `.memorylane-upload-${process.pid}.${startedAt}.tmp`)
 
     try {
@@ -234,9 +228,9 @@ export class DatabaseUploadSync {
         `[DatabaseUploadSync] Upload succeeded (${reason}): upload_id=${data.upload_id} checksum=${data.checksum_sha256}`,
       )
     } catch (error) {
-      if (!force && interruptedByHost(this.env, startedAt, this.getBackendUrl(), error)) {
+      if (!force && this.env.interruptedBy(startedAt, this.getBackendUrl(), error)) {
         const message = error instanceof Error ? error.message : String(error)
-        log.info(`[DatabaseUploadSync] Upload deferred (${reason}), retrying on resume: ${message}`)
+        log.info(`[DatabaseUploadSync] Upload deferred (${reason}): ${message}`)
         return
       }
       throw error
