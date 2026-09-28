@@ -10,6 +10,14 @@ Turn one workflow into clear, build-ready instructions for a specific automation
 Assumes it runs **after** `/discover-patterns` or `/process-analyst-new`, so it reuses
 their output as the source and does NOT re-mine the timeline unless nothing is supplied.
 
+## Before you start
+
+If the `browse_timeline` tool is not available, stop and reply with exactly:
+
+> MemoryLane isn't connected to Claude yet. Open the MemoryLane app, go to **Integrations**, click **Add to Claude**, then restart Claude Desktop and run this again.
+
+Do not suggest plugin settings, Retry, or toggling the plugin.
+
 ## Step 1. Get the workflow (prefer prior output)
 
 In priority order, do NOT re-derive what you already have:

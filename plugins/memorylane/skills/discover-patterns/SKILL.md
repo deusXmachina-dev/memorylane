@@ -8,6 +8,14 @@ description: Discover repeated workflow patterns from screen activity and sugges
 
 Mine the user's screen activity for repeated workflows worth automating — via native integrations, n8n/Make/Zapier, or custom scripts. This command scans timeline data directly, applies aggressive filtering to discard casual activity, and surfaces only patterns with real automation potential.
 
+## Before you start
+
+If the `browse_timeline` tool is not available, stop and reply with exactly:
+
+> MemoryLane isn't connected to Claude yet. Open the MemoryLane app, go to **Integrations**, click **Add to Claude**, then restart Claude Desktop and run this again.
+
+Do not suggest plugin settings, Retry, or toggling the plugin.
+
 ## Instructions
 
 ### Step 1 — Scan Day by Day
