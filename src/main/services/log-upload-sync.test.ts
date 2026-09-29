@@ -9,6 +9,8 @@ vi.mock('@main/utils/logger', () => ({
 
 import { LogUploadSync, type LogUploadSyncParams } from './log-upload-sync'
 import type { LogUploadState } from './log-upload-store'
+import log from '@main/utils/logger'
+import { ManualHostEnvironment } from '@main/monitoring/host-environment'
 
 const NOW = 1_700_000_000_000
 
@@ -31,6 +33,7 @@ describe('LogUploadSync', () => {
   let statsPath: string
 
   beforeEach(() => {
+    vi.clearAllMocks()
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'log-upload-sync-test-'))
     logPath = path.join(dir, 'main.log')
     statsPath = path.join(dir, 'summary-mode-stats.json')
@@ -189,6 +192,87 @@ describe('LogUploadSync', () => {
     expect(await sync.triggerUpload()).toEqual({ success: true })
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('skips scheduled uploads while suspended, offline, or unresolved', async () => {
+    const fetchMock = mockFetchResponse(200)
+    globalThis.fetch = fetchMock
+    const host = new ManualHostEnvironment()
+    const { sync, zipFiles } = makeSync({ env: host, getBackendUrl: () => 'https://backend.test/' })
+
+    host.suspend()
+    sync.requestSync('interval')
+    await sync.stop()
+
+    host.resume()
+    host.online = false
+    sync.requestSync('interval')
+    await sync.stop()
+
+    host.online = true
+    host.resolvable = false
+    sync.requestSync('interval')
+    await sync.stop()
+
+    expect(zipFiles).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('triggerUpload ignores the suspended, offline and unresolved gates', async () => {
+    const fetchMock = mockFetchResponse(200)
+    globalThis.fetch = fetchMock
+    const host = new ManualHostEnvironment()
+    host.suspend()
+    host.online = false
+    host.resolvable = false
+    const { sync } = makeSync({ env: host, getBackendUrl: () => 'https://backend.test/' })
+
+    expect(await sync.triggerUpload()).toEqual({ success: true })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('aborts the transfer on suspend and treats it as not attempted', async () => {
+    const host = new ManualHostEnvironment()
+    const fetchMock = vi.fn<typeof fetch>(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+        }),
+    )
+    globalThis.fetch = fetchMock
+    const { sync, state } = makeSync({ env: host, getBackendUrl: () => 'https://backend.test/' })
+
+    sync.requestSync('interval')
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(host.suspendListenerCount).toBe(1)
+
+    host.suspend()
+    await sync.stop()
+
+    expect(state.value).toBeNull()
+    expect(log.warn).not.toHaveBeenCalled()
+    expect(vi.mocked(log.info).mock.calls.some(([msg]) => /deferred/.test(String(msg)))).toBe(true)
+    expect(host.suspendListenerCount).toBe(0)
+  })
+
+  it('a network failure with no suspend still counts as a failed upload', async () => {
+    globalThis.fetch = vi.fn<typeof fetch>(async () => {
+      throw new TypeError('fetch failed', {
+        cause: Object.assign(new Error('getaddrinfo ENOTFOUND backend.test'), {
+          code: 'ENOTFOUND',
+        }),
+      })
+    })
+    const { sync, state } = makeSync({
+      env: new ManualHostEnvironment(),
+      getBackendUrl: () => 'https://backend.test/',
+    })
+
+    sync.requestSync('interval')
+    await sync.stop()
+
+    expect(state.value).toBeNull()
+    expect(log.warn).toHaveBeenCalledTimes(1)
   })
 
   it('triggerUpload surfaces an upload failure', async () => {

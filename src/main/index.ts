@@ -10,9 +10,8 @@
 // runtime → embedding → @huggingface/transformers during static import resolution.
 import '@main/system/onnxruntime-path-fix'
 
-import { app, globalShortcut, net } from 'electron'
+import { app, globalShortcut } from 'electron'
 import path from 'node:path'
-import { lookup } from 'node:dns/promises'
 import { config as loadEnv } from 'dotenv'
 import {
   AUTO_START_HIDDEN_ARG,
@@ -24,12 +23,6 @@ import { createCaptureCoordinator } from '@main/capture/capture-orchestrator'
 import { createCaptureHotkeyManager } from '@main/capture/capture-hotkey-manager'
 import log from '@main/utils/logger'
 import '@main/utils/logger-electron'
-import {
-  getLastSuspendAt,
-  isSuspended,
-  shouldPause,
-  startPowerMonitoring,
-} from '@main/monitoring/power-monitor'
 import { configureHttpTransport } from '@main/system/http-transport'
 import { CaptureStateManager } from './settings/capture-state-manager'
 import { CaptureSettingsManager } from './settings/capture-settings-manager'
@@ -349,6 +342,7 @@ app.on('ready', async () => {
       getBackendUrl: () => ENTERPRISE_BACKEND_CONFIG.BACKEND_URL,
       getLastUploadAt: () => runtime?.storage.uploadRuns.getLastRunTimestamp() ?? null,
       recordUploadAt: (ts) => runtime?.storage.uploadRuns.record(ts),
+      env: runtime.host,
     })
     databaseUploadSync.start()
 
@@ -359,6 +353,7 @@ app.on('ready', async () => {
       getBackendUrl: () => ENTERPRISE_BACKEND_CONFIG.BACKEND_URL,
       readState: () => readLogUploadState(),
       writeState: (state) => writeLogUploadState(state),
+      env: runtime.host,
     })
     logUploadSync.start()
 
@@ -380,16 +375,12 @@ app.on('ready', async () => {
   userContextBuilder = new UserContextBuilder(runtime.storage, runtime.inferenceProvider)
   // The scheduled analyzer (mining + clustering). Uses the patternDetection*
   // capture settings for enable state and model.
-  taskMiner = new TaskMiner(runtime.storage, runtime.inferenceProvider, runtime.mlWorker, {
-    isSuspended,
-    isOnline: () => net.isOnline(),
-    lastSuspendAt: getLastSuspendAt,
-    resolves: (host) =>
-      lookup(host).then(
-        () => true,
-        () => false,
-      ),
-  })
+  taskMiner = new TaskMiner(
+    runtime.storage,
+    runtime.inferenceProvider,
+    runtime.mlWorker,
+    runtime.host,
+  )
   taskMiner.setEnabled(settings.patternDetectionEnabled)
   pushModelSelections(
     {
@@ -419,10 +410,11 @@ app.on('ready', async () => {
   }
   remoteModelConfig.start()
 
+  const host = runtime.host
   const captureCoordinator = createCaptureCoordinator({
     capture: runtime.capture,
     captureStateManager,
-    isPaused: shouldPause,
+    isPaused: () => host.shouldPause(),
     userContextBuilder,
     onStateChanged: () => {
       void updateTrayMenu()
@@ -593,21 +585,20 @@ app.on('ready', async () => {
     log.warn(hotkeyResult.error)
   }
 
-  startPowerMonitoring({
-    onPause: () => {
-      if (!runtime?.capture.isCapturingNow()) return
-
-      void runtime.capture.forceClose()
-      log.info('[Main] Pausing capture (power state: locked/suspended)')
-      runtime.capture.stopCapture()
-    },
-    onResume: () => {
+  host.start((pause) => {
+    if (!pause) {
       captureCoordinator.resumeCaptureIfDesired('resume')
-      // Catch up uploads on wake — the 24h interval doesn't survive sleep.
-      databaseUploadSync?.scheduleUploadIfStale('resume')
-      logUploadSync?.requestSync('resume')
-      taskMiner?.kick()
-    },
+      return
+    }
+    if (!runtime?.capture.isCapturingNow()) return
+    void runtime.capture.forceClose()
+    log.info('[Main] Pausing capture (power state: locked/suspended)')
+    runtime.capture.stopCapture()
+  })
+  host.onAwake(() => {
+    databaseUploadSync?.scheduleUploadIfStale('resume')
+    logUploadSync?.requestSync('resume')
+    taskMiner?.kick()
   })
 
   log.info(

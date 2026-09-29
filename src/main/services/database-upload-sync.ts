@@ -5,6 +5,7 @@ import log from '@main/utils/logger'
 import { isSameDay } from '@main/utils/day'
 import { type StripOptions } from './strip-database-for-upload'
 import { BACKEND_UPLOAD_TIMEOUT_MS } from '../../shared/constants'
+import { HostEnvironment, ManualHostEnvironment } from '@main/monitoring/host-environment'
 
 // Poll cadence, NOT the upload frequency. We check hourly whether today's
 // upload has happened yet; the isSameDay gate deduplicates to exactly one
@@ -44,6 +45,7 @@ export interface DatabaseUploadSyncParams {
   /** Strip + compress the backup DB. Defaults to a utilityProcess worker;
    *  injectable so tests don't spawn a process. */
   prepareUpload?: PrepareUpload
+  env?: HostEnvironment
 }
 
 export class DatabaseUploadSync {
@@ -57,6 +59,7 @@ export class DatabaseUploadSync {
   private readonly recordUploadAt: (ts: number) => void
   private readonly intervalMs: number
   private readonly prepareUpload: PrepareUpload
+  private readonly env: HostEnvironment
   private timer: ReturnType<typeof setInterval> | null = null
   private uploadRunning = false
   private rerunRequested = false
@@ -73,6 +76,7 @@ export class DatabaseUploadSync {
     this.recordUploadAt = params.recordUploadAt
     this.intervalMs = params.intervalMs ?? DEFAULT_CHECK_INTERVAL_MS
     this.prepareUpload = params.prepareUpload ?? defaultPrepareUpload
+    this.env = params.env ?? new ManualHostEnvironment()
   }
 
   public start(): void {
@@ -170,6 +174,11 @@ export class DatabaseUploadSync {
         log.debug(`[DatabaseUploadSync] Skipping upload (${reason}) — already uploaded today`)
         return
       }
+      const standDown = await this.env.standDown(this.getBackendUrl())
+      if (standDown !== null) {
+        log.info(`[DatabaseUploadSync] Skipping upload (${reason}) — ${standDown}`)
+        return
+      }
     }
 
     if (!this.isActivated()) {
@@ -177,7 +186,9 @@ export class DatabaseUploadSync {
       return
     }
 
-    const tempPath = path.join(os.tmpdir(), `.memorylane-upload-${process.pid}.${Date.now()}.tmp`)
+    const startedAt = Date.now()
+    const suspend = this.env.suspendSignal()
+    const tempPath = path.join(os.tmpdir(), `.memorylane-upload-${process.pid}.${startedAt}.tmp`)
 
     try {
       await this.storage.backupToFile(tempPath)
@@ -199,7 +210,7 @@ export class DatabaseUploadSync {
         method: 'POST',
         headers: { Authorization: `Bearer ${this.getDeviceId()}` },
         body: formData,
-        signal: AbortSignal.timeout(BACKEND_UPLOAD_TIMEOUT_MS),
+        signal: AbortSignal.any([AbortSignal.timeout(BACKEND_UPLOAD_TIMEOUT_MS), suspend.signal]),
       })
 
       if (!response.ok) {
@@ -216,7 +227,15 @@ export class DatabaseUploadSync {
       log.info(
         `[DatabaseUploadSync] Upload succeeded (${reason}): upload_id=${data.upload_id} checksum=${data.checksum_sha256}`,
       )
+    } catch (error) {
+      if (!force && this.env.interruptedBy(startedAt, this.getBackendUrl(), error)) {
+        const message = error instanceof Error ? error.message : String(error)
+        log.info(`[DatabaseUploadSync] Upload deferred (${reason}): ${message}`)
+        return
+      }
+      throw error
     } finally {
+      suspend.release()
       try {
         fs.rmSync(tempPath, { force: true })
       } catch {

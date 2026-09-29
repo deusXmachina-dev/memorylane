@@ -2,6 +2,8 @@ import * as fs from 'fs'
 import * as zlib from 'zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DatabaseUploadSync } from './database-upload-sync'
+import log from '@main/utils/logger'
+import { ManualHostEnvironment } from '@main/monitoring/host-environment'
 
 // The real prep runs in a utilityProcess (electron) and does SQLite work;
 // stub it with an in-process gzip of the backup file so the upload flow stays
@@ -614,6 +616,156 @@ describe('DatabaseUploadSync', () => {
     // Release the first upload: it records today's timestamp, then the rerun
     // re-checks the daily gate and skips — exactly one upload, not two.
     resolveBackup()
+    await sync.stop()
+
+    expect(backupToFile).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  const syncWith = (
+    host: ManualHostEnvironment,
+    overrides: { recordUploadAt?: (ts: number) => void; intervalMs?: number } = {},
+  ) => {
+    const backupToFile = vi.fn(async (dest: string) => {
+      fs.writeFileSync(dest, 'dbcontent')
+    })
+    const sync = new DatabaseUploadSync({
+      storage: { backupToFile },
+      getDeviceId: () => 'device-hex-id',
+      isActivated: () => true,
+      isSyncEnabled: () => true,
+      getStripOptions: () => ({ detailLevel: 'summary' as const }),
+      getBackendUrl: () => 'https://backend.test/',
+      getLastUploadAt: () => null,
+      recordUploadAt: overrides.recordUploadAt ?? (() => {}),
+      intervalMs: overrides.intervalMs,
+      env: host,
+    })
+    return { sync, backupToFile }
+  }
+
+  it('skips scheduled uploads while the system is suspended', async () => {
+    vi.useFakeTimers()
+    const fetchMock = mockFetchResponse(201, { ok: true, upload_id: 'up_1', checksum_sha256: 'x' })
+    globalThis.fetch = fetchMock
+    const host = new ManualHostEnvironment()
+    host.suspend()
+    const { sync, backupToFile } = syncWith(host, { intervalMs: 1000 })
+
+    sync.start()
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(1000)
+    await sync.stop()
+
+    expect(backupToFile).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('skips scheduled uploads while offline', async () => {
+    const fetchMock = mockFetchResponse(201, { ok: true, upload_id: 'up_1', checksum_sha256: 'x' })
+    globalThis.fetch = fetchMock
+    const host = new ManualHostEnvironment()
+    host.online = false
+    const { sync, backupToFile } = syncWith(host)
+
+    sync.start()
+    await sync.stop()
+
+    expect(backupToFile).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('skips scheduled uploads while the backend host does not resolve', async () => {
+    const fetchMock = mockFetchResponse(201, { ok: true, upload_id: 'up_1', checksum_sha256: 'x' })
+    globalThis.fetch = fetchMock
+    const host = new ManualHostEnvironment()
+    host.resolvable = false
+    const lookup = vi.spyOn(host, 'resolves')
+    const { sync, backupToFile } = syncWith(host)
+
+    sync.start()
+    await sync.stop()
+
+    expect(lookup).toHaveBeenCalledWith('backend.test')
+    expect(backupToFile).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('a manual trigger ignores the suspended and offline gates', async () => {
+    const fetchMock = mockFetchResponse(201, { ok: true, upload_id: 'up_1', checksum_sha256: 'x' })
+    globalThis.fetch = fetchMock
+    const host = new ManualHostEnvironment()
+    host.online = false
+    host.resolvable = false
+    const { sync } = syncWith(host)
+
+    expect(await sync.triggerUpload()).toEqual({ success: true })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('aborts the transfer on suspend and treats it as not attempted', async () => {
+    const host = new ManualHostEnvironment()
+    const fetchMock = vi.fn<typeof fetch>(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+        }),
+    )
+    globalThis.fetch = fetchMock
+    const recordUploadAt = vi.fn()
+    const errorLog = vi.spyOn(log, 'error').mockImplementation(() => {})
+    const infoLog = vi.spyOn(log, 'info').mockImplementation(() => {})
+    const { sync, backupToFile } = syncWith(host, { recordUploadAt })
+
+    sync.start()
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    expect(host.suspendListenerCount).toBe(1)
+
+    host.suspend()
+    await sync.stop()
+
+    expect(backupToFile).toHaveBeenCalledTimes(1)
+    expect(recordUploadAt).not.toHaveBeenCalled()
+    expect(errorLog).not.toHaveBeenCalled()
+    expect(infoLog.mock.calls.some(([msg]) => /deferred/.test(String(msg)))).toBe(true)
+    expect(host.suspendListenerCount).toBe(0)
+    errorLog.mockRestore()
+    infoLog.mockRestore()
+  })
+
+  it('a network failure with no suspend still counts as a failed upload', async () => {
+    globalThis.fetch = vi.fn<typeof fetch>(async () => {
+      throw new TypeError('fetch failed', {
+        cause: Object.assign(new Error('getaddrinfo ENOTFOUND backend.test'), {
+          code: 'ENOTFOUND',
+        }),
+      })
+    })
+    const errorLog = vi.spyOn(log, 'error').mockImplementation(() => {})
+    const { sync } = syncWith(new ManualHostEnvironment())
+
+    sync.start()
+    await sync.stop()
+
+    expect(errorLog).toHaveBeenCalledTimes(1)
+    errorLog.mockRestore()
+  })
+
+  it('a resume kick runs the upload skipped while suspended', async () => {
+    vi.useFakeTimers()
+    const fetchMock = mockFetchResponse(201, { ok: true, upload_id: 'up_1', checksum_sha256: 'x' })
+    globalThis.fetch = fetchMock
+    const host = new ManualHostEnvironment()
+    host.suspend()
+    const { sync, backupToFile } = syncWith(host, { intervalMs: 1000 })
+
+    sync.start()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(backupToFile).not.toHaveBeenCalled()
+
+    host.resume()
+    sync.scheduleUploadIfStale('resume')
+    await vi.advanceTimersByTimeAsync(0)
     await sync.stop()
 
     expect(backupToFile).toHaveBeenCalledTimes(1)

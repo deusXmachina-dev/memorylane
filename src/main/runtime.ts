@@ -31,7 +31,7 @@ import {
   type RuntimeCaptureController,
 } from '@main/capture/capture-controller'
 import { PresenceMonitor } from '@main/monitoring/presence-monitor'
-import { getSystemIdleSeconds, shouldPause } from '@main/monitoring/power-monitor'
+import { HostEnvironment } from '@main/monitoring/host-environment'
 import { PRESENCE_MONITOR_CONFIG } from '../shared/constants'
 import { EvalRecorder } from './eval/eval-recorder'
 import { EvalFixtureStore } from './eval/eval-fixture-store'
@@ -40,6 +40,7 @@ import { MlWorkerClient } from './services/ml-worker-client'
 
 export interface MainRuntime {
   capture: RuntimeCapture
+  host: HostEnvironment
   storage: StorageService
   mlWorker: MlWorkerClient
   usageTracker: UsageTracker
@@ -82,6 +83,7 @@ export async function createMainRuntime(params: {
 
   const interactionMonitor = await import('./recorder/interaction-monitor')
 
+  const host = new HostEnvironment()
   const vendorCredentials = params.vendorCredentials
   const inferenceProvider = new InferenceProviderImpl({
     credentials: vendorCredentials,
@@ -186,8 +188,8 @@ export async function createMainRuntime(params: {
   const presenceMonitor = PRESENCE_MONITOR_CONFIG.ENABLED
     ? new PresenceMonitor({
         emit: (event) => harness.handleEvent(event),
-        isPaused: () => shouldPause(),
-        getIdleSeconds: () => getSystemIdleSeconds(),
+        isPaused: () => host.shouldPause(),
+        getIdleSeconds: () => host.idleSeconds(),
       })
     : undefined
 
@@ -242,6 +244,7 @@ export async function createMainRuntime(params: {
 
   return {
     capture,
+    host,
     storage,
     mlWorker,
     usageTracker,
