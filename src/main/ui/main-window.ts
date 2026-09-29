@@ -647,7 +647,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   })
 
   // Subscription / managed key — provider chosen by backend (openrouter | vertex).
-  deps.accessProvider.setUpdateCallback((state, payload) => {
+  deps.accessProvider.addUpdateListener((state, payload) => {
     if (payload?.config && deps) {
       const cfg = payload.config
       const vendor: Vendor = cfg.provider === 'vertex' ? 'google' : 'openrouter'

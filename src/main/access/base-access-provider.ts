@@ -14,7 +14,7 @@ export const DEVICE_IDENTITY_RETRY_MESSAGE =
 
 export abstract class BaseAccessProvider implements AccessProvider {
   protected accessState: AccessState
-  protected onUpdate: AccessStateCallback | null = null
+  private readonly listeners = new Set<AccessStateCallback>()
   protected readonly deviceIdentity: DeviceIdentity
 
   protected constructor(initialState: AccessState, deviceIdentity: DeviceIdentity) {
@@ -61,8 +61,11 @@ export abstract class BaseAccessProvider implements AccessProvider {
     return this.accessState
   }
 
-  public setUpdateCallback(callback: AccessStateCallback): void {
-    this.onUpdate = callback
+  public addUpdateListener(callback: AccessStateCallback): () => void {
+    this.listeners.add(callback)
+    return () => {
+      this.listeners.delete(callback)
+    }
   }
 
   public abstract refreshAccessState(): Promise<void>
@@ -79,6 +82,8 @@ export abstract class BaseAccessProvider implements AccessProvider {
       ...this.accessState,
       ...next,
     }
-    this.onUpdate?.(this.accessState, payload)
+    for (const listener of this.listeners) {
+      listener(this.accessState, payload)
+    }
   }
 }

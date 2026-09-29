@@ -411,15 +411,31 @@ app.on('ready', async () => {
   remoteModelConfig.start()
 
   const host = runtime.host
+  const isDeviceDeactivated = (): boolean =>
+    editionConfig.edition === 'enterprise' &&
+    runtime?.accessProvider.getAccessState().enterpriseActivationStatus === 'inactive'
   const captureCoordinator = createCaptureCoordinator({
     capture: runtime.capture,
     captureStateManager,
-    isPaused: () => host.shouldPause(),
+    isPaused: () => host.shouldPause() || isDeviceDeactivated(),
     userContextBuilder,
     onStateChanged: () => {
       void updateTrayMenu()
       void sendStatusToRenderer()
     },
+  })
+
+  let deviceDeactivated = isDeviceDeactivated()
+  runtime.accessProvider.addUpdateListener(() => {
+    const next = isDeviceDeactivated()
+    if (next === deviceDeactivated) return
+    deviceDeactivated = next
+    if (next) {
+      captureCoordinator.suspendCapture('device deactivated')
+    } else {
+      captureCoordinator.resumeCaptureIfDesired('reactivated')
+    }
+    void updateTrayMenu()
   })
 
   const hotkeyManager = createCaptureHotkeyManager({
@@ -451,6 +467,7 @@ app.on('ready', async () => {
 
   setupTray({
     capture: captureCoordinator.controls,
+    isDeviceDeactivated,
     storage: runtime.storage,
   })
 
@@ -586,14 +603,11 @@ app.on('ready', async () => {
   }
 
   host.start((pause) => {
-    if (!pause) {
+    if (pause) {
+      captureCoordinator.suspendCapture('power state: locked/suspended')
+    } else {
       captureCoordinator.resumeCaptureIfDesired('resume')
-      return
     }
-    if (!runtime?.capture.isCapturingNow()) return
-    void runtime.capture.forceClose()
-    log.info('[Main] Pausing capture (power state: locked/suspended)')
-    runtime.capture.stopCapture()
   })
   host.onAwake(() => {
     databaseUploadSync?.scheduleUploadIfStale('resume')

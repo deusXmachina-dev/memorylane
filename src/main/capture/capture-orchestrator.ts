@@ -40,7 +40,8 @@ export function createCaptureCoordinator(params: {
   onStateChanged?: () => void
 }): {
   controls: CaptureCoordinatorControls
-  resumeCaptureIfDesired(reason: 'startup' | 'resume'): void
+  resumeCaptureIfDesired(reason: 'startup' | 'resume' | 'reactivated'): void
+  suspendCapture(reason: string): void
 } {
   // How often the sweep checks whether a pause deadline has passed.
   const SWEEP_INTERVAL_MS = 15_000
@@ -156,7 +157,14 @@ export function createCaptureCoordinator(params: {
     params.capture.stopCapture()
   }
 
-  const resumeCaptureIfDesired = (reason: 'startup' | 'resume'): void => {
+  const suspendCapture = (reason: string): void => {
+    if (!params.capture.isCapturingNow()) return
+    void params.capture.forceClose()
+    log.info(`[Main] Pausing capture (${reason})`)
+    params.capture.stopCapture()
+  }
+
+  const resumeCaptureIfDesired = (reason: 'startup' | 'resume' | 'reactivated'): void => {
     if (!params.captureStateManager.isCaptureEnabled()) return
     // A timed pause is in-memory: on startup there is none, but on power-resume
     // an active pause must win so unlocking doesn't cut a pause short.
@@ -183,5 +191,6 @@ export function createCaptureCoordinator(params: {
       updateActivityWindowConfig: (input) => params.capture.updateActivityWindowConfig(input),
     },
     resumeCaptureIfDesired,
+    suspendCapture,
   }
 }

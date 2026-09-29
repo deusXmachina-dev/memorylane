@@ -81,7 +81,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
     })
 
@@ -104,7 +104,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
     })
 
@@ -123,7 +123,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
     })
 
@@ -144,7 +144,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
     })
 
@@ -172,7 +172,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
     })
 
@@ -191,7 +191,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
     })
 
@@ -209,7 +209,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
     })
 
@@ -224,7 +224,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
     })
 
@@ -247,7 +247,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
     })
 
@@ -282,7 +282,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; payload?: unknown }> = []
-    provider.setUpdateCallback((state, payload) => {
+    provider.addUpdateListener((state, payload) => {
       updates.push({ status: state.enterpriseActivationStatus, payload })
     })
 
@@ -326,7 +326,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
     })
 
@@ -358,7 +358,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
     })
 
@@ -374,7 +374,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
     })
 
@@ -403,7 +403,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; payload?: unknown }> = []
-    provider.setUpdateCallback((state, payload) => {
+    provider.addUpdateListener((state, payload) => {
       updates.push({ status: state.enterpriseActivationStatus, payload })
     })
 
@@ -431,7 +431,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(throwingIdentity)
     const updates: Array<{ status: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
     })
 
@@ -478,7 +478,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; payload?: unknown }> = []
-    provider.setUpdateCallback((state, payload) => {
+    provider.addUpdateListener((state, payload) => {
       updates.push({ status: state.enterpriseActivationStatus, payload })
     })
 
@@ -591,7 +591,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
     })
 
@@ -621,7 +621,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
     })
 
@@ -642,7 +642,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
     })
 
@@ -671,7 +671,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({
         status: state.enterpriseActivationStatus,
         error: state.error,
@@ -694,7 +694,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; error: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
     })
 
@@ -709,7 +709,7 @@ describe('EnterpriseAccessProvider', () => {
 
     const provider = new EnterpriseAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; payload?: unknown }> = []
-    provider.setUpdateCallback((state, payload) => {
+    provider.addUpdateListener((state, payload) => {
       updates.push({ status: state.enterpriseActivationStatus, payload })
     })
 
@@ -718,5 +718,24 @@ describe('EnterpriseAccessProvider', () => {
     expect(updates).toHaveLength(1)
     expect(updates[0]?.status).toBe('inactive')
     expect(updates[0]?.payload).toEqual({ invalidate: true })
+  })
+
+  it('notifies every registered listener until it unsubscribes', async () => {
+    globalThis.fetch = vi.fn<typeof fetch>(async () => jsonResponse({ activated: false }))
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const first = vi.fn()
+    const second = vi.fn()
+    provider.addUpdateListener(first)
+    const unsubscribe = provider.addUpdateListener(second)
+
+    await provider.refreshAccessState()
+    expect(first).toHaveBeenCalledTimes(1)
+    expect(second).toHaveBeenCalledTimes(1)
+
+    unsubscribe()
+    await provider.refreshAccessState()
+    expect(first).toHaveBeenCalledTimes(2)
+    expect(second).toHaveBeenCalledTimes(1)
   })
 })

@@ -176,4 +176,32 @@ describe('createCaptureCoordinator timed pause', () => {
     expect(capture.startCapture).not.toHaveBeenCalled()
     expect(coordinator.controls.isUserPaused()).toBe(true)
   })
+
+  it('suspendCapture stops a running capture without changing the preference', () => {
+    const { capture, stateManager, coordinator } = makeCoordinator()
+    capture.isCapturingNow.mockReturnValue(true)
+
+    coordinator.suspendCapture('device deactivated')
+
+    expect(capture.forceClose).toHaveBeenCalledTimes(1)
+    expect(capture.stopCapture).toHaveBeenCalledTimes(1)
+    expect(stateManager.setCaptureEnabled).not.toHaveBeenCalled()
+  })
+
+  it('suspendCapture is a no-op when capture is not running', () => {
+    const { capture, coordinator } = makeCoordinator()
+
+    coordinator.suspendCapture('device deactivated')
+
+    expect(capture.forceClose).not.toHaveBeenCalled()
+    expect(capture.stopCapture).not.toHaveBeenCalled()
+  })
+
+  it('resumeCaptureIfDesired restarts capture after reactivation when still desired', () => {
+    const { capture, coordinator } = makeCoordinator()
+
+    coordinator.resumeCaptureIfDesired('reactivated')
+
+    expect(capture.startCapture).toHaveBeenCalledTimes(1)
+  })
 })

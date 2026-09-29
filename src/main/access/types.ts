@@ -17,7 +17,7 @@ export type AccessStateCallback = (state: AccessState, payload?: AccessUpdatePay
 
 export interface AccessProvider {
   getAccessState(): AccessState
-  setUpdateCallback(callback: AccessStateCallback): void
+  addUpdateListener(callback: AccessStateCallback): () => void
   refreshAccessState(): Promise<void>
   startPeriodicRefresh(): void
   stopPeriodicRefresh(): void

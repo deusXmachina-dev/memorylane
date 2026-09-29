@@ -67,7 +67,7 @@ describe('CustomerAccessProvider', () => {
 
     const provider = new CustomerAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null; payload?: unknown }> = []
-    provider.setUpdateCallback((state, payload) => {
+    provider.addUpdateListener((state, payload) => {
       updates.push({ status: state.customerSubscriptionStatus, payload })
     })
 
@@ -125,7 +125,7 @@ describe('CustomerAccessProvider', () => {
 
     const provider = new CustomerAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({ status: state.customerSubscriptionStatus })
     })
 
@@ -174,7 +174,7 @@ describe('CustomerAccessProvider', () => {
 
     const provider = new CustomerAccessProvider(deviceIdentity)
     const updates: Array<{ status: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({ status: state.customerSubscriptionStatus })
     })
 
@@ -204,7 +204,7 @@ describe('CustomerAccessProvider', () => {
     } as DeviceIdentity
     const provider = new CustomerAccessProvider(throwingIdentity)
     const updates: Array<{ status: string | null }> = []
-    provider.setUpdateCallback((state) => {
+    provider.addUpdateListener((state) => {
       updates.push({ status: state.customerSubscriptionStatus })
     })
 
@@ -235,7 +235,7 @@ describe('CustomerAccessProvider', () => {
       globalThis.fetch = makeFetchMock([jsonResponse({}, false, 500)])
       const provider = new CustomerAccessProvider(deviceIdentity)
       const payloads: unknown[] = []
-      provider.setUpdateCallback((_, payload) => payloads.push(payload))
+      provider.addUpdateListener((_, payload) => payloads.push(payload))
 
       await provider.refreshAccessState()
 
@@ -246,7 +246,7 @@ describe('CustomerAccessProvider', () => {
       globalThis.fetch = makeFetchMock([jsonResponse({}, false, 401)])
       const provider = new CustomerAccessProvider(deviceIdentity)
       const payloads: unknown[] = []
-      provider.setUpdateCallback((_, payload) => payloads.push(payload))
+      provider.addUpdateListener((_, payload) => payloads.push(payload))
 
       await provider.refreshAccessState()
 
@@ -257,7 +257,7 @@ describe('CustomerAccessProvider', () => {
       globalThis.fetch = makeFetchMock([jsonResponse({}, false, 403)])
       const provider = new CustomerAccessProvider(deviceIdentity)
       const payloads: unknown[] = []
-      provider.setUpdateCallback((_, payload) => payloads.push(payload))
+      provider.addUpdateListener((_, payload) => payloads.push(payload))
 
       await provider.refreshAccessState()
 
@@ -268,7 +268,7 @@ describe('CustomerAccessProvider', () => {
       globalThis.fetch = makeFetchMock([jsonResponse({}, false, 429)])
       const provider = new CustomerAccessProvider(deviceIdentity)
       const payloads: unknown[] = []
-      provider.setUpdateCallback((_, payload) => payloads.push(payload))
+      provider.addUpdateListener((_, payload) => payloads.push(payload))
 
       await provider.refreshAccessState()
 
@@ -281,7 +281,7 @@ describe('CustomerAccessProvider', () => {
       })
       const provider = new CustomerAccessProvider(deviceIdentity)
       const payloads: unknown[] = []
-      provider.setUpdateCallback((_, payload) => payloads.push(payload))
+      provider.addUpdateListener((_, payload) => payloads.push(payload))
 
       await provider.refreshAccessState()
 
@@ -298,7 +298,7 @@ describe('CustomerAccessProvider', () => {
       } as DeviceIdentity
       const provider = new CustomerAccessProvider(throwingIdentity)
       const payloads: unknown[] = []
-      provider.setUpdateCallback((_, payload) => payloads.push(payload))
+      provider.addUpdateListener((_, payload) => payloads.push(payload))
 
       await provider.refreshAccessState()
 
@@ -310,7 +310,7 @@ describe('CustomerAccessProvider', () => {
       globalThis.fetch = makeFetchMock([jsonResponse({ key: null })])
       const provider = new CustomerAccessProvider(deviceIdentity)
       const payloads: unknown[] = []
-      provider.setUpdateCallback((_, payload) => payloads.push(payload))
+      provider.addUpdateListener((_, payload) => payloads.push(payload))
 
       await provider.refreshAccessState()
 
@@ -321,7 +321,7 @@ describe('CustomerAccessProvider', () => {
       globalThis.fetch = makeFetchMock([jsonResponse({ key: 'sk-or-managed' })])
       const provider = new CustomerAccessProvider(deviceIdentity)
       const payloads: unknown[] = []
-      provider.setUpdateCallback((_, payload) => payloads.push(payload))
+      provider.addUpdateListener((_, payload) => payloads.push(payload))
 
       await provider.refreshAccessState()
 
@@ -341,7 +341,7 @@ describe('CustomerAccessProvider', () => {
 
       const payloads: unknown[] = []
       const callsBefore = fetchMock.mock.calls.length
-      provider.setUpdateCallback((_, payload) => payloads.push(payload))
+      provider.addUpdateListener((_, payload) => payloads.push(payload))
 
       await provider.refreshAccessState()
 
