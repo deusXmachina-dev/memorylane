@@ -1,10 +1,11 @@
-# MemoryLane v1.5.9
+# MemoryLane v1.5.10-alpha.1
 
-Task mining waits for a connection instead of failing days while offline.
+Enterprise uploads stand down while the Mac is asleep.
 
 ## What's Changed
 
-- **No connection, no mining**: before claiming a day, scheduled sweeps check that the provider's host resolves. A laptop that wakes before Wi-Fi reconnects no longer spends attempts. Local models still mine offline (#286).
+- **No uploads during dark wakes**: scheduled database and log uploads skip while the system is suspended, offline, or before the backend host resolves. A suspend aborts an in-flight upload and it retries once the machine is awake and online. Manual "Sync now" still uploads immediately (#289).
+- **Claude Cowork plugin 0.7.0**: connects through the desktop app instead of `npx` (#288).
 
 ## Known Issues & Limitations
 
@@ -22,4 +23,4 @@ Task mining waits for a connection instead of failing days while offline.
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.8...v1.5.9
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.9...v1.5.10-alpha.1
