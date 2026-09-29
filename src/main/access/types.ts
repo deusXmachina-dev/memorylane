@@ -17,7 +17,7 @@ export type AccessStateCallback = (state: AccessState, payload?: AccessUpdatePay
 
 export interface AccessProvider {
   getAccessState(): AccessState
-  setUpdateCallback(callback: AccessStateCallback): void
+  addUpdateListener(callback: AccessStateCallback): () => void
   refreshAccessState(): Promise<void>
   startPeriodicRefresh(): void
   stopPeriodicRefresh(): void
@@ -36,4 +36,8 @@ export function createInitialAccessState(edition: AppEdition): AccessState {
     enterpriseActivationStatus: edition === 'enterprise' ? 'idle' : null,
     error: null,
   }
+}
+
+export function requiresActivation(state: AccessState): boolean {
+  return state.edition === 'enterprise' && !state.isEnterpriseActivated
 }

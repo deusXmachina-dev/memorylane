@@ -20,6 +20,7 @@ import {
   syncAutoStartSetting,
 } from '@main/system/auto-start'
 import { createCaptureCoordinator } from '@main/capture/capture-orchestrator'
+import { requiresActivation } from '@main/access/types'
 import { createCaptureHotkeyManager } from '@main/capture/capture-hotkey-manager'
 import log from '@main/utils/logger'
 import '@main/utils/logger-electron'
@@ -411,15 +412,31 @@ app.on('ready', async () => {
   remoteModelConfig.start()
 
   const host = runtime.host
+  const accessProvider = runtime.accessProvider
+  const deviceRequiresActivation = (): boolean =>
+    requiresActivation(accessProvider.getAccessState())
+  let purging = false
   const captureCoordinator = createCaptureCoordinator({
     capture: runtime.capture,
     captureStateManager,
-    isPaused: () => host.shouldPause(),
+    isPaused: () => purging || host.shouldPause() || deviceRequiresActivation(),
     userContextBuilder,
     onStateChanged: () => {
       void updateTrayMenu()
       void sendStatusToRenderer()
     },
+  })
+
+  let activationBlocked = deviceRequiresActivation()
+  accessProvider.addUpdateListener((state) => {
+    const blocked = requiresActivation(state)
+    if (blocked === activationBlocked) return
+    activationBlocked = blocked
+    if (blocked) {
+      captureCoordinator.suspendCapture('device not activated')
+    } else {
+      captureCoordinator.resumeCaptureIfDesired('reactivated')
+    }
   })
 
   const hotkeyManager = createCaptureHotkeyManager({
@@ -451,6 +468,7 @@ app.on('ready', async () => {
 
   setupTray({
     capture: captureCoordinator.controls,
+    requiresActivation: deviceRequiresActivation,
     storage: runtime.storage,
   })
 
@@ -524,7 +542,15 @@ app.on('ready', async () => {
     databaseExportSync: rawDatabaseExportSync,
     databaseUploadSync: databaseUploadSync ?? undefined,
     logUploadSync: logUploadSync ?? undefined,
-    purgeAll: () => runtime?.purgeAll() ?? Promise.reject(new Error('Runtime not initialized')),
+    purgeAll: async () => {
+      if (!runtime) throw new Error('Runtime not initialized')
+      purging = true
+      try {
+        await runtime.purgeAll()
+      } finally {
+        purging = false
+      }
+    },
     wipeAndRemineTasks: async () => {
       if (!runtime) throw new Error('Runtime not initialized')
       if (!taskMiner) throw new Error('Task miner not initialized')
@@ -586,14 +612,11 @@ app.on('ready', async () => {
   }
 
   host.start((pause) => {
-    if (!pause) {
+    if (pause) {
+      captureCoordinator.suspendCapture('power state: locked/suspended')
+    } else {
       captureCoordinator.resumeCaptureIfDesired('resume')
-      return
     }
-    if (!runtime?.capture.isCapturingNow()) return
-    void runtime.capture.forceClose()
-    log.info('[Main] Pausing capture (power state: locked/suspended)')
-    runtime.capture.stopCapture()
   })
   host.onAwake(() => {
     databaseUploadSync?.scheduleUploadIfStale('resume')

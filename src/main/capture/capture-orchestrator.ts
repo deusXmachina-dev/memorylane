@@ -40,7 +40,8 @@ export function createCaptureCoordinator(params: {
   onStateChanged?: () => void
 }): {
   controls: CaptureCoordinatorControls
-  resumeCaptureIfDesired(reason: 'startup' | 'resume'): void
+  resumeCaptureIfDesired(reason: 'startup' | 'resume' | 'reactivated'): void
+  suspendCapture(reason: string): void
 } {
   // How often the sweep checks whether a pause deadline has passed.
   const SWEEP_INTERVAL_MS = 15_000
@@ -156,17 +157,29 @@ export function createCaptureCoordinator(params: {
     params.capture.stopCapture()
   }
 
-  const resumeCaptureIfDesired = (reason: 'startup' | 'resume'): void => {
-    if (!params.captureStateManager.isCaptureEnabled()) return
-    // A timed pause is in-memory: on startup there is none, but on power-resume
-    // an active pause must win so unlocking doesn't cut a pause short.
-    if (isUserPaused()) return
-    if (params.capture.isCapturingNow() || params.isPaused()) return
+  const suspendCapture = (reason: string): void => {
+    if (params.capture.isCapturingNow()) {
+      void params.capture.forceClose()
+      log.info(`[Main] Pausing capture (${reason})`)
+      params.capture.stopCapture()
+    }
+    notifyStateChanged()
+  }
 
-    log.info(`[Main] Starting capture from persisted preference (${reason})`)
-    params.capture.startCapture()
-
-    scheduleBackgroundAnalyzers()
+  const resumeCaptureIfDesired = (reason: 'startup' | 'resume' | 'reactivated'): void => {
+    const desired =
+      params.captureStateManager.isCaptureEnabled() &&
+      // A timed pause is in-memory: on startup there is none, but on power-resume
+      // an active pause must win so unlocking doesn't cut a pause short.
+      !isUserPaused() &&
+      !params.capture.isCapturingNow() &&
+      !params.isPaused()
+    if (desired) {
+      log.info(`[Main] Starting capture from persisted preference (${reason})`)
+      params.capture.startCapture()
+      scheduleBackgroundAnalyzers()
+    }
+    notifyStateChanged()
   }
 
   return {
@@ -183,5 +196,6 @@ export function createCaptureCoordinator(params: {
       updateActivityWindowConfig: (input) => params.capture.updateActivityWindowConfig(input),
     },
     resumeCaptureIfDesired,
+    suspendCapture,
   }
 }

@@ -3,6 +3,7 @@ import { BACKEND_REQUEST_TIMEOUT_MS, ENTERPRISE_BACKEND_CONFIG } from '../../sha
 import type { ConsentOutcome, PendingConsent } from '../../shared/types'
 import log from '@main/utils/logger'
 import { NetworkError, toUserFacingError } from '@main/utils/network-error'
+import type { ActivationStateStore } from '../settings/activation-state-store'
 import type { DeviceIdentity } from '../settings/device-identity'
 import { parseActivationCode } from './activation-code'
 import { BaseAccessProvider, DEVICE_IDENTITY_RETRY_MESSAGE } from './base-access-provider'
@@ -105,9 +106,20 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
   private consentTimeoutTimer: ReturnType<typeof setTimeout> | null = null
   private tokenRefreshTimer: ReturnType<typeof setTimeout> | null = null
   private pendingConsent: PendingConsentState | null = null
+  private readonly activationStore: Pick<ActivationStateStore, 'isActivated' | 'setActivated'>
 
-  constructor(deviceIdentity: DeviceIdentity) {
-    super(createInitialAccessState('enterprise'), deviceIdentity)
+  constructor(
+    deviceIdentity: DeviceIdentity,
+    activationStore: Pick<ActivationStateStore, 'isActivated' | 'setActivated'>,
+  ) {
+    const initial = createInitialAccessState('enterprise')
+    super(
+      activationStore.isActivated()
+        ? { ...initial, isEnterpriseActivated: true, enterpriseActivationStatus: 'waiting_for_key' }
+        : initial,
+      deviceIdentity,
+    )
+    this.activationStore = activationStore
   }
 
   private resolveBackendBase(): string {
@@ -700,6 +712,11 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
   }
 
   private applyTransition(transition: EnterpriseAccessTransition): void {
+    if (transition.state.enterpriseActivationStatus === 'inactive') {
+      this.activationStore.setActivated(false)
+    } else if (transition.state.isEnterpriseActivated) {
+      this.activationStore.setActivated(true)
+    }
     this.setState(transition.state, transition.payload)
   }
 }

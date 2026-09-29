@@ -23,6 +23,7 @@ interface TrayDependencies {
     stopCaptureForShutdown: () => void
     forceClose: () => Promise<void>
   }
+  requiresActivation: () => boolean
   storage: StorageService
 }
 
@@ -162,6 +163,7 @@ export const updateTrayMenu = async (): Promise<void> => {
   const isCapturing = deps.capture.isCapturingNow()
   const { pausedUntilMs } = deps.capture.getPauseState()
   const isUserPaused = pausedUntilMs !== null
+  const requiresActivation = !isCapturing && deps.requiresActivation()
   const { isPrivacyBlocked, blockedRecently } = trayPrivacyState.getStatus(isCapturing)
 
   // Keep the countdown label fresh while paused; stop refreshing otherwise.
@@ -176,13 +178,15 @@ export const updateTrayMenu = async (): Promise<void> => {
 
   const versionSuffix = ` (v${app.getVersion()})`
   tray.setToolTip(
-    isUserPaused
-      ? `MemoryLane - Capture Paused (resumes ${formatRemaining(pausedUntilMs)})${versionSuffix}`
-      : isPrivacyBlocked
-        ? `MemoryLane - Capture Paused (Privacy Rule)${versionSuffix}`
-        : blockedRecently
-          ? `MemoryLane - Capture Recently Paused (Privacy Rule)${versionSuffix}`
-          : `MemoryLane - Screen Capture${versionSuffix}`,
+    requiresActivation
+      ? `MemoryLane - Capture Paused (Device Not Activated)${versionSuffix}`
+      : isUserPaused
+        ? `MemoryLane - Capture Paused (resumes ${formatRemaining(pausedUntilMs)})${versionSuffix}`
+        : isPrivacyBlocked
+          ? `MemoryLane - Capture Paused (Privacy Rule)${versionSuffix}`
+          : blockedRecently
+            ? `MemoryLane - Capture Recently Paused (Privacy Rule)${versionSuffix}`
+            : `MemoryLane - Screen Capture${versionSuffix}`,
   )
 
   const usageStatsSubmenu = await buildUsageStatsSubmenu()
@@ -214,7 +218,9 @@ export const updateTrayMenu = async (): Promise<void> => {
             { type: 'separator' as const },
           ]
         : []),
-    ...buildCaptureMenuItems({ isCapturing, isUserPaused, pausedUntilMs }),
+    ...(requiresActivation
+      ? [{ label: 'Capture paused: device not activated', enabled: false }]
+      : buildCaptureMenuItems({ isCapturing, isUserPaused, pausedUntilMs })),
     { type: 'separator' },
     {
       label: 'Usage Stats',
