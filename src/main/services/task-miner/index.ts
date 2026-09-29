@@ -23,14 +23,16 @@
  * system is suspended or offline, so a lid-closed night costs no attempts.
  */
 
-import { isIP } from 'node:net'
 import type { StorageService } from '../../storage'
 import type { InferenceProvider } from '../../llm'
 import { PATTERN_DETECTION_CONFIG, TASK_BACKFILL } from '../../../shared/constants'
 import log from '@main/utils/logger'
 import { formatApiError } from './helpers'
-import { isLoopbackUrl } from '@/shared/url-utils'
-import { HostEnvironment, ManualHostEnvironment } from '@main/monitoring/host-environment'
+import {
+  HostEnvironment,
+  ManualHostEnvironment,
+  remoteHost,
+} from '@main/monitoring/host-environment'
 import { extractHttpStatus, isThrottleStatus } from '@main/semantic/error-classify'
 import { getDayBoundaries } from '@main/utils/day'
 import type {
@@ -188,12 +190,12 @@ export class TaskMiner {
   }
 
   private async sweepIfResolvable(provider: InferenceProvider): Promise<void> {
-    const host = this.remoteHost(provider)
+    const host = remoteHost(provider.getRouteSnapshot()?.baseURL)
     if (host) {
       this.running = true
       let resolves = false
       try {
-        resolves = await this.resolvesWithinTimeout(host)
+        resolves = await this.env.resolvesWithinTimeout(host)
       } finally {
         this.running = false
       }
@@ -204,25 +206,6 @@ export class TaskMiner {
     }
     this.lastSkipKey = null
     await this.sweep(provider)
-  }
-
-  private resolvesWithinTimeout(host: string): Promise<boolean> {
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const timeout = new Promise<boolean>((resolve) => {
-      timer = setTimeout(() => resolve(false), TASK_BACKFILL.RESOLVE_TIMEOUT_MS)
-    })
-    return Promise.race([this.env.resolves(host), timeout]).finally(() => clearTimeout(timer))
-  }
-
-  private remoteHost(provider: InferenceProvider): string | null {
-    const baseURL = provider.getRouteSnapshot()?.baseURL
-    if (!baseURL || isLoopbackUrl(baseURL)) return null
-    try {
-      const host = new URL(baseURL).hostname.replace(/^\[(.*)\]$/, '$1')
-      return isIP(host) ? null : host
-    } catch {
-      return null
-    }
   }
 
   private logSkip(key: string, message: string): void {

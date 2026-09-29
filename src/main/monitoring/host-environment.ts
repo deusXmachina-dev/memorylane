@@ -1,12 +1,24 @@
 import { net, powerMonitor } from 'electron'
 import { lookup } from 'node:dns/promises'
+import { isIP } from 'node:net'
 import log from '@main/utils/logger'
 import { describeNetworkError } from '@main/utils/network-error'
 import { isLoopbackUrl } from '@/shared/url-utils'
+import { HOST_RESOLVE_TIMEOUT_MS } from '@/shared/constants'
 
-export type StandDownReason = 'suspended' | 'offline'
+export type StandDownReason = 'suspended' | 'offline' | 'unresolved'
 
 export const AWAKE_CHECK_DELAYS_MS = [30_000, 60_000, 90_000]
+
+export function remoteHost(url: string | undefined): string | null {
+  if (!url || isLoopbackUrl(url)) return null
+  try {
+    const host = new URL(url).hostname.replace(/^\[(.*)\]$/, '$1')
+    return isIP(host) ? null : host
+  } catch {
+    return null
+  }
+}
 
 export class HostEnvironment {
   private screenLocked = false
@@ -100,6 +112,22 @@ export class HostEnvironment {
     if (this.isOnline()) return null
     if (targetUrl && isLoopbackUrl(targetUrl)) return null
     return 'offline'
+  }
+
+  async standDown(targetUrl: string | undefined): Promise<StandDownReason | null> {
+    const reason = this.standDownReason(targetUrl)
+    if (reason !== null) return reason
+    const host = remoteHost(targetUrl)
+    if (host === null) return null
+    return (await this.resolvesWithinTimeout(host)) ? null : 'unresolved'
+  }
+
+  resolvesWithinTimeout(host: string): Promise<boolean> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeout = new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), HOST_RESOLVE_TIMEOUT_MS)
+    })
+    return Promise.race([this.resolves(host), timeout]).finally(() => clearTimeout(timer))
   }
 
   interruptedBy(startedAt: number, targetUrl: string | undefined, error: unknown): boolean {

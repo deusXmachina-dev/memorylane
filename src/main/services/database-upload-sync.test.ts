@@ -675,11 +675,28 @@ describe('DatabaseUploadSync', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('skips scheduled uploads while the backend host does not resolve', async () => {
+    const fetchMock = mockFetchResponse(201, { ok: true, upload_id: 'up_1', checksum_sha256: 'x' })
+    globalThis.fetch = fetchMock
+    const host = new ManualHostEnvironment()
+    host.resolvable = false
+    const lookup = vi.spyOn(host, 'resolves')
+    const { sync, backupToFile } = syncWith(host)
+
+    sync.start()
+    await sync.stop()
+
+    expect(lookup).toHaveBeenCalledWith('backend.test')
+    expect(backupToFile).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('a manual trigger ignores the suspended and offline gates', async () => {
     const fetchMock = mockFetchResponse(201, { ok: true, upload_id: 'up_1', checksum_sha256: 'x' })
     globalThis.fetch = fetchMock
     const host = new ManualHostEnvironment()
     host.online = false
+    host.resolvable = false
     const { sync } = syncWith(host)
 
     expect(await sync.triggerUpload()).toEqual({ success: true })

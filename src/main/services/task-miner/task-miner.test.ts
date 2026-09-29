@@ -7,7 +7,11 @@ import { applyMigrations } from '@main/storage/migrator'
 import { deleteDbFiles, v } from '@main/storage/test-utils'
 import type { InferenceProvider } from '@main/llm'
 import type { Vendor } from '../../../shared/types'
-import { PATTERN_DETECTION_CONFIG, TASK_BACKFILL } from '../../../shared/constants'
+import {
+  HOST_RESOLVE_TIMEOUT_MS,
+  PATTERN_DETECTION_CONFIG,
+  TASK_BACKFILL,
+} from '../../../shared/constants'
 import { TaskMiner } from '.'
 import { runDetection } from './run-detection'
 import { runClustering } from './clustering'
@@ -719,7 +723,7 @@ describe('TaskMiner sweep', () => {
 
     miner.scheduleRun()
     expect(miner.isBusy()).toBe(true)
-    await vi.advanceTimersByTimeAsync(TASK_BACKFILL.RESOLVE_TIMEOUT_MS)
+    await vi.advanceTimersByTimeAsync(HOST_RESOLVE_TIMEOUT_MS)
 
     expect(miner.isBusy()).toBe(false)
     expect(mockedRunDetection).not.toHaveBeenCalled()

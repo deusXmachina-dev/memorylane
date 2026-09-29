@@ -353,6 +353,7 @@ app.on('ready', async () => {
       getBackendUrl: () => ENTERPRISE_BACKEND_CONFIG.BACKEND_URL,
       readState: () => readLogUploadState(),
       writeState: (state) => writeLogUploadState(state),
+      env: runtime.host,
     })
     logUploadSync.start()
 

@@ -174,7 +174,7 @@ export class DatabaseUploadSync {
         log.debug(`[DatabaseUploadSync] Skipping upload (${reason}) — already uploaded today`)
         return
       }
-      const standDown = this.env.standDownReason(this.getBackendUrl())
+      const standDown = await this.env.standDown(this.getBackendUrl())
       if (standDown !== null) {
         log.info(`[DatabaseUploadSync] Skipping upload (${reason}) — ${standDown}`)
         return

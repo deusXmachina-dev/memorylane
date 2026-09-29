@@ -7,6 +7,7 @@ import { BACKEND_UPLOAD_TIMEOUT_MS, LOG_UPLOAD_MIN_INTERVAL_MS } from '../../sha
 import { collectSupportBundleFiles } from '../ui/logs-export'
 import { createZipWithFiles } from '../ui/zip'
 import type { LogUploadState } from './log-upload-store'
+import { HostEnvironment, ManualHostEnvironment } from '@main/monitoring/host-environment'
 
 // Poll cadence, NOT the upload cadence. We check hourly whether the logs have
 // changed and the throttle window has elapsed; uploads are bounded by
@@ -33,6 +34,7 @@ export interface LogUploadSyncParams {
   /** Minimum elapsed time between uploads. Defaults to LOG_UPLOAD_MIN_INTERVAL_MS. */
   minIntervalMs?: number
   now?: () => number
+  env?: HostEnvironment
 }
 
 /**
@@ -59,6 +61,7 @@ export class LogUploadSync {
   private readonly intervalMs: number
   private readonly minIntervalMs: number
   private readonly now: () => number
+  private readonly env: HostEnvironment
 
   private timer: ReturnType<typeof setInterval> | null = null
   // The current pass, or null when idle. Non-null also means "a pass is running"
@@ -79,6 +82,7 @@ export class LogUploadSync {
     this.intervalMs = params.intervalMs ?? DEFAULT_CHECK_INTERVAL_MS
     this.minIntervalMs = params.minIntervalMs ?? LOG_UPLOAD_MIN_INTERVAL_MS
     this.now = params.now ?? Date.now
+    this.env = params.env ?? new ManualHostEnvironment()
   }
 
   start(): void {
@@ -169,9 +173,16 @@ export class LogUploadSync {
         log.debug(`[LogUpload] Skipping (${reason}) — throttled (uploaded recently)`)
         return
       }
+      const standDown = await this.env.standDown(this.getBackendUrl())
+      if (standDown !== null) {
+        log.debug(`[LogUpload] Skipping (${reason}) — ${standDown}`)
+        return
+      }
     }
 
-    const tempPath = path.join(os.tmpdir(), `.memorylane-logs-${process.pid}.${this.now()}.zip`)
+    const startedAt = this.now()
+    const tempPath = path.join(os.tmpdir(), `.memorylane-logs-${process.pid}.${startedAt}.zip`)
+    let suspend: ReturnType<HostEnvironment['suspendSignal']> | null = null
     try {
       await this.zipFiles(files, tempPath)
       const zipBytes = await fsPromises.readFile(tempPath)
@@ -181,11 +192,12 @@ export class LogUploadSync {
 
       const base = this.getBackendUrl().replace(/\/?$/, '/')
       const url = new URL('api/device/logs', base)
+      suspend = this.env.suspendSignal()
       const response = await fetch(url, {
         method: 'POST',
         headers: { Authorization: `Bearer ${this.getDeviceId()}` },
         body: form,
-        signal: AbortSignal.timeout(BACKEND_UPLOAD_TIMEOUT_MS),
+        signal: AbortSignal.any([AbortSignal.timeout(BACKEND_UPLOAD_TIMEOUT_MS), suspend.signal]),
       })
 
       if (!response.ok) {
@@ -195,7 +207,15 @@ export class LogUploadSync {
 
       this.writeState({ lastUploadAt: this.now(), lastSig: signature })
       log.info(`[LogUpload] Upload succeeded (${reason}): ${files.length} file(s)`)
+    } catch (error) {
+      if (!force && this.env.interruptedBy(startedAt, this.getBackendUrl(), error)) {
+        const message = error instanceof Error ? error.message : String(error)
+        log.info(`[LogUpload] Upload deferred (${reason}): ${message}`)
+        return
+      }
+      throw error
     } finally {
+      suspend?.release()
       try {
         fs.rmSync(tempPath, { force: true })
       } catch {

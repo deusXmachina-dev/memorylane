@@ -1,6 +1,12 @@
 import type { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AWAKE_CHECK_DELAYS_MS, HostEnvironment, ManualHostEnvironment } from './host-environment'
+import {
+  AWAKE_CHECK_DELAYS_MS,
+  HostEnvironment,
+  ManualHostEnvironment,
+  remoteHost,
+} from './host-environment'
+import { HOST_RESOLVE_TIMEOUT_MS } from '@/shared/constants'
 
 vi.mock('electron', async () => {
   const { EventEmitter } = await import('node:events')
@@ -114,6 +120,65 @@ describe('standDownReason', () => {
     const host = new ManualHostEnvironment()
     host.online = false
     expect(host.standDownReason('http://localhost:11434/v1')).toBeNull()
+  })
+})
+
+describe('remoteHost', () => {
+  it('returns the hostname of a remote URL', () => {
+    expect(remoteHost('https://backend.test/api/')).toBe('backend.test')
+  })
+
+  it('is null for loopback, IP literals, and unparsable input', () => {
+    expect(remoteHost(undefined)).toBeNull()
+    expect(remoteHost('http://localhost:11434/v1')).toBeNull()
+    expect(remoteHost('http://192.168.1.10:11434/v1')).toBeNull()
+    expect(remoteHost('http://[fd12::10]:11434/v1')).toBeNull()
+    expect(remoteHost('not a url')).toBeNull()
+  })
+})
+
+describe('standDown', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('is null when awake, online and the target resolves', async () => {
+    const host = new ManualHostEnvironment()
+    const lookup = vi.spyOn(host, 'resolves')
+    expect(await host.standDown('https://backend.test/')).toBeNull()
+    expect(lookup).toHaveBeenCalledWith('backend.test')
+  })
+
+  it('reports unresolved when the target does not resolve', async () => {
+    const host = new ManualHostEnvironment()
+    host.resolvable = false
+    expect(await host.standDown('https://backend.test/')).toBe('unresolved')
+  })
+
+  it('reports suspended and offline without a lookup', async () => {
+    const host = new ManualHostEnvironment()
+    const lookup = vi.spyOn(host, 'resolves')
+    host.online = false
+    expect(await host.standDown('https://backend.test/')).toBe('offline')
+    host.suspend()
+    expect(await host.standDown('https://backend.test/')).toBe('suspended')
+    expect(lookup).not.toHaveBeenCalled()
+  })
+
+  it('skips the lookup for loopback and IP-literal targets', async () => {
+    const host = new ManualHostEnvironment()
+    host.resolvable = false
+    expect(await host.standDown('http://localhost:8000/')).toBeNull()
+    expect(await host.standDown('http://10.0.0.5:8000/')).toBeNull()
+  })
+
+  it('treats a hung lookup as unresolved', async () => {
+    vi.useFakeTimers()
+    const host = new ManualHostEnvironment()
+    vi.spyOn(host, 'resolves').mockReturnValue(new Promise<boolean>(() => {}))
+    const pending = host.standDown('https://backend.test/')
+    await vi.advanceTimersByTimeAsync(HOST_RESOLVE_TIMEOUT_MS)
+    expect(await pending).toBe('unresolved')
   })
 })
 
