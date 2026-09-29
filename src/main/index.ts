@@ -20,6 +20,7 @@ import {
   syncAutoStartSetting,
 } from '@main/system/auto-start'
 import { createCaptureCoordinator } from '@main/capture/capture-orchestrator'
+import { requiresActivation } from '@main/access/types'
 import { createCaptureHotkeyManager } from '@main/capture/capture-hotkey-manager'
 import log from '@main/utils/logger'
 import '@main/utils/logger-electron'
@@ -411,13 +412,13 @@ app.on('ready', async () => {
   remoteModelConfig.start()
 
   const host = runtime.host
-  const isDeviceDeactivated = (): boolean =>
-    editionConfig.edition === 'enterprise' &&
-    runtime?.accessProvider.getAccessState().enterpriseActivationStatus === 'inactive'
+  const accessProvider = runtime.accessProvider
+  const deviceRequiresActivation = (): boolean =>
+    requiresActivation(accessProvider.getAccessState())
   const captureCoordinator = createCaptureCoordinator({
     capture: runtime.capture,
     captureStateManager,
-    isPaused: () => host.shouldPause() || isDeviceDeactivated(),
+    isPaused: () => host.shouldPause() || deviceRequiresActivation(),
     userContextBuilder,
     onStateChanged: () => {
       void updateTrayMenu()
@@ -425,17 +426,12 @@ app.on('ready', async () => {
     },
   })
 
-  let deviceDeactivated = isDeviceDeactivated()
-  runtime.accessProvider.addUpdateListener(() => {
-    const next = isDeviceDeactivated()
-    if (next === deviceDeactivated) return
-    deviceDeactivated = next
-    if (next) {
-      captureCoordinator.suspendCapture('device deactivated')
+  accessProvider.addUpdateListener((state) => {
+    if (requiresActivation(state)) {
+      captureCoordinator.suspendCapture('device not activated')
     } else {
       captureCoordinator.resumeCaptureIfDesired('reactivated')
     }
-    void updateTrayMenu()
   })
 
   const hotkeyManager = createCaptureHotkeyManager({
@@ -467,7 +463,7 @@ app.on('ready', async () => {
 
   setupTray({
     capture: captureCoordinator.controls,
-    isDeviceDeactivated,
+    requiresActivation: deviceRequiresActivation,
     storage: runtime.storage,
   })
 

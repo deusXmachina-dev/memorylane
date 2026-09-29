@@ -40,23 +40,26 @@ describe('createCaptureCoordinator', () => {
     expect(userContextBuilder.scheduleRun).toHaveBeenCalledTimes(1)
   })
 
-  it('does not start capture or schedule analyzers on manual start while paused', () => {
+  it('refuses a manual start while paused without persisting the preference', () => {
     const capture = createCaptureMock()
     const stateManager = createCaptureStateManagerMock()
     const userContextBuilder = { scheduleRun: vi.fn() }
+    const onStateChanged = vi.fn()
 
     const coordinator = createCaptureCoordinator({
       capture,
       captureStateManager: stateManager as never,
       isPaused: () => true,
       userContextBuilder: userContextBuilder as never,
+      onStateChanged,
     })
 
     coordinator.controls.requestStartCapture()
 
-    expect(stateManager.setCaptureEnabled).toHaveBeenCalledWith(true)
+    expect(stateManager.setCaptureEnabled).not.toHaveBeenCalled()
     expect(capture.startCapture).not.toHaveBeenCalled()
     expect(userContextBuilder.scheduleRun).not.toHaveBeenCalled()
+    expect(onStateChanged).toHaveBeenCalledTimes(1)
   })
 
   it('keeps scheduling behavior on resume path', () => {
@@ -178,30 +181,43 @@ describe('createCaptureCoordinator timed pause', () => {
   })
 
   it('suspendCapture stops a running capture without changing the preference', () => {
-    const { capture, stateManager, coordinator } = makeCoordinator()
+    const { capture, stateManager, onStateChanged, coordinator } = makeCoordinator()
     capture.isCapturingNow.mockReturnValue(true)
 
-    coordinator.suspendCapture('device deactivated')
+    coordinator.suspendCapture('device not activated')
 
     expect(capture.forceClose).toHaveBeenCalledTimes(1)
     expect(capture.stopCapture).toHaveBeenCalledTimes(1)
     expect(stateManager.setCaptureEnabled).not.toHaveBeenCalled()
+    expect(onStateChanged).toHaveBeenCalledTimes(1)
   })
 
-  it('suspendCapture is a no-op when capture is not running', () => {
-    const { capture, coordinator } = makeCoordinator()
+  it('suspendCapture only refreshes the UI when capture is not running', () => {
+    const { capture, onStateChanged, coordinator } = makeCoordinator()
 
-    coordinator.suspendCapture('device deactivated')
+    coordinator.suspendCapture('device not activated')
 
     expect(capture.forceClose).not.toHaveBeenCalled()
     expect(capture.stopCapture).not.toHaveBeenCalled()
+    expect(onStateChanged).toHaveBeenCalledTimes(1)
   })
 
   it('resumeCaptureIfDesired restarts capture after reactivation when still desired', () => {
-    const { capture, coordinator } = makeCoordinator()
+    const { capture, onStateChanged, coordinator } = makeCoordinator()
 
     coordinator.resumeCaptureIfDesired('reactivated')
 
     expect(capture.startCapture).toHaveBeenCalledTimes(1)
+    expect(onStateChanged).toHaveBeenCalledTimes(1)
+  })
+
+  it('resumeCaptureIfDesired does not start while the device still requires activation', () => {
+    const { capture, onStateChanged, coordinator } = makeCoordinator({ isPaused: () => true })
+
+    coordinator.resumeCaptureIfDesired('startup')
+    coordinator.resumeCaptureIfDesired('reactivated')
+
+    expect(capture.startCapture).not.toHaveBeenCalled()
+    expect(onStateChanged).toHaveBeenCalledTimes(2)
   })
 })

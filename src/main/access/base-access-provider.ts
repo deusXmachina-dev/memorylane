@@ -83,7 +83,11 @@ export abstract class BaseAccessProvider implements AccessProvider {
       ...next,
     }
     for (const listener of this.listeners) {
-      listener(this.accessState, payload)
+      try {
+        listener(this.accessState, payload)
+      } catch (error) {
+        log.warn('[AccessProvider] Update listener threw:', error)
+      }
     }
   }
 }

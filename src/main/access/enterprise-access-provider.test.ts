@@ -28,6 +28,16 @@ function urlsafeBase64(value: string): string {
 
 const ACTIVATION_CODE = `${TENANT_TOKEN}.${urlsafeBase64(EMAIL)}`
 
+function memoryActivationStore(activated = false) {
+  const store = { activated }
+  return {
+    isActivated: () => store.activated,
+    setActivated: vi.fn((next: boolean) => {
+      store.activated = next
+    }),
+  }
+}
+
 const DEFAULT_DOC_BYTES = Buffer.from('%PDF-1.4 fake consent doc')
 const DEFAULT_DOC_SHA = createHash('sha256').update(DEFAULT_DOC_BYTES).digest('hex')
 
@@ -79,7 +89,7 @@ describe('EnterpriseAccessProvider', () => {
     const responses = [descriptorResponse(), pdfResponse()]
     globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null }> = []
     provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
@@ -102,7 +112,7 @@ describe('EnterpriseAccessProvider', () => {
       })
     })
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null; error: string | null }> = []
     provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
@@ -121,7 +131,7 @@ describe('EnterpriseAccessProvider', () => {
       jsonResponse({ error: 'Invalid activation code' }, false, 403),
     )
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null; error: string | null }> = []
     provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
@@ -142,7 +152,7 @@ describe('EnterpriseAccessProvider', () => {
       })
     })
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null; error: string | null }> = []
     provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
@@ -170,7 +180,7 @@ describe('EnterpriseAccessProvider', () => {
     ]
     globalThis.fetch = vi.fn<typeof fetch>(async () => (responses.shift() as () => Response)())
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null; error: string | null }> = []
     provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
@@ -189,7 +199,7 @@ describe('EnterpriseAccessProvider', () => {
     const fetchMock = vi.fn<typeof fetch>()
     globalThis.fetch = fetchMock
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null; error: string | null }> = []
     provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
@@ -207,7 +217,7 @@ describe('EnterpriseAccessProvider', () => {
       descriptorResponse({ contentType: 'text/html' }),
     )
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null }> = []
     provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
@@ -222,7 +232,7 @@ describe('EnterpriseAccessProvider', () => {
     const fetchMock = vi.fn<typeof fetch>(async () => responses.shift() as Response)
     globalThis.fetch = fetchMock
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null; error: string | null }> = []
     provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
@@ -245,7 +255,7 @@ describe('EnterpriseAccessProvider', () => {
     ]
     globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null }> = []
     provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
@@ -280,7 +290,7 @@ describe('EnterpriseAccessProvider', () => {
       return responses.shift() as Response
     })
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null; payload?: unknown }> = []
     provider.addUpdateListener((state, payload) => {
       updates.push({ status: state.enterpriseActivationStatus, payload })
@@ -324,7 +334,7 @@ describe('EnterpriseAccessProvider', () => {
     ]
     globalThis.fetch = vi.fn<typeof fetch>(async () => (responses.shift() as () => Response)())
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null; error: string | null }> = []
     provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
@@ -356,7 +366,7 @@ describe('EnterpriseAccessProvider', () => {
     ]
     globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null }> = []
     provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
@@ -372,7 +382,7 @@ describe('EnterpriseAccessProvider', () => {
   it('rejects descriptors with an unknown state value as malformed', async () => {
     globalThis.fetch = vi.fn<typeof fetch>(async () => jsonResponse({ state: 'pending_review' }))
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null; error: string | null }> = []
     provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
@@ -401,7 +411,7 @@ describe('EnterpriseAccessProvider', () => {
     ]
     globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null; payload?: unknown }> = []
     provider.addUpdateListener((state, payload) => {
       updates.push({ status: state.enterpriseActivationStatus, payload })
@@ -429,7 +439,7 @@ describe('EnterpriseAccessProvider', () => {
       },
     } as DeviceIdentity
 
-    const provider = new EnterpriseAccessProvider(throwingIdentity)
+    const provider = new EnterpriseAccessProvider(throwingIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null }> = []
     provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
@@ -476,7 +486,7 @@ describe('EnterpriseAccessProvider', () => {
     ]
     globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null; payload?: unknown }> = []
     provider.addUpdateListener((state, payload) => {
       updates.push({ status: state.enterpriseActivationStatus, payload })
@@ -523,7 +533,7 @@ describe('EnterpriseAccessProvider', () => {
     const fetchMock = vi.fn<typeof fetch>(async () => responses.shift() as Response)
     globalThis.fetch = fetchMock
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     await provider.activateEnterpriseLicense(ACTIVATION_CODE)
     await provider.submitConsentDecision('accepted')
 
@@ -559,7 +569,7 @@ describe('EnterpriseAccessProvider', () => {
     const fetchMock = vi.fn<typeof fetch>(async () => responses.shift() as Response)
     globalThis.fetch = fetchMock
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     await provider.activateEnterpriseLicense(ACTIVATION_CODE)
     await provider.submitConsentDecision('accepted')
     await vi.advanceTimersByTimeAsync(ENTERPRISE_BACKEND_CONFIG.POLL_INTERVAL_MS)
@@ -589,7 +599,7 @@ describe('EnterpriseAccessProvider', () => {
     const responses = [descriptorResponse(), pdfResponse(), jsonResponse({ declined: true })]
     globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null }> = []
     provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
@@ -619,7 +629,7 @@ describe('EnterpriseAccessProvider', () => {
     ]
     globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null }> = []
     provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
@@ -640,7 +650,7 @@ describe('EnterpriseAccessProvider', () => {
     ]
     globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null }> = []
     provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus })
@@ -656,7 +666,7 @@ describe('EnterpriseAccessProvider', () => {
     const fetchMock = vi.fn<typeof fetch>(async () => responses.shift() ?? descriptorResponse())
     globalThis.fetch = fetchMock
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     await provider.activateEnterpriseLicense(ACTIVATION_CODE)
 
     const before = fetchMock.mock.calls.length
@@ -669,7 +679,7 @@ describe('EnterpriseAccessProvider', () => {
     const responses = [descriptorResponse(), pdfResponse()]
     globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null; error: string | null }> = []
     provider.addUpdateListener((state) => {
       updates.push({
@@ -692,7 +702,7 @@ describe('EnterpriseAccessProvider', () => {
       jsonResponse({ error: 'unauthorized' }, false, 401),
     )
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null; error: string | null }> = []
     provider.addUpdateListener((state) => {
       updates.push({ status: state.enterpriseActivationStatus, error: state.error })
@@ -707,7 +717,7 @@ describe('EnterpriseAccessProvider', () => {
   it('publishes invalidation on refresh when license status is inactive', async () => {
     globalThis.fetch = vi.fn<typeof fetch>(async () => jsonResponse({ activated: false }))
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const updates: Array<{ status: string | null; payload?: unknown }> = []
     provider.addUpdateListener((state, payload) => {
       updates.push({ status: state.enterpriseActivationStatus, payload })
@@ -720,10 +730,62 @@ describe('EnterpriseAccessProvider', () => {
     expect(updates[0]?.payload).toEqual({ invalidate: true })
   })
 
+  it('boots as activated from the persisted verdict and stays activated offline', async () => {
+    globalThis.fetch = vi.fn<typeof fetch>(async () => {
+      throw new TypeError('fetch failed', {
+        cause: Object.assign(new Error('getaddrinfo ENOTFOUND backend.example'), {
+          code: 'ENOTFOUND',
+        }),
+      })
+    })
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore(true))
+    expect(provider.getAccessState().isEnterpriseActivated).toBe(true)
+    expect(provider.getAccessState().enterpriseActivationStatus).toBe('waiting_for_key')
+
+    await provider.refreshAccessState()
+
+    expect(provider.getAccessState().isEnterpriseActivated).toBe(true)
+  })
+
+  it('persists the activation verdict on activated and inactive refreshes', async () => {
+    const responses = [
+      jsonResponse({ activated: true }),
+      jsonResponse({ provider: 'openrouter', apiKey: 'key-123' }),
+      jsonResponse({ error: 'unauthorized' }, false, 401),
+    ]
+    globalThis.fetch = vi.fn<typeof fetch>(async () => responses.shift() as Response)
+    const store = memoryActivationStore()
+    const provider = new EnterpriseAccessProvider(deviceIdentity, store)
+
+    await provider.refreshAccessState()
+    expect(store.setActivated).toHaveBeenLastCalledWith(true)
+
+    await provider.refreshAccessState()
+    expect(store.setActivated).toHaveBeenLastCalledWith(false)
+    expect(provider.getAccessState().isEnterpriseActivated).toBe(false)
+  })
+
+  it('keeps notifying later listeners when an earlier one throws', async () => {
+    globalThis.fetch = vi.fn<typeof fetch>(async () => jsonResponse({ activated: false }))
+
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
+    const second = vi.fn()
+    provider.addUpdateListener(() => {
+      throw new Error('boom')
+    })
+    provider.addUpdateListener(second)
+
+    await expect(provider.refreshAccessState()).resolves.toBeUndefined()
+
+    expect(second).toHaveBeenCalledTimes(1)
+    expect(provider.getAccessState().enterpriseActivationStatus).toBe('inactive')
+  })
+
   it('notifies every registered listener until it unsubscribes', async () => {
     globalThis.fetch = vi.fn<typeof fetch>(async () => jsonResponse({ activated: false }))
 
-    const provider = new EnterpriseAccessProvider(deviceIdentity)
+    const provider = new EnterpriseAccessProvider(deviceIdentity, memoryActivationStore())
     const first = vi.fn()
     const second = vi.fn()
     provider.addUpdateListener(first)

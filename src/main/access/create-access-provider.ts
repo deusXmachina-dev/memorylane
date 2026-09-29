@@ -1,4 +1,5 @@
 import type { AppEdition } from '../../shared/edition'
+import { ActivationStateStore } from '../settings/activation-state-store'
 import type { DeviceIdentity } from '../settings/device-identity'
 import { CustomerAccessProvider } from './customer-access-provider'
 import { EnterpriseAccessProvider } from './enterprise-access-provider'
@@ -9,6 +10,6 @@ export function createAccessProvider(
   deviceIdentity: DeviceIdentity,
 ): AccessProvider {
   return edition === 'enterprise'
-    ? new EnterpriseAccessProvider(deviceIdentity)
+    ? new EnterpriseAccessProvider(deviceIdentity, new ActivationStateStore())
     : new CustomerAccessProvider(deviceIdentity)
 }

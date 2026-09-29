@@ -37,3 +37,7 @@ export function createInitialAccessState(edition: AppEdition): AccessState {
     error: null,
   }
 }
+
+export function requiresActivation(state: AccessState): boolean {
+  return state.edition === 'enterprise' && !state.isEnterpriseActivated
+}

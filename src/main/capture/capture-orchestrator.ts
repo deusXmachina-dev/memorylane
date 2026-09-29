@@ -84,14 +84,14 @@ export function createCaptureCoordinator(params: {
   }
 
   const requestStartCapture = (): void => {
-    // Starting un-pauses: a manual start overrides any active timed pause.
-    clearPauseSweep()
-    if (!persistCaptureEnabled(true)) {
+    if (params.isPaused()) {
+      log.info('[Main] Capture start refused while paused')
       notifyStateChanged()
       return
     }
-    if (params.isPaused()) {
-      log.info('[Main] Capture preference enabled while paused; will start on resume')
+    // Starting un-pauses: a manual start overrides any active timed pause.
+    clearPauseSweep()
+    if (!persistCaptureEnabled(true)) {
       notifyStateChanged()
       return
     }
@@ -158,23 +158,28 @@ export function createCaptureCoordinator(params: {
   }
 
   const suspendCapture = (reason: string): void => {
-    if (!params.capture.isCapturingNow()) return
-    void params.capture.forceClose()
-    log.info(`[Main] Pausing capture (${reason})`)
-    params.capture.stopCapture()
+    if (params.capture.isCapturingNow()) {
+      void params.capture.forceClose()
+      log.info(`[Main] Pausing capture (${reason})`)
+      params.capture.stopCapture()
+    }
+    notifyStateChanged()
   }
 
   const resumeCaptureIfDesired = (reason: 'startup' | 'resume' | 'reactivated'): void => {
-    if (!params.captureStateManager.isCaptureEnabled()) return
-    // A timed pause is in-memory: on startup there is none, but on power-resume
-    // an active pause must win so unlocking doesn't cut a pause short.
-    if (isUserPaused()) return
-    if (params.capture.isCapturingNow() || params.isPaused()) return
-
-    log.info(`[Main] Starting capture from persisted preference (${reason})`)
-    params.capture.startCapture()
-
-    scheduleBackgroundAnalyzers()
+    const desired =
+      params.captureStateManager.isCaptureEnabled() &&
+      // A timed pause is in-memory: on startup there is none, but on power-resume
+      // an active pause must win so unlocking doesn't cut a pause short.
+      !isUserPaused() &&
+      !params.capture.isCapturingNow() &&
+      !params.isPaused()
+    if (desired) {
+      log.info(`[Main] Starting capture from persisted preference (${reason})`)
+      params.capture.startCapture()
+      scheduleBackgroundAnalyzers()
+    }
+    notifyStateChanged()
   }
 
   return {

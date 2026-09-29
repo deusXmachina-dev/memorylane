@@ -23,7 +23,7 @@ interface TrayDependencies {
     stopCaptureForShutdown: () => void
     forceClose: () => Promise<void>
   }
-  isDeviceDeactivated: () => boolean
+  requiresActivation: () => boolean
   storage: StorageService
 }
 
@@ -163,7 +163,7 @@ export const updateTrayMenu = async (): Promise<void> => {
   const isCapturing = deps.capture.isCapturingNow()
   const { pausedUntilMs } = deps.capture.getPauseState()
   const isUserPaused = pausedUntilMs !== null
-  const isDeviceDeactivated = !isCapturing && deps.isDeviceDeactivated()
+  const requiresActivation = !isCapturing && deps.requiresActivation()
   const { isPrivacyBlocked, blockedRecently } = trayPrivacyState.getStatus(isCapturing)
 
   // Keep the countdown label fresh while paused; stop refreshing otherwise.
@@ -178,8 +178,8 @@ export const updateTrayMenu = async (): Promise<void> => {
 
   const versionSuffix = ` (v${app.getVersion()})`
   tray.setToolTip(
-    isDeviceDeactivated
-      ? `MemoryLane - Capture Paused (Device Deactivated)${versionSuffix}`
+    requiresActivation
+      ? `MemoryLane - Capture Paused (Device Not Activated)${versionSuffix}`
       : isUserPaused
         ? `MemoryLane - Capture Paused (resumes ${formatRemaining(pausedUntilMs)})${versionSuffix}`
         : isPrivacyBlocked
@@ -218,8 +218,8 @@ export const updateTrayMenu = async (): Promise<void> => {
             { type: 'separator' as const },
           ]
         : []),
-    ...(isDeviceDeactivated
-      ? [{ label: 'Capture paused: device deactivated', enabled: false }]
+    ...(requiresActivation
+      ? [{ label: 'Capture paused: device not activated', enabled: false }]
       : buildCaptureMenuItems({ isCapturing, isUserPaused, pausedUntilMs })),
     { type: 'separator' },
     {
