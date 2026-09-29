@@ -128,10 +128,10 @@ interface MainWindowDependencies {
   databaseExportSync: {
     onSettingsChanged: () => Promise<void>
   }
-  databaseUploadSync?: {
+  databaseUpload?: {
     triggerUpload: () => Promise<{ success: boolean; error?: string }>
   }
-  logUploadSync?: {
+  logUpload?: {
     triggerUpload: () => Promise<{ success: boolean; error?: string }>
   }
   purgeAll: () => Promise<void>
@@ -830,17 +830,17 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   })
 
   ipcMain.handle('main-window:syncDatabaseToRemote', async () => {
-    if (!deps?.databaseUploadSync) {
+    if (!deps?.databaseUpload) {
       return { success: false, error: 'Not available' }
     }
-    return deps.databaseUploadSync.triggerUpload()
+    return deps.databaseUpload.triggerUpload()
   })
 
   ipcMain.handle('main-window:syncLogsToRemote', async () => {
-    if (!deps?.logUploadSync) {
+    if (!deps?.logUpload) {
       return { success: false, error: 'Not available' }
     }
-    return deps.logUploadSync.triggerUpload()
+    return deps.logUpload.triggerUpload()
   })
 
   ipcMain.handle(
