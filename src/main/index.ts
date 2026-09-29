@@ -415,10 +415,11 @@ app.on('ready', async () => {
   const accessProvider = runtime.accessProvider
   const deviceRequiresActivation = (): boolean =>
     requiresActivation(accessProvider.getAccessState())
+  let purging = false
   const captureCoordinator = createCaptureCoordinator({
     capture: runtime.capture,
     captureStateManager,
-    isPaused: () => host.shouldPause() || deviceRequiresActivation(),
+    isPaused: () => purging || host.shouldPause() || deviceRequiresActivation(),
     userContextBuilder,
     onStateChanged: () => {
       void updateTrayMenu()
@@ -426,8 +427,12 @@ app.on('ready', async () => {
     },
   })
 
+  let activationBlocked = deviceRequiresActivation()
   accessProvider.addUpdateListener((state) => {
-    if (requiresActivation(state)) {
+    const blocked = requiresActivation(state)
+    if (blocked === activationBlocked) return
+    activationBlocked = blocked
+    if (blocked) {
       captureCoordinator.suspendCapture('device not activated')
     } else {
       captureCoordinator.resumeCaptureIfDesired('reactivated')
@@ -537,7 +542,15 @@ app.on('ready', async () => {
     databaseExportSync: rawDatabaseExportSync,
     databaseUploadSync: databaseUploadSync ?? undefined,
     logUploadSync: logUploadSync ?? undefined,
-    purgeAll: () => runtime?.purgeAll() ?? Promise.reject(new Error('Runtime not initialized')),
+    purgeAll: async () => {
+      if (!runtime) throw new Error('Runtime not initialized')
+      purging = true
+      try {
+        await runtime.purgeAll()
+      } finally {
+        purging = false
+      }
+    },
     wipeAndRemineTasks: async () => {
       if (!runtime) throw new Error('Runtime not initialized')
       if (!taskMiner) throw new Error('Task miner not initialized')

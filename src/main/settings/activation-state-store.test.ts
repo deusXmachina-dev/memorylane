@@ -29,6 +29,19 @@ describe('ActivationStateStore', () => {
     expect(new ActivationStateStore(statePath).isActivated()).toBe(false)
   })
 
+  it('keeps retrying after a failed write', () => {
+    const nested = path.join(dir, 'missing', 'activation-state.json')
+    const store = new ActivationStateStore(nested)
+
+    store.setActivated(true)
+    expect(store.isActivated()).toBe(false)
+
+    fs.mkdirSync(path.dirname(nested))
+    store.setActivated(true)
+    expect(store.isActivated()).toBe(true)
+    expect(new ActivationStateStore(nested).isActivated()).toBe(true)
+  })
+
   it('treats a corrupt file as not activated', () => {
     fs.writeFileSync(statePath, '{not json')
     expect(new ActivationStateStore(statePath).isActivated()).toBe(false)

@@ -41,12 +41,14 @@ export class ActivationStateStore {
 
   public setActivated(activated: boolean): void {
     if (this.state.activated === activated) return
-    this.state = { activated }
+    const next: ActivationState = { activated }
     try {
-      fs.writeFileSync(this.statePath, JSON.stringify(this.state, null, 2))
-      log.info(`[ActivationState] Activated set to ${activated}`)
+      fs.writeFileSync(this.statePath, JSON.stringify(next, null, 2))
     } catch (error) {
       log.error('[ActivationState] Failed to save state:', error)
+      return
     }
+    this.state = next
+    log.info(`[ActivationState] Activated set to ${activated}`)
   }
 }

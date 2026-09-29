@@ -40,7 +40,7 @@ describe('createCaptureCoordinator', () => {
     expect(userContextBuilder.scheduleRun).toHaveBeenCalledTimes(1)
   })
 
-  it('refuses a manual start while paused without persisting the preference', () => {
+  it('persists the preference on manual start while paused and defers the start', () => {
     const capture = createCaptureMock()
     const stateManager = createCaptureStateManagerMock()
     const userContextBuilder = { scheduleRun: vi.fn() }
@@ -56,7 +56,7 @@ describe('createCaptureCoordinator', () => {
 
     coordinator.controls.requestStartCapture()
 
-    expect(stateManager.setCaptureEnabled).not.toHaveBeenCalled()
+    expect(stateManager.setCaptureEnabled).toHaveBeenCalledWith(true)
     expect(capture.startCapture).not.toHaveBeenCalled()
     expect(userContextBuilder.scheduleRun).not.toHaveBeenCalled()
     expect(onStateChanged).toHaveBeenCalledTimes(1)

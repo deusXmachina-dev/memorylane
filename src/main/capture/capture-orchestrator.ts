@@ -84,14 +84,14 @@ export function createCaptureCoordinator(params: {
   }
 
   const requestStartCapture = (): void => {
-    if (params.isPaused()) {
-      log.info('[Main] Capture start refused while paused')
-      notifyStateChanged()
-      return
-    }
     // Starting un-pauses: a manual start overrides any active timed pause.
     clearPauseSweep()
     if (!persistCaptureEnabled(true)) {
+      notifyStateChanged()
+      return
+    }
+    if (params.isPaused()) {
+      log.info('[Main] Capture preference enabled while paused; will start on resume')
       notifyStateChanged()
       return
     }
