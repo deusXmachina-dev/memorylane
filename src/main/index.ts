@@ -34,8 +34,9 @@ import { TaskMiner } from './services/task-miner'
 import type { MiningStatus } from '../shared/types'
 import { UserContextBuilder } from './services/user-context-builder'
 import { RawDatabaseExportSync } from './services/raw-database-export-sync'
-import { DatabaseUploadSync } from './services/database-upload-sync'
-import { LogUploadSync } from './services/log-upload-sync'
+import { BackendUpload } from './services/backend-upload'
+import { databaseUploadJob } from './services/database-upload-job'
+import { logUploadJob } from './services/log-upload-job'
 import { readLogUploadState, writeLogUploadState } from './services/log-upload-store'
 import { RemoteBlacklistService } from './services/remote-blacklist-service'
 import { readRemoteBlacklist, writeRemoteBlacklist } from './services/remote-blacklist-store'
@@ -130,8 +131,8 @@ let runtime: MainRuntime | null = null
 let userContextBuilder: UserContextBuilder | null = null
 let taskMiner: TaskMiner | null = null
 let rawDatabaseExportSync: RawDatabaseExportSync | null = null
-let databaseUploadSync: DatabaseUploadSync | null = null
-let logUploadSync: LogUploadSync | null = null
+let databaseUpload: BackendUpload | null = null
+let logUpload: BackendUpload | null = null
 let remoteBlacklist: RemoteBlacklistService | null = null
 let remoteModelConfig: RemoteModelConfigService | null = null
 let deviceReportSync: DeviceReportSync | null = null
@@ -169,8 +170,8 @@ app.on('before-quit', (event) => {
   const steps: Array<[name: string, step: Promise<unknown> | undefined]> = [
     ['runtime.dispose', runtime?.dispose()],
     ['rawDatabaseExportSync.stop', rawDatabaseExportSync?.stop()],
-    ['databaseUploadSync.stop', databaseUploadSync?.stop()],
-    ['logUploadSync.stop', logUploadSync?.stop()],
+    ['databaseUpload.stop', databaseUpload?.stop()],
+    ['logUpload.stop', logUpload?.stop()],
   ]
   const pendingSteps = new Set(steps.filter(([, step]) => step).map(([name]) => name))
 
@@ -331,32 +332,35 @@ app.on('ready', async () => {
   deviceReportSync.start()
 
   if (editionConfig.edition === 'enterprise') {
-    databaseUploadSync = new DatabaseUploadSync({
-      storage: runtime.storage,
+    const backend = {
       getDeviceId: () => deviceIdentity.getDeviceId(),
       isActivated: isEnterpriseActivated,
       isSyncEnabled: () => captureSettingsManager.get().uploadDetailLevel !== 'off',
-      getStripOptions: () => {
-        const level = captureSettingsManager.get().uploadDetailLevel
-        return { detailLevel: level === 'detailed' ? 'detailed' : 'summary' }
-      },
       getBackendUrl: () => ENTERPRISE_BACKEND_CONFIG.BACKEND_URL,
-      getLastUploadAt: () => runtime?.storage.uploadRuns.getLastRunTimestamp() ?? null,
-      recordUploadAt: (ts) => runtime?.storage.uploadRuns.record(ts),
       env: runtime.host,
+    }
+    databaseUpload = new BackendUpload({
+      ...backend,
+      job: databaseUploadJob({
+        storage: runtime.storage,
+        getStripOptions: () => {
+          const level = captureSettingsManager.get().uploadDetailLevel
+          return { detailLevel: level === 'detailed' ? 'detailed' : 'summary' }
+        },
+        getLastUploadAt: () => runtime?.storage.uploadRuns.getLastRunTimestamp() ?? null,
+        recordUploadAt: (ts) => runtime?.storage.uploadRuns.record(ts),
+      }),
     })
-    databaseUploadSync.start()
+    databaseUpload.start()
 
-    logUploadSync = new LogUploadSync({
-      getDeviceId: () => deviceIdentity.getDeviceId(),
-      isActivated: isEnterpriseActivated,
-      isSyncEnabled: () => captureSettingsManager.get().uploadDetailLevel !== 'off',
-      getBackendUrl: () => ENTERPRISE_BACKEND_CONFIG.BACKEND_URL,
-      readState: () => readLogUploadState(),
-      writeState: (state) => writeLogUploadState(state),
-      env: runtime.host,
+    logUpload = new BackendUpload({
+      ...backend,
+      job: logUploadJob({
+        readState: () => readLogUploadState(),
+        writeState: (state) => writeLogUploadState(state),
+      }),
     })
-    logUploadSync.start()
+    logUpload.start()
 
     remoteBlacklist = new RemoteBlacklistService({
       getDeviceId: () => deviceIdentity.getDeviceId(),
@@ -540,8 +544,8 @@ app.on('ready', async () => {
     updateExclusions: (exclusions) => runtime?.updateExclusions(exclusions),
     getManagedExclusions: () => remoteBlacklist?.getBlacklist() ?? { apps: [], urlPatterns: [] },
     databaseExportSync: rawDatabaseExportSync,
-    databaseUploadSync: databaseUploadSync ?? undefined,
-    logUploadSync: logUploadSync ?? undefined,
+    databaseUpload: databaseUpload ?? undefined,
+    logUpload: logUpload ?? undefined,
     purgeAll: async () => {
       if (!runtime) throw new Error('Runtime not initialized')
       purging = true
@@ -619,8 +623,8 @@ app.on('ready', async () => {
     }
   })
   host.onAwake(() => {
-    databaseUploadSync?.scheduleUploadIfStale('resume')
-    logUploadSync?.requestSync('resume')
+    databaseUpload?.kick('resume')
+    logUpload?.kick('resume')
     taskMiner?.kick()
   })
 
