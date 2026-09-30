@@ -442,6 +442,7 @@ app.on('ready', async () => {
       captureCoordinator.resumeCaptureIfDesired('reactivated')
       databaseUpload?.kick('activated')
       logUpload?.kick('activated')
+      void deviceReportSync?.sync()
     }
   })
 
