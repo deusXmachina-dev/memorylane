@@ -130,9 +130,11 @@ interface MainWindowDependencies {
   }
   databaseUpload?: {
     triggerUpload: () => Promise<{ success: boolean; error?: string }>
+    kick: (reason: string) => void
   }
   logUpload?: {
     triggerUpload: () => Promise<{ success: boolean; error?: string }>
+    kick: (reason: string) => void
   }
   purgeAll: () => Promise<void>
   /** Dev-only: wipe all mined sightings/clusters and re-mine from scratch. */
@@ -946,6 +948,10 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         deps.captureSettingsManager.applyToConstants()
         const updated = deps.captureSettingsManager.get()
         logCaptureSettingsChanges(previous, updated)
+        if (previous.uploadDetailLevel === 'off' && updated.uploadDetailLevel !== 'off') {
+          deps.databaseUpload?.kick('sharing enabled')
+          deps.logUpload?.kick('sharing enabled')
+        }
         syncAutoStartSetting(updated.autoStartEnabled)
         deps.capture.updateActivityWindowConfig({
           minActivityDurationMs: updated.minActivityDurationMs,

@@ -440,6 +440,9 @@ app.on('ready', async () => {
       captureCoordinator.suspendCapture('device not activated')
     } else {
       captureCoordinator.resumeCaptureIfDesired('reactivated')
+      databaseUpload?.kick('activated')
+      logUpload?.kick('activated')
+      void deviceReportSync?.sync()
     }
   })
 
