@@ -1,11 +1,13 @@
-# MemoryLane v1.5.10-alpha.2
+# MemoryLane v1.5.10
 
-Enterprise capture follows device activation.
+Enterprise uploads stand down while the Mac is asleep, and capture follows device activation.
 
 ## What's Changed
 
+- **No uploads during dark wakes**: scheduled database and log uploads skip while the system is suspended, offline, or before the backend host resolves. A suspend aborts an in-flight upload and it retries once the machine is awake and online. Manual "Sync now" still uploads immediately (#289).
 - **Capture pauses on deactivated devices**: enterprise capture runs only while the device is activated. Deactivating it in the admin stops capture, reactivating resumes it, and the tray shows why capture is paused. An activated device that starts offline keeps capturing (#290).
 - **"Sync now" always uploads**: a manual sync clicked during a scheduled upload no longer reports success without uploading (#292).
+- **Claude Cowork plugin 0.7.0**: connects through the desktop app instead of `npx` (#288).
 
 ## Known Issues & Limitations
 
@@ -23,4 +25,4 @@ Enterprise capture follows device activation.
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.10-alpha.1...v1.5.10-alpha.2
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.9...v1.5.10
