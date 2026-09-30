@@ -1,9 +1,9 @@
 import * as fs from 'fs'
 import * as fsPromises from 'fs/promises'
 import * as path from 'path'
-import { LOG_UPLOAD_MIN_INTERVAL_MS } from '../../shared/constants'
-import { collectSupportBundleFiles } from '../ui/logs-export'
-import { createZipWithFiles } from '../ui/zip'
+import { LOG_UPLOAD_MIN_INTERVAL_MS } from '@/shared/constants'
+import { collectSupportBundleFiles } from '@main/ui/logs-export'
+import { createZipWithFiles } from '@main/ui/zip'
 import type { LogUploadState } from './log-upload-store'
 import type { UploadJob } from './backend-upload'
 

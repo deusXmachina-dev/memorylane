@@ -293,6 +293,36 @@ describe('BackendUpload', () => {
     expect(job.skipReason).toHaveBeenCalledTimes(2)
   })
 
+  it('keeps a manual trigger forced when it lands mid-flight', async () => {
+    const fetchMock = mockFetchResponse(200)
+    globalThis.fetch = fetchMock
+    const gate = deferred()
+    let uploaded = false
+    const { upload, job } = makeUpload(
+      {},
+      {
+        skipReason: vi.fn(() => (uploaded ? 'already uploaded today' : null)),
+        produce: vi.fn(async () => {
+          await gate.promise
+          return Buffer.from('payload')
+        }),
+        onSuccess: vi.fn(async () => {
+          uploaded = true
+        }),
+      },
+    )
+
+    upload.kick('startup')
+    await vi.waitFor(() => expect(job.produce).toHaveBeenCalledTimes(1))
+    const manual = upload.triggerUpload()
+    gate.resolve()
+    await expect(manual).resolves.toEqual({ success: true })
+    await upload.stop()
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(job.skipReason).toHaveBeenCalledTimes(1)
+  })
+
   it('skips scheduled uploads while suspended, offline, or unresolved', async () => {
     const fetchMock = mockFetchResponse(200)
     globalThis.fetch = fetchMock

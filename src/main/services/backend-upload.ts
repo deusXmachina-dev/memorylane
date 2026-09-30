@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import log from '@main/utils/logger'
-import { BACKEND_UPLOAD_TIMEOUT_MS } from '../../shared/constants'
+import { BACKEND_UPLOAD_TIMEOUT_MS } from '@/shared/constants'
 import { HostEnvironment, ManualHostEnvironment } from '@main/monitoring/host-environment'
 
 const DEFAULT_CHECK_INTERVAL_MS = 60 * 60 * 1000
@@ -45,6 +45,7 @@ export class BackendUpload {
   private timer: ReturnType<typeof setInterval> | null = null
   private uploadRunning = false
   private rerunRequested = false
+  private rerunForce = false
   private inFlight: Promise<void> = Promise.resolve()
 
   constructor(params: BackendUploadParams) {
@@ -91,6 +92,7 @@ export class BackendUpload {
   private queueUpload(reason: string, force: boolean): Promise<void> {
     if (this.uploadRunning) {
       this.rerunRequested = true
+      this.rerunForce ||= force
       return this.inFlight
     }
 
@@ -100,9 +102,10 @@ export class BackendUpload {
     this.inFlight = (async () => {
       do {
         this.rerunRequested = false
+        this.rerunForce = false
         await this.uploadOnce(nextReason, nextForce)
         nextReason = 'coalesced'
-        nextForce = false
+        nextForce = this.rerunForce
       } while (this.rerunRequested)
     })()
       .catch((error) => {
