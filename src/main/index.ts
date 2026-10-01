@@ -325,6 +325,13 @@ app.on('ready', async () => {
     isActivated: editionConfig.edition === 'enterprise' ? isEnterpriseActivated : () => true,
     getBackendUrl: () => backendBaseUrl,
     getVersion: () => app.getVersion(),
+    getKeySource: () => {
+      const { source } = vendorCredentialsManager.getStatus(
+        captureSettingsManager.get().activeVendor,
+      )
+      if (source === 'managed') return 'managed'
+      return source === 'none' ? 'none' : 'byok'
+    },
     edition: editionConfig.edition,
     readStored: () => readDeviceReportState(),
     writeStored: (state) => writeDeviceReportState(state),

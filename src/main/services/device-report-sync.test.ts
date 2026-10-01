@@ -5,6 +5,7 @@ vi.mock('@main/utils/logger', () => ({
 }))
 
 import { DeviceReportSync } from './device-report-sync'
+import type { DeviceReportState, KeySource } from './device-report-store'
 import { DeviceIdentityUnavailableError } from '../settings/device-identity'
 
 const EXPECTED_PLATFORM =
@@ -27,8 +28,9 @@ describe('DeviceReportSync', () => {
       isActivated: () => boolean
       getBackendUrl: () => string
       getVersion: () => string
-      readStored: () => { version: string | null } | null
-      writeStored: (state: { version: string | null }) => void
+      getKeySource: () => KeySource
+      readStored: () => DeviceReportState | null
+      writeStored: (state: DeviceReportState) => void
     }> = {},
   ) {
     const writeStored = overrides.writeStored ?? vi.fn()
@@ -37,6 +39,7 @@ describe('DeviceReportSync', () => {
       isActivated: overrides.isActivated ?? (() => true),
       getBackendUrl: overrides.getBackendUrl ?? (() => 'https://backend.test'),
       getVersion: overrides.getVersion ?? (() => '1.3.0'),
+      getKeySource: overrides.getKeySource ?? (() => 'byok'),
       edition: 'customer',
       readStored: overrides.readStored,
       writeStored,
@@ -63,15 +66,16 @@ describe('DeviceReportSync', () => {
     expect(JSON.parse(init.body as string)).toEqual({
       app_version: '1.3.0',
       platform: EXPECTED_PLATFORM,
+      key_source: 'byok',
     })
-    expect(writeStored).toHaveBeenCalledWith({ version: '1.3.0' })
+    expect(writeStored).toHaveBeenCalledWith({ version: '1.3.0', keySource: 'byok' })
   })
 
   it('does not POST when the stored version already matches (loaded on start)', async () => {
     const fetchMock = vi.fn<typeof fetch>(async () => okResponse())
     globalThis.fetch = fetchMock
 
-    const { service } = makeService({ readStored: () => ({ version: '1.3.0' }) })
+    const { service } = makeService({ readStored: () => ({ version: '1.3.0', keySource: 'byok' }) })
     service.start()
     service.stop()
     await service.sync()
@@ -88,6 +92,31 @@ describe('DeviceReportSync', () => {
     await service.sync()
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('re-reports when the key source changes on the same version', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => okResponse())
+    globalThis.fetch = fetchMock
+
+    let keySource: KeySource = 'none'
+    const { service, writeStored } = makeService({ getKeySource: () => keySource })
+    await service.sync()
+    keySource = 'managed'
+    await service.sync()
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(JSON.parse(fetchMock.mock.calls[1][1]?.body as string).key_source).toBe('managed')
+    expect(writeStored).toHaveBeenLastCalledWith({ version: '1.3.0', keySource: 'managed' })
+  })
+
+  it('reports a stored marker without a key source (older build)', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => okResponse())
+    globalThis.fetch = fetchMock
+
+    const { service } = makeService({ readStored: () => ({ version: '1.3.0', keySource: null }) })
+    service.start()
+    service.stop()
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
   })
 
   it('does not POST when the backend URL is empty', async () => {
@@ -113,7 +142,7 @@ describe('DeviceReportSync', () => {
     activated = true
     await service.sync()
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(writeStored).toHaveBeenCalledWith({ version: '1.3.0' })
+    expect(writeStored).toHaveBeenCalledWith({ version: '1.3.0', keySource: 'byok' })
   })
 
   it('does not record the version on a non-200 and retries on the next sync', async () => {
@@ -128,7 +157,7 @@ describe('DeviceReportSync', () => {
     // The version was never confirmed, so the next tick retries and lands.
     await service.sync()
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(writeStored).toHaveBeenCalledWith({ version: '1.3.0' })
+    expect(writeStored).toHaveBeenCalledWith({ version: '1.3.0', keySource: 'byok' })
   })
 
   it('swallows a transient device-identity error and does not advance state', async () => {

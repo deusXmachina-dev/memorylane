@@ -21,7 +21,7 @@ describe('device-report-store', () => {
   })
 
   it('round-trips a state through write then read', () => {
-    const state = { version: '1.3.0' }
+    const state = { version: '1.3.0', keySource: 'byok' as const }
     writeDeviceReportState(state, TMP_FILE)
     expect(readDeviceReportState(TMP_FILE)).toEqual(state)
   })
@@ -35,8 +35,8 @@ describe('device-report-store', () => {
     expect(readDeviceReportState(TMP_FILE)).toBeNull()
   })
 
-  it('coerces a missing or wrong-typed version to null', () => {
-    fs.writeFileSync(TMP_FILE, JSON.stringify({ version: 42 }))
-    expect(readDeviceReportState(TMP_FILE)).toEqual({ version: null })
+  it('coerces missing or wrong-typed fields to null', () => {
+    fs.writeFileSync(TMP_FILE, JSON.stringify({ version: 42, keySource: 'stored' }))
+    expect(readDeviceReportState(TMP_FILE)).toEqual({ version: null, keySource: null })
   })
 })
