@@ -1,7 +1,7 @@
 import log from '@main/utils/logger'
 import { backendPlatformToken } from '@main/utils/platform'
 import type { AppEdition } from '../../shared/edition'
-import type { DeviceReportState } from './device-report-store'
+import type { DeviceReportState, KeySource } from './device-report-store'
 import { BACKEND_REQUEST_TIMEOUT_MS } from '../../shared/constants'
 
 // Retry cadence for a report that hasn't landed yet. Once the running version is
@@ -15,10 +15,11 @@ export interface DeviceReportSyncParams {
   isActivated: () => boolean
   getBackendUrl: () => string
   getVersion: () => string
+  getKeySource: () => KeySource
   edition: AppEdition
-  /** Last version confirmed by the backend, loaded on start(). */
+  /** Last version and key source confirmed by the backend, loaded on start(). */
   readStored?: () => DeviceReportState | null
-  /** Persists the confirmed version so the reporter stays quiet across restarts. */
+  /** Persists the confirmed marker so the reporter stays quiet across restarts. */
   writeStored?: (state: DeviceReportState) => void
   intervalMs?: number
 }
@@ -26,7 +27,7 @@ export interface DeviceReportSyncParams {
 /**
  * Reports the running app version to the backend so the fleet's version
  * distribution is visible server-side. Gated on `isActivated()` (enterprise waits
- * for activation; customer always reports). Reports on change only; a failed or
+ * for activation; customer always reports). Reports on version or key-source change only; a failed or
  * inactive pass leaves the marker un-advanced so the timer retries until it lands.
  */
 export class DeviceReportSync {
@@ -34,12 +35,13 @@ export class DeviceReportSync {
   private readonly isActivated: () => boolean
   private readonly getBackendUrl: () => string
   private readonly getVersion: () => string
+  private readonly getKeySource: () => KeySource
   private readonly edition: AppEdition
   private readonly readStored?: () => DeviceReportState | null
   private readonly writeStored?: (state: DeviceReportState) => void
   private readonly intervalMs: number
 
-  private lastReported: string | null = null
+  private lastReported: DeviceReportState | null = null
   private timer: ReturnType<typeof setInterval> | null = null
   private syncing = false
 
@@ -48,6 +50,7 @@ export class DeviceReportSync {
     this.isActivated = params.isActivated
     this.getBackendUrl = params.getBackendUrl
     this.getVersion = params.getVersion
+    this.getKeySource = params.getKeySource
     this.edition = params.edition
     this.readStored = params.readStored
     this.writeStored = params.writeStored
@@ -56,7 +59,7 @@ export class DeviceReportSync {
 
   start(): void {
     if (this.timer !== null) return
-    this.lastReported = this.readStored?.()?.version ?? null
+    this.lastReported = this.readStored?.() ?? null
     this.timer = setInterval(() => void this.sync(), this.intervalMs)
     this.timer.unref?.()
     void this.sync()
@@ -69,13 +72,14 @@ export class DeviceReportSync {
     }
   }
 
-  /** One report pass; no-ops unless activated, configured, and on a new version. */
+  /** One report pass; no-ops unless activated, configured, and the version or key source changed. */
   async sync(): Promise<void> {
     if (this.syncing || !this.isActivated()) return
     const base = this.getBackendUrl()
     if (!base) return
     const version = this.getVersion()
-    if (version === this.lastReported) return
+    const keySource = this.getKeySource()
+    if (version === this.lastReported?.version && keySource === this.lastReported.keySource) return
 
     this.syncing = true
     try {
@@ -86,15 +90,19 @@ export class DeviceReportSync {
           Authorization: `Bearer ${this.getDeviceId()}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ app_version: version, platform: backendPlatformToken() }),
+        body: JSON.stringify({
+          app_version: version,
+          platform: backendPlatformToken(),
+          key_source: keySource,
+        }),
         signal: AbortSignal.timeout(BACKEND_REQUEST_TIMEOUT_MS),
       })
       if (!response.ok) {
         throw new Error(`Device report failed (${response.status})`)
       }
-      this.lastReported = version
-      this.writeStored?.({ version })
-      log.info(`[DeviceReport] Reported version ${version} (${this.edition})`)
+      this.lastReported = { version, keySource }
+      this.writeStored?.(this.lastReported)
+      log.info(`[DeviceReport] Reported version ${version}, key ${keySource} (${this.edition})`)
     } catch (error) {
       log.warn('[DeviceReport] Report failed:', error)
     } finally {

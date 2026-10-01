@@ -9,9 +9,12 @@ const FILE_NAME = 'device-report-state.json'
  * persisted so the reporter only re-POSTs on a genuine version change and stays
  * quiet across restarts.
  */
+export type KeySource = 'managed' | 'byok' | 'none'
+
 export interface DeviceReportState {
   /** The last app version confirmed by the backend, or null if never reported. */
   version: string | null
+  keySource: KeySource | null
 }
 
 function defaultPath(): string {
@@ -29,13 +32,18 @@ function defaultPath(): string {
 export function readDeviceReportState(filePath: string = defaultPath()): DeviceReportState | null {
   try {
     const raw = fs.readFileSync(filePath, 'utf-8')
-    const data = JSON.parse(raw) as { version?: unknown }
+    const data = JSON.parse(raw) as { version?: unknown; keySource?: unknown }
     return {
       version: typeof data.version === 'string' ? data.version : null,
+      keySource: isKeySource(data.keySource) ? data.keySource : null,
     }
   } catch {
     return null
   }
+}
+
+function isKeySource(value: unknown): value is KeySource {
+  return value === 'managed' || value === 'byok' || value === 'none'
 }
 
 /**
