@@ -449,6 +449,7 @@ app.on('ready', async () => {
       captureCoordinator.resumeCaptureIfDesired('reactivated')
       databaseUpload?.kick('activated')
       logUpload?.kick('activated')
+      void deviceReportSync?.sync()
     }
   })
 
@@ -595,7 +596,6 @@ app.on('ready', async () => {
     evalFixtureStore: runtime.evalFixtureStore,
     taskFixtureStore: runtime.taskFixtureStore,
   })
-  accessProvider.addUpdateListener(() => void deviceReportSync?.sync())
 
   runtime.accessProvider.startPeriodicRefresh()
 
