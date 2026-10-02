@@ -104,6 +104,7 @@ export interface GoldenBlockSeed {
   apps: string[]
   activityIds: string[]
   description: string
+  verdict?: 'keep' | 'reject'
 }
 
 /**
@@ -126,7 +127,7 @@ export function renderTaskFixtureGoldenMd(
 
   for (const block of blocks) {
     lines.push(`## ${block.title}`)
-    lines.push('Verdict: keep')
+    lines.push(`Verdict: ${block.verdict ?? 'keep'}`)
     lines.push(`Apps: ${block.apps.join(', ')}`)
     lines.push(`Activities: ${block.activityIds.join(', ')}`)
     lines.push('')
