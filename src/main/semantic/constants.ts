@@ -57,8 +57,20 @@ export const MODEL_PRICING_USD_PER_MILLION: Record<
     completion_tokens_per_million: 0.528,
   },
   'openai/gpt-5.6-luna': {
-    input_tokens_per_million: 0.1,
-    completion_tokens_per_million: 0.6,
+    input_tokens_per_million: 0.2,
+    completion_tokens_per_million: 1.2,
+  },
+  'z-ai/glm-5.3-flash': {
+    input_tokens_per_million: 0.15,
+    completion_tokens_per_million: 0.5,
+  },
+  'deepseek/deepseek-v4.1-flash': {
+    input_tokens_per_million: 0.3,
+    completion_tokens_per_million: 1.2,
+  },
+  'xiaomi/mimo-v2.6-flash': {
+    input_tokens_per_million: 0.14,
+    completion_tokens_per_million: 0.28,
   },
   'nex-agi/nex-n2-pro': {
     input_tokens_per_million: 0.25,
