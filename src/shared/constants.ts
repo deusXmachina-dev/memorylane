@@ -134,7 +134,7 @@ export const SCREEN_CAPTURER_CONFIG = {
 
 // User Context Builder Configuration
 export const USER_CONTEXT_CONFIG = {
-  MODEL: 'minimax/minimax-m3',
+  MODEL: 'z-ai/glm-5.3-flash',
   LOOKBACK_DAYS: 7, // Analyze past week of activities
   MIN_ACTIVITIES: 50, // Minimum total activities in DB before first run
   SETTLE_DELAY_MS: 30 * 1000, // 30s after unlock
@@ -142,7 +142,7 @@ export const USER_CONTEXT_CONFIG = {
 
 // Pattern Detection Configuration
 export const PATTERN_DETECTION_CONFIG = {
-  MODEL: 'minimax/minimax-m3',
+  MODEL: 'z-ai/glm-5.3-flash',
   LOOKBACK_DAYS: 1, // Days back from today to analyze (1 = yesterday)
   MIN_ACTIVITIES: 200, // Minimum total activities in DB before first run
   // Request deadline for task-mining LLM calls, which scan a whole day in one

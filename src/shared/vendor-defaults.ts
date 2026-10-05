@@ -13,7 +13,7 @@ export interface ModelPreset {
  * are authoritative — an upgrade replaces stale/retired ids rather than
  * stranding a seat on them.
  */
-export const MODEL_DEFAULTS_VERSION = 3
+export const MODEL_DEFAULTS_VERSION = 4
 
 export interface VendorPresets {
   /** Presets for each model slot. The first entry is the vendor's default. */
@@ -52,9 +52,9 @@ export const VENDOR_PRESETS: Record<Vendor, VendorPresets> = {
     ],
     // ZDR-capable only, ordered by findings/task-mining-benchmark.md.
     patternDetection: [
+      { id: 'z-ai/glm-5.3-flash', label: 'GLM 5.3 Flash' },
+      { id: 'xiaomi/mimo-v2.6-flash', label: 'MiMo V2.6 Flash' },
       { id: 'minimax/minimax-m3', label: 'MiniMax M3' },
-      { id: 'xiaomi/mimo-v2.5', label: 'MiMo V2.5' },
-      { id: 'google/gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
     ],
   },
   google: {

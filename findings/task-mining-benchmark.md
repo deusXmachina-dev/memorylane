@@ -1,5 +1,26 @@
 # Task-Mining Benchmark — model sweep
 
+## 2026-10-05 update — default moves to `z-ai/glm-5.3-flash`
+
+One sweep per model, scan-only, ZDR-only key. "Real" = the 6 jaro fixtures
+(widened-gate goldens, 41 keep blocks); "Seeded" = the two synthetic
+`2026-09-15-packaging-supplier` fixtures (28 keep, 6 reject).
+
+| Model                          | Real recall | Real rejects | Seeded recall | Seeded rejects | $ (6 real days) |
+| ------------------------------ | ----------: | -----------: | ------------: | -------------: | --------------: |
+| `z-ai/glm-5.3-flash`           |       12/41 |            1 |         28/28 |              0 |          $0.072 |
+| `xiaomi/mimo-v2.6-flash`       |       11/41 |            2 |         28/28 |              0 |          $0.047 |
+| `deepseek/deepseek-v4.1-flash` |       10/41 |            0 |         28/28 |              0 |          $0.094 |
+| `minimax/minimax-m3` (prev.)   |        8/41 |            0 |         25/28 |              0 |          $0.133 |
+| `openai/gpt-5.6-luna`          |           — |            — |         25/28 |              0 |               — |
+
+glm leads both suites at about half minimax's cost and has the widest ZDR provider
+coverage; mimo-v2.6-flash is the cheapest fallback (only 4 ZDR providers). Shipped
+chain for task mining, user context and cluster review: glm-5.3-flash →
+mimo-v2.6-flash → minimax-m3. Single sweep, so ±1 block is noise.
+
+---
+
 Date: 2026-08-05 (supersedes the 2026-07-03 sweep, kept at the bottom)
 Eval: `npm run eval-tasks`, scan-only, over the 6 committed fixtures
 (`evals/task-mining/fixtures/`). 3 full sweeps per model, one process per model.
