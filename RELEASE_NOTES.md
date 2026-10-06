@@ -1,13 +1,13 @@
-# MemoryLane v1.5.10
+# MemoryLane v1.5.11-alpha.1
 
-Enterprise uploads stand down while the Mac is asleep, and capture follows device activation.
+Refreshed default models and faster first uploads after activation.
 
 ## What's Changed
 
-- **No uploads during dark wakes**: scheduled database and log uploads skip while the system is suspended, offline, or before the backend host resolves. A suspend aborts an in-flight upload and it retries once the machine is awake and online. Manual "Sync now" still uploads immediately (#289).
-- **Capture pauses on deactivated devices**: enterprise capture runs only while the device is activated. Deactivating it in the admin stops capture, reactivating resumes it, and the tray shows why capture is paused. An activated device that starts offline keeps capturing (#290).
-- **"Sync now" always uploads**: a manual sync clicked during a scheduled upload no longer reports success without uploading (#292).
-- **Claude Cowork plugin 0.7.0**: connects through the desktop app instead of `npx` (#288).
+- **New summarization models**: refreshed default model chains; video is sent in the `video_url` format OpenRouter expects. Existing installs switch to the new defaults (#295).
+- **New task-mining default**: task mining, user context and cluster review default to glm-5.3-flash, falling back to mimo-v2.6-flash and minimax-m3 (#294).
+- **Uploads start on activation**: activating a device, or turning sharing on, starts uploads right away instead of waiting for the hourly check (#291).
+- **Device report includes key source**: reports whether the device uses a managed key, its own key, or none (#293).
 
 ## Known Issues & Limitations
 
@@ -25,4 +25,4 @@ Enterprise uploads stand down while the Mac is asleep, and capture follows devic
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.9...v1.5.10
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.10...v1.5.11-alpha.1
