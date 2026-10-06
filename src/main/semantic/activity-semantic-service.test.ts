@@ -169,7 +169,7 @@ function httpError(status: number, body: unknown) {
 }
 
 function bodyHasVideo(body: MockChatCompletionBody): boolean {
-  return body.messages.some((m) => m.content.some((c) => c.type === 'input_video'))
+  return body.messages.some((m) => m.content.some((c) => c.type === 'video_url'))
 }
 
 interface SetupOptions {

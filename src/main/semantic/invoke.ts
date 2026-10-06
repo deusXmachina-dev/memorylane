@@ -108,7 +108,7 @@ interface RawChatCompletionResponse {
 /**
  * Video pipeline only: posts an OpenAI-compatible chat completions request
  * directly. Bypasses the AI SDK because @ai-sdk/openai-compatible does not
- * support `input_video` content; OpenRouter (and some custom endpoints) do.
+ * send video parts; OpenRouter (and some custom endpoints) accept `video_url`.
  */
 export async function invokeRawVideoCompletion(
   input: RawVideoCompletionInput,
@@ -184,7 +184,7 @@ function toVideoContentPart(item: ChatContentItem): Record<string, unknown> {
   }
   if (item.type === 'input_video') {
     return {
-      type: 'input_video',
+      type: 'video_url',
       video_url: { url: item.videoUrl.url },
     }
   }

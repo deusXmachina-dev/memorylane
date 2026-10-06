@@ -392,6 +392,7 @@ describe('CaptureSettingsManager', () => {
           activeVendor: 'openrouter',
           semanticSnapshotModel: 'mistralai/mistral-small-3.2-24b-instruct',
           semanticPipelineMode: 'image',
+          modelDefaultsVersion: MODEL_DEFAULTS_VERSION,
         }),
       )
       const manager = new CaptureSettingsManager(configPath)
