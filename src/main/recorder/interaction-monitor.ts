@@ -275,6 +275,13 @@ function handleScroll(event: UiohookWheelEvent): void {
   })
 }
 
+function normalizeTitle(title: string): string {
+  return title
+    .replace(/[\p{So}\p{Sk}️‍]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 /**
  * Handle events from the native app-watcher process.
  * Translates AppWatcherEvent into InteractionContext for downstream consumers.
@@ -313,7 +320,7 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
   // Skip if nothing actually changed
   if (
     previousWindow &&
-    previousWindow.title === current.title &&
+    normalizeTitle(previousWindow.title) === normalizeTitle(current.title) &&
     previousWindow.processName === current.processName &&
     previousWindow.hwnd === current.hwnd &&
     previousWindow.url === current.url &&

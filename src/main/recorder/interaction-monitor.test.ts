@@ -203,6 +203,29 @@ describe('interaction-monitor session emission', () => {
     expect(emitted.map((c) => c.type)).toEqual(['app_change', 'keyboard'])
     expect(emitted[1].timestamp).toBe(1000)
   })
+
+  it('ignores title changes that only differ in symbol glyphs (progress spinners)', () => {
+    appChange('Ghostty', '◐ Broken link', 0)
+    appChange('Ghostty', '◑ Broken link', 1000)
+    appChange('Ghostty', '⠋ Broken link', 2000)
+    appChange('Ghostty', '⠙ Broken link', 3000)
+    appChange('Ghostty', '✳ Broken link', 4000)
+    appChange('Ghostty', 'Broken link', 5000)
+
+    expect(emitted.map((c) => c.activeWindow?.title)).toEqual(['◐ Broken link'])
+  })
+
+  it('still emits for real title changes and for app changes with the same title', () => {
+    appChange('Browser', 'Fix login · PR #261', 0)
+    appChange('Browser', 'Fix login · PR #262', 1000)
+    appChange('Editor', 'Fix login · PR #262', 2000)
+
+    expect(emitted.map((c) => [c.activeWindow?.processName, c.activeWindow?.title])).toEqual([
+      ['Browser', 'Fix login · PR #261'],
+      ['Browser', 'Fix login · PR #262'],
+      ['Editor', 'Fix login · PR #262'],
+    ])
+  })
 })
 
 describe('interaction-monitor keep-alive invariant', () => {
