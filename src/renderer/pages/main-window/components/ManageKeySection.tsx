@@ -247,7 +247,7 @@ export function ManageKeySection({
           </a>{' '}
           because they are transparent about{' '}
           <a
-            href="https://openrouter.ai/models?order=newest&supported_parameters=reasoning&fmt=free%2Cfixed%2Cinput%2Coutput&policies=ZDR"
+            href="https://openrouter.ai/docs/guides/features/zdr"
             target="_blank"
             rel="noopener noreferrer"
             className="underline hover:text-foreground"
