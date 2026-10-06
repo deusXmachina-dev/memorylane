@@ -13,8 +13,44 @@ export const MODEL_PRICING_USD_PER_MILLION: Record<
     completion_tokens_per_million: 2.5,
   },
   'mistralai/mistral-small-3.2-24b-instruct': {
-    input_tokens_per_million: 0.08,
-    completion_tokens_per_million: 0.2,
+    input_tokens_per_million: 0.094,
+    completion_tokens_per_million: 0.25,
+  },
+  'mistralai/mistral-small-2603': {
+    input_tokens_per_million: 0.15,
+    completion_tokens_per_million: 0.6,
+  },
+  'google/gemma-4-26b-a4b-it': {
+    input_tokens_per_million: 0.09,
+    completion_tokens_per_million: 0.3,
+  },
+  'google/gemma-4-31b-it': {
+    input_tokens_per_million: 0.09,
+    completion_tokens_per_million: 0.34,
+  },
+  'openai/gpt-6-luna': {
+    input_tokens_per_million: 0.1,
+    completion_tokens_per_million: 0.5,
+  },
+  'qwen/qwen3.5-9b': {
+    input_tokens_per_million: 0.1,
+    completion_tokens_per_million: 0.15,
+  },
+  'inclusionai/ling-3.0-flash-vl': {
+    input_tokens_per_million: 0.021,
+    completion_tokens_per_million: 0.062,
+  },
+  'qwen/qwen3.6-35b-a3b': {
+    input_tokens_per_million: 0.15,
+    completion_tokens_per_million: 1,
+  },
+  'qwen/qwen3.8-27b': {
+    input_tokens_per_million: 0.425,
+    completion_tokens_per_million: 2.55,
+  },
+  'google/gemini-3.8-flash': {
+    input_tokens_per_million: 0.75,
+    completion_tokens_per_million: 3.75,
   },
   'google/gemini-2.5-flash-lite': {
     input_tokens_per_million: 0.1,

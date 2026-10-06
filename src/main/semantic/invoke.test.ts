@@ -79,6 +79,28 @@ describe('invokeRawVideoCompletion', () => {
     expect(outcome.completionTokens).toBe(4)
   })
 
+  it('sends video as an OpenAI-style video_url part', async () => {
+    let sent: { messages: { content: unknown[] }[] } | undefined
+    const fetchImpl: typeof globalThis.fetch = async (_url, init) => {
+      sent = JSON.parse(String(init?.body))
+      return jsonResponse({ choices: [{ message: { content: 'ok' } }] })
+    }
+
+    await invokeRawVideoCompletion({
+      route: makeRoute(),
+      model: 'm',
+      content: VIDEO_CONTENT,
+      signal: new AbortController().signal,
+      requestTimeoutMs: 120_000,
+      fetchImpl,
+    })
+
+    expect(sent?.messages[0].content).toEqual([
+      { type: 'text', text: 'summarize' },
+      { type: 'video_url', video_url: { url: 'data:video/mp4;base64,AAAA' } },
+    ])
+  })
+
   it('formats structured error responses with code/provider_message details', async () => {
     const fetchImpl: typeof globalThis.fetch = async () =>
       jsonResponse(

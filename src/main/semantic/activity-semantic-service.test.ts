@@ -169,7 +169,7 @@ function httpError(status: number, body: unknown) {
 }
 
 function bodyHasVideo(body: MockChatCompletionBody): boolean {
-  return body.messages.some((m) => m.content.some((c) => c.type === 'input_video'))
+  return body.messages.some((m) => m.content.some((c) => c.type === 'video_url'))
 }
 
 interface SetupOptions {
@@ -713,7 +713,12 @@ describe('ActivitySemanticService', () => {
     })
     fetchMock.setHandler(({ body }) => {
       if (bodyHasVideo(body)) {
-        return httpError(400, { error: { message: 'input_video is not supported by this model' } })
+        return httpError(400, {
+          error: {
+            message:
+              "Input tag 'video_url' found using 'type' does not match any of the expected tags: 'text', 'image_url'",
+          },
+        })
       }
       return chatCompletionResponse('snapshot summary from custom model')
     })
@@ -734,7 +739,7 @@ describe('ActivitySemanticService', () => {
     expect(diagnostics?.chosenModel).toBe('moondream:latest')
   })
 
-  it('cache-skips video after a structured 422 with input_video details', async () => {
+  it('cache-skips video after a structured 422 with video_url details', async () => {
     const tempDir = createTempDir()
     tempDirs.push(tempDir)
     const videoPath = createVideoFile(tempDir)
@@ -760,7 +765,7 @@ describe('ActivitySemanticService', () => {
               {
                 loc: ['body', 'messages', 0, 'content'],
                 msg: "Input should be 'text', 'image' or 'image_url'",
-                input: 'input_video',
+                input: 'video_url',
                 ctx: { expected: "'text', 'image' or 'image_url'" },
               },
             ],
@@ -809,7 +814,7 @@ describe('ActivitySemanticService', () => {
     fetchMock.setHandler(({ body }) => {
       if (bodyHasVideo(body)) {
         return httpError(400, {
-          error: { message: 'video input not supported; input_video unsupported' },
+          error: { message: 'video input not supported; video_url unsupported' },
         })
       }
       return chatCompletionResponse('snapshot summary')
@@ -860,7 +865,7 @@ describe('ActivitySemanticService', () => {
     fetchMock.setHandler(({ body }) => {
       if (bodyHasVideo(body) && body.model === 'model-a-no-video') {
         return httpError(400, {
-          error: { message: 'input_video is not supported by this model' },
+          error: { message: 'video_url is not supported by this model' },
         })
       }
       if (bodyHasVideo(body) && body.model === 'model-b-with-video') {

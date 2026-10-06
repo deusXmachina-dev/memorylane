@@ -13,7 +13,7 @@ export interface ModelPreset {
  * are authoritative — an upgrade replaces stale/retired ids rather than
  * stranding a seat on them.
  */
-export const MODEL_DEFAULTS_VERSION = 4
+export const MODEL_DEFAULTS_VERSION = 5
 
 export interface VendorPresets {
   /** Presets for each model slot. The first entry is the vendor's default. */
@@ -43,11 +43,12 @@ export const VENDOR_PRESETS: Record<Vendor, VendorPresets> = {
     semanticVideo: [
       { id: 'google/gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite' },
       { id: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash' },
+      { id: 'z-ai/glm-5.3-flash', label: 'GLM 5.3 Flash' },
       { id: 'google/gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite' },
-      { id: 'google/gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
     ],
     semanticSnapshot: [
-      { id: 'mistralai/mistral-small-3.2-24b-instruct', label: 'Mistral Small 3.2' },
+      { id: 'openai/gpt-6-luna', label: 'GPT-6 Luna' },
+      { id: 'google/gemma-4-31b-it', label: 'Gemma 4 31B' },
       { id: 'google/gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite' },
     ],
     // ZDR-capable only, ordered by findings/task-mining-benchmark.md.

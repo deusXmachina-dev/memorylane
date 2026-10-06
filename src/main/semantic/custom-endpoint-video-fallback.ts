@@ -12,7 +12,7 @@ export function videoUnsupportedCacheKey(input: {
 
 export function isLikelyVideoUnsupportedError(message: string): boolean {
   const text = message.toLowerCase()
-  if (text.includes('input_video')) return true
+  if (text.includes('video_url')) return true
   if (text.includes('invalid message format')) return true
 
   const hasVideoCue = ['video', 'mp4'].some((cue) => text.includes(cue))
