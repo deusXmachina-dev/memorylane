@@ -15,7 +15,7 @@ import type { DeterministicCheck, DeterministicResult } from './types'
 // are exempt: goldens use them to describe reading, so only event-log vocabulary
 // hard-fails.
 export const RAW_INTERACTION_RE =
-  /\b(click(?:ed|ing|s)?|typed|typing|keystrokes?|keypress(?:es)?|key\s?counts?|keys?\s+(?:pressed|typed)|pressed\s+(?:a\s+)?key|mouse|cursor|double-click)\b/i
+  /\b(click(?:ed|ing|s)?|typed|typing|keystrokes?|keypress(?:es)?|key\s?counts?|keys?\s+(?:pressed|typed)|pressed\s+(?:a\s+)?key|mouse|cursor|double-click|pressed\s+(?:enter|escape|tab|shift|cmd|ctrl)|enter\s+key|keyboard\s+shortcuts?|(?:cmd|ctrl)[+/]|scroll\s+bursts?)\b/i
 
 // "NEVER start with 'During this session', 'In this session', 'The user', ..."
 export const META_OPENER_RE = /^\s*(during|in)\s+this\s+session\b|^\s*the\s+user\b/i
@@ -68,6 +68,11 @@ const ACTION_VERB_OPENERS = new Set([
   'built',
   'deployed',
   'merged',
+  'sent',
+  'submitted',
+  'saved',
+  'replied',
+  'posted',
 ])
 
 function countWords(text: string): number {

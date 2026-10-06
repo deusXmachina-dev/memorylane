@@ -1,7 +1,8 @@
 import { screen } from 'electron'
-import { uIOhook, UiohookMouseEvent, UiohookWheelEvent } from 'uiohook-napi'
+import { uIOhook, UiohookKeyboardEvent, UiohookMouseEvent, UiohookWheelEvent } from 'uiohook-napi'
 import { INTERACTION_MONITOR_CONFIG } from '@constants'
-import { InteractionContext } from '../../shared/types'
+import { InteractionContext, KeyRun } from '../../shared/types'
+import { appendKey, classifyKey } from './key-sequence'
 import { addAppWatcherListener, AppWatcherEvent } from './app-watcher'
 import { resolveAppWatcherDisplay } from './app-watcher-display'
 import log from '@main/utils/logger'
@@ -167,6 +168,7 @@ const clickSession = new DebouncedSession(
         timestamp: lastEventTime,
         displayId: accumulation.displayId,
         clickPosition: accumulation.position ?? undefined,
+        clickCount: accumulation.count,
       })
     },
   },
@@ -176,7 +178,10 @@ const typingSession = new DebouncedSession(
   () => INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS,
   () => INTERACTION_MONITOR_CONFIG.MAX_SESSION_MS,
   {
-    initialAccumulation: () => ({ keyCount: 0 }),
+    initialAccumulation: (): { keyCount: number; keySequence: KeyRun[] } => ({
+      keyCount: 0,
+      keySequence: [],
+    }),
     hasActivity: (accumulation) => accumulation.keyCount > 0,
     onStart: () => log.debug('[Interaction Monitor] Typing session started'),
     emit: (accumulation, subWindowStart, lastEventTime) => {
@@ -188,6 +193,7 @@ const typingSession = new DebouncedSession(
         timestamp: lastEventTime,
         displayId: cachedDisplayId ?? undefined,
         keyCount: accumulation.keyCount,
+        keySequence: accumulation.keySequence,
         durationMs: Math.max(0, lastEventTime - subWindowStart),
         windowTitle: cachedWindowTitle ?? undefined,
       })
@@ -249,13 +255,15 @@ function handleMouseClick(event: UiohookMouseEvent): void {
  * Handle keyboard events (if enabled)
  * Tracks "typing sessions" - emits event when user pauses typing
  */
-function handleKeyboard(): void {
+function handleKeyboard(event: UiohookKeyboardEvent): void {
   if (!INTERACTION_MONITOR_CONFIG.TRACK_KEYBOARD) {
     return
   }
 
+  const keyClass = classifyKey(event)
   typingSession.record(Date.now(), (accumulation) => {
     accumulation.keyCount++
+    if (keyClass) appendKey(accumulation.keySequence, keyClass)
   })
 }
 
