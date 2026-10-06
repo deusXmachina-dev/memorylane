@@ -24,7 +24,8 @@ const { mockScreen, handlers, mockUiohook, appWatcher } = vi.hoisted(() => {
 })
 
 vi.mock('electron', () => ({ screen: mockScreen }))
-vi.mock('uiohook-napi', () => ({
+vi.mock('uiohook-napi', async (importOriginal) => ({
+  UiohookKey: (await importOriginal<typeof import('uiohook-napi')>()).UiohookKey,
   uIOhook: mockUiohook,
   UiohookMouseEvent: class {},
   UiohookWheelEvent: class {},
@@ -53,8 +54,8 @@ function wheel(rotation = 1): void {
   handlers['wheel']?.({ rotation, direction: 3, x: 0, y: 0 })
 }
 
-function key(): void {
-  handlers['keydown']?.({})
+function key(keycode = 16, mods: { metaKey?: boolean } = {}): void {
+  handlers['keydown']?.({ keycode, metaKey: false, ctrlKey: false, shiftKey: false, ...mods })
 }
 
 function appChange(app: string, title: string, timestamp: number): void {
@@ -113,6 +114,36 @@ describe('interaction-monitor session emission', () => {
       expect(c.timestamp).toBeGreaterThan(0)
       expect(c.scrollDirection).toBe('vertical')
     }
+  })
+
+  it('emits the ordered key sequence of a typing session without characters', () => {
+    key()
+    key()
+    key(28)
+    key()
+    key(31, { metaKey: true })
+    vi.advanceTimersByTime(INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS)
+
+    expect(emitted).toHaveLength(1)
+    expect(emitted[0]).toMatchObject({
+      type: 'keyboard',
+      keyCount: 5,
+      keySequence: [
+        { key: 'char', count: 2 },
+        { key: 'enter', count: 1 },
+        { key: 'char', count: 1 },
+        { key: 'mod+s', count: 1 },
+      ],
+    })
+  })
+
+  it('emits the click count of a click session', () => {
+    handlers['click']?.({ x: 1, y: 1 })
+    handlers['click']?.({ x: 2, y: 2 })
+    vi.advanceTimersByTime(INTERACTION_MONITOR_CONFIG.CLICK_DEBOUNCE_MS)
+
+    expect(emitted).toHaveLength(1)
+    expect(emitted[0]).toMatchObject({ type: 'click', clickCount: 2 })
   })
 
   it('stamps a short scroll session at the last event receipt time', () => {
