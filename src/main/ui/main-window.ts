@@ -281,6 +281,11 @@ export function openMainWindow(): void {
     },
   })
 
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https://')) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+
   if (!app.isPackaged) {
     mainWindow.loadURL('http://localhost:5173/main-window.html')
   } else {
