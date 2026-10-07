@@ -1,5 +1,9 @@
-import { UiohookKey, type UiohookKeyboardEvent } from 'uiohook-napi'
-import type { KeyClass, KeyRun } from '../../shared/types'
+import { UiohookKey, type UiohookKeyboardEvent, type UiohookMouseEvent } from 'uiohook-napi'
+import type { ClickClass, InputRun, KeyClass } from '../../shared/types'
+
+const MOUSE_BUTTON_RIGHT = 2
+const MOUSE_BUTTON_MIDDLE = 3
+export const DRAG_MIN_DISTANCE_PX = 10
 
 const MODIFIER_KEYCODES = new Set<number>([
   UiohookKey.Shift,
@@ -57,11 +61,40 @@ export function classifyKey(
   return 'char'
 }
 
-export function appendKey(sequence: KeyRun[], key: KeyClass): void {
+export function classifyClick(
+  event: Pick<UiohookMouseEvent, 'button' | 'clicks' | 'metaKey' | 'ctrlKey'>,
+  platform: NodeJS.Platform = process.platform,
+): ClickClass | null {
+  if (event.button === MOUSE_BUTTON_RIGHT || (platform === 'darwin' && event.ctrlKey)) {
+    return 'right'
+  }
+  if (event.button === MOUSE_BUTTON_MIDDLE) return 'middle'
+  if (event.metaKey || event.ctrlKey) return 'mod'
+  if (event.clicks === 2) return 'double'
+  if (event.clicks > 2) return null
+  return 'left'
+}
+
+export function isDrag(from: { x: number; y: number }, to: { x: number; y: number }): boolean {
+  return Math.hypot(to.x - from.x, to.y - from.y) >= DRAG_MIN_DISTANCE_PX
+}
+
+export function appendRun<T extends string>(sequence: InputRun<T>[], kind: T): void {
   const last = sequence[sequence.length - 1]
-  if (last?.key === key) {
+  if (last?.kind === kind) {
     last.count++
   } else {
-    sequence.push({ key, count: 1 })
+    sequence.push({ kind, count: 1 })
   }
+}
+
+export function appendClick(sequence: InputRun<ClickClass>[], kind: ClickClass): void {
+  if (kind === 'double') {
+    const last = sequence[sequence.length - 1]
+    if (last?.kind === 'left') {
+      last.count--
+      if (last.count === 0) sequence.pop()
+    }
+  }
+  appendRun(sequence, kind)
 }

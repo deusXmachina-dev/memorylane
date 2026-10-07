@@ -27,8 +27,10 @@ export type KeyClass =
   | 'mod+f'
   | 'shortcut'
 
-export interface KeyRun {
-  key: KeyClass
+export type ClickClass = 'left' | 'right' | 'middle' | 'double' | 'mod' | 'drag'
+
+export interface InputRun<T extends string> {
+  kind: T
   count: number
 }
 
@@ -43,12 +45,12 @@ export interface InteractionContext {
 
   // Click-specific
   clickPosition?: { x: number; y: number }
-  clickCount?: number
+  clickSequence?: InputRun<ClickClass>[] // Ordered, run-length-encoded click classes
 
   // Keyboard-specific
   keyCount?: number // Number of keys pressed in typing session
   durationMs?: number // Duration of typing session in milliseconds
-  keySequence?: KeyRun[] // Ordered, run-length-encoded key classes; never characters
+  keySequence?: InputRun<KeyClass>[] // Ordered, run-length-encoded key classes; never characters
 
   // Scroll-specific
   scrollDirection?: 'vertical' | 'horizontal'

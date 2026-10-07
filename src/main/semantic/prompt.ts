@@ -1,4 +1,4 @@
-import type { InteractionContext, KeyClass, KeyRun } from '../../shared/types'
+import type { ClickClass, InputRun, InteractionContext, KeyClass } from '../../shared/types'
 import type { Activity } from '@main/activity/activity-types'
 import { isPassiveView } from '@main/activity/passive-view'
 import { scrubPII } from '@/shared/sanitize'
@@ -108,7 +108,7 @@ function buildInteractionTimeline(activity: Activity): string {
     return {
       offsetSeconds: (group[0].timestamp - activity.startTimestamp) / 1000,
       text: scrubPII(describeInteraction(merged)),
-      keep: hasSignificantKey(merged.keySequence),
+      keep: hasSignificantInput(merged),
     }
   })
 
@@ -132,28 +132,37 @@ function mergeGroup(group: InteractionContext[]): InteractionContext {
   if (group.length === 1) return group[0]
   const first = group[0]
   switch (first.type) {
-    case 'keyboard': {
-      const keySequence: KeyRun[] = []
-      for (const event of group) {
-        for (const run of event.keySequence ?? [{ key: 'char', count: event.keyCount ?? 0 }]) {
-          const last = keySequence[keySequence.length - 1]
-          if (last?.key === run.key) last.count += run.count
-          else if (run.count > 0) keySequence.push({ ...run })
-        }
-      }
+    case 'keyboard':
       return {
         ...first,
         keyCount: sum(group, (event) => event.keyCount ?? 0),
-        keySequence,
+        keySequence: mergeRuns(group.map(keySequenceOf)),
       }
-    }
     case 'scroll':
       return { ...first, durationMs: sum(group, (event) => event.durationMs ?? 0) }
     case 'click':
-      return { ...first, clickCount: sum(group, (event) => event.clickCount ?? 1) }
+      return { ...first, clickSequence: mergeRuns(group.map(clickSequenceOf)) }
     default:
       return first
   }
+}
+
+function mergeRuns<T extends string>(sequences: InputRun<T>[][]): InputRun<T>[] {
+  const merged: InputRun<T>[] = []
+  for (const run of sequences.flat()) {
+    const last = merged[merged.length - 1]
+    if (last?.kind === run.kind) last.count += run.count
+    else if (run.count > 0) merged.push({ ...run })
+  }
+  return merged
+}
+
+function keySequenceOf(event: InteractionContext): InputRun<KeyClass>[] {
+  return event.keySequence ?? [{ kind: 'char', count: event.keyCount ?? 0 }]
+}
+
+function clickSequenceOf(event: InteractionContext): InputRun<ClickClass>[] {
+  return event.clickSequence ?? [{ kind: 'left', count: 1 }]
 }
 
 function capLines(lines: TimelineLine[]): string[] {
@@ -188,21 +197,30 @@ function capLines(lines: TimelineLine[]): string[] {
 
 function describeInputTotals(interactions: InteractionContext[]): string {
   const keyboard = interactions.filter((interaction) => interaction.type === 'keyboard')
-  const characters = sum(keyboard, (event) =>
-    event.keySequence
-      ? sum(event.keySequence, (run) => (run.key === 'char' ? run.count : 0))
-      : (event.keyCount ?? 0),
+  const characters = sum(keyboard.map(keySequenceOf).flat(), (run) =>
+    run.kind === 'char' ? run.count : 0,
   )
   const scrolls = interactions.filter((interaction) => interaction.type === 'scroll').length
-  const clicks = sum(
-    interactions.filter((interaction) => interaction.type === 'click'),
-    (event) => event.clickCount ?? 1,
-  )
-  return `Input totals: ${plural(characters, 'character')} typed, ${plural(scrolls, 'scroll burst')}, ${plural(clicks, 'click')}`
+  const clickRuns = interactions
+    .filter((interaction) => interaction.type === 'click')
+    .flatMap(clickSequenceOf)
+  const clicks = sum(clickRuns, (run) => (run.kind === 'drag' ? 0 : run.count))
+  const drags = sum(clickRuns, (run) => (run.kind === 'drag' ? run.count : 0))
+  const totals = [
+    `${plural(characters, 'character')} typed`,
+    plural(scrolls, 'scroll burst'),
+    plural(clicks, 'click'),
+    ...(drags > 0 ? [plural(drags, 'drag')] : []),
+  ]
+  return `Input totals: ${totals.join(', ')}`
 }
 
-function hasSignificantKey(keySequence: KeyRun[] | undefined): boolean {
-  return keySequence?.some((run) => run.key !== 'char' && run.key !== 'delete') ?? false
+function hasSignificantInput(interaction: InteractionContext): boolean {
+  return (
+    (interaction.keySequence?.some((run) => run.kind !== 'char' && run.kind !== 'delete') ??
+      false) ||
+    (interaction.clickSequence?.some((run) => run.kind !== 'left') ?? false)
+  )
 }
 
 const KEY_PHRASES: Record<Exclude<KeyClass, 'char' | 'delete'>, string> = {
@@ -221,11 +239,27 @@ const KEY_PHRASES: Record<Exclude<KeyClass, 'char' | 'delete'>, string> = {
   shortcut: 'used a keyboard shortcut',
 }
 
-function describeKeyRun(run: KeyRun): string {
-  if (run.key === 'char') return `typed ${plural(run.count, 'character')}`
-  if (run.key === 'delete') return `deleted ${plural(run.count, 'character')}`
-  const phrase = KEY_PHRASES[run.key]
-  return run.count > 1 ? `${phrase} ×${run.count}` : phrase
+const CLICK_PHRASES: Record<ClickClass, string> = {
+  left: 'clicked',
+  right: 'right-clicked (context menu)',
+  middle: 'middle-clicked (open in new tab)',
+  double: 'double-clicked (open/select)',
+  mod: 'Cmd/Ctrl-clicked (open in new tab/multi-select)',
+  drag: 'dragged (move/select)',
+}
+
+function describeKeyRun(run: InputRun<KeyClass>): string {
+  if (run.kind === 'char') return `typed ${plural(run.count, 'character')}`
+  if (run.kind === 'delete') return `deleted ${plural(run.count, 'character')}`
+  return withCount(KEY_PHRASES[run.kind], run.count)
+}
+
+function describeClickRun(run: InputRun<ClickClass>): string {
+  return withCount(CLICK_PHRASES[run.kind], run.count)
+}
+
+function withCount(phrase: string, count: number): string {
+  return count > 1 ? `${phrase} ×${count}` : phrase
 }
 
 export function describeInteraction(interaction: InteractionContext): string {
@@ -247,10 +281,8 @@ export function describeInteraction(interaction: InteractionContext): string {
       const seconds = Math.round((interaction.durationMs ?? 0) / 1000)
       return seconds > 0 ? `scrolled for ${seconds}s` : 'scrolled'
     }
-    case 'click': {
-      const count = interaction.clickCount ?? 1
-      return count > 1 ? `${count} clicks` : 'click'
-    }
+    case 'click':
+      return clickSequenceOf(interaction).map(describeClickRun).join(', then ') || 'clicked'
     default:
       return interaction.type
   }

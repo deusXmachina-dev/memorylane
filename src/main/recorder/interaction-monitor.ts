@@ -1,8 +1,8 @@
 import { screen } from 'electron'
 import { uIOhook, UiohookKeyboardEvent, UiohookMouseEvent, UiohookWheelEvent } from 'uiohook-napi'
 import { INTERACTION_MONITOR_CONFIG } from '@constants'
-import { InteractionContext, KeyRun } from '../../shared/types'
-import { appendKey, classifyKey } from './key-sequence'
+import { ClickClass, InputRun, InteractionContext, KeyClass } from '../../shared/types'
+import { appendClick, appendRun, classifyClick, classifyKey, isDrag } from './input-sequence'
 import { addAppWatcherListener, AppWatcherEvent } from './app-watcher'
 import { resolveAppWatcherDisplay } from './app-watcher-display'
 import log from '@main/utils/logger'
@@ -22,6 +22,8 @@ let cachedWindowTitle: string | null = null
 
 // Unsubscribe handle for our app-watcher listener
 let appWatcherUnsubscribe: (() => void) | null = null
+
+let pressPosition: { x: number; y: number } | null = null
 
 /**
  * Resolve which Electron Display contains the given global coordinate.
@@ -144,6 +146,7 @@ class DebouncedSession<A> {
 
 interface ClickAccumulation {
   count: number
+  sequence: InputRun<ClickClass>[]
   position: { x: number; y: number } | null
   displayId: number | undefined
 }
@@ -154,6 +157,7 @@ const clickSession = new DebouncedSession(
   {
     initialAccumulation: (): ClickAccumulation => ({
       count: 0,
+      sequence: [],
       position: null,
       displayId: undefined,
     }),
@@ -168,7 +172,7 @@ const clickSession = new DebouncedSession(
         timestamp: lastEventTime,
         displayId: accumulation.displayId,
         clickPosition: accumulation.position ?? undefined,
-        clickCount: accumulation.count,
+        clickSequence: accumulation.sequence,
       })
     },
   },
@@ -178,7 +182,7 @@ const typingSession = new DebouncedSession(
   () => INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS,
   () => INTERACTION_MONITOR_CONFIG.MAX_SESSION_MS,
   {
-    initialAccumulation: (): { keyCount: number; keySequence: KeyRun[] } => ({
+    initialAccumulation: (): { keyCount: number; keySequence: InputRun<KeyClass>[] } => ({
       keyCount: 0,
       keySequence: [],
     }),
@@ -244,11 +248,28 @@ function handleMouseClick(event: UiohookMouseEvent): void {
     return
   }
 
+  recordClick(event, classifyClick(event))
+}
+
+function recordClick(event: UiohookMouseEvent, clickClass: ClickClass | null): void {
   clickSession.record(Date.now(), (accumulation) => {
     accumulation.count++
+    if (clickClass) appendClick(accumulation.sequence, clickClass)
     accumulation.position = { x: event.x, y: event.y }
     accumulation.displayId = getDisplayIdForPoint(event.x, event.y)
   })
+}
+
+function handleMouseDown(event: UiohookMouseEvent): void {
+  pressPosition = event.button === 1 ? { x: event.x, y: event.y } : null
+}
+
+function handleMouseUp(event: UiohookMouseEvent): void {
+  if (!INTERACTION_MONITOR_CONFIG.TRACK_CLICKS) {
+    return
+  }
+  if (pressPosition && isDrag(pressPosition, event)) recordClick(event, 'drag')
+  pressPosition = null
 }
 
 /**
@@ -263,7 +284,7 @@ function handleKeyboard(event: UiohookKeyboardEvent): void {
   const keyClass = classifyKey(event)
   typingSession.record(Date.now(), (accumulation) => {
     accumulation.keyCount++
-    if (keyClass) appendKey(accumulation.keySequence, keyClass)
+    if (keyClass) appendRun(accumulation.keySequence, keyClass)
   })
 }
 
@@ -393,6 +414,8 @@ export function startInteractionMonitoring(): void {
     // Register event handlers
     if (INTERACTION_MONITOR_CONFIG.TRACK_CLICKS) {
       uIOhook.on('click', handleMouseClick)
+      uIOhook.on('mousedown', handleMouseDown)
+      uIOhook.on('mouseup', handleMouseUp)
     }
 
     if (INTERACTION_MONITOR_CONFIG.TRACK_KEYBOARD) {
@@ -441,6 +464,7 @@ export function stopInteractionMonitoring(): void {
     previousWindowDisplayId = null
     cachedDisplayId = null
     cachedWindowTitle = null
+    pressPosition = null
 
     // Stop the native app-watcher process (only our listener; others may still be attached)
     if (appWatcherUnsubscribe) {

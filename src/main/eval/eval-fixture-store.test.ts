@@ -111,7 +111,7 @@ describe('EvalFixtureStore', () => {
     // Presence dropped; remaining sorted by timestamp; text matches the prompt formatter.
     expect(w.events).toEqual([
       { offsetMs: 1_000, type: 'keyboard', text: 'typed 45 keys' },
-      { offsetMs: 2_000, type: 'click', text: 'click' },
+      { offsetMs: 2_000, type: 'click', text: 'clicked' },
     ])
   })
 
