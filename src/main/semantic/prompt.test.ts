@@ -57,16 +57,30 @@ describe('describeInteraction', () => {
         timestamp: 0,
         keyCount: 60,
         keySequence: [
-          { key: 'char', count: 42 },
-          { key: 'enter', count: 1 },
-          { key: 'char', count: 10 },
-          { key: 'delete', count: 3 },
-          { key: 'mod+s', count: 1 },
+          { kind: 'char', count: 42 },
+          { kind: 'enter', count: 1 },
+          { kind: 'char', count: 10 },
+          { kind: 'delete', count: 3 },
+          { kind: 'mod+s', count: 1 },
         ],
       }),
     ).toBe(
       'typed 42 characters, then pressed Enter, then typed 10 characters, then deleted 3 characters, then pressed Cmd/Ctrl+S (save)',
     )
+  })
+
+  it('narrates the click sequence in order', () => {
+    expect(
+      describeInteraction({
+        type: 'click',
+        timestamp: 0,
+        clickSequence: [
+          { kind: 'left', count: 2 },
+          { kind: 'right', count: 1 },
+          { kind: 'drag', count: 1 },
+        ],
+      }),
+    ).toBe('clicked ×2, then right-clicked (context menu), then dragged (move/select)')
   })
 
   it('falls back to the key count for events without a sequence', () => {
@@ -82,7 +96,7 @@ describe('interaction timeline', () => {
       makeActivity([
         { type: 'scroll', timestamp: 2000, durationMs: 3000 },
         { type: 'scroll', timestamp: 6000, durationMs: 4000 },
-        { type: 'click', timestamp: 9000, clickCount: 2 },
+        { type: 'click', timestamp: 9000, clickSequence: [{ kind: 'left', count: 2 }] },
       ]),
       'video',
     )
@@ -90,20 +104,20 @@ describe('interaction timeline', () => {
     expect(timelineOf(prompt)).toEqual([
       '- Input totals: 0 characters typed, 2 scroll bursts, 2 clicks',
       '- t+1.0s: scrolled for 7s',
-      '- t+8.0s: 2 clicks',
+      '- t+8.0s: clicked ×2',
     ])
   })
 
   it('joins adjacent typing events into one sequence', () => {
     const prompt = buildSemanticPrompt(
       makeActivity([
-        { type: 'keyboard', timestamp: 2000, keySequence: [{ key: 'char', count: 20 }] },
+        { type: 'keyboard', timestamp: 2000, keySequence: [{ kind: 'char', count: 20 }] },
         {
           type: 'keyboard',
           timestamp: 6000,
           keySequence: [
-            { key: 'char', count: 5 },
-            { key: 'enter', count: 1 },
+            { kind: 'char', count: 5 },
+            { kind: 'enter', count: 1 },
           ],
         },
       ]),
@@ -121,7 +135,7 @@ describe('interaction timeline', () => {
     interactions.push({
       type: 'keyboard',
       timestamp: 50_000,
-      keySequence: [{ key: 'mod+enter', count: 1 }],
+      keySequence: [{ kind: 'mod+enter', count: 1 }],
     })
     interactions.push({ type: 'click', timestamp: 51_000 })
     for (let i = 0; i < 20; i++) {
