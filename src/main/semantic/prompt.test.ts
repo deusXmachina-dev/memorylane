@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildSemanticPrompt } from './prompt'
+import { buildSemanticPrompt, describeInteraction } from './prompt'
 import type { Activity } from '@main/activity/activity-types'
 
 const PASSIVE_RULE = 'The user did not click, type, or scroll in this window'
@@ -41,5 +41,135 @@ describe('buildSemanticPrompt', () => {
     const prompt = buildSemanticPrompt(makeActivity([{ type: 'click', timestamp: 1500 }]), 'video')
 
     expect(prompt).not.toContain(PASSIVE_RULE)
+  })
+})
+
+function timelineOf(prompt: string): string[] {
+  const section = prompt.split('## Activity timeline\n')[1].split('\n\n')[0]
+  return section.split('\n')
+}
+
+describe('describeInteraction', () => {
+  it('narrates the key sequence in order', () => {
+    expect(
+      describeInteraction({
+        type: 'keyboard',
+        timestamp: 0,
+        keyCount: 60,
+        keySequence: [
+          { kind: 'char', count: 42 },
+          { kind: 'enter', count: 1 },
+          { kind: 'char', count: 10 },
+          { kind: 'delete', count: 3 },
+          { kind: 'mod+s', count: 1 },
+        ],
+      }),
+    ).toBe(
+      'typed 42 characters, then pressed Enter, then typed 10 characters, then deleted 3 characters, then pressed Cmd/Ctrl+S (save)',
+    )
+  })
+
+  it('narrates the click sequence in order', () => {
+    expect(
+      describeInteraction({
+        type: 'click',
+        timestamp: 0,
+        clickSequence: [
+          { kind: 'left', count: 2 },
+          { kind: 'right', count: 1 },
+          { kind: 'drag', count: 1 },
+        ],
+      }),
+    ).toBe('clicked ×2, then right-clicked (context menu), then dragged (move/select)')
+  })
+
+  it('falls back to the key count for events without a sequence', () => {
+    expect(describeInteraction({ type: 'keyboard', timestamp: 0, keyCount: 7 })).toBe(
+      'typed 7 keys',
+    )
+  })
+})
+
+describe('interaction timeline', () => {
+  it('states when nothing was typed', () => {
+    const prompt = buildSemanticPrompt(
+      makeActivity([
+        { type: 'scroll', timestamp: 2000, durationMs: 3000 },
+        { type: 'scroll', timestamp: 6000, durationMs: 4000 },
+        { type: 'click', timestamp: 9000, clickSequence: [{ kind: 'left', count: 2 }] },
+      ]),
+      'video',
+    )
+
+    expect(timelineOf(prompt)).toEqual([
+      '- Input totals: 0 characters typed, 2 scroll bursts, 2 clicks',
+      '- t+1.0s: scrolled for 7s',
+      '- t+8.0s: clicked ×2',
+    ])
+  })
+
+  it('joins adjacent typing events into one sequence', () => {
+    const prompt = buildSemanticPrompt(
+      makeActivity([
+        { type: 'keyboard', timestamp: 2000, keySequence: [{ kind: 'char', count: 20 }] },
+        {
+          type: 'keyboard',
+          timestamp: 6000,
+          keySequence: [
+            { kind: 'char', count: 5 },
+            { kind: 'enter', count: 1 },
+          ],
+        },
+      ]),
+      'video',
+    )
+
+    expect(timelineOf(prompt)[1]).toBe('- t+1.0s: typed 25 characters, then pressed Enter')
+  })
+
+  it('keeps a submit at the end of a long activity', () => {
+    const interactions: Activity['interactions'] = []
+    for (let i = 0; i < 40; i++) {
+      interactions.push({ type: i % 2 ? 'scroll' : 'click', timestamp: 2000 + i * 1000 })
+    }
+    interactions.push({
+      type: 'keyboard',
+      timestamp: 50_000,
+      keySequence: [{ kind: 'mod+enter', count: 1 }],
+    })
+    interactions.push({ type: 'click', timestamp: 51_000 })
+    for (let i = 0; i < 20; i++) {
+      interactions.push({ type: i % 2 ? 'click' : 'scroll', timestamp: 52_000 + i * 1000 })
+    }
+
+    const timeline = timelineOf(buildSemanticPrompt(makeActivity(interactions), 'video'))
+
+    expect(timeline).toContain('- t+49.0s: pressed Cmd/Ctrl+Enter (send/submit)')
+    expect(timeline.length).toBeLessThanOrEqual(1 + 20 + 3)
+    expect(timeline.some((line) => line.includes('events omitted'))).toBe(true)
+  })
+
+  it('caps the timeline when most lines are significant', () => {
+    const interactions: Activity['interactions'] = []
+    for (let i = 0; i < 60; i++) {
+      interactions.push({
+        type: 'keyboard',
+        timestamp: 2000 + i * 1000,
+        keySequence: [
+          { kind: 'char', count: 10 },
+          { kind: 'enter', count: 1 },
+        ],
+      })
+      interactions.push({ type: 'scroll', timestamp: 2500 + i * 1000, durationMs: 200 })
+    }
+
+    const timeline = timelineOf(buildSemanticPrompt(makeActivity(interactions), 'video'))
+    const events = timeline.filter((line) => line.startsWith('- t+'))
+
+    expect(events).toHaveLength(20)
+    expect(events.every((line) => line.includes('pressed Enter'))).toBe(true)
+    expect(events[0]).toBe('- t+1.0s: typed 10 characters, then pressed Enter')
+    expect(events[19]).toBe('- t+60.0s: typed 10 characters, then pressed Enter')
+    expect(timeline[0]).toBe('- Input totals: 600 characters typed, 60 scroll bursts, 0 clicks')
   })
 })

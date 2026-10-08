@@ -10,6 +10,30 @@ import type {
   TaskSightingSummary,
 } from './eval-review'
 
+export type KeyClass =
+  | 'char'
+  | 'delete'
+  | 'enter'
+  | 'shift+enter'
+  | 'tab'
+  | 'escape'
+  | 'mod+enter'
+  | 'mod+s'
+  | 'mod+c'
+  | 'mod+v'
+  | 'mod+x'
+  | 'mod+z'
+  | 'mod+a'
+  | 'mod+f'
+  | 'shortcut'
+
+export type ClickClass = 'left' | 'right' | 'middle' | 'double' | 'mod' | 'drag'
+
+export interface InputRun<T extends string> {
+  kind: T
+  count: number
+}
+
 export interface InteractionContext {
   // 'presence' is a synthetic heartbeat emitted while the user is at the machine
   // but not providing input (reading), so a no-input view keeps its event window
@@ -21,10 +45,12 @@ export interface InteractionContext {
 
   // Click-specific
   clickPosition?: { x: number; y: number }
+  clickSequence?: InputRun<ClickClass>[] // Ordered, run-length-encoded click classes
 
   // Keyboard-specific
   keyCount?: number // Number of keys pressed in typing session
   durationMs?: number // Duration of typing session in milliseconds
+  keySequence?: InputRun<KeyClass>[] // Ordered, run-length-encoded key classes; never characters
 
   // Scroll-specific
   scrollDirection?: 'vertical' | 'horizontal'

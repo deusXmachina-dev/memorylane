@@ -24,7 +24,8 @@ const { mockScreen, handlers, mockUiohook, appWatcher } = vi.hoisted(() => {
 })
 
 vi.mock('electron', () => ({ screen: mockScreen }))
-vi.mock('uiohook-napi', () => ({
+vi.mock('uiohook-napi', async (importOriginal) => ({
+  UiohookKey: (await importOriginal<typeof import('uiohook-napi')>()).UiohookKey,
   uIOhook: mockUiohook,
   UiohookMouseEvent: class {},
   UiohookWheelEvent: class {},
@@ -53,8 +54,8 @@ function wheel(rotation = 1): void {
   handlers['wheel']?.({ rotation, direction: 3, x: 0, y: 0 })
 }
 
-function key(): void {
-  handlers['keydown']?.({})
+function key(keycode = 16, mods: { metaKey?: boolean } = {}): void {
+  handlers['keydown']?.({ keycode, metaKey: false, ctrlKey: false, shiftKey: false, ...mods })
 }
 
 function appChange(app: string, title: string, timestamp: number): void {
@@ -113,6 +114,48 @@ describe('interaction-monitor session emission', () => {
       expect(c.timestamp).toBeGreaterThan(0)
       expect(c.scrollDirection).toBe('vertical')
     }
+  })
+
+  it('emits the ordered key sequence of a typing session without characters', () => {
+    key()
+    key()
+    key(28)
+    key()
+    key(31, { metaKey: true })
+    vi.advanceTimersByTime(INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS)
+
+    expect(emitted).toHaveLength(1)
+    expect(emitted[0]).toMatchObject({
+      type: 'keyboard',
+      keyCount: 5,
+      keySequence: [
+        { kind: 'char', count: 2 },
+        { kind: 'enter', count: 1 },
+        { kind: 'char', count: 1 },
+        { kind: 'mod+s', count: 1 },
+      ],
+    })
+  })
+
+  it('emits the ordered click sequence including drags', () => {
+    const mouse = { metaKey: false, ctrlKey: false, x: 1, y: 1 }
+    handlers['click']?.({ ...mouse, button: 1, clicks: 1 })
+    handlers['click']?.({ ...mouse, button: 2, clicks: 1 })
+    handlers['mousedown']?.({ ...mouse, button: 1 })
+    handlers['mouseup']?.({ ...mouse, button: 1, x: 200, y: 1 })
+    handlers['mousedown']?.({ ...mouse, button: 1 })
+    handlers['mouseup']?.({ ...mouse, button: 1 })
+    vi.advanceTimersByTime(INTERACTION_MONITOR_CONFIG.CLICK_DEBOUNCE_MS)
+
+    expect(emitted).toHaveLength(1)
+    expect(emitted[0]).toMatchObject({
+      type: 'click',
+      clickSequence: [
+        { kind: 'left', count: 1 },
+        { kind: 'right', count: 1 },
+        { kind: 'drag', count: 1 },
+      ],
+    })
   })
 
   it('stamps a short scroll session at the last event receipt time', () => {

@@ -75,6 +75,10 @@ describe('scoreDeterministic', () => {
   it('regexes are anchored as expected', () => {
     expect(RAW_INTERACTION_RE.test('typing')).toBe(true)
     expect(RAW_INTERACTION_RE.test('typescript')).toBe(false)
+    expect(RAW_INTERACTION_RE.test('pressed Enter to send')).toBe(true)
+    expect(RAW_INTERACTION_RE.test('saved with Cmd+S')).toBe(true)
+    expect(RAW_INTERACTION_RE.test('used a keyboard shortcut')).toBe(true)
+    expect(RAW_INTERACTION_RE.test('entered the key details')).toBe(false)
     expect(META_OPENER_RE.test('During this session')).toBe(true)
     expect(META_OPENER_RE.test('Reviewed the user guide')).toBe(false)
   })
