@@ -148,4 +148,28 @@ describe('interaction timeline', () => {
     expect(timeline.length).toBeLessThanOrEqual(1 + 20 + 3)
     expect(timeline.some((line) => line.includes('events omitted'))).toBe(true)
   })
+
+  it('caps the timeline when most lines are significant', () => {
+    const interactions: Activity['interactions'] = []
+    for (let i = 0; i < 60; i++) {
+      interactions.push({
+        type: 'keyboard',
+        timestamp: 2000 + i * 1000,
+        keySequence: [
+          { kind: 'char', count: 10 },
+          { kind: 'enter', count: 1 },
+        ],
+      })
+      interactions.push({ type: 'scroll', timestamp: 2500 + i * 1000, durationMs: 200 })
+    }
+
+    const timeline = timelineOf(buildSemanticPrompt(makeActivity(interactions), 'video'))
+    const events = timeline.filter((line) => line.startsWith('- t+'))
+
+    expect(events).toHaveLength(20)
+    expect(events.every((line) => line.includes('pressed Enter'))).toBe(true)
+    expect(events[0]).toBe('- t+1.0s: typed 10 characters, then pressed Enter')
+    expect(events[19]).toBe('- t+60.0s: typed 10 characters, then pressed Enter')
+    expect(timeline[0]).toBe('- Input totals: 600 characters typed, 60 scroll bursts, 0 clicks')
+  })
 })

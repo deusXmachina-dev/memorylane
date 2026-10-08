@@ -22,7 +22,7 @@ export function buildSemanticPrompt(
   // Rules first - sets the model behavior before it sees any data.
   prompt += '## Rules\n'
   prompt +=
-    '- Media is the primary source for what was on screen. The timeline records what the user actually did (typing, submit keys, scrolling, clicks): use it to tell what the user did from what they merely saw.\n'
+    '- Media is the primary source for what was on screen. The timeline records what the user actually did (typing, submit keys, scrolling, clicks): use it to tell what the user did from what they merely saw. Long timelines omit some events; the Input totals line still counts everything.\n'
   prompt += '- Answer "What was I working on?" - useful for recall, not a play-by-play.\n'
   prompt +=
     '- NEVER mention raw interactions (clicks, scrolling, key counts). Translate into meaningful actions.\n'
@@ -166,17 +166,11 @@ function clickSequenceOf(event: InteractionContext): InputRun<ClickClass>[] {
 }
 
 function capLines(lines: TimelineLine[]): string[] {
-  const kept = new Set<number>()
-  if (lines.length <= MAX_TIMELINE_LINES) {
-    lines.forEach((_, index) => kept.add(index))
-  } else {
-    lines.forEach((line, index) => line.keep && kept.add(index))
-    const others = lines.map((_, index) => index).filter((index) => !kept.has(index))
-    const budget = Math.max(0, MAX_TIMELINE_LINES - kept.size)
-    const head = Math.ceil(budget / 2)
-    others.slice(0, head).forEach((index) => kept.add(index))
-    others.slice(others.length - (budget - head)).forEach((index) => kept.add(index))
-  }
+  const indices = lines.map((_, index) => index)
+  const significant = indices.filter((index) => lines[index].keep)
+  const others = indices.filter((index) => !lines[index].keep)
+  const kept = new Set(pickEnds(significant, MAX_TIMELINE_LINES))
+  pickEnds(others, MAX_TIMELINE_LINES - kept.size).forEach((index) => kept.add(index))
 
   const output: string[] = []
   let omitted = 0
@@ -193,6 +187,12 @@ function capLines(lines: TimelineLine[]): string[] {
   })
   if (omitted > 0) output.push(`- ... ${omitted} events omitted`)
   return output
+}
+
+function pickEnds(indices: number[], budget: number): number[] {
+  if (indices.length <= budget) return indices
+  const head = Math.ceil(budget / 2)
+  return [...indices.slice(0, head), ...indices.slice(indices.length - (budget - head))]
 }
 
 function describeInputTotals(interactions: InteractionContext[]): string {
