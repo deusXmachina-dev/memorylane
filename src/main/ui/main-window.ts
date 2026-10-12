@@ -32,7 +32,7 @@ import type { RemoteModelConfig } from '../../shared/remote-model-config'
 import { applyVendorSwitch } from './vendor-switch'
 import { applyModelSettings } from './model-settings'
 import type { EvalRecorder } from '../eval/eval-recorder'
-import { RECORDING_SCRIPTS } from '../eval/recording-scripts'
+import { importRecordingScripts, listRecordingScripts } from '../eval/recording-scripts'
 import type { EvalFixtureStore } from '../eval/eval-fixture-store'
 import type { TaskFixtureStore } from '../eval/task-fixture-store'
 import {
@@ -1165,7 +1165,33 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     },
   )
 
-  ipcMain.handle('main-window:evalListScripts', () => RECORDING_SCRIPTS)
+  ipcMain.handle('main-window:evalListScripts', () => {
+    if (!deps) return []
+    try {
+      return listRecordingScripts(deps.evalRecorder.fixturesRoot)
+    } catch (error) {
+      log.warn('[Eval] Failed to read scenarios', error)
+      return []
+    }
+  })
+
+  ipcMain.handle('main-window:evalImportScripts', async () => {
+    if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
+    const result = await showOpenDialog(getMainWindow(), {
+      title: 'Import Scenarios',
+      properties: ['openFile'],
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    })
+    if (result.canceled || !result.filePaths[0]) {
+      return { success: false as const, error: 'Canceled' }
+    }
+    try {
+      const count = importRecordingScripts(deps.evalRecorder.fixturesRoot, result.filePaths[0])
+      return { success: true as const, count }
+    } catch (error) {
+      return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
+    }
+  })
 
   ipcMain.handle('main-window:evalStopRecording', async () => {
     try {
@@ -1223,7 +1249,11 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   ipcMain.handle(
     'main-window:evalOpenSetupUrl',
     async (_event: IpcMainInvokeEvent, url: unknown) => {
-      const known = RECORDING_SCRIPTS.some((s) => s.setup.some((item) => item.url === url))
+      const known =
+        deps !== null &&
+        listRecordingScripts(deps.evalRecorder.fixturesRoot).some((s) =>
+          s.setup.some((item) => item.url === url),
+        )
       if (typeof url !== 'string' || !known)
         return { success: false as const, error: 'Unknown URL' }
       await shell.openExternal(url)

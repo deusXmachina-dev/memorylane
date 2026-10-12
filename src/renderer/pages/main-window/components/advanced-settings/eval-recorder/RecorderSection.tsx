@@ -31,6 +31,16 @@ export function RecorderSection({ api }: { api: MainWindowAPI }): React.JSX.Elem
     void refreshFixtures()
   }, [api, refreshFixtures])
 
+  const importScripts = useCallback(async () => {
+    const result = await api.evalImportScripts()
+    if (!result.success) {
+      if (result.error !== 'Canceled') toast.error(result.error ?? 'Import failed')
+      return
+    }
+    setScripts(await api.evalListScripts())
+    toast.success(`Imported ${result.count} scenarios`)
+  }, [api])
+
   useEffect(() => {
     const poll = async (): Promise<void> => {
       const next = await api.evalRecordingStatus()
@@ -179,6 +189,7 @@ export function RecorderSection({ api }: { api: MainWindowAPI }): React.JSX.Elem
         onExportFixture={(name) => void exportFixture(name)}
         onDeleteFixture={(name) => void deleteFixture(name)}
         onFreeRecording={() => void start()}
+        onImportScenarios={() => void importScripts()}
       />
     </>
   )

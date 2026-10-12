@@ -4,6 +4,7 @@ import {
   CheckCircleIcon,
   CircleIcon,
   RecordIcon,
+  UploadSimpleIcon,
   WarningCircleIcon,
 } from '@phosphor-icons/react'
 import { Button } from '@components/ui/button'
@@ -23,6 +24,7 @@ export function ScenarioLibrary({
   onExportFixture,
   onDeleteFixture,
   onFreeRecording,
+  onImportScenarios,
 }: {
   scenarios: Scenario[]
   freeFixtures: EvalFixtureSummary[]
@@ -31,6 +33,7 @@ export function ScenarioLibrary({
   onExportFixture: (name: string) => void
   onDeleteFixture: (name: string) => void
   onFreeRecording: () => void
+  onImportScenarios: () => void
 }): React.JSX.Element {
   const [filter, setFilter] = useState<Filter>('all')
   const count = (status: ScenarioStatus): number =>
@@ -46,10 +49,25 @@ export function ScenarioLibrary({
       <section className="space-y-3">
         <div className="flex items-baseline justify-between gap-4">
           <h2 className="text-base font-medium">Eval scenarios</h2>
-          <span className="text-sm text-muted-foreground">
-            {done} of {total} recorded{redo > 0 && ` · ${redo} need a redo`}
-          </span>
+          <div className="flex items-center gap-3">
+            {total > 0 && (
+              <span className="text-sm text-muted-foreground">
+                {done} of {total} recorded{redo > 0 && ` · ${redo} need a redo`}
+              </span>
+            )}
+            <Button variant="outline" size="sm" onClick={onImportScenarios}>
+              <UploadSimpleIcon /> Import scenarios
+            </Button>
+          </div>
         </div>
+        {total === 0 && (
+          <p className="text-sm text-muted-foreground">
+            No scenarios yet. Import a scenarios file to get started.
+          </p>
+        )}
+      </section>
+
+      {total > 0 && (
         <div className="flex h-1.5 overflow-hidden rounded-full bg-muted">
           <div className="bg-primary" style={{ width: `${(done / Math.max(total, 1)) * 100}%` }} />
           <div
@@ -57,7 +75,7 @@ export function ScenarioLibrary({
             style={{ width: `${(redo / Math.max(total, 1)) * 100}%` }}
           />
         </div>
-      </section>
+      )}
 
       {next && (
         <div className="flex items-center gap-4 rounded-xl p-4 ring-1 ring-primary">
@@ -73,44 +91,46 @@ export function ScenarioLibrary({
         </div>
       )}
 
-      <section className="space-y-3">
-        <SegmentedControl
-          layout="wrap"
-          ariaLabel="Filter scenarios"
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { value: 'all', label: `All ${total}` },
-            { value: 'todo', label: `To record ${count('todo')}` },
-            { value: 'redo', label: `Redo ${redo}` },
-            { value: 'done', label: `Done ${done}` },
-          ]}
-        />
-        <div className="divide-y divide-border rounded-xl ring-1 ring-foreground/10">
-          {shown.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">Nothing here.</p>
-          ) : (
-            shown.map((scenario) => (
-              <button
-                key={scenario.script.id}
-                type="button"
-                onClick={() => onOpenScenario(scenario.script.id)}
-                className="flex w-full items-center gap-4 px-4 py-3 text-left hover:bg-muted/50"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium">{scenario.script.title}</div>
-                  <div className="truncate text-xs text-muted-foreground">
-                    {scenario.script.steps.length} steps · ~{scriptSeconds(scenario.script)}s ·{' '}
-                    {scenario.script.targets.join(', ')}
+      {total > 0 && (
+        <section className="space-y-3">
+          <SegmentedControl
+            layout="wrap"
+            ariaLabel="Filter scenarios"
+            value={filter}
+            onChange={setFilter}
+            options={[
+              { value: 'all', label: `All ${total}` },
+              { value: 'todo', label: `To record ${count('todo')}` },
+              { value: 'redo', label: `Redo ${redo}` },
+              { value: 'done', label: `Done ${done}` },
+            ]}
+          />
+          <div className="divide-y divide-border rounded-xl ring-1 ring-foreground/10">
+            {shown.length === 0 ? (
+              <p className="p-4 text-sm text-muted-foreground">Nothing here.</p>
+            ) : (
+              shown.map((scenario) => (
+                <button
+                  key={scenario.script.id}
+                  type="button"
+                  onClick={() => onOpenScenario(scenario.script.id)}
+                  className="flex w-full items-center gap-4 px-4 py-3 text-left hover:bg-muted/50"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium">{scenario.script.title}</div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {scenario.script.steps.length} steps · ~{scriptSeconds(scenario.script)}s ·{' '}
+                      {scenario.script.targets.join(', ')}
+                    </div>
                   </div>
-                </div>
-                <StatusLabel scenario={scenario} />
-                <CaretRightIcon className="size-4 text-muted-foreground" />
-              </button>
-            ))
-          )}
-        </div>
-      </section>
+                  <StatusLabel scenario={scenario} />
+                  <CaretRightIcon className="size-4 text-muted-foreground" />
+                </button>
+              ))
+            )}
+          </div>
+        </section>
+      )}
 
       <SettingsSection title="Other recordings" description="Recordings made without a script.">
         {freeFixtures.map((f) => (

@@ -481,6 +481,7 @@ export interface MainWindowAPI {
     scriptId?: string,
   ) => Promise<{ success: boolean; status?: EvalRecordingStatus; error?: string }>
   evalListScripts: () => Promise<RecordingScript[]>
+  evalImportScripts: () => Promise<{ success: boolean; count?: number; error?: string }>
   evalStopRecording: () => Promise<{
     success: boolean
     fixture?: EvalPromoteSummary

@@ -39,7 +39,7 @@ export function sanitizeFixtureName(name: string): string {
 export class EvalRecorder {
   private readonly harness: PipelineHarness
   private readonly capture: RuntimeCaptureController
-  private readonly fixturesRoot: string
+  readonly fixturesRoot: string
 
   private activeName: string | null = null
   private startedAt: number | null = null
@@ -77,7 +77,7 @@ export class EvalRecorder {
   /** Begins capturing the producer's frame + event-window streams to a staging dir. */
   start(name: string, scriptId?: string): EvalRecordingStatus {
     if (this.isRecording()) throw new Error('A recording is already in progress')
-    const script = scriptId ? getRecordingScript(scriptId) : null
+    const script = scriptId ? getRecordingScript(this.fixturesRoot, scriptId) : null
     if (scriptId && !script) throw new Error(`Unknown script: ${scriptId}`)
 
     const safeName = sanitizeFixtureName(name)

@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RecordingScript } from '@/shared/eval-review'
 import { goldenFromScript } from './script-golden'
-import { RECORDING_SCRIPTS } from './recording-scripts'
-import { mustMentionRecall, scoreDeterministic } from './deterministic'
+import { mustMentionRecall } from './deterministic'
 import type { ReplayActivity } from './types'
 
 function block(
@@ -106,28 +105,6 @@ describe('goldenFromScript', () => {
     const { check } = goldenFromScript(script, [block(0, 'TextEdit')])
     expect(check.steps?.map((s) => s.got)).toEqual(['TextEdit', null, null])
     expect(check.steps?.[1].issue).toBe('nothing recorded for this step')
-  })
-})
-
-describe('RECORDING_SCRIPTS', () => {
-  it('has unique ids', () => {
-    const ids = RECORDING_SCRIPTS.map((s) => s.id)
-    expect(new Set(ids).size).toBe(ids.length)
-  })
-
-  it.each(
-    RECORDING_SCRIPTS.flatMap((s) =>
-      s.steps.map((step, i) => ({ label: `${s.id}#${i + 1}`, step })),
-    ),
-  )('$label target summary passes the prompt rules and names its facts', ({ step }) => {
-    const { summary, mustMention, dropped } = step.expect
-    if (dropped) {
-      expect(summary).toBeUndefined()
-      return
-    }
-    if (!summary) return
-    expect(scoreDeterministic(summary).hardFails).toBe(0)
-    expect(mustMentionRecall(summary, mustMention ?? []).missed).toEqual([])
   })
 })
 

@@ -155,6 +155,7 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   evalStartRecording: (scriptId?: string) =>
     ipcRenderer.invoke('main-window:evalStartRecording', scriptId),
   evalListScripts: () => ipcRenderer.invoke('main-window:evalListScripts'),
+  evalImportScripts: () => ipcRenderer.invoke('main-window:evalImportScripts'),
   evalStopRecording: () => ipcRenderer.invoke('main-window:evalStopRecording'),
   evalCancelRecording: () => ipcRenderer.invoke('main-window:evalCancelRecording'),
   evalRestartRecording: () => ipcRenderer.invoke('main-window:evalRestartRecording'),
