@@ -5,7 +5,7 @@ import {
   type RecordingScriptStep,
   type ScriptCheck,
   type ScriptStepCheck,
-} from '../../shared/eval-review'
+} from '@/shared/eval-review'
 import type { GoldenSource } from './golden-md'
 import type { ReplayActivity } from './types'
 

@@ -1,4 +1,4 @@
-import type { SemanticRunDiagnostics } from '../semantic/types'
+import type { SemanticRunDiagnostics } from '@main/semantic/types'
 import type { DroppedActivityReason } from '@main/activity/activity-types'
 import type { ActivityProducerStats } from '@main/activity/activity-producer'
 

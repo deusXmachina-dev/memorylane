@@ -17,10 +17,10 @@ import type {
   EvalFixtureSummary,
   GoldenBlock,
   ScriptCheck,
-} from '../../shared/eval-review'
-import type { EventWindow, InteractionContext } from '../../shared/types'
+} from '@/shared/eval-review'
+import type { EventWindow, InteractionContext } from '@/shared/types'
 import { readJsonl } from './jsonl'
-import { describeInteraction } from '../semantic/prompt'
+import { describeInteraction } from '@main/semantic/prompt'
 import { evalMediaUrl } from './eval-media-protocol'
 import { formatGoldenMd, parseGoldenMd } from './golden-md'
 

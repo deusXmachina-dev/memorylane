@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { RecordingScript } from '../../shared/eval-review'
+import type { RecordingScript } from '@/shared/eval-review'
 import { goldenFromScript } from './script-golden'
 import { RECORDING_SCRIPTS } from './recording-scripts'
 import { mustMentionRecall, scoreDeterministic } from './deterministic'

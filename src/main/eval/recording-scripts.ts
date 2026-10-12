@@ -1,4 +1,4 @@
-import type { RecordingScript } from '../../shared/eval-review'
+import type { RecordingScript } from '@/shared/eval-review'
 
 const EDITOR = ['TextEdit', 'Notepad']
 const BROWSER = ['browser']

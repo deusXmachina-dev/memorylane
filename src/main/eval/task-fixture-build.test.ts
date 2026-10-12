@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import * as os from 'os'
 import * as path from 'path'
-import { StorageService } from '../storage'
-import { applyMigrations } from '../storage/migrator'
-import { createStoredActivity, deleteDbFiles } from '../storage/test-utils'
+import { StorageService } from '@main/storage'
+import { applyMigrations } from '@main/storage/migrator'
+import { createStoredActivity, deleteDbFiles } from '@main/storage/test-utils'
 import {
   applyParaphrasedSummaries,
   buildWindowedActivities,

@@ -1,6 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import { InMemoryStream } from '../streams/in-memory-stream'
+import { InMemoryStream } from '@main/streams/in-memory-stream'
 import { ActivityProducer, type ActivityProducerStats } from '@main/activity/activity-producer'
 import { ActivityExtractor } from '@main/activity/activity-extractor'
 import type {
@@ -17,9 +17,9 @@ import type {
   ActivityEmbeddingService,
   ActivityOcrService,
 } from '@main/activity/activity-transformer-types'
-import type { Frame } from '../recorder/screen-capturer'
-import type { EventWindow } from '../../shared/types'
-import type { SemanticRunDiagnostics } from '../semantic/types'
+import type { Frame } from '@main/recorder/screen-capturer'
+import type { EventWindow } from '@/shared/types'
+import type { SemanticRunDiagnostics } from '@main/semantic/types'
 import type { DumpedFrame, ReplayActivity } from './types'
 import { readJsonl } from './jsonl'
 

@@ -17,7 +17,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import log from '@main/utils/logger'
-import type { StreamSubscription } from '../streams/stream'
+import type { StreamSubscription } from '@main/streams/stream'
 import type { PipelineHarness } from '@main/activity/pipeline-harness'
 import type { RuntimeCaptureController } from '@main/capture/capture-controller'
 import { FrameDebugDumper } from '@main/debug/frame-debug-dump'
@@ -25,7 +25,7 @@ import { EventWindowDebugDumper } from '@main/debug/event-window-debug-dump'
 import { ActivityDebugDumper } from './activity-debug-dump'
 import { promoteCapture, type PromoteCaptureResult } from './promote-fixture'
 import { getRecordingScript } from './recording-scripts'
-import type { EvalRecordingStatus, RecordingScript } from '../../shared/eval-review'
+import type { EvalRecordingStatus, RecordingScript } from '@/shared/eval-review'
 
 /** Filesystem-safe fixture name (the dir under the fixtures root). */
 export function sanitizeFixtureName(name: string): string {

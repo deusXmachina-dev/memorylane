@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import { splitMarkdownBlocks } from './markdown-blocks'
 import type { ReplayActivity } from './types'
-import type { GoldenBlock } from '../../shared/eval-review'
+import type { GoldenBlock } from '@/shared/eval-review'
 
 /**
  * The golden is a single hand-editable Markdown file per fixture (`golden.md`).

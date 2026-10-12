@@ -1,7 +1,7 @@
 import { generateText } from 'ai'
 import log from '@main/utils/logger'
-import { DEFAULT_REQUEST_TIMEOUT_MS, type InferenceProvider } from '../llm'
-import { extractJsonObject } from '../services/task-miner/helpers'
+import { DEFAULT_REQUEST_TIMEOUT_MS, type InferenceProvider } from '@main/llm'
+import { extractJsonObject } from '@main/services/task-miner/helpers'
 
 /** A user-message content part the judge prompt can carry (text, or an image). */
 export type JudgeContent =

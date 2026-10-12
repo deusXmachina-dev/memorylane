@@ -1,4 +1,4 @@
-import { MODEL_PRICING_USD_PER_MILLION } from '../semantic/constants'
+import { MODEL_PRICING_USD_PER_MILLION } from '@main/semantic/constants'
 
 /**
  * USD cost for a single model call, from the shared pricing table. Returns null
