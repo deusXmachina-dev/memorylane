@@ -19,7 +19,7 @@ if (process.platform === 'win32' && app.isPackaged) {
     'node_modules',
     'onnxruntime-node',
     'bin',
-    'napi-v3',
+    'napi-v6',
     'win32',
     process.arch,
   )
