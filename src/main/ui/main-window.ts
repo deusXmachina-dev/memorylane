@@ -346,18 +346,28 @@ function recordingName(scriptId: string | undefined): string {
   return scriptId ? `${scriptId}-${stamp}` : stamp
 }
 
+let startingEvalRecording = false
+
 async function startEvalRecording(scriptId: string | undefined): Promise<EvalRecordingStatus> {
   if (!deps) throw new Error('Dependencies not initialized')
-  await hideForRecording()
-  await showRecordingGuide()
+  if (startingEvalRecording || deps.evalRecorder.isRecording()) {
+    throw new Error('A recording is already in progress')
+  }
+  startingEvalRecording = true
   try {
-    const status = deps.evalRecorder.start(recordingName(scriptId), scriptId)
-    void updateTrayMenu()
-    return status
-  } catch (error) {
-    closeRecordingGuide()
-    openMainWindow()
-    throw error
+    await hideForRecording()
+    await showRecordingGuide()
+    try {
+      const status = deps.evalRecorder.start(recordingName(scriptId), scriptId)
+      void updateTrayMenu()
+      return status
+    } catch (error) {
+      closeRecordingGuide()
+      openMainWindow()
+      throw error
+    }
+  } finally {
+    startingEvalRecording = false
   }
 }
 
