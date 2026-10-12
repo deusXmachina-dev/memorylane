@@ -505,6 +505,7 @@ export interface MainWindowAPI {
   ) => Promise<{ success: boolean; error?: string }>
   evalDeleteFixture: (name: string) => Promise<{ success: boolean; error?: string }>
   evalExportFixture: (name: string) => Promise<{ success: boolean; path?: string; error?: string }>
+  evalExportAllFixtures: () => Promise<{ success: boolean; count?: number; error?: string }>
   // Task-mining goldens (Developer → Tasks tab)
   evalListTaskSightings: () => Promise<TaskSightingSummary[]>
   evalPreviewTaskGolden: (

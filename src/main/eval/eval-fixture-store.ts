@@ -164,33 +164,49 @@ export class EvalFixtureStore {
   async exportZip(name: string, destPath: string): Promise<void> {
     const dir = this.dirFor(name)
     if (!fs.existsSync(dir)) throw new Error(`Fixture not found: ${name}`)
-
-    const files: { real: string; entry: string }[] = []
-    const walk = (current: string, rel: string): void => {
-      for (const e of fs.readdirSync(current, { withFileTypes: true })) {
-        const real = path.join(current, e.name)
-        const entry = path.posix.join(rel, e.name)
-        if (e.isDirectory()) walk(real, entry)
-        else if (e.isFile()) files.push({ real, entry })
-      }
-    }
-    walk(dir, path.basename(name))
-
-    await fs.promises.mkdir(path.dirname(destPath), { recursive: true })
-    await new Promise<void>((resolve, reject) => {
-      const zip = new yazl.ZipFile()
-      const output = fs.createWriteStream(destPath)
-      const onError = (error: unknown): void =>
-        reject(error instanceof Error ? error : new Error(String(error)))
-      output.once('error', onError)
-      zip.outputStream.once('error', onError)
-      output.once('close', resolve)
-      zip.outputStream.pipe(output)
-      for (const f of files) zip.addFile(f.real, f.entry)
-      zip.end()
-    })
+    const files = listFiles(dir, path.basename(name))
+    await writeZip(files, destPath)
     log.info(`[EvalFixtureStore] Exported "${name}" (${files.length} files) -> ${destPath}`)
   }
+
+  /** Every recording plus the scenarios file, in one zip. */
+  async exportAllZip(destPath: string): Promise<number> {
+    const names = this.list().map((f) => f.name)
+    if (names.length === 0) throw new Error('No recordings to export')
+    const files = names.flatMap((name) => listFiles(this.dirFor(name), name))
+    const scenarios = path.join(this.root, 'scenarios.json')
+    if (fs.existsSync(scenarios)) files.push({ real: scenarios, entry: 'scenarios.json' })
+    await writeZip(files, destPath)
+    log.info(`[EvalFixtureStore] Exported ${names.length} recordings -> ${destPath}`)
+    return names.length
+  }
+}
+
+function listFiles(dir: string, rel: string): { real: string; entry: string }[] {
+  const files: { real: string; entry: string }[] = []
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const real = path.join(dir, e.name)
+    const entry = path.posix.join(rel, e.name)
+    if (e.isDirectory()) files.push(...listFiles(real, entry))
+    else if (e.isFile()) files.push({ real, entry })
+  }
+  return files
+}
+
+async function writeZip(files: { real: string; entry: string }[], destPath: string): Promise<void> {
+  await fs.promises.mkdir(path.dirname(destPath), { recursive: true })
+  await new Promise<void>((resolve, reject) => {
+    const zip = new yazl.ZipFile()
+    const output = fs.createWriteStream(destPath)
+    const onError = (error: unknown): void =>
+      reject(error instanceof Error ? error : new Error(String(error)))
+    output.once('error', onError)
+    zip.outputStream.once('error', onError)
+    output.once('close', resolve)
+    zip.outputStream.pipe(output)
+    for (const f of files) zip.addFile(f.real, f.entry)
+    zip.end()
+  })
 }
 
 /** First app/window context in a window, as "processName — title" (or null). */

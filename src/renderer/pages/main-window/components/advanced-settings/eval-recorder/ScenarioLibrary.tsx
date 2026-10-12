@@ -3,6 +3,7 @@ import {
   CaretRightIcon,
   CheckCircleIcon,
   CircleIcon,
+  DownloadSimpleIcon,
   RecordIcon,
   UploadSimpleIcon,
   WarningCircleIcon,
@@ -25,6 +26,7 @@ export function ScenarioLibrary({
   onDeleteFixture,
   onFreeRecording,
   onImportScenarios,
+  onExportAll,
 }: {
   scenarios: Scenario[]
   freeFixtures: EvalFixtureSummary[]
@@ -34,6 +36,7 @@ export function ScenarioLibrary({
   onDeleteFixture: (name: string) => void
   onFreeRecording: () => void
   onImportScenarios: () => void
+  onExportAll?: () => void
 }): React.JSX.Element {
   const [filter, setFilter] = useState<Filter>('all')
   const count = (status: ScenarioStatus): number =>
@@ -58,6 +61,11 @@ export function ScenarioLibrary({
             <Button variant="outline" size="sm" onClick={onImportScenarios}>
               <UploadSimpleIcon /> Import scenarios
             </Button>
+            {onExportAll && (
+              <Button variant="outline" size="sm" onClick={onExportAll}>
+                <DownloadSimpleIcon /> Export all
+              </Button>
+            )}
           </div>
         </div>
         {total === 0 && (

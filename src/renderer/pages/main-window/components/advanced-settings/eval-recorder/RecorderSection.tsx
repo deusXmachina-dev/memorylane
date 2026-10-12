@@ -98,6 +98,15 @@ export function RecorderSection({ api }: { api: MainWindowAPI }): React.JSX.Elem
     [api],
   )
 
+  const exportAll = useCallback(async () => {
+    const result = await api.evalExportAllFixtures()
+    if (!result.success) {
+      if (result.error !== 'Canceled') toast.error(result.error ?? 'Export failed')
+      return
+    }
+    toast.success(`Exported ${result.count} recordings`)
+  }, [api])
+
   const deleteFixture = useCallback(
     async (name: string) => {
       const result = await api.evalDeleteFixture(name)
@@ -190,6 +199,7 @@ export function RecorderSection({ api }: { api: MainWindowAPI }): React.JSX.Elem
         onDeleteFixture={(name) => void deleteFixture(name)}
         onFreeRecording={() => void start()}
         onImportScenarios={() => void importScripts()}
+        onExportAll={fixtures.length > 0 ? () => void exportAll() : undefined}
       />
     </>
   )

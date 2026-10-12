@@ -170,6 +170,7 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
     ipcRenderer.invoke('main-window:evalSaveGoldenBlocks', name, blocks),
   evalDeleteFixture: (name: string) => ipcRenderer.invoke('main-window:evalDeleteFixture', name),
   evalExportFixture: (name: string) => ipcRenderer.invoke('main-window:evalExportFixture', name),
+  evalExportAllFixtures: () => ipcRenderer.invoke('main-window:evalExportAllFixtures'),
   // Task-mining goldens (Developer → Tasks tab)
   evalListTaskSightings: () => ipcRenderer.invoke('main-window:evalListTaskSightings'),
   evalPreviewTaskGolden: (sightingId: string, beforeMin: number, afterMin: number) =>

@@ -1345,6 +1345,24 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     },
   )
 
+  ipcMain.handle('main-window:evalExportAllFixtures', async () => {
+    if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
+    const stamp = new Date().toISOString().slice(0, 10)
+    const result = await showSaveDialog(getMainWindow(), {
+      title: 'Export All Recordings',
+      defaultPath: path.join(app.getPath('desktop'), `eval-recordings-${stamp}.zip`),
+      buttonLabel: 'Export',
+      filters: [{ name: 'ZIP Archives', extensions: ['zip'] }],
+    })
+    if (result.canceled || !result.filePath) return { success: false as const, error: 'Canceled' }
+    try {
+      const count = await deps.evalFixtureStore.exportAllZip(result.filePath)
+      return { success: true as const, count }
+    } catch (error) {
+      return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
+    }
+  })
+
   // Task-mining goldens (Developer → Tasks tab). Source: mined sightings;
   // output: {userData}/task-fixtures via taskFixtureStore.
   ipcMain.handle('main-window:evalListTaskSightings', () => {
