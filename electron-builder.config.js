@@ -12,6 +12,8 @@ const macTargets = isEnterprise
       { target: 'dmg', arch: ['arm64'] },
     ]
 
+const appFiles = ['out/**/*', 'package.json', '!node_modules/onnxruntime-web/**']
+
 const macConfig = {
   minimumSystemVersion: '13.0',
   notarize: false,
@@ -27,6 +29,7 @@ const macConfig = {
   artifactName: '${productName}-${arch}-mac.${ext}',
   target: macTargets,
   files: [
+    ...appFiles,
     '!node_modules/onnxruntime-node/bin/*/{linux,win32}/**',
     '!node_modules/onnxruntime-node/bin/*/darwin/*/libonnxruntime.*.*.*.dylib',
   ],
@@ -60,7 +63,7 @@ module.exports = {
     buildResources: 'assets',
     output: `dist/${edition}`,
   },
-  files: ['out/**/*', 'package.json', '!node_modules/onnxruntime-web/**'],
+  files: appFiles,
   extraMetadata: {
     name: packageName,
     productName,
@@ -123,6 +126,7 @@ module.exports = {
     },
     target: winTargets,
     files: [
+      ...appFiles,
       '!node_modules/onnxruntime-node/bin/*/{darwin,linux}/**',
       '!node_modules/onnxruntime-node/bin/*/win32/arm64/**',
     ],
