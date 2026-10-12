@@ -11,7 +11,12 @@ import * as path from 'path'
 import * as yazl from 'yazl'
 import log from '@main/utils/logger'
 import type { DumpedFrame, FixtureManifest } from './types'
-import type { EvalEventWindow, EvalFixtureLoad, EvalFixtureSummary } from '../../shared/eval-review'
+import type {
+  EvalEventWindow,
+  EvalFixtureLoad,
+  EvalFixtureSummary,
+  ScriptCheck,
+} from '../../shared/eval-review'
 import type { EventWindow, InteractionContext } from '../../shared/types'
 import { readJsonl } from './jsonl'
 import { describeInteraction } from '../semantic/prompt'
@@ -73,7 +78,23 @@ export class EvalFixtureStore {
 
     const eventWindows = this.loadEventWindows(dir)
 
-    return { name: path.basename(name), label: manifest.label, goldenMd, videoUrl, eventWindows }
+    return {
+      name: path.basename(name),
+      label: manifest.label,
+      goldenMd,
+      scriptId: manifest.script ?? null,
+      scriptCheck: this.readScriptCheck(dir),
+      videoUrl,
+      eventWindows,
+    }
+  }
+
+  private readScriptCheck(dir: string): ScriptCheck | null {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(dir, 'script-check.json'), 'utf8')) as ScriptCheck
+    } catch {
+      return null
+    }
   }
 
   /**

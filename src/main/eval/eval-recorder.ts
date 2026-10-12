@@ -24,6 +24,8 @@ import { FrameDebugDumper } from '@main/debug/frame-debug-dump'
 import { EventWindowDebugDumper } from '@main/debug/event-window-debug-dump'
 import { ActivityDebugDumper } from './activity-debug-dump'
 import { promoteCapture, type PromoteCaptureResult } from './promote-fixture'
+import { getRecordingScript } from './recording-scripts'
+import type { RecordingScript } from '../../shared/eval-review'
 
 export interface EvalRecordingStatus {
   recording: boolean
@@ -52,6 +54,8 @@ export class EvalRecorder {
   private eventSub: StreamSubscription | null = null
   private activityUnsub: (() => void) | null = null
   private startedCapture = false
+  private script: RecordingScript | null = null
+  private stopping = false
 
   constructor(deps: {
     harness: PipelineHarness
@@ -72,8 +76,10 @@ export class EvalRecorder {
   }
 
   /** Begins capturing the producer's frame + event-window streams to a staging dir. */
-  start(name: string): EvalRecordingStatus {
+  start(name: string, scriptId?: string): EvalRecordingStatus {
     if (this.isRecording()) throw new Error('A recording is already in progress')
+    const script = scriptId ? getRecordingScript(scriptId) : null
+    if (scriptId && !script) throw new Error(`Unknown script: ${scriptId}`)
 
     const safeName = sanitizeFixtureName(name)
     const stagingDir = path.join(this.fixturesRoot, '.staging', safeName)
@@ -118,6 +124,7 @@ export class EvalRecorder {
     if (this.startedCapture) this.capture.startCapture()
 
     this.activeName = safeName
+    this.script = script
     this.startedAt = Date.now()
     this.stagingDir = stagingDir
     log.info(`[EvalRecorder] Recording "${safeName}" -> ${stagingDir}`)
@@ -129,6 +136,8 @@ export class EvalRecorder {
     const name = this.activeName
     const stagingDir = this.stagingDir
     if (!name || !stagingDir) throw new Error('No recording in progress')
+    if (this.stopping) throw new Error('Recording is already stopping')
+    this.stopping = true
 
     // Drain so the session's final activity closes, gets summarized, persisted,
     // and dumped before we promote — otherwise its golden summary seeds blank.
@@ -166,6 +175,7 @@ export class EvalRecorder {
         // Always refresh the golden — re-recording the same name should reflect
         // this capture, not silently keep a stale scaffold.
         reseed: true,
+        script: this.script ?? undefined,
       })
       log.info(`[EvalRecorder] Promoted "${name}" -> ${result.fixtureDir}`)
       return result
@@ -178,6 +188,8 @@ export class EvalRecorder {
       this.startedAt = null
       this.stagingDir = null
       this.startedCapture = false
+      this.script = null
+      this.stopping = false
     }
   }
 }

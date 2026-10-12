@@ -25,6 +25,10 @@ interface TrayDependencies {
   }
   requiresActivation: () => boolean
   storage: StorageService
+  evalRecording: {
+    isRecording: () => boolean
+    stop: () => void
+  }
 }
 
 // Tray menus are static once set; while paused we periodically rebuild so the
@@ -190,9 +194,16 @@ export const updateTrayMenu = async (): Promise<void> => {
   )
 
   const usageStatsSubmenu = await buildUsageStatsSubmenu()
+  if (!tray) return
 
   const updateState = getUpdateState()
   const contextMenu = Menu.buildFromTemplate([
+    ...(deps.evalRecording.isRecording()
+      ? [
+          { label: 'Stop eval recording', click: () => deps!.evalRecording.stop() },
+          { type: 'separator' as const },
+        ]
+      : []),
     ...(updateState === 'ready'
       ? [
           { label: 'Install Update Now (Restart)', click: () => void quitAndInstall() },

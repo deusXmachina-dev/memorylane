@@ -4,6 +4,7 @@ import type {
   EvalFixtureSummary,
   EvalPromoteSummary,
   EvalRecordingStatus,
+  RecordingScript,
   TaskFixtureLoad,
   TaskFixtureSummary,
   TaskGoldenDraft,
@@ -477,7 +478,9 @@ export interface MainWindowAPI {
   // Eval recorder + fixture review (Developer mode)
   evalStartRecording: (
     name: string,
+    scriptId?: string,
   ) => Promise<{ success: boolean; status?: EvalRecordingStatus; error?: string }>
+  evalListScripts: () => Promise<RecordingScript[]>
   evalStopRecording: () => Promise<{
     success: boolean
     fixture?: EvalPromoteSummary

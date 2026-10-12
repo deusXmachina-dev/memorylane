@@ -44,11 +44,48 @@ export interface EvalEventWindow {
   events: EvalEvent[]
 }
 
+/** One step of a recording script: what to do, and the activity it should produce. */
+export interface RecordingScriptStep {
+  instruction: string
+  expect: {
+    /** Accepted app names; `browser` matches any known browser. */
+    app: string[]
+    tld?: string
+    /** Expected to be dropped (e.g. a <3s hop). */
+    dropped?: true
+    /** Target summary. Omitted on a dropped step or a heuristic `Viewed …` step. */
+    summary?: string
+    mustMention?: string[]
+  }
+}
+
+/** A short scripted session; each step maps to one expected activity. */
+export interface RecordingScript {
+  id: string
+  title: string
+  /** Pipeline behaviours this script exercises. */
+  targets: string[]
+  /** State to set up before pressing Start. */
+  setup: string
+  steps: RecordingScriptStep[]
+}
+
+/** Whether a scripted recording produced the activities its script expects. */
+export interface ScriptCheck {
+  scriptId: string
+  followed: boolean
+  expected: number
+  produced: number
+  issues: string[]
+}
+
 /** A fixture loaded for review: the editable golden + the review video. */
 export interface EvalFixtureLoad {
   name: string
   label: string
   goldenMd: string
+  scriptId: string | null
+  scriptCheck: ScriptCheck | null
   /** `mlmedia://` URL streaming `session.mp4` off disk (seekable), or null. */
   videoUrl: string | null
   /** Captured interaction events, window-grouped; `[]` when none on disk. */

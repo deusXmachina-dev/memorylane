@@ -152,7 +152,9 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   // App lifecycle
   restartApp: () => ipcRenderer.invoke('main-window:restartApp'),
   // Eval recorder + fixture review (Developer mode)
-  evalStartRecording: (name: string) => ipcRenderer.invoke('main-window:evalStartRecording', name),
+  evalStartRecording: (name: string, scriptId?: string) =>
+    ipcRenderer.invoke('main-window:evalStartRecording', name, scriptId),
+  evalListScripts: () => ipcRenderer.invoke('main-window:evalListScripts'),
   evalStopRecording: () => ipcRenderer.invoke('main-window:evalStopRecording'),
   evalRecordingStatus: () => ipcRenderer.invoke('main-window:evalRecordingStatus'),
   evalListFixtures: () => ipcRenderer.invoke('main-window:evalListFixtures'),

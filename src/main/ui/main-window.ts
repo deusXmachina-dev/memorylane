@@ -32,6 +32,7 @@ import type { RemoteModelConfig } from '../../shared/remote-model-config'
 import { applyVendorSwitch } from './vendor-switch'
 import { applyModelSettings } from './model-settings'
 import type { EvalRecorder } from '../eval/eval-recorder'
+import { RECORDING_SCRIPTS } from '../eval/recording-scripts'
 import type { EvalFixtureStore } from '../eval/eval-fixture-store'
 import type { TaskFixtureStore } from '../eval/task-fixture-store'
 import {
@@ -314,6 +315,28 @@ export function getMainWindow(): BrowserWindow | null {
     return mainWindow
   }
   return null
+}
+
+/** Gets the main window out of the way so a scripted take starts in the user's own app. */
+async function hideForScriptedRecording(): Promise<void> {
+  const win = getMainWindow()
+  if (!win) return
+  if (process.platform === 'darwin') app.hide()
+  else win.minimize()
+  await new Promise((resolve) => setTimeout(resolve, 500))
+}
+
+/** Tray action: stops an eval recording without switching back to the app mid-take. */
+export async function stopEvalRecordingFromTray(): Promise<void> {
+  if (!deps) return
+  try {
+    const result = await deps.evalRecorder.stop()
+    log.info(`[EvalRecorder] Stopped from tray -> ${result.fixtureDir}`)
+  } catch (error) {
+    log.warn('[EvalRecorder] Tray stop failed:', error)
+  }
+  void updateTrayMenu()
+  openMainWindow()
 }
 
 /**
@@ -1086,20 +1109,31 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
 
   // Eval recorder + fixture review (Developer mode). Handlers ship in every build
   // and are inert until the hidden UI invokes them.
-  ipcMain.handle('main-window:evalStartRecording', (_event: IpcMainInvokeEvent, name: unknown) => {
-    if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
-    try {
-      const status = deps.evalRecorder.start(typeof name === 'string' ? name : '')
-      return { success: true as const, status }
-    } catch (error) {
-      return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
-    }
-  })
+  ipcMain.handle(
+    'main-window:evalStartRecording',
+    async (_event: IpcMainInvokeEvent, name: unknown, scriptId: unknown) => {
+      if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
+      try {
+        if (typeof scriptId === 'string') await hideForScriptedRecording()
+        const status = deps.evalRecorder.start(
+          typeof name === 'string' ? name : '',
+          typeof scriptId === 'string' ? scriptId : undefined,
+        )
+        void updateTrayMenu()
+        return { success: true as const, status }
+      } catch (error) {
+        return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
+      }
+    },
+  )
+
+  ipcMain.handle('main-window:evalListScripts', () => RECORDING_SCRIPTS)
 
   ipcMain.handle('main-window:evalStopRecording', async () => {
     if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
     try {
       const result = await deps.evalRecorder.stop()
+      void updateTrayMenu()
       return {
         success: true as const,
         fixture: {

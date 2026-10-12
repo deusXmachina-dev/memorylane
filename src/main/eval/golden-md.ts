@@ -51,6 +51,8 @@ export interface GoldenActivity {
    */
   dropped?: boolean
   summary: string
+  /** Facts the candidate summary must contain (`Must mention: a; b`). */
+  mustMention?: string[]
 }
 
 export const HEADER_RE = /^##\s+(?:(\d+)\.\s*)?(.+?)(?:\s+—\s+(.+))?\s*$/
@@ -58,6 +60,7 @@ export const HEADER_RE = /^##\s+(?:(\d+)\.\s*)?(.+?)(?:\s+—\s+(.+))?\s*$/
 // `· App`); older goldens have none. It's captured but appName is taken from the
 // header, so the label is advisory.
 export const TIME_RE = /^\s*(\d+):(\d{2})\s*(?:->|→)\s*(\d+):(\d{2})\s*(?:·(.*))?$/
+const MUST_MENTION_RE = /^\s*Must mention:\s*(.*)$/i
 
 export function formatOffset(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000))
@@ -95,11 +98,16 @@ function parseOffset(min: string, sec: string): number {
   return (parseInt(min, 10) * 60 + parseInt(sec, 10)) * 1000
 }
 
+export type GoldenSource = Pick<
+  ReplayActivity,
+  'startTimestamp' | 'endTimestamp' | 'appName' | 'windowTitle' | 'tld' | 'dropped' | 'summary'
+> & { mustMention?: string[] }
+
 /** Renders a golden.md scaffold from a replay's activities (summaries left blank
  *  when no LLM ran, so the user fills them in). */
 export function renderGoldenMd(
   fixture: string,
-  activities: ReplayActivity[],
+  activities: GoldenSource[],
   sessionStartMs?: number,
 ): string {
   const sorted = [...activities].sort((a, b) => a.startTimestamp - b.startTimestamp)
@@ -127,6 +135,10 @@ export function renderGoldenMd(
       lines.push(`DROPPED — ${act.dropped.reason}: ${act.dropped.detail}`)
     } else {
       lines.push(act.summary || '_(no summary produced — fill in the target)_')
+      if (act.mustMention?.length) {
+        lines.push('')
+        lines.push(`Must mention: ${act.mustMention.join('; ')}`)
+      }
     }
     lines.push('')
     if (i < sorted.length - 1) {
@@ -165,8 +177,17 @@ export function parseGoldenMd(text: string): GoldenActivity[] {
     if (timeLineIdx === -1) continue
 
     const summaryLines: string[] = []
+    let mustMention: string[] | undefined
     for (let i = timeLineIdx + 1; i < block.length; i++) {
       if (block[i].trim() === '---') break
+      const mm = block[i].match(MUST_MENTION_RE)
+      if (mm) {
+        mustMention = mm[1]
+          .split(';')
+          .map((t) => t.trim())
+          .filter(Boolean)
+        continue
+      }
       summaryLines.push(block[i])
     }
     const summary = summaryLines.join('\n').trim()
@@ -181,6 +202,7 @@ export function parseGoldenMd(text: string): GoldenActivity[] {
       endOffsetMs,
       dropped: dropped || undefined,
       summary,
+      mustMention: mustMention?.length ? mustMention : undefined,
     })
   }
 

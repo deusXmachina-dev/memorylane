@@ -181,3 +181,13 @@ function finalize(checks: DeterministicCheck[]): DeterministicResult {
     passRate: checks.length === 0 ? 1 : passed / checks.length,
   }
 }
+
+/** Share of `facts` the summary contains (case-insensitive), plus the ones it missed. */
+export function mustMentionRecall(
+  summary: string,
+  facts: string[],
+): { recall: number; missed: string[] } {
+  const text = summary.toLowerCase()
+  const missed = facts.filter((f) => !text.includes(f.toLowerCase()))
+  return { recall: facts.length ? (facts.length - missed.length) / facts.length : 1, missed }
+}

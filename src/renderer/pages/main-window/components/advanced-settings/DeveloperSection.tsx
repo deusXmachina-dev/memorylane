@@ -12,9 +12,16 @@ import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Textarea } from '@components/ui/textarea'
 import { Card, CardContent } from '@components/ui/card'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@components/ui/select'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@components/ui/tabs'
 import type { MainWindowAPI } from '@types'
-import type { EvalFixtureLoad, EvalFixtureSummary } from '@/shared/eval-review'
+import type { EvalFixtureLoad, EvalFixtureSummary, RecordingScript } from '@/shared/eval-review'
 import { setDevMode } from '@/renderer/lib/dev-mode'
 import { SettingsSection } from './SettingsSection'
 import { TaskGoldenSection } from './TaskGoldenSection'
@@ -157,17 +164,24 @@ function elapsed(startedAt: number, now: number): string {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
 }
 
-function defaultName(): string {
+const FREE_RECORDING = 'free'
+
+function defaultName(scriptId = FREE_RECORDING): string {
   // Local time, filesystem-friendly — sanitized again in the main process.
-  return new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
+  return scriptId === FREE_RECORDING ? stamp : `${scriptId}-${stamp}`
 }
 
 function RecorderSection({ api }: { api: MainWindowAPI }): React.JSX.Element {
   const [recording, setRecording] = useState(false)
   const [startedAt, setStartedAt] = useState<number | null>(null)
   const [now, setNow] = useState(() => Date.now())
-  const [name, setName] = useState(defaultName)
+  const [name, setName] = useState(() => defaultName())
   const [busy, setBusy] = useState(false)
+  const [scripts, setScripts] = useState<RecordingScript[]>([])
+  const [scriptId, setScriptId] = useState(FREE_RECORDING)
+  const script = scripts.find((s) => s.id === scriptId) ?? null
+  const recordingName = useRef<string | null>(null)
 
   const [fixtures, setFixtures] = useState<EvalFixtureSummary[]>([])
   const [selected, setSelected] = useState<EvalFixtureLoad | null>(null)
@@ -184,48 +198,10 @@ function RecorderSection({ api }: { api: MainWindowAPI }): React.JSX.Element {
       const status = await api.evalRecordingStatus()
       setRecording(status.recording)
       setStartedAt(status.startedAt)
+      recordingName.current = status.name
+      setScripts(await api.evalListScripts())
       await refreshFixtures()
     })()
-  }, [api, refreshFixtures])
-
-  // Tick the elapsed clock while recording.
-  useEffect(() => {
-    if (!recording) return
-    const id = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(id)
-  }, [recording])
-
-  const startRecording = useCallback(async () => {
-    setBusy(true)
-    const result = await api.evalStartRecording(name)
-    setBusy(false)
-    if (!result.success) {
-      toast.error(result.error ?? 'Failed to start recording')
-      return
-    }
-    setRecording(true)
-    setStartedAt(result.status?.startedAt ?? Date.now())
-    setNow(Date.now())
-    toast.success('Recording started')
-  }, [api, name])
-
-  const stopRecording = useCallback(async () => {
-    setBusy(true)
-    toast.loading('Promoting fixture…', { id: 'eval-stop' })
-    const result = await api.evalStopRecording()
-    setBusy(false)
-    setRecording(false)
-    setStartedAt(null)
-    if (!result.success) {
-      toast.error(result.error ?? 'Failed to stop recording', { id: 'eval-stop' })
-      return
-    }
-    toast.success(
-      `Fixture "${result.fixture?.name}" created (${result.fixture?.frameCount ?? 0} frames)`,
-      { id: 'eval-stop' },
-    )
-    setName(defaultName())
-    await refreshFixtures()
   }, [api, refreshFixtures])
 
   const openFixture = useCallback(
@@ -240,6 +216,65 @@ function RecorderSection({ api }: { api: MainWindowAPI }): React.JSX.Element {
     },
     [api],
   )
+
+  const chooseScript = useCallback((id: string) => {
+    setScriptId(id)
+    setName(defaultName(id))
+  }, [])
+
+  // Tick the elapsed clock while recording, and notice a stop from the tray.
+  useEffect(() => {
+    if (!recording || busy) return
+    const id = setInterval(() => {
+      setNow(Date.now())
+      void api.evalRecordingStatus().then(async (status) => {
+        if (status.recording) return
+        setRecording(false)
+        setStartedAt(null)
+        setName(defaultName(scriptId))
+        await refreshFixtures()
+        if (recordingName.current) await openFixture(recordingName.current)
+        recordingName.current = null
+      })
+    }, 1000)
+    return () => clearInterval(id)
+  }, [api, recording, busy, scriptId, refreshFixtures, openFixture])
+
+  const startRecording = useCallback(async () => {
+    setBusy(true)
+    const result = await api.evalStartRecording(name, script?.id)
+    setBusy(false)
+    if (!result.success) {
+      toast.error(result.error ?? 'Failed to start recording')
+      return
+    }
+    setRecording(true)
+    setStartedAt(result.status?.startedAt ?? Date.now())
+    setNow(Date.now())
+    recordingName.current = result.status?.name ?? null
+    toast.success('Recording started')
+  }, [api, name, script])
+
+  const stopRecording = useCallback(async () => {
+    setBusy(true)
+    toast.loading('Promoting fixture…', { id: 'eval-stop' })
+    const result = await api.evalStopRecording()
+    setBusy(false)
+    setRecording(false)
+    setStartedAt(null)
+    recordingName.current = null
+    if (!result.success) {
+      toast.error(result.error ?? 'Failed to stop recording', { id: 'eval-stop' })
+      return
+    }
+    toast.success(
+      `Fixture "${result.fixture?.name}" created (${result.fixture?.frameCount ?? 0} frames)`,
+      { id: 'eval-stop' },
+    )
+    setName(defaultName(scriptId))
+    await refreshFixtures()
+    if (result.fixture) await openFixture(result.fixture.name)
+  }, [api, scriptId, refreshFixtures, openFixture])
 
   const saveGolden = useCallback(async () => {
     if (!selected) return
@@ -286,6 +321,10 @@ function RecorderSection({ api }: { api: MainWindowAPI }): React.JSX.Element {
         onGoldenChange={setGoldenDraft}
         onSave={saveGolden}
         onBack={() => setSelected(null)}
+        onRerecord={(id) => {
+          setSelected(null)
+          chooseScript(id)
+        }}
       />
     )
   }
@@ -294,8 +333,37 @@ function RecorderSection({ api }: { api: MainWindowAPI }): React.JSX.Element {
     <div className="space-y-6">
       <SettingsSection
         title="Record eval session"
-        description="Records a real session and turns it into an eval fixture (video + editable golden). Capture is left as you found it when you stop."
+        description="Pick a script, set up, press Start and follow the steps. The golden is filled from the script. Capture is left as you found it when you stop."
       >
+        {!recording && (
+          <div className="space-y-3 pt-3">
+            <Select value={scriptId} onValueChange={(v) => chooseScript(v as string)}>
+              <SelectTrigger className="w-full max-w-md">
+                <SelectValue>
+                  {(v) =>
+                    v === FREE_RECORDING
+                      ? 'Free recording'
+                      : (scripts.find((s) => s.id === v)?.title ?? v)
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={FREE_RECORDING}>Free recording</SelectItem>
+                {scripts.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {script && <ScriptCard script={script} />}
+          </div>
+        )}
+        {recording && script && (
+          <div className="pt-3">
+            <ScriptCard script={script} />
+          </div>
+        )}
         <div className="flex items-center gap-2 py-3">
           {recording ? (
             <>
@@ -359,6 +427,65 @@ function RecorderSection({ api }: { api: MainWindowAPI }): React.JSX.Element {
   )
 }
 
+function ScriptCard({ script }: { script: RecordingScript }): React.JSX.Element {
+  return (
+    <Card>
+      <CardContent className="space-y-3 p-4">
+        <div className="text-sm">
+          <span className="font-medium">Set up: </span>
+          {script.setup}
+        </div>
+        <ol className="list-decimal space-y-1 pl-5 text-base">
+          {script.steps.map((step, i) => (
+            <li key={i}>{step.instruction}</li>
+          ))}
+        </ol>
+        <p className="text-xs text-muted-foreground">
+          Start hides this window. When done, stop from the tray icon.
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
+
+function ScriptCheckBanner({
+  fixture,
+  onRerecord,
+}: {
+  fixture: EvalFixtureLoad
+  onRerecord: (scriptId: string) => void
+}): React.JSX.Element | null {
+  const check = fixture.scriptCheck
+  if (!check) return null
+  if (check.followed) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Followed the script ✓ Golden filled from the script.
+      </p>
+    )
+  }
+  return (
+    <Card>
+      <CardContent className="flex items-start gap-3 p-3">
+        <div className="flex-1 space-y-1 text-sm">
+          <div className="font-medium">Recording doesn't match the script</div>
+          <ul className="list-disc pl-5 text-muted-foreground">
+            {check.issues.map((issue, i) => (
+              <li key={i}>{issue}</li>
+            ))}
+          </ul>
+          <p className="text-xs text-muted-foreground">
+            Re-record, or if you did follow it, this is a pipeline bug: write the golden by hand.
+          </p>
+        </div>
+        <Button size="sm" variant="secondary" onClick={() => onRerecord(check.scriptId)}>
+          <RecordIcon weight="fill" /> Re-record
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
 function FixtureReview({
   fixture,
   goldenDraft,
@@ -366,6 +493,7 @@ function FixtureReview({
   onGoldenChange,
   onSave,
   onBack,
+  onRerecord,
 }: {
   fixture: EvalFixtureLoad
   goldenDraft: string
@@ -373,6 +501,7 @@ function FixtureReview({
   onGoldenChange: (value: string) => void
   onSave: () => void
   onBack: () => void
+  onRerecord: (scriptId: string) => void
 }): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null)
 
@@ -387,6 +516,8 @@ function FixtureReview({
           <FloppyDiskIcon /> Save golden
         </Button>
       </div>
+
+      <ScriptCheckBanner fixture={fixture} onRerecord={onRerecord} />
 
       {/* Video on top (kept small), then events + golden.md as scrollable columns. */}
       <Card>

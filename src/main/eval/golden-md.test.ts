@@ -69,6 +69,18 @@ describe('renderGoldenMd → parseGoldenMd round-trip', () => {
     })
   })
 
+  it('round-trips `Must mention:` facts without folding them into the summary', () => {
+    const md = renderGoldenMd('facts', [
+      { ...replayActivity(), mustMention: ['auth middleware', 'Q3; draft'] },
+      replayActivity({ activityId: 'a2', startTimestamp: 1_090_000, endTimestamp: 1_130_000 }),
+    ])
+    expect(md).toContain('Must mention: auth middleware; Q3; draft')
+    const [first, second] = parseGoldenMd(md)
+    expect(first.summary).toBe('Stepped through the auth middleware in the debugger.')
+    expect(first.mustMention).toEqual(['auth middleware', 'Q3', 'draft'])
+    expect(second.mustMention).toBeUndefined()
+  })
+
   it('renders the `· App · tld` label and parses the tld back', () => {
     const acts = [
       replayActivity({ activityId: 'a1', appName: 'Code', tld: undefined }),
