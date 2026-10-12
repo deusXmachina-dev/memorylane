@@ -9,19 +9,20 @@
  * that directory to PATH at module-evaluation time — before any subsequent static
  * import can trigger a require('onnxruntime-node').
  */
+import fs from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
 
 if (process.platform === 'win32' && app.isPackaged) {
-  const onnxBinDir = path.join(
+  const binRoot = path.join(
     process.resourcesPath,
     'app.asar.unpacked',
     'node_modules',
     'onnxruntime-node',
     'bin',
-    'napi-v6',
-    'win32',
-    process.arch,
   )
-  process.env.PATH = `${onnxBinDir};${process.env.PATH ?? ''}`
+  const onnxBinDirs = (fs.existsSync(binRoot) ? fs.readdirSync(binRoot) : [])
+    .map((napi) => path.join(binRoot, napi, 'win32', process.arch))
+    .filter((dir) => fs.existsSync(path.join(dir, 'onnxruntime_binding.node')))
+  process.env.PATH = [...onnxBinDirs, process.env.PATH ?? ''].join(';')
 }

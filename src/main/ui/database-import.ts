@@ -1,4 +1,4 @@
-import { type BrowserWindow } from 'electron'
+import { app, type BrowserWindow } from 'electron'
 import { showMessageBox, showOpenDialog } from '@main/ui/dialogs'
 import Database from 'better-sqlite3'
 import fs from 'node:fs'
@@ -125,6 +125,7 @@ export async function importDatabase({
   try {
     const openResult = await showOpenDialog(parentWindow, {
       title: 'Import Database',
+      defaultPath: app.getPath('documents'),
       buttonLabel: 'Import',
       properties: ['openFile'],
       filters: [{ name: 'MemoryLane Database', extensions: ['zip', 'db'] }],
