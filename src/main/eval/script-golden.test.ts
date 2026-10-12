@@ -33,14 +33,15 @@ const script: RecordingScript = {
   id: 'demo',
   title: 'Demo',
   targets: [],
-  setup: '',
+  setup: [],
   steps: [
     {
       instruction: '',
+      seconds: 5,
       expect: { app: ['TextEdit'], summary: 'Wrote a note.', mustMention: ['note'] },
     },
-    { instruction: '', expect: { app: ['browser'], dropped: true } },
-    { instruction: '', expect: { app: ['browser'], tld: 'en.wikipedia.org' } },
+    { instruction: '', seconds: 1, expect: { app: ['browser'], dropped: true } },
+    { instruction: '', seconds: 20, expect: { app: ['browser'], tld: 'en.wikipedia.org' } },
   ],
 }
 
@@ -63,6 +64,11 @@ describe('goldenFromScript', () => {
       expected: 3,
       produced: 3,
       issues: [],
+      steps: [
+        { ok: true, got: 'TextEdit', issue: null },
+        { ok: true, got: 'Google Chrome', issue: null },
+        { ok: true, got: 'Google Chrome · en.wikipedia.org', issue: null },
+      ],
     })
     expect(golden?.map((g) => g.summary)).toEqual([
       'Wrote a note.',
@@ -93,6 +99,13 @@ describe('goldenFromScript', () => {
       'step 2: expected a drop, got a kept Google Chrome · en.wikipedia.org',
       'step 3: expected a hands-off view, but Google Chrome · en.wikipedia.org had input',
     ])
+    expect(check.steps?.map((s) => s.ok)).toEqual([false, false, false])
+  })
+
+  it('marks steps with nothing recorded', () => {
+    const { check } = goldenFromScript(script, [block(0, 'TextEdit')])
+    expect(check.steps?.map((s) => s.got)).toEqual(['TextEdit', null, null])
+    expect(check.steps?.[1].issue).toBe('nothing recorded for this step')
   })
 })
 

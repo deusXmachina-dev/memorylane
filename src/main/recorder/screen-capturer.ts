@@ -52,6 +52,11 @@ export class ScreenCapturer {
     this.backend.send({ intervalMs: ms })
   }
 
+  /** Re-reads which windows to leave out of frames (the eval recording guide). */
+  refreshCaptureFilter(): void {
+    if (this._capturing) this.backend.send({ refreshFilter: true })
+  }
+
   async start(): Promise<void> {
     if (this._capturing) return
     this._capturing = true

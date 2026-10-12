@@ -30,6 +30,7 @@ let fixturesRoot: string
 let frameStream: InMemoryStream<Frame>
 let eventStream: InMemoryStream<EventWindow>
 let harness: PipelineHarness
+let refreshCaptureFilter: () => void
 let capture: RuntimeCaptureController
 let setRetain: (value: boolean) => void
 let sweepNow: () => void
@@ -53,6 +54,7 @@ beforeEach(() => {
   capturing = false
 
   const flush: () => void = vi.fn()
+  refreshCaptureFilter = vi.fn()
   const drainActivities: () => Promise<void> = vi.fn().mockResolvedValue(undefined)
   const waitForIdle: () => Promise<void> = vi.fn().mockResolvedValue(undefined)
 
@@ -63,6 +65,7 @@ beforeEach(() => {
     drainActivities,
     setRetainScreenshots: setRetain,
     sweepNow,
+    screenCapturer: { refreshCaptureFilter },
   } as PipelineHarness
 
   capture = {
@@ -144,6 +147,7 @@ describe('EvalRecorder', () => {
     const recorder = new EvalRecorder({ harness, capture, fixturesRoot })
     recorder.start('rec2')
     expect(startCapture).not.toHaveBeenCalled()
+    expect(refreshCaptureFilter).toHaveBeenCalled()
 
     await appendFrameAndWindow()
     await recorder.stop()
@@ -151,6 +155,19 @@ describe('EvalRecorder', () => {
     // The extractor must still be drained even though we never stopped capture —
     // this is the race that previously left the final summaries unpersisted.
     expect(harness.drainActivities).toHaveBeenCalled()
+  })
+
+  it('cancels without writing a fixture', async () => {
+    const recorder = new EvalRecorder({ harness, capture, fixturesRoot })
+    recorder.start('rec5')
+    await appendFrameAndWindow()
+    await recorder.cancel()
+
+    expect(recorder.isRecording()).toBe(false)
+    expect(stopCapture).toHaveBeenCalled()
+    expect(setRetain).toHaveBeenLastCalledWith(false)
+    expect(fs.existsSync(path.join(fixturesRoot, 'rec5'))).toBe(false)
+    expect(fs.existsSync(path.join(fixturesRoot, '.staging', 'rec5'))).toBe(false)
   })
 
   it('rejects a second concurrent recording', () => {

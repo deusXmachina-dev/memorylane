@@ -25,13 +25,7 @@ import { EventWindowDebugDumper } from '@main/debug/event-window-debug-dump'
 import { ActivityDebugDumper } from './activity-debug-dump'
 import { promoteCapture, type PromoteCaptureResult } from './promote-fixture'
 import { getRecordingScript } from './recording-scripts'
-import type { RecordingScript } from '../../shared/eval-review'
-
-export interface EvalRecordingStatus {
-  recording: boolean
-  name: string | null
-  startedAt: number | null
-}
+import type { EvalRecordingStatus, RecordingScript } from '../../shared/eval-review'
 
 /** Filesystem-safe fixture name (the dir under the fixtures root). */
 export function sanitizeFixtureName(name: string): string {
@@ -72,7 +66,12 @@ export class EvalRecorder {
   }
 
   getStatus(): EvalRecordingStatus {
-    return { recording: this.isRecording(), name: this.activeName, startedAt: this.startedAt }
+    return {
+      recording: this.isRecording(),
+      name: this.activeName,
+      startedAt: this.startedAt,
+      scriptId: this.script?.id ?? null,
+    }
   }
 
   /** Begins capturing the producer's frame + event-window streams to a staging dir. */
@@ -122,6 +121,7 @@ export class EvalRecorder {
     // is off, and remember so we can restore the prior state on stop.
     this.startedCapture = !this.capture.isCapturingNow()
     if (this.startedCapture) this.capture.startCapture()
+    else this.harness.screenCapturer.refreshCaptureFilter()
 
     this.activeName = safeName
     this.script = script
@@ -151,19 +151,7 @@ export class EvalRecorder {
     } catch (error) {
       log.warn('[EvalRecorder] drainActivities failed:', error)
     }
-    if (this.startedCapture) {
-      // We turned capture on for this recording; turn it back off to restore the
-      // operator's prior "capture off" state.
-      this.capture.stopCapture()
-      await this.capture.waitForIdle()
-    }
-
-    this.frameSub?.unsubscribe()
-    this.eventSub?.unsubscribe()
-    this.activityUnsub?.()
-    this.frameSub = null
-    this.eventSub = null
-    this.activityUnsub = null
+    await this.detach()
 
     try {
       const result = await promoteCapture({
@@ -180,16 +168,47 @@ export class EvalRecorder {
       log.info(`[EvalRecorder] Promoted "${name}" -> ${result.fixtureDir}`)
       return result
     } finally {
-      // Release retention and reclaim the screenshots that piled up; drop staging.
-      this.harness.setRetainScreenshots(false)
-      this.harness.sweepNow()
-      fs.rmSync(stagingDir, { recursive: true, force: true })
-      this.activeName = null
-      this.startedAt = null
-      this.stagingDir = null
-      this.startedCapture = false
-      this.script = null
-      this.stopping = false
+      this.release(stagingDir)
     }
+  }
+
+  /** Stops the recording and throws the capture away. */
+  async cancel(): Promise<void> {
+    const stagingDir = this.stagingDir
+    if (!this.activeName || !stagingDir) throw new Error('No recording in progress')
+    if (this.stopping) throw new Error('Recording is already stopping')
+    this.stopping = true
+    await this.detach()
+    this.release(stagingDir)
+    log.info('[EvalRecorder] Recording canceled')
+  }
+
+  private async detach(): Promise<void> {
+    if (this.startedCapture) {
+      // We turned capture on for this recording; turn it back off to restore the
+      // operator's prior "capture off" state.
+      this.capture.stopCapture()
+      await this.capture.waitForIdle()
+    }
+
+    this.frameSub?.unsubscribe()
+    this.eventSub?.unsubscribe()
+    this.activityUnsub?.()
+    this.frameSub = null
+    this.eventSub = null
+    this.activityUnsub = null
+  }
+
+  private release(stagingDir: string): void {
+    // Release retention and reclaim the screenshots that piled up; drop staging.
+    this.harness.setRetainScreenshots(false)
+    this.harness.sweepNow()
+    fs.rmSync(stagingDir, { recursive: true, force: true })
+    this.activeName = null
+    this.startedAt = null
+    this.stagingDir = null
+    this.startedCapture = false
+    this.script = null
+    this.stopping = false
   }
 }

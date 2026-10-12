@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   parseGoldenMd,
   renderGoldenMd,
+  formatGoldenMd,
   matchSegments,
   formatOffset,
   type GoldenActivity,
@@ -209,5 +210,23 @@ describe('matchSegments', () => {
     expect(report.unmatchedGoldenIndexes).toEqual([2])
     expect(report.unmatchedActivityIds).toEqual(['splinter'])
     expect(report.coverage).toBe(0.5)
+  })
+})
+
+describe('formatGoldenMd', () => {
+  it('writes parsed blocks back unchanged', () => {
+    const md = renderGoldenMd('fx', [
+      { ...replayActivity(), mustMention: ['auth', 'debugger'] },
+      replayActivity({
+        activityId: 'a2',
+        appName: 'Chrome',
+        windowTitle: '',
+        tld: 'github.com',
+        startTimestamp: 1_090_000,
+        endTimestamp: 1_092_000,
+        dropped: { reason: 'too_short', detail: '2000ms < 3000ms' },
+      }),
+    ])
+    expect(formatGoldenMd('fx', parseGoldenMd(md))).toBe(md)
   })
 })

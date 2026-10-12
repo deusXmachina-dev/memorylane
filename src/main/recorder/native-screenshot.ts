@@ -38,6 +38,7 @@ export interface ScreenshotExecutable {
 export type CaptureBackendCommand = {
   displayId?: number | null // null = reset to main display
   intervalMs?: number
+  refreshFilter?: true
 }
 
 export interface ScreenshotPlatformAdapter {

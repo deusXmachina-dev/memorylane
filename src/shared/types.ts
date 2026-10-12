@@ -4,6 +4,7 @@ import type {
   EvalFixtureSummary,
   EvalPromoteSummary,
   EvalRecordingStatus,
+  GoldenBlock,
   RecordingScript,
   TaskFixtureLoad,
   TaskFixtureSummary,
@@ -477,7 +478,6 @@ export interface MainWindowAPI {
   restartApp: () => Promise<void>
   // Eval recorder + fixture review (Developer mode)
   evalStartRecording: (
-    name: string,
     scriptId?: string,
   ) => Promise<{ success: boolean; status?: EvalRecordingStatus; error?: string }>
   evalListScripts: () => Promise<RecordingScript[]>
@@ -486,10 +486,22 @@ export interface MainWindowAPI {
     fixture?: EvalPromoteSummary
     error?: string
   }>
+  evalCancelRecording: () => Promise<{ success: boolean; error?: string }>
+  evalRestartRecording: () => Promise<{
+    success: boolean
+    status?: EvalRecordingStatus
+    error?: string
+  }>
+  evalResizeGuide: (height: number) => void
+  evalOpenSetupUrl: (url: string) => Promise<{ success: boolean; error?: string }>
   evalRecordingStatus: () => Promise<EvalRecordingStatus>
   evalListFixtures: () => Promise<EvalFixtureSummary[]>
   evalLoadFixture: (name: string) => Promise<EvalFixtureLoad | null>
   evalSaveGolden: (name: string, markdown: string) => Promise<{ success: boolean; error?: string }>
+  evalSaveGoldenBlocks: (
+    name: string,
+    blocks: GoldenBlock[],
+  ) => Promise<{ success: boolean; error?: string }>
   evalDeleteFixture: (name: string) => Promise<{ success: boolean; error?: string }>
   evalExportFixture: (name: string) => Promise<{ success: boolean; path?: string; error?: string }>
   // Task-mining goldens (Developer → Tasks tab)

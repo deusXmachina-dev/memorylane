@@ -1,5 +1,11 @@
 import { isBrowserApp } from '@/shared/app-utils'
-import type { RecordingScript, RecordingScriptStep, ScriptCheck } from '../../shared/eval-review'
+import {
+  isHandsOffStep,
+  type RecordingScript,
+  type RecordingScriptStep,
+  type ScriptCheck,
+  type ScriptStepCheck,
+} from '../../shared/eval-review'
 import type { GoldenSource } from './golden-md'
 import type { ReplayActivity } from './types'
 
@@ -11,15 +17,19 @@ function appMatches(expected: string[], appName: string): boolean {
   )
 }
 
+function describeBlock(block: ReplayActivity): string {
+  return `${block.appName}${block.tld ? ` · ${block.tld}` : ''}`
+}
+
 function stepIssue(step: RecordingScriptStep, block: ReplayActivity): string | null {
   const { expect } = step
-  const where = `${block.appName}${block.tld ? ` · ${block.tld}` : ''}`
+  const where = describeBlock(block)
   if (!appMatches(expect.app, block.appName))
     return `expected ${expect.app.join('/')}, got ${where}`
   if (expect.tld && expect.tld !== block.tld) return `expected ${expect.tld}, got ${where}`
   if (expect.dropped && !block.dropped) return `expected a drop, got a kept ${where}`
   if (!expect.dropped && block.dropped) return `${where} was dropped (${block.dropped.detail})`
-  if (!expect.dropped && !expect.summary && !block.summaryModel.startsWith('heuristic:')) {
+  if (isHandsOffStep(step) && !block.summaryModel.startsWith('heuristic:')) {
     return `expected a hands-off view, but ${where} had input`
   }
   return null
@@ -40,11 +50,13 @@ export function goldenFromScript(
   if (sorted.length !== script.steps.length) {
     issues.push(`expected ${script.steps.length} activities, got ${sorted.length}`)
   }
-  const n = Math.min(sorted.length, script.steps.length)
-  for (let i = 0; i < n; i++) {
-    const issue = stepIssue(script.steps[i], sorted[i])
+  const steps: ScriptStepCheck[] = script.steps.map((step, i) => {
+    const block = sorted[i]
+    if (!block) return { ok: false, got: null, issue: 'nothing recorded for this step' }
+    const issue = stepIssue(step, block)
     if (issue) issues.push(`step ${i + 1}: ${issue}`)
-  }
+    return { ok: issue === null, got: describeBlock(block), issue }
+  })
 
   const check: ScriptCheck = {
     scriptId: script.id,
@@ -52,6 +64,7 @@ export function goldenFromScript(
     expected: script.steps.length,
     produced: sorted.length,
     issues,
+    steps,
   }
   if (!check.followed) return { check, golden: null }
 

@@ -152,15 +152,21 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   // App lifecycle
   restartApp: () => ipcRenderer.invoke('main-window:restartApp'),
   // Eval recorder + fixture review (Developer mode)
-  evalStartRecording: (name: string, scriptId?: string) =>
-    ipcRenderer.invoke('main-window:evalStartRecording', name, scriptId),
+  evalStartRecording: (scriptId?: string) =>
+    ipcRenderer.invoke('main-window:evalStartRecording', scriptId),
   evalListScripts: () => ipcRenderer.invoke('main-window:evalListScripts'),
   evalStopRecording: () => ipcRenderer.invoke('main-window:evalStopRecording'),
+  evalCancelRecording: () => ipcRenderer.invoke('main-window:evalCancelRecording'),
+  evalRestartRecording: () => ipcRenderer.invoke('main-window:evalRestartRecording'),
+  evalResizeGuide: (height: number) => ipcRenderer.send('main-window:evalResizeGuide', height),
+  evalOpenSetupUrl: (url: string) => ipcRenderer.invoke('main-window:evalOpenSetupUrl', url),
   evalRecordingStatus: () => ipcRenderer.invoke('main-window:evalRecordingStatus'),
   evalListFixtures: () => ipcRenderer.invoke('main-window:evalListFixtures'),
   evalLoadFixture: (name: string) => ipcRenderer.invoke('main-window:evalLoadFixture', name),
   evalSaveGolden: (name: string, markdown: string) =>
     ipcRenderer.invoke('main-window:evalSaveGolden', name, markdown),
+  evalSaveGoldenBlocks: (name: string, blocks: unknown[]) =>
+    ipcRenderer.invoke('main-window:evalSaveGoldenBlocks', name, blocks),
   evalDeleteFixture: (name: string) => ipcRenderer.invoke('main-window:evalDeleteFixture', name),
   evalExportFixture: (name: string) => ipcRenderer.invoke('main-window:evalExportFixture', name),
   // Task-mining goldens (Developer → Tasks tab)

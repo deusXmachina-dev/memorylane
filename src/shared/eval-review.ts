@@ -11,6 +11,7 @@ export interface EvalRecordingStatus {
   name: string | null
   /** Epoch ms the current recording started, or null. */
   startedAt: number | null
+  scriptId: string | null
 }
 
 /** One promoted fixture, for the Developer tab's list. */
@@ -22,6 +23,9 @@ export interface EvalFixtureSummary {
   eventWindowCount: number
   appMix: string[]
   hasVideo: boolean
+  scriptId: string | null
+  /** Whether the recording matched its script; null for a free recording. */
+  scriptFollowed: boolean | null
 }
 
 /** One captured interaction, formatted for display. Offsets anchor to the
@@ -47,6 +51,8 @@ export interface EvalEventWindow {
 /** One step of a recording script: what to do, and the activity it should produce. */
 export interface RecordingScriptStep {
   instruction: string
+  /** Rough time the step takes; paces the recording guide. */
+  seconds: number
   expect: {
     /** Accepted app names; `browser` matches any known browser. */
     app: string[]
@@ -59,6 +65,17 @@ export interface RecordingScriptStep {
   }
 }
 
+/** A step where the operator keeps their hands off and the app gets a `Viewed …` summary. */
+export function isHandsOffStep(step: RecordingScriptStep): boolean {
+  return !step.expect.dropped && !step.expect.summary
+}
+
+export interface RecordingSetupItem {
+  text: string
+  /** Page the item asks for; the setup screen offers to open it. */
+  url?: string
+}
+
 /** A short scripted session; each step maps to one expected activity. */
 export interface RecordingScript {
   id: string
@@ -66,7 +83,7 @@ export interface RecordingScript {
   /** Pipeline behaviours this script exercises. */
   targets: string[]
   /** State to set up before pressing Start. */
-  setup: string
+  setup: RecordingSetupItem[]
   steps: RecordingScriptStep[]
 }
 
@@ -77,6 +94,28 @@ export interface ScriptCheck {
   expected: number
   produced: number
   issues: string[]
+  /** One entry per script step; absent on checks written before it existed. */
+  steps?: ScriptStepCheck[]
+}
+
+export interface ScriptStepCheck {
+  ok: boolean
+  /** What the step produced (`App · tld`), or null when nothing lined up with it. */
+  got: string | null
+  issue: string | null
+}
+
+/** One `## ` block of a golden.md. */
+export interface GoldenBlock {
+  appName: string
+  windowTitle?: string
+  tld?: string
+  startOffsetMs: number
+  endOffsetMs: number
+  /** A `DROPPED` marker: the pipeline is expected not to emit this span. */
+  dropped?: boolean
+  summary: string
+  mustMention?: string[]
 }
 
 /** A fixture loaded for review: the editable golden + the review video. */
@@ -84,6 +123,8 @@ export interface EvalFixtureLoad {
   name: string
   label: string
   goldenMd: string
+  /** `goldenMd` parsed into blocks, for the per-step editor. */
+  goldenBlocks: GoldenBlock[]
   scriptId: string | null
   scriptCheck: ScriptCheck | null
   /** `mlmedia://` URL streaming `session.mp4` off disk (seekable), or null. */

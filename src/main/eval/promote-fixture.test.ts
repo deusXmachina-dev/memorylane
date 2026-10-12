@@ -165,13 +165,14 @@ describe('promoteCapture', () => {
         id: 'code-edit',
         title: 'Edit auth.ts',
         targets: [],
-        setup: '',
+        setup: [],
         steps: [
           {
             instruction: '',
+            seconds: 10,
             expect: { app: ['Code'], summary: 'Edited auth.ts.', mustMention: ['auth.ts'] },
           },
-          { instruction: '', expect: { app: ['Code'], dropped: true } },
+          { instruction: '', seconds: 1, expect: { app: ['Code'], dropped: true } },
         ],
       },
     })

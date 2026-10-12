@@ -15,12 +15,14 @@ import type {
   EvalEventWindow,
   EvalFixtureLoad,
   EvalFixtureSummary,
+  GoldenBlock,
   ScriptCheck,
 } from '../../shared/eval-review'
 import type { EventWindow, InteractionContext } from '../../shared/types'
 import { readJsonl } from './jsonl'
 import { describeInteraction } from '../semantic/prompt'
 import { evalMediaUrl } from './eval-media-protocol'
+import { formatGoldenMd, parseGoldenMd } from './golden-md'
 
 /** Staging dir for in-progress recordings — never listed as a fixture. */
 const STAGING_DIR = '.staging'
@@ -58,6 +60,8 @@ export class EvalFixtureStore {
         eventWindowCount: manifest.eventWindowCount,
         appMix: manifest.appMix,
         hasVideo: fs.existsSync(path.join(dir, 'session.mp4')),
+        scriptId: manifest.script ?? null,
+        scriptFollowed: manifest.script ? (this.readScriptCheck(dir)?.followed ?? false) : null,
       })
     }
     // Newest first.
@@ -82,6 +86,7 @@ export class EvalFixtureStore {
       name: path.basename(name),
       label: manifest.label,
       goldenMd,
+      goldenBlocks: parseGoldenMd(goldenMd),
       scriptId: manifest.script ?? null,
       scriptCheck: this.readScriptCheck(dir),
       videoUrl,
@@ -144,6 +149,10 @@ export class EvalFixtureStore {
     const dir = this.dirFor(name)
     if (!fs.existsSync(dir)) throw new Error(`Fixture not found: ${name}`)
     fs.writeFileSync(path.join(dir, 'golden.md'), markdown, 'utf8')
+  }
+
+  saveGoldenBlocks(name: string, blocks: GoldenBlock[]): void {
+    this.saveGolden(name, formatGoldenMd(path.basename(name), blocks))
   }
 
   delete(name: string): void {
