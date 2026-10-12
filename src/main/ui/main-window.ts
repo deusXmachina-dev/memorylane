@@ -349,7 +349,6 @@ function recordingName(scriptId: string | undefined): string {
 async function startEvalRecording(scriptId: string | undefined): Promise<EvalRecordingStatus> {
   if (!deps) throw new Error('Dependencies not initialized')
   await hideForRecording()
-  // The guide must be on screen before the recorder refreshes the capture filter.
   await showRecordingGuide()
   try {
     const status = deps.evalRecorder.start(recordingName(scriptId), scriptId)

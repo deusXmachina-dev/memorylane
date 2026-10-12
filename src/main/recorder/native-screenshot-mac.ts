@@ -70,8 +70,5 @@ export function buildMacCommandPayload(command: CaptureBackendCommand): Record<s
   if (command.intervalMs !== undefined) {
     payload.intervalMs = command.intervalMs
   }
-  if (command.refreshFilter) {
-    payload.refreshFilter = true
-  }
   return payload
 }

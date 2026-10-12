@@ -1,8 +1,7 @@
 /**
  * Small always-on-top window that shows a scripted eval recording's steps while
  * the operator performs them. It never takes focus (so the take stays in the
- * operator's own apps) and is left out of captured frames: by title in the macOS
- * capture filter, by content protection on Windows.
+ * operator's own apps) and asks the OS to keep it out of screen captures.
  */
 
 import { app, BrowserWindow, screen } from 'electron'

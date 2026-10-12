@@ -121,7 +121,6 @@ export class EvalRecorder {
     // is off, and remember so we can restore the prior state on stop.
     this.startedCapture = !this.capture.isCapturingNow()
     if (this.startedCapture) this.capture.startCapture()
-    else this.harness.screenCapturer.refreshCaptureFilter()
 
     this.activeName = safeName
     this.script = script

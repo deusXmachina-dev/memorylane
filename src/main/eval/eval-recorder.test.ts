@@ -30,7 +30,6 @@ let fixturesRoot: string
 let frameStream: InMemoryStream<Frame>
 let eventStream: InMemoryStream<EventWindow>
 let harness: PipelineHarness
-let refreshCaptureFilter: () => void
 let capture: RuntimeCaptureController
 let setRetain: (value: boolean) => void
 let sweepNow: () => void
@@ -54,7 +53,6 @@ beforeEach(() => {
   capturing = false
 
   const flush: () => void = vi.fn()
-  refreshCaptureFilter = vi.fn()
   const drainActivities: () => Promise<void> = vi.fn().mockResolvedValue(undefined)
   const waitForIdle: () => Promise<void> = vi.fn().mockResolvedValue(undefined)
 
@@ -65,7 +63,6 @@ beforeEach(() => {
     drainActivities,
     setRetainScreenshots: setRetain,
     sweepNow,
-    screenCapturer: { refreshCaptureFilter },
   } as PipelineHarness
 
   capture = {
@@ -147,7 +144,6 @@ describe('EvalRecorder', () => {
     const recorder = new EvalRecorder({ harness, capture, fixturesRoot })
     recorder.start('rec2')
     expect(startCapture).not.toHaveBeenCalled()
-    expect(refreshCaptureFilter).toHaveBeenCalled()
 
     await appendFrameAndWindow()
     await recorder.stop()

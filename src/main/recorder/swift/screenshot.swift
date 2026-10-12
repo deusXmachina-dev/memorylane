@@ -215,7 +215,7 @@ class AutonomousCapture: NSObject, SCStreamOutput {
             throw ScreenshotError.displayNotFound(resolvedDisplayId)
         }
 
-        let filter = captureFilter(display: display, content: content)
+        let filter = SCContentFilter(display: display, excludingWindows: [])
 
         let streamConfig = SCStreamConfiguration()
         streamConfig.width = display.width * 2 // Retina
@@ -239,22 +239,6 @@ class AutonomousCapture: NSObject, SCStreamOutput {
         self.stream = newStream
         self.currentDisplayId = resolvedDisplayId
         fputs("[daemon] Stream started for display \(resolvedDisplayId) at \(config.intervalMs)ms interval\n", stderr)
-    }
-
-    func refreshFilter() async {
-        guard let stream = self.stream, let displayId = currentDisplayId else { return }
-        do {
-            let content = try await SCShareableContent.current
-            guard let display = content.displays.first(where: { $0.displayID == displayId }) else { return }
-            try await stream.updateContentFilter(captureFilter(display: display, content: content))
-        } catch {
-            fputs("[daemon] Failed to refresh capture filter: \(error)\n", stderr)
-        }
-    }
-
-    private func captureFilter(display: SCDisplay, content: SCShareableContent) -> SCContentFilter {
-        let excluded = content.windows.filter { $0.title == recordingGuideTitle }
-        return SCContentFilter(display: display, excludingWindows: excluded)
     }
 
     func stopStream() async {
@@ -377,9 +361,6 @@ class AutonomousCapture: NSObject, SCStreamOutput {
     }
 }
 
-/// Title of MemoryLane's eval recording guide window, which frames leave out.
-let recordingGuideTitle = "MemoryLane recording guide"
-
 // MARK: - Stdin command listener
 
 func listenForCommands(capture: AutonomousCapture) {
@@ -393,15 +374,10 @@ func listenForCommands(capture: AutonomousCapture) {
 
             let newDisplayId = json["displayId"]
             let newIntervalMs = json["intervalMs"] as? Int
-            let refreshFilter = json["refreshFilter"] as? Bool ?? false
 
             Task {
                 if let newIntervalMs {
                     await capture.updateIntervalMs(newIntervalMs)
-                }
-
-                if refreshFilter {
-                    await capture.refreshFilter()
                 }
 
                 if newDisplayId is NSNull {
