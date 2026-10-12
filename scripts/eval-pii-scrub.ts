@@ -74,13 +74,11 @@ const NER_MODELS: Record<string, { id: string; dtype: string }> = {
 const ALL_SCRUBBERS = [
   'current',
   'remove-pii',
-  'redact-pii',
   'rampart',
   'piiranha',
   'rampart+current',
   'piiranha+current',
   'remove-pii+rampart',
-  'redact-pii+rampart',
 ]
 
 const LABEL_PLACEHOLDERS: Record<string, string> = {
@@ -400,16 +398,6 @@ function buildScrubber(spec: string, threshold: number, cache: Map<string, Scrub
         return (text: string) => mod.removePII(text)
       },
       () => pkgFootprint(['@coffeeandfun/remove-pii']),
-    )
-  } else if (spec === 'redact-pii') {
-    scrubber = makeSimpleScrubber(
-      'redact-pii',
-      async () => {
-        const mod = await import('redact-pii')
-        const redactor = new mod.SyncRedactor()
-        return (text: string) => redactor.redact(text)
-      },
-      () => pkgFootprint(['redact-pii', '@google-cloud/dlp', 'lodash']),
     )
   } else if (NER_MODELS[base]) {
     const m = NER_MODELS[base]
