@@ -1,4 +1,4 @@
-# MemoryLane v1.5.11-alpha.2
+# MemoryLane v1.5.11-alpha.3
 
 Electron 44 and dependency updates, smaller installers.
 
@@ -10,6 +10,7 @@ Electron 44 and dependency updates, smaller installers.
 - **Import dialog opens in Documents**, where exports are saved.
 - **Links open in the system browser** (#296).
 - **Fewer false app switches**: title changes of only symbols are ignored (#297).
+- **Scripted eval recordings** in Developer mode, with an on-screen step guide (#302).
 
 ## Known Issues & Limitations
 
@@ -27,4 +28,4 @@ Electron 44 and dependency updates, smaller installers.
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.11-alpha.1...v1.5.11-alpha.2
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.11-alpha.2...v1.5.11-alpha.3
