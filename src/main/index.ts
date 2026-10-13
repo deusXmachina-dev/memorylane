@@ -18,35 +18,50 @@ import { createCaptureHotkeyManager } from '@main/capture/capture-hotkey-manager
 import log from '@main/utils/logger'
 import '@main/utils/logger-electron'
 import { configureHttpTransport } from '@main/system/http-transport'
-import { CaptureStateManager } from './settings/capture-state-manager'
-import { CaptureSettingsManager } from './settings/capture-settings-manager'
-import { DeviceIdentity } from './settings/device-identity'
-import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
-import { TaskMiner } from './services/task-miner'
-import type { MiningStatus } from '../shared/types'
-import { UserContextBuilder } from './services/user-context-builder'
-import { RawDatabaseExportSync } from './services/raw-database-export-sync'
-import { BackendUpload } from './services/backend-upload'
-import { databaseUploadJob } from './services/database-upload-job'
-import { logUploadJob } from './services/log-upload-job'
-import { readLogUploadState, writeLogUploadState } from './services/log-upload-store'
-import { RemoteBlacklistService } from './services/remote-blacklist-service'
-import { readRemoteBlacklist, writeRemoteBlacklist } from './services/remote-blacklist-store'
-import { RemoteModelConfigService } from './services/remote-model-config-service'
-import { readRemoteModelConfig, writeRemoteModelConfig } from './services/remote-model-config-store'
-import type { RemoteModelConfig } from '../shared/remote-model-config'
-import { pushModelSelections, resolveModelPush } from './ui/apply-models'
-import { DeviceReportSync } from './services/device-report-sync'
-import { readDeviceReportState, writeDeviceReportState } from './services/device-report-store'
-import { createMainRuntime, type MainRuntime } from './runtime'
-import { registerEvalMediaScheme, registerEvalMediaProtocol } from './eval/eval-media-protocol'
+import { CaptureStateManager } from '@main/settings/capture-state-manager'
+import { CaptureSettingsManager } from '@main/settings/capture-settings-manager'
+import { DeviceIdentity } from '@main/settings/device-identity'
+import { VendorCredentialsManager } from '@main/settings/vendor-credentials-manager'
+import { TaskMiner } from '@main/services/task-miner'
+import type { MiningStatus } from '@types'
+import { UserContextBuilder } from '@main/services/user-context-builder'
+import { RawDatabaseExportSync } from '@main/services/raw-database-export-sync'
+import { BackendUpload } from '@main/services/backend-upload'
+import { databaseUploadJob } from '@main/services/database-upload-job'
+import { logUploadJob } from '@main/services/log-upload-job'
+import { readLogUploadState, writeLogUploadState } from '@main/services/log-upload-store'
+import { RemoteBlacklistService } from '@main/services/remote-blacklist-service'
+import { readRemoteBlacklist, writeRemoteBlacklist } from '@main/services/remote-blacklist-store'
+import { RemoteModelConfigService } from '@main/services/remote-model-config-service'
+import {
+  readRemoteModelConfig,
+  writeRemoteModelConfig,
+} from '@main/services/remote-model-config-store'
+import type { RemoteModelConfig } from '@/shared/remote-model-config'
+import { pushModelSelections, resolveModelPush } from '@main/ui/apply-models'
+import { DeviceReportSync } from '@main/services/device-report-sync'
+import { readDeviceReportState, writeDeviceReportState } from '@main/services/device-report-store'
+import { createMainRuntime, type MainRuntime } from '@main/runtime'
+import { registerEvalMediaScheme, registerEvalMediaProtocol } from '@main/eval/eval-media-protocol'
 import {
   createObservationController,
   type ObservationController,
 } from '@main/capture/observation-controller'
 import { getAppDirectoryName } from '@main/utils/paths'
 import { loadAppEditionConfig } from '@main/system/edition'
-import { ENTERPRISE_BACKEND_CONFIG, MANAGED_KEY_CONFIG } from '../shared/constants'
+import { ENTERPRISE_BACKEND_CONFIG, MANAGED_KEY_CONFIG } from '@constants'
+import { initAutoUpdater } from '@main/system/updater'
+import { setupTray, updateTrayMenu, setPrivacyBlockedState } from '@main/ui/tray'
+import {
+  initMainWindowIPC,
+  openMainWindow,
+  sendManagedExclusionsUpdate,
+  sendMiningProgress,
+  sendObservationUpdate,
+  sendStatusToRenderer,
+  sendUpdateState,
+  stopEvalRecordingFromTray,
+} from '@main/ui/main-window'
 
 // Keep single-instance behavior in packaged app, but allow dev to run
 // alongside production for local debugging.
@@ -193,9 +208,7 @@ app.on('second-instance', (_event, argv) => {
   // the single-instance race pass --memorylane-hidden; only a real user launch
   // should surface the window.
   if (argv.includes(AUTO_START_HIDDEN_ARG)) return
-  void import('./ui/main-window').then(({ openMainWindow }) => {
-    openMainWindow()
-  })
+  openMainWindow()
 })
 
 app.on('ready', async () => {
@@ -217,15 +230,6 @@ app.on('ready', async () => {
     syncAutoStartSetting(initialCaptureSettings.autoStartEnabled)
     captureStateManager.setAutoStartSyncedExecPath(process.execPath)
   }
-
-  const { setupTray, updateTrayMenu, setPrivacyBlockedState } = await import('./ui/tray')
-  const {
-    initMainWindowIPC,
-    openMainWindow,
-    sendStatusToRenderer,
-    sendManagedExclusionsUpdate,
-    stopEvalRecordingFromTray,
-  } = await import('./ui/main-window')
 
   // Per-edition backend base URL, shared by device reporting and remote config.
   const backendBaseUrl =
@@ -464,8 +468,6 @@ app.on('ready', async () => {
   })
 
   if (editionConfig.edition === 'customer') {
-    const { initAutoUpdater } = await import('@main/system/updater')
-    const { sendUpdateState } = await import('./ui/main-window')
     initAutoUpdater(() => {
       void updateTrayMenu()
       sendUpdateState()
@@ -473,8 +475,6 @@ app.on('ready', async () => {
   } else {
     log.info('[Updater] Skipping auto-updater for enterprise edition')
   }
-
-  const { sendObservationUpdate, sendMiningProgress } = await import('./ui/main-window')
 
   observation = createObservationController({
     captureControl: runtime.capture,

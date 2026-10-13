@@ -20,11 +20,8 @@ import * as ts from 'typescript'
  * Implementation notes:
  * - Uses the TypeScript compiler API (not a regex) so multi-line imports,
  *   inline `{ type X }` bindings, and comments are all handled correctly.
- * - Only follows relative import specifiers. `src/main` uses relative
- *   imports throughout; path aliases (`@/…`, `@components/…`) are not
- *   traversed. This is an audit, not a proof: if `src/main` ever adopts
- *   aliased imports, extend `extractRelativeImportSpecifiers` to resolve
- *   them via the `tsconfig.node.json` `paths` map.
+ * - Follows relative specifiers and the `tsconfig.node.json` path aliases
+ *   (`@/`, `@main/`, `@constants`, `@types`).
  */
 
 const PROJECT_ROOT = findProjectRoot(__dirname)
@@ -88,8 +85,8 @@ describe('MCP entry electron isolation', () => {
         })
       }
 
-      for (const spec of extractRelativeImportSpecifiers(sf)) {
-        const resolved = resolveRelativeImport(file, spec)
+      for (const spec of extractLocalImportSpecifiers(sf)) {
+        const resolved = resolveLocalImport(file, spec)
         if (resolved) visit(resolved)
       }
     }
@@ -145,21 +142,39 @@ function importsElectronAtRuntime(stmt: ts.ImportDeclaration): boolean {
   return hasDefault
 }
 
-function extractRelativeImportSpecifiers(sf: ts.SourceFile): string[] {
+const PATH_ALIASES: Array<[prefix: string, target: string]> = [
+  ['@main/', path.join(PROJECT_ROOT, 'src', 'main') + '/'],
+  ['@/', path.join(PROJECT_ROOT, 'src') + '/'],
+]
+const EXACT_ALIASES: Record<string, string> = {
+  '@constants': path.join(PROJECT_ROOT, 'src', 'shared', 'constants'),
+  '@types': path.join(PROJECT_ROOT, 'src', 'shared', 'types'),
+}
+
+function extractLocalImportSpecifiers(sf: ts.SourceFile): string[] {
   const specifiers: string[] = []
   for (const stmt of sf.statements) {
-    if (!ts.isImportDeclaration(stmt)) continue
+    if (!ts.isImportDeclaration(stmt) && !ts.isExportDeclaration(stmt)) continue
     const spec = stmt.moduleSpecifier
-    if (!ts.isStringLiteral(spec)) continue
-    if (spec.text.startsWith('./') || spec.text.startsWith('../')) {
-      specifiers.push(spec.text)
-    }
+    if (!spec || !ts.isStringLiteral(spec)) continue
+    if (ts.isImportDeclaration(stmt) && stmt.importClause?.isTypeOnly) continue
+    if (ts.isExportDeclaration(stmt) && stmt.isTypeOnly) continue
+    specifiers.push(spec.text)
   }
   return specifiers
 }
 
-function resolveRelativeImport(fromFile: string, specifier: string): string | null {
-  const base = path.resolve(path.dirname(fromFile), specifier)
+function resolveLocalImport(fromFile: string, specifier: string): string | null {
+  let base: string | null = null
+  if (specifier.startsWith('./') || specifier.startsWith('../')) {
+    base = path.resolve(path.dirname(fromFile), specifier)
+  } else if (EXACT_ALIASES[specifier]) {
+    base = EXACT_ALIASES[specifier]
+  } else {
+    const alias = PATH_ALIASES.find(([prefix]) => specifier.startsWith(prefix))
+    if (alias) base = alias[1] + specifier.slice(alias[0].length)
+  }
+  if (!base) return null
   const candidates = [
     base + '.ts',
     base + '.tsx',

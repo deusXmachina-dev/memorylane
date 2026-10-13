@@ -2,28 +2,29 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { app } from 'electron'
 import log from '@main/utils/logger'
-import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
-import { DeviceIdentity } from './settings/device-identity'
-import { createAccessProvider, type AccessProvider } from './access'
-import type { AppEdition } from '../shared/edition'
-import { StorageService } from './storage'
-import { applyMigrations } from './storage/migrator'
-import { applyPendingDatabaseImport } from './ui/database-import'
-import { activityOcrService } from './processor/ocr'
-import { UsageTracker } from './services/usage-tracker'
-import { SummaryModeTracker } from './services/summary-mode-tracker'
+import * as interactionMonitor from '@main/recorder/interaction-monitor'
+import { VendorCredentialsManager } from '@main/settings/vendor-credentials-manager'
+import { DeviceIdentity } from '@main/settings/device-identity'
+import { createAccessProvider, type AccessProvider } from '@main/access'
+import type { AppEdition } from '@/shared/edition'
+import { StorageService } from '@main/storage'
+import { applyMigrations } from '@main/storage/migrator'
+import { applyPendingDatabaseImport } from '@main/ui/database-import'
+import { activityOcrService } from '@main/processor/ocr'
+import { UsageTracker } from '@main/services/usage-tracker'
+import { SummaryModeTracker } from '@main/services/summary-mode-tracker'
 import { createPipelineHarness } from '@main/activity/pipeline-harness'
 import { DefaultActivityTransformer } from '@main/activity/activity-transformer'
 import { SqliteActivitySink } from '@main/activity/sqlite-activity-sink'
-import { FfmpegVideoStitcher } from './video/video-stitcher'
+import { FfmpegVideoStitcher } from '@main/video/video-stitcher'
 import {
   ActivitySemanticService,
   SemanticFileDebugDumper,
 } from '@main/semantic/activity-semantic-service'
 import type { SemanticPipelinePreference } from '@main/semantic/activity-semantic-service'
 import { InteractionEventDebugDumper } from '@main/debug/interaction-event-debug-dump'
-import { InferenceProviderImpl, type InferenceProvider } from './llm'
-import type { Vendor } from '../shared/types'
+import { InferenceProviderImpl, type InferenceProvider } from '@main/llm'
+import type { Vendor } from '@types'
 import { createCaptureBlacklistCoordinator } from '@main/capture/capture-blacklist-coordinator'
 import {
   createCaptureController,
@@ -31,10 +32,10 @@ import {
   type RuntimeCaptureController,
 } from '@main/capture/capture-controller'
 import { HostEnvironment } from '@main/monitoring/host-environment'
-import { EvalRecorder } from './eval/eval-recorder'
-import { EvalFixtureStore } from './eval/eval-fixture-store'
-import { TaskFixtureStore } from './eval/task-fixture-store'
-import { MlWorkerClient } from './services/ml-worker-client'
+import { EvalRecorder } from '@main/eval/eval-recorder'
+import { EvalFixtureStore } from '@main/eval/eval-fixture-store'
+import { TaskFixtureStore } from '@main/eval/task-fixture-store'
+import { MlWorkerClient } from '@main/services/ml-worker-client'
 
 export interface MainRuntime {
   capture: RuntimeCapture
@@ -78,8 +79,6 @@ export async function createMainRuntime(params: {
   initialSnapshotModels?: string[]
 }): Promise<MainRuntime> {
   const onCaptureStateChanged = params.onCaptureStateChanged ?? (() => undefined)
-
-  const interactionMonitor = await import('./recorder/interaction-monitor')
 
   const host = new HostEnvironment()
   const vendorCredentials = params.vendorCredentials
