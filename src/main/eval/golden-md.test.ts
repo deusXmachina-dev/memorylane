@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   parseGoldenMd,
   renderGoldenMd,
+  formatGoldenMd,
   matchSegments,
   formatOffset,
   type GoldenActivity,
@@ -67,6 +68,18 @@ describe('renderGoldenMd → parseGoldenMd round-trip', () => {
       endOffsetMs: 130_000,
       summary: "Reviewed the PR's diff.",
     })
+  })
+
+  it('round-trips `Must mention:` facts without folding them into the summary', () => {
+    const md = renderGoldenMd('facts', [
+      { ...replayActivity(), mustMention: ['auth middleware', 'Q3; draft'] },
+      replayActivity({ activityId: 'a2', startTimestamp: 1_090_000, endTimestamp: 1_130_000 }),
+    ])
+    expect(md).toContain('Must mention: auth middleware; Q3; draft')
+    const [first, second] = parseGoldenMd(md)
+    expect(first.summary).toBe('Stepped through the auth middleware in the debugger.')
+    expect(first.mustMention).toEqual(['auth middleware', 'Q3', 'draft'])
+    expect(second.mustMention).toBeUndefined()
   })
 
   it('renders the `· App · tld` label and parses the tld back', () => {
@@ -197,5 +210,23 @@ describe('matchSegments', () => {
     expect(report.unmatchedGoldenIndexes).toEqual([2])
     expect(report.unmatchedActivityIds).toEqual(['splinter'])
     expect(report.coverage).toBe(0.5)
+  })
+})
+
+describe('formatGoldenMd', () => {
+  it('writes parsed blocks back unchanged', () => {
+    const md = renderGoldenMd('fx', [
+      { ...replayActivity(), mustMention: ['auth', 'debugger'] },
+      replayActivity({
+        activityId: 'a2',
+        appName: 'Chrome',
+        windowTitle: '',
+        tld: 'github.com',
+        startTimestamp: 1_090_000,
+        endTimestamp: 1_092_000,
+        dropped: { reason: 'too_short', detail: '2000ms < 3000ms' },
+      }),
+    ])
+    expect(formatGoldenMd('fx', parseGoldenMd(md))).toBe(md)
   })
 })

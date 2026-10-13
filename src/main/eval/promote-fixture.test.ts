@@ -153,6 +153,40 @@ describe('promoteCapture', () => {
     expect(kept?.summary).toBe('Live captured summary.')
   })
 
+  it('fills the golden from a followed script and records the check', async () => {
+    writeLiveActivity(sourceDir, 'Live captured summary.')
+
+    const result = await promoteCapture({
+      sourceDir,
+      fixturesRoot,
+      name: 'scripted',
+      video: false,
+      script: {
+        id: 'code-edit',
+        title: 'Edit auth.ts',
+        targets: [],
+        setup: [],
+        steps: [
+          {
+            instruction: '',
+            seconds: 10,
+            expect: { app: ['Code'], summary: 'Edited auth.ts.', mustMention: ['auth.ts'] },
+          },
+          { instruction: '', seconds: 1, expect: { app: ['Code'], dropped: true } },
+        ],
+      },
+    })
+
+    const fxDir = path.join(fixturesRoot, 'scripted')
+    expect(result.scriptFollowed).toBe(true)
+    const [kept] = parseGoldenMd(fs.readFileSync(path.join(fxDir, 'golden.md'), 'utf8'))
+    expect(kept).toMatchObject({ summary: 'Edited auth.ts.', mustMention: ['auth.ts'] })
+    const manifest = JSON.parse(fs.readFileSync(path.join(fxDir, 'manifest.json'), 'utf8'))
+    expect(manifest).toMatchObject({ script: 'code-edit', description: 'Edit auth.ts' })
+    const check = JSON.parse(fs.readFileSync(path.join(fxDir, 'script-check.json'), 'utf8'))
+    expect(check.followed).toBe(true)
+  })
+
   it('does not overwrite an existing golden.md unless reseed', async () => {
     writeLiveActivity(sourceDir, 'Live captured summary.')
     const fxDir = path.join(fixturesRoot, 'demo3')

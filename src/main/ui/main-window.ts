@@ -32,6 +32,7 @@ import type { RemoteModelConfig } from '../../shared/remote-model-config'
 import { applyVendorSwitch } from './vendor-switch'
 import { applyModelSettings } from './model-settings'
 import type { EvalRecorder } from '../eval/eval-recorder'
+import { importRecordingScripts, listRecordingScripts } from '@main/eval/recording-scripts'
 import type { EvalFixtureStore } from '../eval/eval-fixture-store'
 import type { TaskFixtureStore } from '../eval/task-fixture-store'
 import {
@@ -40,7 +41,13 @@ import {
   renderSightingGoldenMd,
 } from '../eval/task-fixture-build'
 import { TASK_FIXTURE_SCHEMA_VERSION } from '../eval/task-types'
-import type { TaskSightingSummary } from '../../shared/eval-review'
+import type { PromoteCaptureResult } from '@main/eval/promote-fixture'
+import type { EvalRecordingStatus, GoldenBlock, TaskSightingSummary } from '@/shared/eval-review'
+import {
+  closeRecordingGuide,
+  resizeRecordingGuide,
+  showRecordingGuide,
+} from '@main/ui/recording-guide-window'
 import type { AccessProvider } from '../access'
 import type {
   AccessState,
@@ -314,6 +321,72 @@ export function getMainWindow(): BrowserWindow | null {
     return mainWindow
   }
   return null
+}
+
+/** Gets the main window out of the way so a take starts in the user's own app. */
+async function hideForRecording(): Promise<void> {
+  const win = getMainWindow()
+  if (!win) return
+  if (process.platform === 'darwin') {
+    win.hide()
+    app.hide()
+  } else win.minimize()
+  await new Promise((resolve) => setTimeout(resolve, 500))
+}
+
+/** `<script>-YYYY-MM-DD-HH-MM-SS` in local time; a free recording is just the stamp. */
+function recordingName(scriptId: string | undefined): string {
+  const d = new Date()
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`
+  return scriptId ? `${scriptId}-${stamp}` : stamp
+}
+
+let startingEvalRecording = false
+
+async function startEvalRecording(scriptId: string | undefined): Promise<EvalRecordingStatus> {
+  if (!deps) throw new Error('Dependencies not initialized')
+  if (startingEvalRecording || deps.evalRecorder.isRecording()) {
+    throw new Error('A recording is already in progress')
+  }
+  startingEvalRecording = true
+  try {
+    await hideForRecording()
+    await showRecordingGuide()
+    try {
+      const status = deps.evalRecorder.start(recordingName(scriptId), scriptId)
+      void updateTrayMenu()
+      return status
+    } catch (error) {
+      closeRecordingGuide()
+      openMainWindow()
+      throw error
+    }
+  } finally {
+    startingEvalRecording = false
+  }
+}
+
+/** Stops the take and promotes it, then brings the app back for review. */
+async function finishEvalRecording(): Promise<PromoteCaptureResult> {
+  if (!deps) throw new Error('Dependencies not initialized')
+  try {
+    return await deps.evalRecorder.stop()
+  } finally {
+    closeRecordingGuide()
+    void updateTrayMenu()
+    openMainWindow()
+  }
+}
+
+/** Tray action: stops an eval recording without switching back to the app mid-take. */
+export async function stopEvalRecordingFromTray(): Promise<void> {
+  try {
+    const result = await finishEvalRecording()
+    log.info(`[EvalRecorder] Stopped from tray -> ${result.fixtureDir}`)
+  } catch (error) {
+    log.warn('[EvalRecorder] Tray stop failed:', error)
+  }
 }
 
 /**
@@ -1086,20 +1159,49 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
 
   // Eval recorder + fixture review (Developer mode). Handlers ship in every build
   // and are inert until the hidden UI invokes them.
-  ipcMain.handle('main-window:evalStartRecording', (_event: IpcMainInvokeEvent, name: unknown) => {
-    if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
+  ipcMain.handle(
+    'main-window:evalStartRecording',
+    async (_event: IpcMainInvokeEvent, scriptId: unknown) => {
+      try {
+        const status = await startEvalRecording(typeof scriptId === 'string' ? scriptId : undefined)
+        return { success: true as const, status }
+      } catch (error) {
+        return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
+      }
+    },
+  )
+
+  ipcMain.handle('main-window:evalListScripts', () => {
+    if (!deps) return []
     try {
-      const status = deps.evalRecorder.start(typeof name === 'string' ? name : '')
-      return { success: true as const, status }
+      return listRecordingScripts(deps.evalRecorder.fixturesRoot)
+    } catch (error) {
+      log.warn('[Eval] Failed to read scenarios', error)
+      return []
+    }
+  })
+
+  ipcMain.handle('main-window:evalImportScripts', async () => {
+    if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
+    const result = await showOpenDialog(getMainWindow(), {
+      title: 'Import Scenarios',
+      properties: ['openFile'],
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    })
+    if (result.canceled || !result.filePaths[0]) {
+      return { success: false as const, error: 'Canceled' }
+    }
+    try {
+      const count = importRecordingScripts(deps.evalRecorder.fixturesRoot, result.filePaths[0])
+      return { success: true as const, count }
     } catch (error) {
       return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
     }
   })
 
   ipcMain.handle('main-window:evalStopRecording', async () => {
-    if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
     try {
-      const result = await deps.evalRecorder.stop()
+      const result = await finishEvalRecording()
       return {
         success: true as const,
         fixture: {
@@ -1114,8 +1216,66 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
   })
 
+  ipcMain.handle('main-window:evalCancelRecording', async () => {
+    if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
+    try {
+      await deps.evalRecorder.cancel()
+      return { success: true as const }
+    } catch (error) {
+      return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
+    } finally {
+      closeRecordingGuide()
+      void updateTrayMenu()
+      openMainWindow()
+    }
+  })
+
+  ipcMain.handle('main-window:evalRestartRecording', async () => {
+    if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
+    try {
+      const { scriptId } = deps.evalRecorder.getStatus()
+      await deps.evalRecorder.cancel()
+      const status = deps.evalRecorder.start(
+        recordingName(scriptId ?? undefined),
+        scriptId ?? undefined,
+      )
+      return { success: true as const, status }
+    } catch (error) {
+      closeRecordingGuide()
+      void updateTrayMenu()
+      openMainWindow()
+      return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
+    }
+  })
+
+  ipcMain.on('main-window:evalResizeGuide', (_event, height: unknown) => {
+    if (typeof height === 'number') resizeRecordingGuide(height)
+  })
+
+  ipcMain.handle(
+    'main-window:evalOpenSetupUrl',
+    async (_event: IpcMainInvokeEvent, url: unknown) => {
+      const known =
+        deps !== null &&
+        listRecordingScripts(deps.evalRecorder.fixturesRoot).some((s) =>
+          s.setup.some((item) => item.url === url),
+        )
+      if (typeof url !== 'string' || !known)
+        return { success: false as const, error: 'Unknown URL' }
+      await shell.openExternal(url)
+      return { success: true as const }
+    },
+  )
+
   ipcMain.handle('main-window:evalRecordingStatus', () => {
-    return deps?.evalRecorder.getStatus() ?? { recording: false, name: null, startedAt: null }
+    return (
+      deps?.evalRecorder.getStatus() ?? {
+        recording: false,
+        name: null,
+        startedAt: null,
+        scriptId: null,
+      }
+    )
   })
 
   ipcMain.handle('main-window:evalListFixtures', () => {
@@ -1136,6 +1296,22 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       }
       try {
         deps.evalFixtureStore.saveGolden(name, markdown)
+        return { success: true as const }
+      } catch (error) {
+        return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'main-window:evalSaveGoldenBlocks',
+    (_event: IpcMainInvokeEvent, name: unknown, blocks: unknown) => {
+      if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
+      if (typeof name !== 'string' || !Array.isArray(blocks)) {
+        return { success: false as const, error: 'Invalid arguments' }
+      }
+      try {
+        deps.evalFixtureStore.saveGoldenBlocks(name, blocks as GoldenBlock[])
         return { success: true as const }
       } catch (error) {
         return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
@@ -1174,6 +1350,24 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       }
     },
   )
+
+  ipcMain.handle('main-window:evalExportAllFixtures', async () => {
+    if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
+    const stamp = new Date().toISOString().slice(0, 10)
+    const result = await showSaveDialog(getMainWindow(), {
+      title: 'Export All Recordings',
+      defaultPath: path.join(app.getPath('desktop'), `eval-recordings-${stamp}.zip`),
+      buttonLabel: 'Export',
+      filters: [{ name: 'ZIP Archives', extensions: ['zip'] }],
+    })
+    if (result.canceled || !result.filePath) return { success: false as const, error: 'Canceled' }
+    try {
+      const count = await deps.evalFixtureStore.exportAllZip(result.filePath)
+      return { success: true as const, count }
+    } catch (error) {
+      return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
+    }
+  })
 
   // Task-mining goldens (Developer → Tasks tab). Source: mined sightings;
   // output: {userData}/task-fixtures via taskFixtureStore.

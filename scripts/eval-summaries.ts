@@ -32,7 +32,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { VENDOR_PRESETS } from '../src/shared/vendor-defaults'
 import type { SemanticPipelinePreference } from '../src/main/semantic/activity-semantic-service'
-import { scoreDeterministic } from '../src/main/eval/deterministic'
+import { mustMentionRecall, scoreDeterministic } from '../src/main/eval/deterministic'
 import { judgeEquivalence } from '../src/main/eval/judge'
 import { priceUsd, sumCosts } from '../src/main/eval/cost'
 import { renderMarkdown, writeReport } from '../src/main/eval/report'
@@ -212,6 +212,9 @@ async function main() {
     const eqVals = summaries
       .map((s) => s.golden?.equivalence)
       .filter((n): n is number => typeof n === 'number')
+    const mentionVals = summaries
+      .map((s) => s.golden?.mustMentionRecall)
+      .filter((n): n is number => typeof n === 'number')
     const detVals = summaries
       .map((s) => s.deterministic)
       .filter((d): d is DeterministicResult => d !== null)
@@ -234,6 +237,7 @@ async function main() {
       hardFails,
       segmentation,
       avgEquivalence: eqVals.length ? Math.round(mean(eqVals) * 1000) / 1000 : null,
+      avgMustMention: mentionVals.length ? Math.round(mean(mentionVals) * 1000) / 1000 : null,
       costUsd: sumCosts(summaries.map((s) => s.summaryCostUsd)),
       judgeCostUsd: sumCosts(summaries.map((s) => s.judgeCostUsd)),
     }
@@ -347,11 +351,17 @@ async function scoreActivities(params: {
         equivalence = eq?.equivalence ?? null
         if (eq) judgeCosts.push(priceUsd(judgeModel, eq.tokensIn, eq.tokensOut))
       }
+      const facts = act.summaryModel.startsWith('heuristic:')
+        ? []
+        : (matched.golden.mustMention ?? [])
+      const mention = facts.length ? mustMentionRecall(act.summary, facts) : null
       golden = {
         index: matched.golden.index,
         summary: matched.golden.summary,
         overlapRatio: matched.overlapRatio,
         equivalence,
+        mustMentionRecall: mention?.recall ?? null,
+        mustMentionMissed: mention?.missed ?? [],
       }
     }
 

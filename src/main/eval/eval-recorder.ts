@@ -17,19 +17,15 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import log from '@main/utils/logger'
-import type { StreamSubscription } from '../streams/stream'
+import type { StreamSubscription } from '@main/streams/stream'
 import type { PipelineHarness } from '@main/activity/pipeline-harness'
 import type { RuntimeCaptureController } from '@main/capture/capture-controller'
 import { FrameDebugDumper } from '@main/debug/frame-debug-dump'
 import { EventWindowDebugDumper } from '@main/debug/event-window-debug-dump'
 import { ActivityDebugDumper } from './activity-debug-dump'
 import { promoteCapture, type PromoteCaptureResult } from './promote-fixture'
-
-export interface EvalRecordingStatus {
-  recording: boolean
-  name: string | null
-  startedAt: number | null
-}
+import { getRecordingScript } from './recording-scripts'
+import type { EvalRecordingStatus, RecordingScript } from '@/shared/eval-review'
 
 /** Filesystem-safe fixture name (the dir under the fixtures root). */
 export function sanitizeFixtureName(name: string): string {
@@ -43,7 +39,7 @@ export function sanitizeFixtureName(name: string): string {
 export class EvalRecorder {
   private readonly harness: PipelineHarness
   private readonly capture: RuntimeCaptureController
-  private readonly fixturesRoot: string
+  readonly fixturesRoot: string
 
   private activeName: string | null = null
   private startedAt: number | null = null
@@ -52,6 +48,8 @@ export class EvalRecorder {
   private eventSub: StreamSubscription | null = null
   private activityUnsub: (() => void) | null = null
   private startedCapture = false
+  private script: RecordingScript | null = null
+  private stopping = false
 
   constructor(deps: {
     harness: PipelineHarness
@@ -68,12 +66,19 @@ export class EvalRecorder {
   }
 
   getStatus(): EvalRecordingStatus {
-    return { recording: this.isRecording(), name: this.activeName, startedAt: this.startedAt }
+    return {
+      recording: this.isRecording(),
+      name: this.activeName,
+      startedAt: this.startedAt,
+      scriptId: this.script?.id ?? null,
+    }
   }
 
   /** Begins capturing the producer's frame + event-window streams to a staging dir. */
-  start(name: string): EvalRecordingStatus {
+  start(name: string, scriptId?: string): EvalRecordingStatus {
     if (this.isRecording()) throw new Error('A recording is already in progress')
+    const script = scriptId ? getRecordingScript(this.fixturesRoot, scriptId) : null
+    if (scriptId && !script) throw new Error(`Unknown script: ${scriptId}`)
 
     const safeName = sanitizeFixtureName(name)
     const stagingDir = path.join(this.fixturesRoot, '.staging', safeName)
@@ -118,6 +123,7 @@ export class EvalRecorder {
     if (this.startedCapture) this.capture.startCapture()
 
     this.activeName = safeName
+    this.script = script
     this.startedAt = Date.now()
     this.stagingDir = stagingDir
     log.info(`[EvalRecorder] Recording "${safeName}" -> ${stagingDir}`)
@@ -129,6 +135,8 @@ export class EvalRecorder {
     const name = this.activeName
     const stagingDir = this.stagingDir
     if (!name || !stagingDir) throw new Error('No recording in progress')
+    if (this.stopping) throw new Error('Recording is already stopping')
+    this.stopping = true
 
     // Drain so the session's final activity closes, gets summarized, persisted,
     // and dumped before we promote — otherwise its golden summary seeds blank.
@@ -136,27 +144,15 @@ export class EvalRecorder {
     // capture, fixing the prior race where an already-running capture skipped the
     // extractor drain. The dumpers stay subscribed through this so the final
     // window/frame/activity is dumped.
-    await this.capture.waitForIdle()
     try {
-      await this.harness.drainActivities()
-    } catch (error) {
-      log.warn('[EvalRecorder] drainActivities failed:', error)
-    }
-    if (this.startedCapture) {
-      // We turned capture on for this recording; turn it back off to restore the
-      // operator's prior "capture off" state.
-      this.capture.stopCapture()
       await this.capture.waitForIdle()
-    }
+      try {
+        await this.harness.drainActivities()
+      } catch (error) {
+        log.warn('[EvalRecorder] drainActivities failed:', error)
+      }
+      await this.detach()
 
-    this.frameSub?.unsubscribe()
-    this.eventSub?.unsubscribe()
-    this.activityUnsub?.()
-    this.frameSub = null
-    this.eventSub = null
-    this.activityUnsub = null
-
-    try {
       const result = await promoteCapture({
         sourceDir: stagingDir,
         fixturesRoot: this.fixturesRoot,
@@ -166,18 +162,57 @@ export class EvalRecorder {
         // Always refresh the golden — re-recording the same name should reflect
         // this capture, not silently keep a stale scaffold.
         reseed: true,
+        script: this.script ?? undefined,
       })
       log.info(`[EvalRecorder] Promoted "${name}" -> ${result.fixtureDir}`)
       return result
     } finally {
-      // Release retention and reclaim the screenshots that piled up; drop staging.
-      this.harness.setRetainScreenshots(false)
-      this.harness.sweepNow()
-      fs.rmSync(stagingDir, { recursive: true, force: true })
-      this.activeName = null
-      this.startedAt = null
-      this.stagingDir = null
-      this.startedCapture = false
+      this.release(stagingDir)
     }
+  }
+
+  /** Stops the recording and throws the capture away. */
+  async cancel(): Promise<void> {
+    const stagingDir = this.stagingDir
+    if (!this.activeName || !stagingDir) throw new Error('No recording in progress')
+    if (this.stopping) throw new Error('Recording is already stopping')
+    this.stopping = true
+    try {
+      await this.detach()
+    } finally {
+      this.release(stagingDir)
+    }
+    log.info('[EvalRecorder] Recording canceled')
+  }
+
+  private async detach(): Promise<void> {
+    try {
+      if (this.startedCapture) {
+        // We turned capture on for this recording; turn it back off to restore the
+        // operator's prior "capture off" state.
+        this.capture.stopCapture()
+        await this.capture.waitForIdle()
+      }
+    } finally {
+      this.frameSub?.unsubscribe()
+      this.eventSub?.unsubscribe()
+      this.activityUnsub?.()
+      this.frameSub = null
+      this.eventSub = null
+      this.activityUnsub = null
+    }
+  }
+
+  private release(stagingDir: string): void {
+    // Release retention and reclaim the screenshots that piled up; drop staging.
+    this.harness.setRetainScreenshots(false)
+    this.harness.sweepNow()
+    fs.rmSync(stagingDir, { recursive: true, force: true })
+    this.activeName = null
+    this.startedAt = null
+    this.stagingDir = null
+    this.startedCapture = false
+    this.script = null
+    this.stopping = false
   }
 }

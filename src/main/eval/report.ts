@@ -35,14 +35,16 @@ export function renderMarkdown(report: EvalReport): string {
   // Scorecard
   lines.push('## Scorecard')
   lines.push('')
-  lines.push('| Fixture | Model | Acts | Det pass% | Hard fails | Seg% | Equiv | Cost (USD) |')
-  lines.push('|---|---|--:|--:|--:|--:|--:|--:|')
+  lines.push(
+    '| Fixture | Model | Acts | Det pass% | Hard fails | Seg% | Equiv | Mention% | Cost (USD) |',
+  )
+  lines.push('|---|---|--:|--:|--:|--:|--:|--:|--:|')
   for (const f of report.fixtures) {
     const seg = f.segmentation ? pct(f.segmentation.coverage) : '—'
     lines.push(
       `| ${f.fixture} | ${modelLabel(f)} | ${f.summaries.length} | ` +
         `${pct(f.detPassRate)} | ${f.hardFails} | ` +
-        `${seg} | ${fmt(f.avgEquivalence, 2)} | ${usd(f.costUsd)} |`,
+        `${seg} | ${fmt(f.avgEquivalence, 2)} | ${pct(f.avgMustMention)} | ${usd(f.costUsd)} |`,
     )
   }
   lines.push('')
@@ -83,6 +85,9 @@ export function renderMarkdown(report: EvalReport): string {
       lines.push(`  - ${s.summary || '_(empty)_'}`)
       if (s.golden) {
         lines.push(`  - golden #${s.golden.index}: ${s.golden.summary || '_(empty)_'}`)
+        if (s.golden.mustMentionMissed.length) {
+          lines.push(`  - missing: ${s.golden.mustMentionMissed.join('; ')}`)
+        }
       }
       const failed = s.deterministic?.checks.filter((ch) => !ch.passed && ch.detail) ?? []
       if (failed.length) {
@@ -127,14 +132,14 @@ export function renderComparisonMarkdown(report: EvalReport): string | null {
     lines.push('')
 
     // Per-variant rollup.
-    lines.push('| Variant | Acts | Det pass% | Hard fails | Seg% | Equiv | Cost (USD) |')
-    lines.push('|---|--:|--:|--:|--:|--:|--:|')
+    lines.push('| Variant | Acts | Det pass% | Hard fails | Seg% | Equiv | Mention% | Cost (USD) |')
+    lines.push('|---|--:|--:|--:|--:|--:|--:|--:|')
     for (const s of scores) {
       const seg = s.segmentation ? pct(s.segmentation.coverage) : '—'
       lines.push(
         `| ${modelLabel(s)} | ${s.summaries.length} | ${pct(s.detPassRate)} | ` +
           `${s.hardFails} | ${seg} | ${fmt(s.avgEquivalence, 2)} | ` +
-          `${usd(s.costUsd)} |`,
+          `${pct(s.avgMustMention)} | ${usd(s.costUsd)} |`,
       )
     }
     lines.push('')
@@ -191,6 +196,9 @@ export function renderComparisonMarkdown(report: EvalReport): string | null {
           sum.golden?.equivalence != null ? `equiv ${fmt(sum.golden.equivalence, 2)}` : 'equiv —',
         ]
         if (sum.deterministic?.hardFails) parts.push(`${sum.deterministic.hardFails} hard-fail(s)`)
+        if (sum.golden?.mustMentionMissed.length) {
+          parts.push(`missing ${sum.golden.mustMentionMissed.join('; ')}`)
+        }
         // Note the model that actually ran if it differs from the requested one.
         const ran = sum.summaryModel && sum.summaryModel !== s.model ? ` → ${sum.summaryModel}` : ''
         return `**${parts.join(' · ')}${ran}**<br>${cell(sum.summary || '_(empty)_')}`

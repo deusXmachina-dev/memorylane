@@ -15,10 +15,12 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import sharp from 'sharp'
-import { SCREEN_CAPTURER_CONFIG } from '../../shared/constants'
-import { FfmpegVideoStitcher } from '../video/video-stitcher'
-import type { EventWindow } from '../../shared/types'
-import { renderGoldenMd } from './golden-md'
+import { SCREEN_CAPTURER_CONFIG } from '@/shared/constants'
+import { FfmpegVideoStitcher } from '@main/video/video-stitcher'
+import type { EventWindow } from '@/shared/types'
+import type { RecordingScript } from '@/shared/eval-review'
+import { renderGoldenMd, type GoldenSource } from './golden-md'
+import { goldenFromScript } from './script-golden'
 import { replayFixture, ScaffoldTransformer } from './replay-harness'
 import { readJsonl } from './jsonl'
 import {
@@ -45,6 +47,8 @@ export interface PromoteCaptureOptions {
   seed?: boolean
   reseed?: boolean
   expectedActivities?: number
+  /** The script this session followed: its text seeds the golden when the recording matches. */
+  script?: RecordingScript
 }
 
 export interface PromoteCaptureResult {
@@ -56,6 +60,7 @@ export interface PromoteCaptureResult {
   downsampled: boolean
   video: { ok: boolean; durationMs?: number; error?: string } | null
   golden: { seeded: boolean; kept: number; dropped: number; summariesFilled: number } | null
+  scriptFollowed?: boolean
 }
 
 async function copyFrame(
@@ -205,14 +210,16 @@ export async function promoteCapture(opts: PromoteCaptureOptions): Promise<Promo
   const manifest: FixtureManifest = {
     name: opts.name,
     label: opts.label ?? opts.name,
-    description: opts.description ?? '',
+    description: opts.description ?? opts.script?.title ?? '',
     capturedAt: new Date().toISOString(),
     platform: process.platform,
     appMix: deriveAppMix(windows),
     frameCount: promotedFrames.length,
     eventWindowCount: windows.length,
-    expectedActivityCount: opts.expectedActivities,
+    expectedActivityCount:
+      opts.expectedActivities ?? opts.script?.steps.filter((s) => !s.expect.dropped).length,
     downsampled: downsample || undefined,
+    script: opts.script?.id,
     schemaVersion: FIXTURE_SCHEMA_VERSION,
   }
   fs.writeFileSync(
@@ -255,9 +262,18 @@ export async function promoteCapture(opts: PromoteCaptureOptions): Promise<Promo
     if (fs.existsSync(goldenPath) && !opts.reseed) {
       result.golden = { seeded: false, kept: 0, dropped: 0, summariesFilled: 0 }
     } else {
+      let goldenBlocks: GoldenSource[] = transcript
+      const checkPath = path.join(fixtureDir, 'script-check.json')
+      fs.rmSync(checkPath, { force: true })
+      if (opts.script) {
+        const { check, golden } = goldenFromScript(opts.script, transcript)
+        fs.writeFileSync(checkPath, JSON.stringify(check, null, 2), 'utf8')
+        result.scriptFollowed = check.followed
+        if (golden) goldenBlocks = golden
+      }
       fs.writeFileSync(
         goldenPath,
-        renderGoldenMd(path.basename(fixtureDir), transcript, sessionStartMs),
+        renderGoldenMd(path.basename(fixtureDir), goldenBlocks, sessionStartMs),
         'utf8',
       )
       result.golden = {

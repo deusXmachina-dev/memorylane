@@ -141,6 +141,18 @@ describe('EvalFixtureStore', () => {
     expect(bytes.subarray(0, 2).toString('latin1')).toBe('PK')
   })
 
+  it('exports all fixtures and the scenarios file to one zip', async () => {
+    writeFixture('alpha')
+    writeFixture('beta')
+    fs.writeFileSync(path.join(root, 'scenarios.json'), '[]')
+    const dest = path.join(root, 'out', 'all.zip')
+    expect(await store.exportAllZip(dest)).toBe(2)
+    const text = fs.readFileSync(dest).toString('latin1')
+    expect(text).toContain('alpha/')
+    expect(text).toContain('beta/')
+    expect(text).toContain('scenarios.json')
+  })
+
   it('deletes a fixture', () => {
     writeFixture('alpha')
     store.delete('alpha')

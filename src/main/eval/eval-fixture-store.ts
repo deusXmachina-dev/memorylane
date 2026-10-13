@@ -11,11 +11,18 @@ import * as path from 'path'
 import * as yazl from 'yazl'
 import log from '@main/utils/logger'
 import type { DumpedFrame, FixtureManifest } from './types'
-import type { EvalEventWindow, EvalFixtureLoad, EvalFixtureSummary } from '../../shared/eval-review'
-import type { EventWindow, InteractionContext } from '../../shared/types'
+import type {
+  EvalEventWindow,
+  EvalFixtureLoad,
+  EvalFixtureSummary,
+  GoldenBlock,
+  ScriptCheck,
+} from '@/shared/eval-review'
+import type { EventWindow, InteractionContext } from '@/shared/types'
 import { readJsonl } from './jsonl'
-import { describeInteraction } from '../semantic/prompt'
+import { describeInteraction } from '@main/semantic/prompt'
 import { evalMediaUrl } from './eval-media-protocol'
+import { formatGoldenMd, parseGoldenMd } from './golden-md'
 
 /** Staging dir for in-progress recordings — never listed as a fixture. */
 const STAGING_DIR = '.staging'
@@ -53,6 +60,8 @@ export class EvalFixtureStore {
         eventWindowCount: manifest.eventWindowCount,
         appMix: manifest.appMix,
         hasVideo: fs.existsSync(path.join(dir, 'session.mp4')),
+        scriptId: manifest.script ?? null,
+        scriptFollowed: manifest.script ? (this.readScriptCheck(dir)?.followed ?? false) : null,
       })
     }
     // Newest first.
@@ -73,7 +82,24 @@ export class EvalFixtureStore {
 
     const eventWindows = this.loadEventWindows(dir)
 
-    return { name: path.basename(name), label: manifest.label, goldenMd, videoUrl, eventWindows }
+    return {
+      name: path.basename(name),
+      label: manifest.label,
+      goldenMd,
+      goldenBlocks: parseGoldenMd(goldenMd),
+      scriptId: manifest.script ?? null,
+      scriptCheck: this.readScriptCheck(dir),
+      videoUrl,
+      eventWindows,
+    }
+  }
+
+  private readScriptCheck(dir: string): ScriptCheck | null {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(dir, 'script-check.json'), 'utf8')) as ScriptCheck
+    } catch {
+      return null
+    }
   }
 
   /**
@@ -125,6 +151,10 @@ export class EvalFixtureStore {
     fs.writeFileSync(path.join(dir, 'golden.md'), markdown, 'utf8')
   }
 
+  saveGoldenBlocks(name: string, blocks: GoldenBlock[]): void {
+    this.saveGolden(name, formatGoldenMd(path.basename(name), blocks))
+  }
+
   delete(name: string): void {
     const dir = this.dirFor(name)
     fs.rmSync(dir, { recursive: true, force: true })
@@ -134,33 +164,49 @@ export class EvalFixtureStore {
   async exportZip(name: string, destPath: string): Promise<void> {
     const dir = this.dirFor(name)
     if (!fs.existsSync(dir)) throw new Error(`Fixture not found: ${name}`)
-
-    const files: { real: string; entry: string }[] = []
-    const walk = (current: string, rel: string): void => {
-      for (const e of fs.readdirSync(current, { withFileTypes: true })) {
-        const real = path.join(current, e.name)
-        const entry = path.posix.join(rel, e.name)
-        if (e.isDirectory()) walk(real, entry)
-        else if (e.isFile()) files.push({ real, entry })
-      }
-    }
-    walk(dir, path.basename(name))
-
-    await fs.promises.mkdir(path.dirname(destPath), { recursive: true })
-    await new Promise<void>((resolve, reject) => {
-      const zip = new yazl.ZipFile()
-      const output = fs.createWriteStream(destPath)
-      const onError = (error: unknown): void =>
-        reject(error instanceof Error ? error : new Error(String(error)))
-      output.once('error', onError)
-      zip.outputStream.once('error', onError)
-      output.once('close', resolve)
-      zip.outputStream.pipe(output)
-      for (const f of files) zip.addFile(f.real, f.entry)
-      zip.end()
-    })
+    const files = listFiles(dir, path.basename(name))
+    await writeZip(files, destPath)
     log.info(`[EvalFixtureStore] Exported "${name}" (${files.length} files) -> ${destPath}`)
   }
+
+  /** Every recording plus the scenarios file, in one zip. */
+  async exportAllZip(destPath: string): Promise<number> {
+    const names = this.list().map((f) => f.name)
+    if (names.length === 0) throw new Error('No recordings to export')
+    const files = names.flatMap((name) => listFiles(this.dirFor(name), name))
+    const scenarios = path.join(this.root, 'scenarios.json')
+    if (fs.existsSync(scenarios)) files.push({ real: scenarios, entry: 'scenarios.json' })
+    await writeZip(files, destPath)
+    log.info(`[EvalFixtureStore] Exported ${names.length} recordings -> ${destPath}`)
+    return names.length
+  }
+}
+
+function listFiles(dir: string, rel: string): { real: string; entry: string }[] {
+  const files: { real: string; entry: string }[] = []
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const real = path.join(dir, e.name)
+    const entry = path.posix.join(rel, e.name)
+    if (e.isDirectory()) files.push(...listFiles(real, entry))
+    else if (e.isFile()) files.push({ real, entry })
+  }
+  return files
+}
+
+async function writeZip(files: { real: string; entry: string }[], destPath: string): Promise<void> {
+  await fs.promises.mkdir(path.dirname(destPath), { recursive: true })
+  await new Promise<void>((resolve, reject) => {
+    const zip = new yazl.ZipFile()
+    const output = fs.createWriteStream(destPath)
+    const onError = (error: unknown): void =>
+      reject(error instanceof Error ? error : new Error(String(error)))
+    output.once('error', onError)
+    zip.outputStream.once('error', onError)
+    output.once('close', resolve)
+    zip.outputStream.pipe(output)
+    for (const f of files) zip.addFile(f.real, f.entry)
+    zip.end()
+  })
 }
 
 /** First app/window context in a window, as "processName — title" (or null). */

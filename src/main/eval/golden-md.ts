@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import { splitMarkdownBlocks } from './markdown-blocks'
 import type { ReplayActivity } from './types'
+import type { GoldenBlock } from '@/shared/eval-review'
 
 /**
  * The golden is a single hand-editable Markdown file per fixture (`golden.md`).
@@ -35,22 +36,9 @@ import type { ReplayActivity } from './types'
  * only — matching is by time overlap, not index.
  */
 
-export interface GoldenActivity {
+export interface GoldenActivity extends GoldenBlock {
   /** 1-based, human-facing only. */
   index: number
-  appName: string
-  windowTitle?: string
-  /** Domain of a web activity, recovered from the time-line `· App · tld` label. */
-  tld?: string
-  startOffsetMs: number
-  endOffsetMs: number
-  /**
-   * `true` when this block is a `DROPPED` marker, not a summary: the pipeline is
-   * expected to drop (not emit) an activity in this span. A produced activity
-   * overlapping it is a scoring violation. `summary` holds the drop note.
-   */
-  dropped?: boolean
-  summary: string
 }
 
 export const HEADER_RE = /^##\s+(?:(\d+)\.\s*)?(.+?)(?:\s+—\s+(.+))?\s*$/
@@ -58,6 +46,7 @@ export const HEADER_RE = /^##\s+(?:(\d+)\.\s*)?(.+?)(?:\s+—\s+(.+))?\s*$/
 // `· App`); older goldens have none. It's captured but appName is taken from the
 // header, so the label is advisory.
 export const TIME_RE = /^\s*(\d+):(\d{2})\s*(?:->|→)\s*(\d+):(\d{2})\s*(?:·(.*))?$/
+const MUST_MENTION_RE = /^\s*Must mention:\s*(.*)$/i
 
 export function formatOffset(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000))
@@ -95,41 +84,57 @@ function parseOffset(min: string, sec: string): number {
   return (parseInt(min, 10) * 60 + parseInt(sec, 10)) * 1000
 }
 
+export type GoldenSource = Pick<
+  ReplayActivity,
+  'startTimestamp' | 'endTimestamp' | 'appName' | 'windowTitle' | 'tld' | 'dropped' | 'summary'
+> & { mustMention?: string[] }
+
 /** Renders a golden.md scaffold from a replay's activities (summaries left blank
  *  when no LLM ran, so the user fills them in). */
 export function renderGoldenMd(
   fixture: string,
-  activities: ReplayActivity[],
+  activities: GoldenSource[],
   sessionStartMs?: number,
 ): string {
   const sorted = [...activities].sort((a, b) => a.startTimestamp - b.startTimestamp)
   // Anchor to the session.mp4 clock (min frame ts) so mm:ss lines up with the
   // review video; fall back to the first block when no zero is supplied.
   const sessionStart = sessionStartMs ?? (sorted.length ? sorted[0].startTimestamp : 0)
+  return formatGoldenMd(
+    fixture,
+    sorted.map((act) => ({
+      appName: act.appName,
+      windowTitle: act.windowTitle || undefined,
+      tld: act.tld,
+      startOffsetMs: act.startTimestamp - sessionStart,
+      endOffsetMs: act.endTimestamp - sessionStart,
+      dropped: act.dropped ? true : undefined,
+      summary: act.dropped
+        ? `DROPPED — ${act.dropped.reason}: ${act.dropped.detail}`
+        : act.summary || '_(no summary produced — fill in the target)_',
+      mustMention: act.dropped ? undefined : act.mustMention,
+    })),
+  )
+}
 
+/** Writes golden blocks back out as golden.md, in the order given. */
+export function formatGoldenMd(fixture: string, blocks: GoldenBlock[]): string {
   const lines: string[] = []
   lines.push(`# Golden — ${fixture}`)
   lines.push('')
 
-  sorted.forEach((act, i) => {
-    const title = act.windowTitle ? ` — ${act.windowTitle}` : ''
-    lines.push(`## ${i + 1}. ${act.appName}${title}`)
-    lines.push(
-      formatTimeLine(
-        act.startTimestamp - sessionStart,
-        act.endTimestamp - sessionStart,
-        act.appName,
-        act.tld,
-      ),
-    )
+  blocks.forEach((block, i) => {
+    const title = block.windowTitle ? ` — ${block.windowTitle}` : ''
+    lines.push(`## ${i + 1}. ${block.appName}${title}`)
+    lines.push(formatTimeLine(block.startOffsetMs, block.endOffsetMs, block.appName, block.tld))
     lines.push('')
-    if (act.dropped) {
-      lines.push(`DROPPED — ${act.dropped.reason}: ${act.dropped.detail}`)
-    } else {
-      lines.push(act.summary || '_(no summary produced — fill in the target)_')
+    lines.push(block.summary)
+    if (!block.dropped && block.mustMention?.length) {
+      lines.push('')
+      lines.push(`Must mention: ${block.mustMention.join('; ')}`)
     }
     lines.push('')
-    if (i < sorted.length - 1) {
+    if (i < blocks.length - 1) {
       lines.push('---')
       lines.push('')
     }
@@ -165,8 +170,17 @@ export function parseGoldenMd(text: string): GoldenActivity[] {
     if (timeLineIdx === -1) continue
 
     const summaryLines: string[] = []
+    let mustMention: string[] | undefined
     for (let i = timeLineIdx + 1; i < block.length; i++) {
       if (block[i].trim() === '---') break
+      const mm = block[i].match(MUST_MENTION_RE)
+      if (mm) {
+        mustMention = mm[1]
+          .split(';')
+          .map((t) => t.trim())
+          .filter(Boolean)
+        continue
+      }
       summaryLines.push(block[i])
     }
     const summary = summaryLines.join('\n').trim()
@@ -181,6 +195,7 @@ export function parseGoldenMd(text: string): GoldenActivity[] {
       endOffsetMs,
       dropped: dropped || undefined,
       summary,
+      mustMention: mustMention?.length ? mustMention : undefined,
     })
   }
 

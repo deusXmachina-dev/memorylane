@@ -1,4 +1,4 @@
-import type { SemanticRunDiagnostics } from '../semantic/types'
+import type { SemanticRunDiagnostics } from '@main/semantic/types'
 import type { DroppedActivityReason } from '@main/activity/activity-types'
 import type { ActivityProducerStats } from '@main/activity/activity-producer'
 
@@ -29,6 +29,8 @@ export interface FixtureManifest {
   expectedActivityCount?: number
   /** True when PNGs were re-encoded smaller during promotion. */
   downsampled?: boolean
+  /** Id of the recording script this session followed. */
+  script?: string
   schemaVersion: number
 }
 
@@ -120,6 +122,9 @@ export interface GoldenMatch {
   overlapRatio: number
   /** 0..1 equivalence of candidate vs golden, or null when the judge is off. */
   equivalence: number | null
+  /** Share of the golden's `mustMention` facts found in the candidate, or null when none. */
+  mustMentionRecall: number | null
+  mustMentionMissed: string[]
 }
 
 export interface ScoredSummary {
@@ -183,6 +188,8 @@ export interface FixtureScore {
   segmentation: SegmentationScore | null
   /** Mean golden equivalence over matched blocks, 0..1, or null. */
   avgEquivalence: number | null
+  /** Mean mustMention recall over matched blocks that list facts, 0..1, or null. */
+  avgMustMention: number | null
   /** Total summarizer (production) cost in USD over all activities, or null if unpriced. */
   costUsd: number | null
   /** Total eval-time equivalence-judge cost in USD, or null if unpriced. */

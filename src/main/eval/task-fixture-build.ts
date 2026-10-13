@@ -6,8 +6,8 @@
  * either way: `TaskFixtureActivity[]` (→ activities.jsonl) plus a `golden.md`.
  */
 
-import type { StorageService } from '../storage'
-import type { StoredActivity } from '../storage/types'
+import type { StorageService } from '@main/storage'
+import type { StoredActivity } from '@main/storage/types'
 import type { GoldenActivity } from './golden-md'
 import type { TaskFixtureActivity } from './task-types'
 

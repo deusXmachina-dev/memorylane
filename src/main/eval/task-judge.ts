@@ -1,4 +1,4 @@
-import type { InferenceProvider } from '../llm'
+import type { InferenceProvider } from '@main/llm'
 import { callJsonJudge } from './llm-judge'
 import type { DetectedSighting, GoldenSighting } from './task-types'
 

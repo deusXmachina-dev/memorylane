@@ -38,6 +38,7 @@ function fixtureScore(over: Partial<FixtureScore> = {}): FixtureScore {
     hardFails: 0,
     segmentation: null,
     avgEquivalence: null,
+    avgMustMention: null,
     costUsd: 0.0004,
     judgeCostUsd: 0.0002,
     ...over,
@@ -145,6 +146,8 @@ describe('renderMarkdown', () => {
                   summary: 'Debugged the auth middleware.',
                   overlapRatio: 0.9,
                   equivalence: 0.82,
+                  mustMentionRecall: null,
+                  mustMentionMissed: [],
                 },
               }),
             ],
@@ -186,6 +189,8 @@ describe('renderComparisonMarkdown', () => {
                   summary: 'Debugged the auth middleware.',
                   overlapRatio: 0.9,
                   equivalence: 0.8,
+                  mustMentionRecall: null,
+                  mustMentionMissed: [],
                 },
               }),
             ],
@@ -199,7 +204,13 @@ describe('renderComparisonMarkdown', () => {
   })
 
   it('pivots two models of the same fixture side by side, keyed by golden block', () => {
-    const golden = { index: 1, summary: 'Debugged the auth middleware.', overlapRatio: 0.9 }
+    const golden = {
+      index: 1,
+      summary: 'Debugged the auth middleware.',
+      overlapRatio: 0.9,
+      mustMentionRecall: null,
+      mustMentionMissed: [],
+    }
     const cmp = renderComparisonMarkdown(
       report({
         fixtures: [

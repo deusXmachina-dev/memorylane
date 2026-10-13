@@ -4,9 +4,9 @@ import * as os from 'os'
 import * as path from 'path'
 import sharp from 'sharp'
 import { EvalRecorder, sanitizeFixtureName } from './eval-recorder'
-import { InMemoryStream } from '../streams/in-memory-stream'
-import type { Frame } from '../recorder/screen-capturer'
-import type { EventWindow } from '../../shared/types'
+import { InMemoryStream } from '@main/streams/in-memory-stream'
+import type { Frame } from '@main/recorder/screen-capturer'
+import type { EventWindow } from '@/shared/types'
 import type { PipelineHarness } from '@main/activity/pipeline-harness'
 import type { RuntimeCaptureController } from '@main/capture/capture-controller'
 
@@ -153,9 +153,34 @@ describe('EvalRecorder', () => {
     expect(harness.drainActivities).toHaveBeenCalled()
   })
 
+  it('cancels without writing a fixture', async () => {
+    const recorder = new EvalRecorder({ harness, capture, fixturesRoot })
+    recorder.start('rec5')
+    await appendFrameAndWindow()
+    await recorder.cancel()
+
+    expect(recorder.isRecording()).toBe(false)
+    expect(stopCapture).toHaveBeenCalled()
+    expect(setRetain).toHaveBeenLastCalledWith(false)
+    expect(fs.existsSync(path.join(fixturesRoot, 'rec5'))).toBe(false)
+    expect(fs.existsSync(path.join(fixturesRoot, '.staging', 'rec5'))).toBe(false)
+  })
+
   it('rejects a second concurrent recording', () => {
     const recorder = new EvalRecorder({ harness, capture, fixturesRoot })
     recorder.start('rec3')
     expect(() => recorder.start('rec4')).toThrow(/already in progress/)
+  })
+
+  it.each(['stop', 'cancel'] as const)('can record again after a failed %s', async (method) => {
+    vi.mocked(capture.waitForIdle).mockRejectedValue(new Error('boom'))
+    const recorder = new EvalRecorder({ harness, capture, fixturesRoot })
+    recorder.start('rec6')
+
+    await expect(recorder[method]()).rejects.toThrow('boom')
+
+    expect(recorder.isRecording()).toBe(false)
+    expect(setRetain).toHaveBeenLastCalledWith(false)
+    expect(() => recorder.start('rec7')).not.toThrow()
   })
 })

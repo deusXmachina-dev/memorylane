@@ -13,7 +13,7 @@ import * as path from 'path'
 import * as yazl from 'yazl'
 import log from '@main/utils/logger'
 import type { TaskFixtureActivity, TaskFixtureManifest } from './task-types'
-import type { TaskFixtureLoad, TaskFixtureSummary } from '../../shared/eval-review'
+import type { TaskFixtureLoad, TaskFixtureSummary } from '@/shared/eval-review'
 
 /** Filesystem-safe single path segment from a free-text name. */
 export function sanitizeFixtureName(name: string): string {

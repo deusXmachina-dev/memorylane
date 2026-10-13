@@ -251,8 +251,13 @@ app.on('ready', async () => {
   }
 
   const { setupTray, updateTrayMenu, setPrivacyBlockedState } = await import('./ui/tray')
-  const { initMainWindowIPC, openMainWindow, sendStatusToRenderer, sendManagedExclusionsUpdate } =
-    await import('./ui/main-window')
+  const {
+    initMainWindowIPC,
+    openMainWindow,
+    sendStatusToRenderer,
+    sendManagedExclusionsUpdate,
+    stopEvalRecordingFromTray,
+  } = await import('./ui/main-window')
 
   // Per-edition backend base URL, shared by device reporting and remote config.
   const backendBaseUrl =
@@ -484,6 +489,10 @@ app.on('ready', async () => {
     capture: captureCoordinator.controls,
     requiresActivation: deviceRequiresActivation,
     storage: runtime.storage,
+    evalRecording: {
+      isRecording: () => runtime?.evalRecorder.isRecording() ?? false,
+      stop: () => void stopEvalRecordingFromTray(),
+    },
   })
 
   if (editionConfig.edition === 'customer') {
