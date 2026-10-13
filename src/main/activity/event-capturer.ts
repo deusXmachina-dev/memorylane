@@ -69,12 +69,7 @@ export class EventCapturer {
     }
 
     if (this.currentWindow === null) {
-      this.currentWindow = this.openWindow(this.nextWindowStartTimestamp ?? event.timestamp)
-      this.nextWindowStartTimestamp = null
-      if (this.awayContext !== null) {
-        this.currentWindow.events.push({ ...this.awayContext, timestamp: event.timestamp })
-        this.awayContext = null
-      }
+      this.currentWindow = this.openWindowAt(event.timestamp)
     }
 
     this.away = false
@@ -85,6 +80,12 @@ export class EventCapturer {
     this.away = true
     if (this.currentWindow === null) return
     this.closeWindow('gap', { lastInputAt })
+  }
+
+  openReturn(at: number): void {
+    this.away = false
+    if (this.currentWindow !== null) return
+    this.currentWindow = this.openWindowAt(at)
   }
 
   flush(boundaryTimestamp?: number): void {
@@ -177,6 +178,16 @@ export class EventCapturer {
   private openWindow(startTimestamp: number): NonNullable<EventCapturer['currentWindow']> {
     this.startMaxDurationTimer()
     return { id: uuidv4(), startTimestamp, events: [] }
+  }
+
+  private openWindowAt(timestamp: number): NonNullable<EventCapturer['currentWindow']> {
+    const window = this.openWindow(this.nextWindowStartTimestamp ?? timestamp)
+    this.nextWindowStartTimestamp = null
+    if (this.awayContext !== null) {
+      window.events.push({ ...this.awayContext, timestamp })
+      this.awayContext = null
+    }
+    return window
   }
 
   private startMaxDurationTimer(): void {

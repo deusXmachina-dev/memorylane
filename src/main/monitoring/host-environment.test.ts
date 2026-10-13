@@ -134,6 +134,28 @@ describe('idle', () => {
     expect(onIdle).toHaveBeenCalledTimes(2)
   })
 
+  it('emits a return with the input time when idle drops below the threshold', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(200_000)
+    const host = new ManualHostEnvironment()
+    const idle = vi.spyOn(host, 'idleSeconds')
+    const onReturn = vi.fn()
+    host.onReturn(onReturn)
+
+    idle.mockReturnValue(10)
+    host.checkIdle()
+    expect(onReturn).not.toHaveBeenCalled()
+
+    idle.mockReturnValue(AWAY_IDLE_SECONDS)
+    host.checkIdle()
+    idle.mockReturnValue(2)
+    host.checkIdle()
+    idle.mockReturnValue(1)
+    host.checkIdle()
+    expect(onReturn).toHaveBeenCalledTimes(1)
+    expect(onReturn).toHaveBeenCalledWith(198_000)
+  })
+
   it('polls idle once started', async () => {
     vi.useFakeTimers()
     const emitter = (await import('electron')).powerMonitor as unknown as EventEmitter

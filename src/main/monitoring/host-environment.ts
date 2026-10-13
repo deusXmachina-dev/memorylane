@@ -28,6 +28,7 @@ export class HostEnvironment {
   private onPauseChange: ((pause: boolean) => void) | null = null
   private idle = false
   private readonly idleListeners = new Set<(lastInputAt: number) => void>()
+  private readonly returnListeners = new Set<(at: number) => void>()
   protected readonly suspendListeners = new Set<() => void>()
   protected readonly resumeListeners = new Set<() => void>()
 
@@ -100,13 +101,19 @@ export class HostEnvironment {
     }
   }
 
+  onReturn(listener: (at: number) => void): () => void {
+    this.returnListeners.add(listener)
+    return () => {
+      this.returnListeners.delete(listener)
+    }
+  }
+
   checkIdle(): void {
     const idle = this.idleSeconds() >= AWAY_IDLE_SECONDS
     if (idle === this.idle) return
     this.idle = idle
-    if (!idle) return
-    const lastInputAt = this.lastInputAt()
-    for (const listener of this.idleListeners) listener(lastInputAt)
+    const at = this.lastInputAt()
+    for (const listener of idle ? this.idleListeners : this.returnListeners) listener(at)
   }
 
   resolves(host: string): Promise<boolean> {

@@ -428,6 +428,56 @@ describe('EventCapturer idle and boundary ends', () => {
     expect(windows[0].events[0].activeWindow).toEqual(chrome)
   })
 
+  it('reopens on return at the return time with the away app_change as context', async () => {
+    const chrome = { title: 'Inbox', processName: 'Google Chrome' }
+    capturer.handleEvent(makeEvent({ type: 'click', timestamp: 1000 }))
+    capturer.closeIdle(1000)
+    await flushAsyncAppends()
+    capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 2000, activeWindow: chrome }))
+
+    capturer.openReturn(3000)
+    capturer.closeIdle(3400)
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(2)
+    expect(windows[1].closedBy).toBe('gap')
+    expect(windows[1].startTimestamp).toBe(3000)
+    expect(windows[1].endTimestamp).toBe(3400)
+    expect(windows[1].events).toHaveLength(1)
+    expect(windows[1].events[0]).toMatchObject({
+      type: 'app_change',
+      timestamp: 3000,
+      activeWindow: chrome,
+    })
+  })
+
+  it('reopens on return without context and ends at the next idle', async () => {
+    capturer.closeIdle(1000)
+
+    capturer.openReturn(3000)
+    capturer.closeIdle(3400)
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].startTimestamp).toBe(3000)
+    expect(windows[0].endTimestamp).toBe(3400)
+    expect(windows[0].events).toHaveLength(0)
+  })
+
+  it('return keeps an already reopened window and ends the away state', async () => {
+    capturer.closeIdle(1000)
+    capturer.handleEvent(makeEvent({ type: 'click', timestamp: 2000 }))
+
+    capturer.openReturn(2000)
+    capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 2500 }))
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].closedBy).toBe('app_change')
+    expect(windows[0].startTimestamp).toBe(2000)
+    expect(windows[0].endTimestamp).toBe(2500)
+  })
+
   it('splits on app_change again once input has ended the away state', async () => {
     capturer.closeIdle(1000)
     capturer.handleEvent(makeEvent({ type: 'click', timestamp: 2000 }))

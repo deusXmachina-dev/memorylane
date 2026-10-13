@@ -177,15 +177,17 @@ export async function createMainRuntime(params: {
     extractorSink: sink,
     retainScreenshots,
   })
-  host.onIdle((lastInputAt) => {
-    harness.eventCapturer.closeIdle(lastInputAt)
-  })
-
   const capture: RuntimeCaptureController = createCaptureController({
     harness,
     interactionMonitor,
     outputDir,
     onStateChanged: () => onCaptureStateChanged(),
+  })
+  host.onIdle((lastInputAt) => {
+    harness.eventCapturer.closeIdle(lastInputAt)
+  })
+  host.onReturn((at) => {
+    if (capture.isCapturingNow()) harness.eventCapturer.openReturn(at)
   })
 
   const blacklistCoordinator = createCaptureBlacklistCoordinator({
