@@ -668,7 +668,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         deps.runtime.credentialsChanged()
       }
       if (switching || changed) {
-        void deps.runtime.remoteModels.sync()
+        void deps.sync.remoteModels.sync()
       }
     }
     if (payload?.invalidate && deps) {

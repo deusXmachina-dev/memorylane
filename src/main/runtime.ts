@@ -18,12 +18,9 @@ import { UsageTracker } from '@main/services/usage-tracker'
 import { SummaryModeTracker } from '@main/services/summary-mode-tracker'
 import { TaskMiner } from '@main/services/task-miner'
 import { UserContextBuilder } from '@main/services/user-context-builder'
-import { RemoteModelConfigService } from '@main/services/remote-model-config-service'
 import { BackendClient } from '@main/services/backend-client'
-import {
-  readRemoteModelConfig,
-  writeRemoteModelConfig,
-} from '@main/services/remote-model-config-store'
+import { readRemoteModelConfig } from '@main/services/remote-model-config-store'
+import type { RemoteModelConfig } from '@/shared/remote-model-config'
 import { pushModelSelections, resolveModelPush } from '@main/ui/apply-models'
 import { createPipelineHarness, type PipelineHarness } from '@main/activity/pipeline-harness'
 import { DefaultActivityTransformer } from '@main/activity/activity-transformer'
@@ -59,7 +56,6 @@ export interface MainRuntime {
   semanticService: ActivitySemanticService
   accessProvider: AccessProvider
   backend: BackendClient
-  remoteModels: RemoteModelConfigService
   taskMiner: TaskMiner
   userContextBuilder: UserContextBuilder
   evalRecorder: EvalRecorder
@@ -69,7 +65,7 @@ export interface MainRuntime {
   isEnterpriseActivated(): boolean
   requiresActivation(): boolean
   isPurging(): boolean
-  applyModels(): void
+  setRemoteModelConfig(config: RemoteModelConfig): void
   credentialsChanged(): void
   onStateChanged(listener: () => void): () => void
   notifyStateChanged(): void
@@ -105,14 +101,8 @@ export async function createMainRuntime(params: {
     getBackendUrl: () => backendUrlFor(edition),
     env: host,
   })
-  const remoteModels = new RemoteModelConfigService({
-    backend,
-    isActivated: () => isManaged() && (edition !== 'enterprise' || isEnterpriseActivated()),
-    onChange: () => applyModels(),
-    readStored: () => readRemoteModelConfig(),
-    writeStored: (config) => writeRemoteModelConfig(config),
-  })
-  const getRemoteModelConfig = () => (isManaged() ? remoteModels.getConfig() : null)
+  let remoteModelConfig = readRemoteModelConfig()
+  const getRemoteModelConfig = () => (isManaged() ? remoteModelConfig : null)
 
   const dev = !app.isPackaged
   const userDataPath = app.getPath('userData')
@@ -293,7 +283,6 @@ export async function createMainRuntime(params: {
     semanticService,
     accessProvider,
     backend,
-    remoteModels,
     taskMiner,
     userContextBuilder,
     evalRecorder,
@@ -303,7 +292,10 @@ export async function createMainRuntime(params: {
     isEnterpriseActivated,
     requiresActivation: () => requiresActivation(accessProvider.getAccessState()),
     isPurging: () => purging,
-    applyModels,
+    setRemoteModelConfig(config): void {
+      remoteModelConfig = config
+      applyModels()
+    },
     credentialsChanged(): void {
       applyModels()
       inferenceProvider.notifyConfigChanged()
@@ -314,7 +306,6 @@ export async function createMainRuntime(params: {
     onPrivacyBlockingChanged: privacyBlockingChanged.add,
     start(): void {
       accessProvider.startPeriodicRefresh()
-      remoteModels.start()
       // After a derived-data wipe migration the DB is still mined, so clusters
       // rebuild from sightings before the sweep poll starts.
       void taskMiner.rebuildClustersIfEmpty().then(() => taskMiner.startup())
@@ -332,7 +323,6 @@ export async function createMainRuntime(params: {
       if (disposePromise) return disposePromise
       disposePromise = (async () => {
         step('stop access refresh', () => accessProvider.stopPeriodicRefresh())
-        step('stop remote model config', () => remoteModels.stop())
         step('stop task miner', () => taskMiner.stop())
         step('stop user context builder', () => userContextBuilder.stop())
         unsubscribeSettings()

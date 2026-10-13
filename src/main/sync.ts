@@ -6,6 +6,11 @@ import { databaseUploadJob } from '@main/services/database-upload-job'
 import { logUploadJob } from '@main/services/log-upload-job'
 import { readLogUploadState, writeLogUploadState } from '@main/services/log-upload-store'
 import { RemoteBlacklistService } from '@main/services/remote-blacklist-service'
+import { RemoteModelConfigService } from '@main/services/remote-model-config-service'
+import {
+  readRemoteModelConfig,
+  writeRemoteModelConfig,
+} from '@main/services/remote-model-config-store'
 import { readRemoteBlacklist, writeRemoteBlacklist } from '@main/services/remote-blacklist-store'
 import { deviceReportJob } from '@main/services/device-report-job'
 import { readDeviceReportState, writeDeviceReportState } from '@main/services/device-report-store'
@@ -18,6 +23,7 @@ export interface ManagedExclusions {
 
 export interface AppSync {
   databaseExport: RawDatabaseExportSync
+  remoteModels: RemoteModelConfigService
   databaseUpload: BackendUpload | null
   logUpload: BackendUpload | null
   getManagedExclusions(): ManagedExclusions
@@ -36,6 +42,14 @@ export function createSync(runtime: MainRuntime): AppSync {
     storage,
     getExportDirectory: () => settings.get().databaseExportDirectory,
     getInstallationId: () => deviceIdentity.getPublicInstallationId(),
+  })
+
+  const remoteModels = new RemoteModelConfigService({
+    backend,
+    isActivated: () => runtime.isManaged() && (!enterprise || runtime.isEnterpriseActivated()),
+    onChange: (config) => runtime.setRemoteModelConfig(config),
+    readStored: () => readRemoteModelConfig(),
+    writeStored: (config) => writeRemoteModelConfig(config),
   })
 
   // Both editions report, so the fleet's version distribution is visible server-side.
@@ -102,6 +116,7 @@ export function createSync(runtime: MainRuntime): AppSync {
 
   return {
     databaseExport,
+    remoteModels,
     databaseUpload,
     logUpload,
     getManagedExclusions: () => remoteBlacklist?.getBlacklist() ?? { apps: [], urlPatterns: [] },
@@ -109,6 +124,7 @@ export function createSync(runtime: MainRuntime): AppSync {
     kick,
     start(): void {
       databaseExport.start()
+      remoteModels.start()
       deviceReport.start()
       databaseUpload?.start()
       logUpload?.start()
@@ -127,6 +143,7 @@ export function createSync(runtime: MainRuntime): AppSync {
     async stop(): Promise<void> {
       await Promise.allSettled([
         databaseExport.stop(),
+        remoteModels.stop(),
         deviceReport.stop(),
         databaseUpload?.stop(),
         logUpload?.stop(),
