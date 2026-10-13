@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { EVENT_CAPTURER_CONFIG, INTERACTION_MONITOR_CONFIG } from '@constants'
+import { INTERACTION_MONITOR_CONFIG } from '@constants'
 import type { InteractionContext } from '../../shared/types'
 
 // --- Mocks -----------------------------------------------------------------
@@ -86,7 +86,7 @@ describe('interaction-monitor session emission', () => {
 
   it('emits interim events during a long continuous scroll (instead of one late event)', () => {
     // 20 wheel events, one every 500ms => 10s of continuous scrolling, which
-    // exceeds MAX_SESSION_MS (4000) and the gap window several times over.
+    // exceeds MAX_SESSION_MS (4000) several times over.
     for (let i = 0; i < 20; i++) {
       wheel(1)
       vi.advanceTimersByTime(500)
@@ -94,8 +94,7 @@ describe('interaction-monitor session emission', () => {
     // Stop scrolling and let the debounce flush the final sub-window.
     vi.advanceTimersByTime(INTERACTION_MONITOR_CONFIG.SCROLL_DEBOUNCE_MS)
 
-    // Old behavior emitted exactly one event at the very end; the fix emits
-    // interim sub-windows so the downstream window stays alive.
+    // Old behavior emitted exactly one event at the very end.
     expect(emitted.length).toBeGreaterThan(1)
     expect(emitted.every((c) => c.type === 'scroll')).toBe(true)
 
@@ -225,17 +224,5 @@ describe('interaction-monitor session emission', () => {
       ['Browser', 'Fix login · PR #262'],
       ['Editor', 'Fix login · PR #262'],
     ])
-  })
-})
-
-describe('interaction-monitor keep-alive invariant', () => {
-  // The interim flush only keeps the downstream event-capturer window alive if a
-  // continuous session emits more often than the gap timer closes it. If this
-  // regresses (e.g. MAX_SESSION_MS bumped to >= GAP_TIMEOUT_MS), long scroll/typing
-  // sessions are silently dropped again — the exact bug this module fixes.
-  it('emits interim sub-windows faster than the event-capturer gap closes the window', () => {
-    expect(INTERACTION_MONITOR_CONFIG.MAX_SESSION_MS).toBeLessThan(
-      EVENT_CAPTURER_CONFIG.GAP_TIMEOUT_MS,
-    )
   })
 })

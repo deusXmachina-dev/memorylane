@@ -29,7 +29,7 @@ function makeActivity(interactions: Activity['interactions']): Activity {
 describe('buildSemanticPrompt', () => {
   it('warns the model off implied actions when nothing was clicked, typed or scrolled', () => {
     const prompt = buildSemanticPrompt(
-      makeActivity([{ type: 'presence', timestamp: 1500 }]),
+      makeActivity([{ type: 'app_change', timestamp: 1500 }]),
       'video',
     )
 

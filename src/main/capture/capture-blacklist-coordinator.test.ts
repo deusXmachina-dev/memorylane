@@ -28,23 +28,24 @@ describe('capture blacklist coordinator', () => {
   it('suppresses screenshots and drops events while excluded app is active', () => {
     const forwarded: InteractionContext[] = []
     const suppressionTransitions: boolean[] = []
-    let flushCount = 0
+    const flushBoundaries: (number | undefined)[] = []
 
     const coordinator = createCaptureBlacklistCoordinator({
       initialExcludedApps: ['signal'],
       forwardInteraction: (event) => forwarded.push(event),
-      flushEvents: () => {
-        flushCount++
+      flushEvents: (boundaryTimestamp) => {
+        flushBoundaries.push(boundaryTimestamp)
       },
       setScreenshotsSuppressed: (suppressed) => {
         suppressionTransitions.push(suppressed)
       },
     })
 
-    coordinator.handleInteraction(appChangeEvent('Signal'))
+    const switchToSignal = appChangeEvent('Signal')
+    coordinator.handleInteraction(switchToSignal)
     coordinator.handleInteraction({ type: 'keyboard', timestamp: Date.now(), keyCount: 3 })
 
-    expect(flushCount).toBe(1)
+    expect(flushBoundaries).toEqual([switchToSignal.timestamp])
     expect(suppressionTransitions).toEqual([true])
     expect(forwarded).toHaveLength(0)
   })

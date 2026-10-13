@@ -6,7 +6,7 @@ import {
   ManualHostEnvironment,
   remoteHost,
 } from './host-environment'
-import { HOST_RESOLVE_TIMEOUT_MS } from '@/shared/constants'
+import { AWAY_IDLE_SECONDS, HOST_RESOLVE_TIMEOUT_MS, IDLE_POLL_MS } from '@/shared/constants'
 
 vi.mock('electron', async () => {
   const { EventEmitter } = await import('node:events')
@@ -94,6 +94,80 @@ describe('power events', () => {
     emitter.emit('resume')
     expect(onSuspend).toHaveBeenCalledTimes(1)
     expect(onResume).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('idle', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('reports the last input time from OS idle', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(100_000)
+    const host = new ManualHostEnvironment()
+    vi.spyOn(host, 'idleSeconds').mockReturnValue(30)
+    expect(host.lastInputAt()).toBe(70_000)
+  })
+
+  it('emits once when idle crosses the threshold, again after a return', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(200_000)
+    const host = new ManualHostEnvironment()
+    const idle = vi.spyOn(host, 'idleSeconds')
+    const onIdle = vi.fn()
+    host.onIdle(onIdle)
+
+    idle.mockReturnValue(30)
+    host.checkIdle()
+    idle.mockReturnValue(AWAY_IDLE_SECONDS)
+    host.checkIdle()
+    idle.mockReturnValue(AWAY_IDLE_SECONDS + 5)
+    host.checkIdle()
+    expect(onIdle).toHaveBeenCalledTimes(1)
+    expect(onIdle).toHaveBeenCalledWith(200_000 - AWAY_IDLE_SECONDS * 1000)
+
+    idle.mockReturnValue(0)
+    host.checkIdle()
+    idle.mockReturnValue(AWAY_IDLE_SECONDS)
+    host.checkIdle()
+    expect(onIdle).toHaveBeenCalledTimes(2)
+  })
+
+  it('emits a return with the input time when idle drops below the threshold', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(200_000)
+    const host = new ManualHostEnvironment()
+    const idle = vi.spyOn(host, 'idleSeconds')
+    const onReturn = vi.fn()
+    host.onReturn(onReturn)
+
+    idle.mockReturnValue(10)
+    host.checkIdle()
+    expect(onReturn).not.toHaveBeenCalled()
+
+    idle.mockReturnValue(AWAY_IDLE_SECONDS)
+    host.checkIdle()
+    idle.mockReturnValue(2)
+    host.checkIdle()
+    idle.mockReturnValue(1)
+    host.checkIdle()
+    expect(onReturn).toHaveBeenCalledTimes(1)
+    expect(onReturn).toHaveBeenCalledWith(198_000)
+  })
+
+  it('polls idle once started', async () => {
+    vi.useFakeTimers()
+    const emitter = (await import('electron')).powerMonitor as unknown as EventEmitter
+    emitter.removeAllListeners()
+    const host = new HostEnvironment()
+    const onIdle = vi.fn()
+    host.onIdle(onIdle)
+    host.start(vi.fn())
+    vi.spyOn(host, 'idleSeconds').mockReturnValue(AWAY_IDLE_SECONDS)
+
+    vi.advanceTimersByTime(IDLE_POLL_MS)
+    expect(onIdle).toHaveBeenCalledTimes(1)
   })
 })
 

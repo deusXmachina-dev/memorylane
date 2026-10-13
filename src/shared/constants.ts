@@ -26,18 +26,9 @@ export const INTERACTION_MONITOR_CONFIG = {
   TYPING_DEBOUNCE_MS: 2000, // Wait for typing to stop before emitting event (500-5000ms)
   SCROLL_DEBOUNCE_MS: 2000, // Wait for scrolling to stop before emitting event (200-2000ms)
   // Force-emit an interim event when a continuous session runs longer than this,
-  // so long scroll/typing keeps the event-capturer's window alive instead of
-  // being cut by its idle gap. The binding invariant is
-  // MAX_SESSION_MS < EVENT_CAPTURER_CONFIG.GAP_TIMEOUT_MS — otherwise a continuous
-  // session emits less often than the gap and the downstream window is dropped
-  // (guarded by a test in interaction-monitor.test.ts).
-  //
-  // This is independent of the debounce values above: debounce controls when a
-  // session is considered *finished*, while this caps how long a *running* session
-  // goes between emits. When a user-configured debounce exceeds this (the UI allows
-  // up to 10s), a long session is intentionally split into interim sub-windows —
-  // each stamped at receipt time, with no events lost or double-counted — because
-  // honoring a debounce longer than the gap would let the window die.
+  // so a long scroll/typing session shows up in the timeline as it happens
+  // instead of as one event at its end. Debounce decides when a session is
+  // *finished*; this caps how long a *running* session goes between emits.
   MAX_SESSION_MS: 4000,
 }
 
@@ -78,6 +69,8 @@ export const TRANSPORT_TIMEOUT_MS = 2 * MAX_REQUEST_TIMEOUT_MS
 export const BACKEND_REQUEST_TIMEOUT_MS = 30_000
 export const BACKEND_UPLOAD_TIMEOUT_MS = 30 * 60_000
 export const HOST_RESOLVE_TIMEOUT_MS = 5_000
+export const AWAY_IDLE_SECONDS = 90
+export const IDLE_POLL_MS = 5_000
 
 // Activity Window Configuration
 export const ACTIVITY_CONFIG = {
@@ -95,26 +88,9 @@ export const LLM_HEALTH_CONFIG = {
   RECOVERY_PROBE_INTERVAL_MS: 60_000, // Re-probe cadence while health is failing
 }
 
-// Presence Heartbeat Configuration
-// Keeps an event window alive while the user is present but not providing input
-// (reading), so a no-input view isn't dropped when the idle gap fires.
-export const PRESENCE_MONITOR_CONFIG = {
-  ENABLED: true,
-  // Heartbeat cadence. The binding invariant is
-  // HEARTBEAT_INTERVAL_MS < EVENT_CAPTURER_CONFIG.GAP_TIMEOUT_MS — otherwise the
-  // window dies between heartbeats (guarded by a test). Mirrors the
-  // INTERACTION_MONITOR_CONFIG.MAX_SESSION_MS keep-alive for active sessions.
-  HEARTBEAT_INTERVAL_MS: 4_000,
-  // Stop heartbeating once the OS reports this many seconds with no input. Mouse
-  // movement resets the OS idle timer, so a present reader counts as active; a
-  // genuine walk-away is cut roughly this long after their last movement.
-  AWAY_IDLE_SECONDS: 90,
-}
-
-// Event Capturer Configuration (gap-based session windowing)
+// Event Capturer Configuration
 export const EVENT_CAPTURER_CONFIG = {
-  GAP_TIMEOUT_MS: 5_000,
-  MAX_WINDOW_DURATION_MS: 5 * 60 * 1000, // Safety cap only — most windows close via gap timer
+  MAX_WINDOW_DURATION_MS: 5 * 60 * 1000,
   LATE_EVENT_GRACE_MS: 3_500, // Hold closed windows briefly to absorb debounced late arrivals
 }
 

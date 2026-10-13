@@ -4,7 +4,7 @@ import { isIP } from 'node:net'
 import log from '@main/utils/logger'
 import { describeNetworkError } from '@main/utils/network-error'
 import { isLoopbackUrl } from '@/shared/url-utils'
-import { HOST_RESOLVE_TIMEOUT_MS } from '@/shared/constants'
+import { AWAY_IDLE_SECONDS, HOST_RESOLVE_TIMEOUT_MS, IDLE_POLL_MS } from '@/shared/constants'
 
 export type StandDownReason = 'suspended' | 'offline' | 'unresolved'
 
@@ -26,6 +26,9 @@ export class HostEnvironment {
   private onBattery = false
   private suspendedAt = 0
   private onPauseChange: ((pause: boolean) => void) | null = null
+  private idle = false
+  private readonly idleListeners = new Set<(lastInputAt: number) => void>()
+  private readonly returnListeners = new Set<(at: number) => void>()
   protected readonly suspendListeners = new Set<() => void>()
   protected readonly resumeListeners = new Set<() => void>()
 
@@ -60,6 +63,7 @@ export class HostEnvironment {
       this.onBattery = true
     })
 
+    setInterval(() => this.checkIdle(), IDLE_POLL_MS)
     log.info(`[Power] Monitoring started (onBattery=${this.onBattery})`)
   }
 
@@ -84,6 +88,32 @@ export class HostEnvironment {
   /** Seconds since the last system-wide user input (mouse move counts), per the OS. */
   idleSeconds(): number {
     return powerMonitor.getSystemIdleTime()
+  }
+
+  lastInputAt(): number {
+    return Date.now() - this.idleSeconds() * 1000
+  }
+
+  onIdle(listener: (lastInputAt: number) => void): () => void {
+    this.idleListeners.add(listener)
+    return () => {
+      this.idleListeners.delete(listener)
+    }
+  }
+
+  onReturn(listener: (at: number) => void): () => void {
+    this.returnListeners.add(listener)
+    return () => {
+      this.returnListeners.delete(listener)
+    }
+  }
+
+  checkIdle(): void {
+    const idle = this.idleSeconds() >= AWAY_IDLE_SECONDS
+    if (idle === this.idle) return
+    this.idle = idle
+    const at = this.lastInputAt()
+    for (const listener of idle ? this.idleListeners : this.returnListeners) listener(at)
   }
 
   resolves(host: string): Promise<boolean> {

@@ -6,7 +6,6 @@ import type { StreamSubscription } from '@main/streams/stream'
 // Use short timer values for fast tests
 vi.mock('@constants', () => ({
   EVENT_CAPTURER_CONFIG: {
-    GAP_TIMEOUT_MS: 100,
     MAX_WINDOW_DURATION_MS: 500,
   },
 }))
@@ -60,14 +59,15 @@ describe('EventCapturer', () => {
     vi.useRealTimers()
   })
 
-  it('emits a window via gap closure after inactivity', async () => {
+  it('closes with gap when the host reports idle', async () => {
     capturer.handleEvent(makeEvent({ type: 'keyboard', timestamp: 1000 }))
     capturer.handleEvent(makeEvent({ type: 'keyboard', timestamp: 1050 }))
 
+    vi.advanceTimersByTime(300)
+    await flushAsyncAppends()
     expect(windows).toHaveLength(0)
 
-    // Advance past gap timeout (100ms mock)
-    vi.advanceTimersByTime(100)
+    capturer.closeIdle(1050)
     await flushAsyncAppends()
 
     expect(windows).toHaveLength(1)
@@ -78,22 +78,17 @@ describe('EventCapturer', () => {
   })
 
   it('force-closes with max_duration when window exceeds max duration', async () => {
-    // Feed events continuously to keep the gap timer resetting
     capturer.handleEvent(makeEvent({ type: 'keyboard', timestamp: 1000 }))
     for (let i = 1; i <= 10; i++) {
-      vi.advanceTimersByTime(80) // less than gap timeout (100ms)
+      vi.advanceTimersByTime(80)
       capturer.handleEvent(makeEvent({ type: 'keyboard', timestamp: 1000 + i * 80 }))
     }
     await flushAsyncAppends()
 
-    // At this point ~800ms has passed. Max duration is 500ms, so the timer should
-    // have fired at 500ms. The window should have been closed then.
     expect(windows).toHaveLength(1)
     expect(windows[0].closedBy).toBe('max_duration')
 
-    // The events after max_duration fired opened a new window
-    // Advance past gap timeout to close that second window
-    vi.advanceTimersByTime(100)
+    capturer.closeIdle(1800)
     await flushAsyncAppends()
     expect(windows).toHaveLength(2)
   })
@@ -212,12 +207,12 @@ describe('EventCapturer', () => {
   it('produces multiple consecutive windows with unique ids', async () => {
     // First window
     capturer.handleEvent(makeEvent({ type: 'keyboard', timestamp: 8000 }))
-    vi.advanceTimersByTime(100) // gap close
+    capturer.closeIdle(Date.now())
     await flushAsyncAppends()
 
     // Second window
     capturer.handleEvent(makeEvent({ type: 'click', timestamp: 9000 }))
-    vi.advanceTimersByTime(100) // gap close
+    capturer.closeIdle(Date.now())
     await flushAsyncAppends()
 
     expect(windows).toHaveLength(2)
@@ -270,7 +265,7 @@ describe('EventCapturer', () => {
     // New window starts at app_change boundary (12100), then we receive a late/backdated
     // event that should be routed into the prior pending window.
     capturer.handleEvent(makeEvent({ type: 'scroll', timestamp: 11900 }))
-    capturer.flush()
+    capturer.flush(11950)
     await flushAsyncAppends()
 
     expect(windows).toHaveLength(2)
@@ -278,23 +273,219 @@ describe('EventCapturer', () => {
     expect(windows[1].endTimestamp).toBe(12100)
     expect(windows[1].endTimestamp - windows[1].startTimestamp).toBeGreaterThanOrEqual(0)
   })
+})
 
-  it('gap timer resets on each event', async () => {
-    capturer.handleEvent(makeEvent({ type: 'keyboard', timestamp: 11000 }))
+describe('EventCapturer idle and boundary ends', () => {
+  let capturer: EventCapturer
+  let stream: InMemoryStream<EventWindow>
+  let windows: EventWindow[]
+  let windowsSubscription: StreamSubscription
 
-    // Advance 80ms (less than 100ms gap) and feed another event
-    vi.advanceTimersByTime(80)
-    capturer.handleEvent(makeEvent({ type: 'keyboard', timestamp: 11080 }))
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1000)
+    stream = new InMemoryStream<EventWindow>()
+    windows = []
+    capturer = new EventCapturer(stream)
+    windowsSubscription = stream.subscribe({
+      startAt: { type: 'now' },
+      onRecord: (record) => windows.push(record.payload),
+    })
+  })
 
-    // Advance another 80ms — should not close yet (gap restarted)
-    vi.advanceTimersByTime(80)
+  afterEach(() => {
+    windowsSubscription.unsubscribe()
+    capturer.destroy()
+    vi.useRealTimers()
+  })
+
+  it('keeps a no-input window open until idle and ends it at the last input', async () => {
+    capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 1000 }))
+
+    vi.advanceTimersByTime(300)
     await flushAsyncAppends()
     expect(windows).toHaveLength(0)
 
-    // Advance remaining 20ms to hit 100ms after last event
-    vi.advanceTimersByTime(20)
+    capturer.closeIdle(1200)
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].closedBy).toBe('gap')
+    expect(windows[0].startTimestamp).toBe(1000)
+    expect(windows[0].endTimestamp).toBe(1200)
+    expect(windows[0].events).toHaveLength(1)
+  })
+
+  it('ends at the last event when idle began before it', async () => {
+    capturer.handleEvent(makeEvent({ type: 'click', timestamp: 1000 }))
+
+    capturer.closeIdle(900)
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].endTimestamp).toBe(1000)
+  })
+
+  it('flush without a boundary ends at now', async () => {
+    capturer.handleEvent(makeEvent({ type: 'click', timestamp: 1000 }))
+    vi.setSystemTime(2000)
+
+    capturer.flush()
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].closedBy).toBe('flush')
+    expect(windows[0].endTimestamp).toBe(2000)
+  })
+
+  it('flush with a boundary ends the window at the boundary', async () => {
+    capturer.handleEvent(makeEvent({ type: 'click', timestamp: 1000 }))
+    vi.setSystemTime(2000)
+
+    capturer.flush(1300)
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].endTimestamp).toBe(1300)
+  })
+
+  it('falls back to now when the close boundary is not finite', async () => {
+    capturer.handleEvent(makeEvent({ type: 'click', timestamp: 1000 }))
+    vi.setSystemTime(2000)
+
+    capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: NaN }))
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].closedBy).toBe('app_change')
+    expect(windows[0].endTimestamp).toBe(2000)
+  })
+
+  it('rolls over at max_duration and ends the next window at the last input', async () => {
+    capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 1000 }))
+
+    vi.advanceTimersByTime(500)
     await flushAsyncAppends()
     expect(windows).toHaveLength(1)
-    expect(windows[0].events).toHaveLength(2)
+    expect(windows[0].closedBy).toBe('max_duration')
+    expect(windows[0].endTimestamp).toBe(1500)
+
+    vi.advanceTimersByTime(300)
+    capturer.closeIdle(1650)
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(2)
+    expect(windows[1].closedBy).toBe('gap')
+    expect(windows[1].startTimestamp).toBe(1500)
+    expect(windows[1].endTimestamp).toBe(1650)
+    expect(windows[1].events).toHaveLength(0)
+  })
+
+  it('drops a rolled-over window with no input after it opened', async () => {
+    capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 1000 }))
+
+    vi.advanceTimersByTime(500)
+    capturer.closeIdle(1050)
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].closedBy).toBe('max_duration')
+  })
+
+  it('does not open a window on app_change while away', async () => {
+    capturer.handleEvent(makeEvent({ type: 'click', timestamp: 1000 }))
+    capturer.closeIdle(1000)
+    await flushAsyncAppends()
+    expect(windows).toHaveLength(1)
+
+    vi.setSystemTime(2000)
+    capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 2000 }))
+    vi.advanceTimersByTime(1500)
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+  })
+
+  it('opens on the first input after away and carries the latest app_change as context', async () => {
+    const screensaver = { title: '', processName: 'ScreenSaverEngine' }
+    const chrome = { title: 'Inbox', processName: 'Google Chrome' }
+    capturer.closeIdle(1000)
+    capturer.handleEvent(
+      makeEvent({ type: 'app_change', timestamp: 2000, activeWindow: screensaver }),
+    )
+    capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 3000, activeWindow: chrome }))
+
+    vi.setSystemTime(5000)
+    capturer.handleEvent(makeEvent({ type: 'click', timestamp: 5000 }))
+    capturer.closeIdle(5000)
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].startTimestamp).toBe(5000)
+    expect(windows[0].endTimestamp).toBe(5000)
+    expect(windows[0].events.map((event) => event.type)).toEqual(['app_change', 'click'])
+    expect(windows[0].events[0].timestamp).toBe(5000)
+    expect(windows[0].events[0].activeWindow).toEqual(chrome)
+  })
+
+  it('reopens on return at the return time with the away app_change as context', async () => {
+    const chrome = { title: 'Inbox', processName: 'Google Chrome' }
+    capturer.handleEvent(makeEvent({ type: 'click', timestamp: 1000 }))
+    capturer.closeIdle(1000)
+    await flushAsyncAppends()
+    capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 2000, activeWindow: chrome }))
+
+    capturer.openReturn(3000)
+    capturer.closeIdle(3400)
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(2)
+    expect(windows[1].closedBy).toBe('gap')
+    expect(windows[1].startTimestamp).toBe(3000)
+    expect(windows[1].endTimestamp).toBe(3400)
+    expect(windows[1].events).toHaveLength(1)
+    expect(windows[1].events[0]).toMatchObject({
+      type: 'app_change',
+      timestamp: 3000,
+      activeWindow: chrome,
+    })
+  })
+
+  it('reopens on return without context and ends at the next idle', async () => {
+    capturer.closeIdle(1000)
+
+    capturer.openReturn(3000)
+    capturer.closeIdle(3400)
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].startTimestamp).toBe(3000)
+    expect(windows[0].endTimestamp).toBe(3400)
+    expect(windows[0].events).toHaveLength(0)
+  })
+
+  it('return keeps an already reopened window and ends the away state', async () => {
+    capturer.closeIdle(1000)
+    capturer.handleEvent(makeEvent({ type: 'click', timestamp: 2000 }))
+
+    capturer.openReturn(2000)
+    capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 2500 }))
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].closedBy).toBe('app_change')
+    expect(windows[0].startTimestamp).toBe(2000)
+    expect(windows[0].endTimestamp).toBe(2500)
+  })
+
+  it('splits on app_change again once input has ended the away state', async () => {
+    capturer.closeIdle(1000)
+    capturer.handleEvent(makeEvent({ type: 'click', timestamp: 2000 }))
+    capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 2500 }))
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].closedBy).toBe('app_change')
+    expect(windows[0].endTimestamp).toBe(2500)
   })
 })

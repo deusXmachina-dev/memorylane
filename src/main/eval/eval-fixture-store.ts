@@ -24,6 +24,13 @@ import { describeInteraction } from '@main/semantic/prompt'
 import { evalMediaUrl } from './eval-media-protocol'
 import { formatGoldenMd, parseGoldenMd } from './golden-md'
 
+const INTERACTION_TYPES = new Set<InteractionContext['type']>([
+  'click',
+  'keyboard',
+  'scroll',
+  'app_change',
+])
+
 /** Staging dir for in-progress recordings — never listed as a fixture. */
 const STAGING_DIR = '.staging'
 
@@ -106,9 +113,7 @@ export class EvalFixtureStore {
    * Reads `event-windows.jsonl` into a display-ready, window-grouped timeline.
    * Offsets anchor to the same session-start clock as the video and golden mm:ss
    * (min frame timestamp, falling back to the earliest window start), so the
-   * review UI lines up across all three columns. Presence heartbeats are
-   * synthetic keep-alives with no user-action signal, so they're dropped — same
-   * as the model's prompt timeline.
+   * review UI lines up across all three columns.
    */
   private loadEventWindows(dir: string): EvalEventWindow[] {
     const windowsPath = path.join(dir, 'event-windows.jsonl')
@@ -119,7 +124,7 @@ export class EvalFixtureStore {
     const sessionStartMs = this.sessionStartMs(dir, windows)
     return windows.map((w) => {
       const events = w.events
-        .filter((e) => e.type !== 'presence')
+        .filter((e) => INTERACTION_TYPES.has(e.type))
         .sort((a, b) => a.timestamp - b.timestamp)
       return {
         startOffsetMs: w.startTimestamp - sessionStartMs,

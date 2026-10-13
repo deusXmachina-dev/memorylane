@@ -12,6 +12,7 @@ interface PendingWindow {
   boundaryTimestamp: number
   includeBoundaryTimestamp: boolean
   endTimestampOverride?: number
+  lastInputAt: number
   finalizeTimer: NodeJS.Timeout | null
 }
 
@@ -19,6 +20,7 @@ interface CloseWindowOptions {
   boundaryTimestamp?: number
   includeBoundaryTimestamp?: boolean
   waitForLateEvents?: boolean
+  lastInputAt?: number
 }
 
 export class EventCapturer {
@@ -27,11 +29,6 @@ export class EventCapturer {
 
   private appendChain: Promise<void> = Promise.resolve()
 
-  /**
-   * The in-progress window accumulating events. `null` when idle (no events
-   * since the last window closed). Created lazily on the first handleEvent()
-   * call after a close.
-   */
   private currentWindow: {
     id: string
     startTimestamp: number
@@ -44,20 +41,10 @@ export class EventCapturer {
    * switch boundary. Other close reasons open at the next observed event.
    */
   private nextWindowStartTimestamp: number | null = null
+  private away = false
+  private awayContext: InteractionContext | null = null
   private pendingWindows: PendingWindow[] = []
 
-  /**
-   * Gap timer handle. Restarted on every handleEvent() call. When it fires
-   * (no new event within GAP_TIMEOUT_MS), the current window closes with
-   * closedBy: 'gap'. This is the primary close mechanism.
-   */
-  private gapTimer: NodeJS.Timeout | null = null
-
-  /**
-   * Max duration timer handle. Started once when a window opens. When it
-   * fires (window has been open for MAX_WINDOW_DURATION_MS), the window
-   * force-closes with closedBy: 'max_duration'. Safety valve only.
-   */
   private maxDurationTimer: NodeJS.Timeout | null = null
 
   constructor(eventStream: DurableStream<EventWindow>) {
@@ -65,56 +52,47 @@ export class EventCapturer {
     this.lateEventGraceMs = EVENT_CAPTURER_CONFIG.LATE_EVENT_GRACE_MS ?? 0
   }
 
-  /**
-   * Ingest a single interaction event. This is the only entry point for data.
-   * Synchronous, performs no I/O — just accumulates the event and manages timers.
-   *
-   * - If event is app_change and a window is open: closes it first.
-   * - If no window is open: creates one (lazy open), starts max duration timer.
-   * - Pushes the event into currentWindow.events.
-   * - Resets the gap timer.
-   */
   handleEvent(event: InteractionContext): void {
-    // App change splits the current window before opening a new one
-    if (event.type === 'app_change' && this.currentWindow !== null) {
-      this.closeWindow('app_change', {
-        boundaryTimestamp: event.timestamp,
-        includeBoundaryTimestamp: false,
-      })
-    }
-
-    // Route late debounced events into recently closed windows when they
-    // occurred before that window's close boundary.
-    if (event.type !== 'app_change' && this.tryAttachToPendingWindow(event)) {
+    if (event.type === 'app_change') {
+      if (this.away) {
+        this.awayContext = event
+        return
+      }
+      if (this.currentWindow !== null) {
+        this.closeWindow('app_change', {
+          boundaryTimestamp: event.timestamp,
+          includeBoundaryTimestamp: false,
+        })
+      }
+    } else if (this.tryAttachToPendingWindow(event)) {
       return
     }
 
-    // Lazy open: create a new window on the first event
     if (this.currentWindow === null) {
-      const startTimestamp = this.nextWindowStartTimestamp ?? event.timestamp
-      this.nextWindowStartTimestamp = null
-      this.currentWindow = {
-        id: uuidv4(),
-        startTimestamp,
-        events: [],
-      }
-      this.startMaxDurationTimer()
+      this.currentWindow = this.openWindowAt(event.timestamp)
     }
 
+    this.away = false
     this.currentWindow.events.push(event)
-    this.resetGapTimer()
   }
 
-  /**
-   * Gracefully close the current window and emit it to callbacks.
-   * Sets closedBy: 'flush'. Used on sleep/lock/capture-stop.
-   * No-op if no window is open.
-   */
-  flush(): void {
+  closeIdle(lastInputAt: number): void {
+    this.away = true
+    if (this.currentWindow === null) return
+    this.closeWindow('gap', { lastInputAt })
+  }
+
+  openReturn(at: number): void {
+    this.away = false
+    if (this.currentWindow !== null) return
+    this.currentWindow = this.openWindowAt(at)
+  }
+
+  flush(boundaryTimestamp?: number): void {
     if (this.currentWindow === null) return
     this.closeWindow('flush', {
       waitForLateEvents: false,
-      boundaryTimestamp: Date.now(),
+      boundaryTimestamp,
     })
   }
 
@@ -141,16 +119,14 @@ export class EventCapturer {
    * emitting. Used on app quit where we don't need the partial data.
    */
   destroy(): void {
-    if (this.gapTimer !== null) {
-      clearTimeout(this.gapTimer)
-      this.gapTimer = null
-    }
     if (this.maxDurationTimer !== null) {
       clearTimeout(this.maxDurationTimer)
       this.maxDurationTimer = null
     }
     this.currentWindow = null
     this.nextWindowStartTimestamp = null
+    this.away = false
+    this.awayContext = null
     this.clearPendingWindows()
   }
 
@@ -161,17 +137,24 @@ export class EventCapturer {
   private closeWindow(reason: EventWindow['closedBy'], options?: CloseWindowOptions): void {
     if (this.currentWindow === null) return
 
-    // Clear timers
-    if (this.gapTimer !== null) {
-      clearTimeout(this.gapTimer)
-      this.gapTimer = null
-    }
     if (this.maxDurationTimer !== null) {
       clearTimeout(this.maxDurationTimer)
       this.maxDurationTimer = null
     }
 
-    const boundaryTimestamp = options?.boundaryTimestamp ?? Date.now()
+    const requestedBoundary = options?.boundaryTimestamp
+    const boundaryTimestamp =
+      requestedBoundary !== undefined && Number.isFinite(requestedBoundary)
+        ? requestedBoundary
+        : Date.now()
+    const { startTimestamp, events } = this.currentWindow
+    const lastInputAt = options?.lastInputAt ?? boundaryTimestamp
+    if (events.length === 0 && lastInputAt <= startTimestamp) {
+      this.currentWindow = null
+      this.nextWindowStartTimestamp = null
+      return
+    }
+
     const pendingWindow: PendingWindow = {
       id: this.currentWindow.id,
       startTimestamp: this.currentWindow.startTimestamp,
@@ -179,36 +162,40 @@ export class EventCapturer {
       closedBy: reason,
       boundaryTimestamp,
       includeBoundaryTimestamp: options?.includeBoundaryTimestamp ?? true,
-      endTimestampOverride:
-        reason === 'app_change' && Number.isFinite(boundaryTimestamp)
-          ? boundaryTimestamp
-          : undefined,
+      endTimestampOverride: reason === 'app_change' ? boundaryTimestamp : undefined,
+      lastInputAt,
       finalizeTimer: null,
     }
 
     this.currentWindow = null
-    this.nextWindowStartTimestamp =
-      reason === 'app_change' && Number.isFinite(boundaryTimestamp) ? boundaryTimestamp : null
+    this.nextWindowStartTimestamp = reason === 'app_change' ? boundaryTimestamp : null
 
     const shouldWaitForLateEvents = options?.waitForLateEvents ?? true
     const finalizeDelayMs = shouldWaitForLateEvents ? this.lateEventGraceMs : 0
     this.schedulePendingWindowFinalize(pendingWindow, finalizeDelayMs)
   }
 
-  private resetGapTimer(): void {
-    if (this.gapTimer !== null) {
-      clearTimeout(this.gapTimer)
+  private openWindow(startTimestamp: number): NonNullable<EventCapturer['currentWindow']> {
+    this.startMaxDurationTimer()
+    return { id: uuidv4(), startTimestamp, events: [] }
+  }
+
+  private openWindowAt(timestamp: number): NonNullable<EventCapturer['currentWindow']> {
+    const window = this.openWindow(this.nextWindowStartTimestamp ?? timestamp)
+    this.nextWindowStartTimestamp = null
+    if (this.awayContext !== null) {
+      window.events.push({ ...this.awayContext, timestamp })
+      this.awayContext = null
     }
-    this.gapTimer = setTimeout(() => {
-      this.gapTimer = null
-      this.closeWindow('gap')
-    }, EVENT_CAPTURER_CONFIG.GAP_TIMEOUT_MS)
+    return window
   }
 
   private startMaxDurationTimer(): void {
     this.maxDurationTimer = setTimeout(() => {
       this.maxDurationTimer = null
-      this.closeWindow('max_duration')
+      const boundaryTimestamp = Date.now()
+      this.closeWindow('max_duration', { boundaryTimestamp })
+      this.currentWindow = this.openWindow(boundaryTimestamp)
     }, EVENT_CAPTURER_CONFIG.MAX_WINDOW_DURATION_MS)
   }
 
@@ -292,11 +279,12 @@ export class EventCapturer {
     startTimestamp: number
     events: InteractionContext[]
     endTimestampOverride?: number
+    lastInputAt: number
   }): {
     startTimestamp: number
     endTimestamp: number
   } {
-    if (window.endTimestampOverride !== undefined && Number.isFinite(window.endTimestampOverride)) {
+    if (window.endTimestampOverride !== undefined) {
       return {
         startTimestamp: window.startTimestamp,
         endTimestamp: Math.max(window.startTimestamp, window.endTimestampOverride),
@@ -306,6 +294,7 @@ export class EventCapturer {
     const timestamps = window.events
       .map((event) => event.timestamp)
       .filter((timestamp) => Number.isFinite(timestamp))
+    timestamps.push(window.lastInputAt)
     if (timestamps.length === 0) {
       return {
         startTimestamp: window.startTimestamp,
