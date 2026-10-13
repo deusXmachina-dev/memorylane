@@ -92,10 +92,6 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   getActivityDigest: () => ipcRenderer.invoke('main-window:getActivityDigest'),
   // Stats
   getStats: () => ipcRenderer.invoke('main-window:getStats'),
-  chooseDatabaseExportDirectory: (initialPath?: string) =>
-    ipcRenderer.invoke('main-window:chooseDatabaseExportDirectory', initialPath),
-  setDatabaseExportDirectory: (directoryPath: string) =>
-    ipcRenderer.invoke('main-window:setDatabaseExportDirectory', directoryPath),
   // Database export
   exportDatabaseZip: () => ipcRenderer.invoke('main-window:exportDatabaseZip'),
   exportLogsZip: () => ipcRenderer.invoke('main-window:exportLogsZip'),

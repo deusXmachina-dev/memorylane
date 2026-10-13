@@ -16,7 +16,6 @@ export interface LiveSettingsTargets {
   }
   inferenceProvider: { notifyConfigChanged(): void }
   taskMiner: { setEnabled(enabled: boolean): void }
-  databaseExport: { exportNow(reason: string): Promise<void> }
   applyModels(): void
 }
 
@@ -46,9 +45,6 @@ export function applySettingsChange(
   t.semanticService.updateRequestTimeoutMs(next.activityRequestTimeoutMs)
   if (next.patternDetectionEnabled !== previous.patternDetectionEnabled) {
     t.taskMiner.setEnabled(next.patternDetectionEnabled)
-  }
-  if (next.databaseExportDirectory !== previous.databaseExportDirectory) {
-    void t.databaseExport.exportNow('directory changed')
   }
   if (MODEL_KEYS.some((key) => next[key] !== previous[key])) {
     t.applyModels()

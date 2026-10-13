@@ -779,31 +779,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   // Stats
   ipcMain.handle('main-window:getStats', () => buildStats())
 
-  ipcMain.handle(
-    'main-window:chooseDatabaseExportDirectory',
-    async (_event: IpcMainInvokeEvent, initialPath?: string) => {
-      try {
-        const result = await showOpenDialog(getMainWindow(), {
-          properties: ['openDirectory', 'createDirectory'],
-          defaultPath:
-            typeof initialPath === 'string' && /\S/.test(initialPath) ? initialPath : undefined,
-        })
-
-        if (result.canceled) {
-          return { cancelled: true }
-        }
-
-        return {
-          cancelled: false,
-          directoryPath: result.filePaths[0],
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to choose folder'
-        return { cancelled: false, error: message }
-      }
-    },
-  )
-
   // Shell — only allow https URLs to prevent arbitrary protocol execution
   ipcMain.handle('main-window:openExternal', (_event: IpcMainInvokeEvent, url: string) => {
     if (typeof url !== 'string' || !url.startsWith('https://')) return
@@ -920,14 +895,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     (_event: IpcMainInvokeEvent, partial: Partial<AppSettings>) => {
       if (!deps) return { success: false, error: 'Dependencies not initialized' }
       const previous = deps.runtime.settings.get()
-      // databaseExportDirectory is renderer-untrusted (path-traversal sink).
-      // The only legitimate write path is `main-window:setDatabaseExportDirectory`,
-      // which runs realpath + safe-root containment. Drop it here regardless of
-      // value so a malicious renderer can't bypass that check.
       const sanitized: Partial<AppSettings> = { ...partial }
-      if ('databaseExportDirectory' in sanitized) {
-        delete sanitized.databaseExportDirectory
-      }
       try {
         if (
           sanitized.captureHotkeyAccelerator !== undefined &&
@@ -956,20 +924,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         ) {
           deps.hotkey.reconfigure(previous.captureHotkeyAccelerator)
         }
-        const message = error instanceof Error ? error.message : 'Unknown error'
-        return { success: false, error: message }
-      }
-    },
-  )
-
-  ipcMain.handle(
-    'main-window:setDatabaseExportDirectory',
-    (_event: IpcMainInvokeEvent, requestedPath: unknown) => {
-      if (!deps) return { success: false, error: 'Dependencies not initialized' }
-      try {
-        deps.runtime.settings.setDatabaseExportDirectory(requestedPath)
-        return { success: true }
-      } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'
         return { success: false, error: message }
       }

@@ -157,12 +157,6 @@ export interface DatabaseImportResult {
   error?: string | undefined
 }
 
-export interface DirectorySelectionResult {
-  cancelled: boolean
-  directoryPath?: string | undefined
-  error?: string | undefined
-}
-
 export interface SettingsAPI {
   getCredentialStatuses: () => Promise<Record<Vendor, VendorStatus>>
   saveCredentials: (vendor: Vendor, creds: VendorCredentials) => Promise<SaveResult>
@@ -235,7 +229,6 @@ export interface AppSettings {
   taskMiningRequestTimeoutMs: number
   semanticPipelineMode: SemanticPipelineMode
   captureHotkeyAccelerator: string
-  databaseExportDirectory: string
   excludePrivateBrowsing: boolean
   excludeLoginScreens: boolean
   excludedApps: string[]
@@ -443,8 +436,6 @@ export interface MainWindowAPI {
   getActivityDigest: () => Promise<ActivityDigest>
   // Stats
   getStats: () => Promise<MainWindowStats>
-  chooseDatabaseExportDirectory: (initialPath?: string) => Promise<DirectorySelectionResult>
-  setDatabaseExportDirectory: (directoryPath: string) => Promise<SaveResult>
   // Database export
   exportDatabaseZip: () => Promise<DatabaseExportResult>
   exportLogsZip: () => Promise<DatabaseExportResult>

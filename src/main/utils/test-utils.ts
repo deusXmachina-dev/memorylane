@@ -32,7 +32,6 @@ export function makeAppSettings(overrides: Partial<AppSettings> = {}): AppSettin
     taskMiningRequestTimeoutMs: 1200000,
     semanticPipelineMode: 'auto',
     captureHotkeyAccelerator: 'CommandOrControl+Shift+M',
-    databaseExportDirectory: '',
     excludePrivateBrowsing: true,
     excludeLoginScreens: true,
     excludedApps: [],

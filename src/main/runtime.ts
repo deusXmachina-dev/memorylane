@@ -19,7 +19,6 @@ import { SummaryModeTracker } from '@main/services/summary-mode-tracker'
 import { TaskMiner } from '@main/services/task-miner'
 import { UserContextBuilder } from '@main/services/user-context-builder'
 import { BackendClient } from '@main/services/backend-client'
-import { DatabaseExport } from '@main/services/database-export'
 import { readRemoteModelConfig } from '@main/services/remote-model-config-store'
 import type { RemoteModelConfig } from '@/shared/remote-model-config'
 import { pushModelSelections, resolveModelPush } from '@main/ui/apply-models'
@@ -209,15 +208,9 @@ export async function createMainRuntime(params: {
   }
   applyModels()
 
-  const databaseExport = new DatabaseExport({
-    storage,
-    getExportDirectory: () => settings.get().databaseExportDirectory,
-    getInstallationId: () => deviceIdentity.getPublicInstallationId(),
-  })
-
   const unsubscribeSettings = settings.onChange((next, previous) =>
     applySettingsChange(
-      { harness, semanticService, inferenceProvider, taskMiner, databaseExport, applyModels },
+      { harness, semanticService, inferenceProvider, taskMiner, applyModels },
       next,
       previous,
     ),
@@ -313,7 +306,6 @@ export async function createMainRuntime(params: {
     onPrivacyBlockingChanged: privacyBlockingChanged.add,
     start(): void {
       accessProvider.startPeriodicRefresh()
-      databaseExport.start()
       // After a derived-data wipe migration the DB is still mined, so clusters
       // rebuild from sightings before the sweep poll starts.
       void taskMiner.rebuildClustersIfEmpty().then(() => taskMiner.startup())
@@ -358,7 +350,6 @@ export async function createMainRuntime(params: {
         step('dispose pipeline harness', () => harness.dispose())
         step('dispose semantic service', () => semanticService.dispose())
         step('dispose ml-worker', () => mlWorker.dispose())
-        await databaseExport.stop()
         step('close storage', () => storage.close())
       })()
       return disposePromise

@@ -50,7 +50,6 @@ describe('AppSettingsManager', () => {
       expect(defaults.taskMiningRequestTimeoutMs).toBe(PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS)
       expect(defaults.semanticPipelineMode).toBe('auto')
       expect(defaults.captureHotkeyAccelerator).toBe(DEFAULT_CAPTURE_HOTKEY_ACCELERATOR)
-      expect(defaults.databaseExportDirectory).toBe('')
       expect(defaults.excludePrivateBrowsing).toBe(true)
       expect(defaults.excludeLoginScreens).toBe(true)
       expect(defaults.excludedApps).toEqual([])
@@ -75,23 +74,6 @@ describe('AppSettingsManager', () => {
       const raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
       expect(raw.autoStartEnabled).toBe(true)
       expect(raw.typingDebounceMs).toBe(5000)
-    })
-
-    it('persists database export directory to disk', () => {
-      // Path must be inside one of the safe roots (home/documents/desktop/userData)
-      // so the path-traversal check accepts it. Use a real subdirectory of the
-      // tmp dir we already create under os.tmpdir() — but the path-traversal
-      // check rejects /tmp paths, so we use a directory inside the user's home.
-      const safeDir = fs.mkdtempSync(path.join(os.homedir(), 'ml-export-test-'))
-      try {
-        const manager = new AppSettingsManager(configPath)
-        manager.save({ databaseExportDirectory: safeDir })
-
-        const reloaded = new AppSettingsManager(configPath)
-        expect(reloaded.get().databaseExportDirectory).toBe(fs.realpathSync(safeDir))
-      } finally {
-        fs.rmSync(safeDir, { recursive: true, force: true })
-      }
     })
 
     it('merges partial saves with existing settings', () => {
@@ -218,41 +200,6 @@ describe('AppSettingsManager', () => {
       fs.writeFileSync(configPath, JSON.stringify({ uploadDetailLevel: 'off' }))
       const manager = new AppSettingsManager({ configPath, edition: 'enterprise' })
       expect(manager.get().uploadDetailLevel).toBe('off')
-    })
-
-    it('normalizes blank database export directories to disabled', () => {
-      fs.writeFileSync(configPath, JSON.stringify({ databaseExportDirectory: '   ' }))
-      const manager = new AppSettingsManager(configPath)
-      expect(manager.get().databaseExportDirectory).toBe('')
-    })
-
-    it('drops databaseExportDirectory outside the safe roots', () => {
-      const manager = new AppSettingsManager(configPath)
-      manager.save({ databaseExportDirectory: '/tmp/evil-export' })
-      expect(manager.get().databaseExportDirectory).toBe('')
-    })
-
-    it('drops databaseExportDirectory containing .. segments', () => {
-      const manager = new AppSettingsManager(configPath)
-      manager.save({ databaseExportDirectory: `${os.homedir()}/../etc/evil` })
-      expect(manager.get().databaseExportDirectory).toBe('')
-    })
-
-    it('drops databaseExportDirectory containing .. with backslash separators', () => {
-      // Windows treats both `/` and `\` as path separators. The previous
-      // implementation split on `path.sep` only, which on Windows is `\` and
-      // would miss `..` segments delimited by `/` (and on POSIX would miss
-      // `\..\`). Verify the validator now catches `..` regardless of which
-      // separator the input uses.
-      const manager = new AppSettingsManager(configPath)
-      manager.save({ databaseExportDirectory: `${os.homedir()}\\..\\etc\\evil` })
-      expect(manager.get().databaseExportDirectory).toBe('')
-    })
-
-    it('drops non-absolute databaseExportDirectory paths', () => {
-      const manager = new AppSettingsManager(configPath)
-      manager.save({ databaseExportDirectory: 'relative/path' })
-      expect(manager.get().databaseExportDirectory).toBe('')
     })
 
     it('unknown keys in saved file are ignored (partial merge uses defaults)', () => {
