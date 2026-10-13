@@ -78,6 +78,7 @@ export const TRANSPORT_TIMEOUT_MS = 2 * MAX_REQUEST_TIMEOUT_MS
 export const BACKEND_REQUEST_TIMEOUT_MS = 30_000
 export const BACKEND_UPLOAD_TIMEOUT_MS = 30 * 60_000
 export const HOST_RESOLVE_TIMEOUT_MS = 5_000
+export const AWAY_IDLE_SECONDS = 90
 
 // Activity Window Configuration
 export const ACTIVITY_CONFIG = {
@@ -100,9 +101,6 @@ export const EVENT_CAPTURER_CONFIG = {
   GAP_TIMEOUT_MS: 5_000,
   MAX_WINDOW_DURATION_MS: 5 * 60 * 1000, // Safety cap only — most windows close via gap timer
   LATE_EVENT_GRACE_MS: 3_500, // Hold closed windows briefly to absorb debounced late arrivals
-  // While OS idle (mouse movement counts) is below this and the screen is unlocked,
-  // the gap timer keeps a no-input window (reading) open instead of closing it.
-  AWAY_IDLE_SECONDS: 90,
 }
 
 // OCR Pipeline Configuration

@@ -6,7 +6,7 @@ import {
   ManualHostEnvironment,
   remoteHost,
 } from './host-environment'
-import { EVENT_CAPTURER_CONFIG, HOST_RESOLVE_TIMEOUT_MS } from '@/shared/constants'
+import { AWAY_IDLE_SECONDS, HOST_RESOLVE_TIMEOUT_MS } from '@/shared/constants'
 
 vi.mock('electron', async () => {
   const { EventEmitter } = await import('node:events')
@@ -113,7 +113,7 @@ describe('presence', () => {
 
   it('is away once idle reaches the threshold', () => {
     const host = new ManualHostEnvironment()
-    vi.spyOn(host, 'idleSeconds').mockReturnValue(EVENT_CAPTURER_CONFIG.AWAY_IDLE_SECONDS)
+    vi.spyOn(host, 'idleSeconds').mockReturnValue(AWAY_IDLE_SECONDS)
     expect(host.isPresent()).toBe(false)
   })
 

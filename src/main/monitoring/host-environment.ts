@@ -4,7 +4,7 @@ import { isIP } from 'node:net'
 import log from '@main/utils/logger'
 import { describeNetworkError } from '@main/utils/network-error'
 import { isLoopbackUrl } from '@/shared/url-utils'
-import { EVENT_CAPTURER_CONFIG, HOST_RESOLVE_TIMEOUT_MS } from '@/shared/constants'
+import { AWAY_IDLE_SECONDS, HOST_RESOLVE_TIMEOUT_MS } from '@/shared/constants'
 
 export type StandDownReason = 'suspended' | 'offline' | 'unresolved'
 
@@ -87,7 +87,7 @@ export class HostEnvironment {
   }
 
   isPresent(): boolean {
-    return !this.shouldPause() && this.idleSeconds() < EVENT_CAPTURER_CONFIG.AWAY_IDLE_SECONDS
+    return !this.shouldPause() && this.idleSeconds() < AWAY_IDLE_SECONDS
   }
 
   lastInputAt(): number {
