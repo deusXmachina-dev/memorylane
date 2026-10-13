@@ -205,8 +205,6 @@ function setupService(options: SetupOptions = {}): {
   tempDirs.push(tmpDir)
   const vendorCredentials = new VendorCredentialsManager({
     configPath: path.join(tmpDir, 'vendor-credentials.json'),
-    legacyApiKeyConfigPath: path.join(tmpDir, '__missing-api-key.json'),
-    legacyCustomEndpointConfigPath: path.join(tmpDir, '__missing-endpoint.json'),
     safeStorage: makeSafeStorageShim(),
     env: {},
   })

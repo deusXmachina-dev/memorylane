@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { InstalledApp } from '@/shared/types'
 import {
   getExcludedAppMatch,
   getExcludedUrlMatch,
-  migrateExcludedAppTokens,
   normalizeExcludedApps,
   normalizeToken,
   normalizeWildcardPatterns,
@@ -99,43 +97,6 @@ describe('capture exclusions', () => {
     expect(
       getExcludedAppMatch({ processName: 'WhatsApp', bundleId: 'whatsapp.root' }, excludedApps),
     ).toBe('whatsapp')
-  })
-
-  it('migrates legacy app tokens to full bundle ids', () => {
-    const apps: InstalledApp[] = [
-      { displayName: 'MemoryLane', matchToken: 'com.memorylane.app' },
-      { displayName: 'Slack', matchToken: 'com.tinyspeck.slackmacgap' },
-    ]
-    expect(
-      migrateExcludedAppTokens(
-        ['app', 'com.memorylane', 'slackmacgap', 'slack', 'memorylane', 'unknownapp'],
-        apps,
-      ),
-    ).toEqual([
-      'com.memorylane.app', // last segment `app`
-      'com.memorylane.app', // over-stripped bundle id `com.memorylane`
-      'com.tinyspeck.slackmacgap', // last segment
-      'com.tinyspeck.slackmacgap', // display name `Slack`
-      'com.memorylane.app', // display name `MemoryLane`
-      'unknownapp', // not an installed app — left as-is
-    ])
-  })
-
-  it('leaves already-migrated bundle ids and ambiguous tokens untouched', () => {
-    const apps: InstalledApp[] = [
-      { displayName: 'MemoryLane', matchToken: 'com.memorylane.app' },
-      { displayName: 'Zoom', matchToken: 'com.zoom.app' },
-    ]
-    // `app` maps to two apps → ambiguous → left alone. A full bundle id is already current.
-    expect(migrateExcludedAppTokens(['app', 'com.memorylane.app'], apps)).toEqual([
-      'app',
-      'com.memorylane.app',
-    ])
-  })
-
-  it('is a no-op for Windows exe-name tokens (match token has no dotted forms)', () => {
-    const apps: InstalledApp[] = [{ displayName: 'Google Chrome', matchToken: 'chrome' }]
-    expect(migrateExcludedAppTokens(['chrome'], apps)).toEqual(['chrome'])
   })
 
   it('normalizes and deduplicates wildcard patterns', () => {

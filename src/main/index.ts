@@ -1,10 +1,3 @@
-/**
- * MemoryLane - Main Process Entry Point
- *
- * Tray app running the timeline-first pipeline.
- * The MCP server is provided by the CLI package (@deusxmachina-dev/memorylane-cli).
- */
-
 // Side-effect import: sets process.env.PATH for onnxruntime DLLs on Windows.
 // Must be the first import — onnxruntime-node is loaded transitively via
 // runtime → embedding → @huggingface/transformers during static import resolution.
@@ -28,7 +21,6 @@ import { configureHttpTransport } from '@main/system/http-transport'
 import { CaptureStateManager } from './settings/capture-state-manager'
 import { CaptureSettingsManager } from './settings/capture-settings-manager'
 import { DeviceIdentity } from './settings/device-identity'
-import { listInstalledApps } from './apps/installed-apps'
 import { VendorCredentialsManager } from './settings/vendor-credentials-manager'
 import { TaskMiner } from './services/task-miner'
 import type { MiningStatus } from '../shared/types'
@@ -216,30 +208,6 @@ app.on('ready', async () => {
 
   const vendorCredentialsManager = new VendorCredentialsManager()
   const captureSettingsManager = new CaptureSettingsManager({ edition: editionConfig.edition })
-  // First-launch migration from legacy custom-endpoint config.
-  if (vendorCredentialsManager.migration.hadCustomEndpoint) {
-    if (captureSettingsManager.get().activeVendor === 'openrouter') {
-      captureSettingsManager.setActiveVendor('openai-compatible')
-      log.info('[Main] migrated activeVendor to openai-compatible from legacy custom-endpoint')
-    }
-    const carriedModel = vendorCredentialsManager.migration.customEndpointModel
-    if (carriedModel && captureSettingsManager.get().activeVendor === 'openai-compatible') {
-      // Pre-PR custom endpoints stored a single model id used wherever the
-      // custom endpoint was hit. Restore it into every slot so the user's
-      // prior choice survives — they can re-pick per slot afterwards.
-      captureSettingsManager.save({
-        semanticSnapshotModel: carriedModel,
-        patternDetectionModel: carriedModel,
-      })
-      log.info(
-        `[Main] restored legacy custom-endpoint model into snapshot+pattern slots: ${carriedModel}`,
-      )
-    }
-  }
-  // First-launch upgrade of pre-v1 excluded-app tokens to bundle ids. Must run
-  // before initialCaptureSettings is read below so the runtime starts with the
-  // migrated tokens.
-  await captureSettingsManager.migrateAppTokens(listInstalledApps)
   const captureStateManager = new CaptureStateManager()
   const deviceIdentity = new DeviceIdentity()
   captureSettingsManager.applyToConstants()
@@ -268,7 +236,7 @@ app.on('ready', async () => {
   const isEnterpriseActivated = (): boolean =>
     runtime?.accessProvider.getAccessState().isEnterpriseActivated ?? false
 
-  // Remote model config (DEU-202): constructed before the runtime so chain
+  // Remote model config: constructed before the runtime so chain
   // building can already see the disk cache (loaded in the constructor);
   // onChange is late-bound below once the miners exist, and start() only runs
   // after that binding. Managed-key installs only — BYOK and custom endpoints

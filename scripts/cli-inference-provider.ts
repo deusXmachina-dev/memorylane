@@ -84,8 +84,6 @@ export function loadCliInferenceProvider(
 
   const credentials = new VendorCredentialsManager({
     configPath: path.join(userData, 'vendor-credentials.json'),
-    legacyApiKeyConfigPath: path.join(userData, 'secure-config.json'),
-    legacyCustomEndpointConfigPath: path.join(userData, 'custom-endpoint.json'),
     safeStorage: {
       // CLI cannot decrypt the stored key (no Electron app context). Force
       // the manager to fall through to env-var resolution.
