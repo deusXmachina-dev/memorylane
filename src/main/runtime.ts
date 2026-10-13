@@ -47,6 +47,8 @@ import { MlWorkerClient } from '@main/services/ml-worker-client'
 import { backendUrlFor } from '@main/system/edition'
 import { listenerSet } from '@main/utils/listeners'
 
+const SHUTDOWN_DRAIN_MS = 3_000
+
 export interface MainRuntime {
   edition: AppEdition
   settings: AppSettingsManager
@@ -345,12 +347,27 @@ export async function createMainRuntime(params: {
         step('stop task miner', () => taskMiner.stop())
         step('stop user context builder', () => userContextBuilder.stop())
         unsubscribeSettings()
-        try {
+        const stopped = (async () => {
           await capture.forceClose()
           capture.stopCapture()
           await capture.waitForIdle()
-        } catch (error) {
-          log.warn('[Runtime] Error while stopping capture during dispose:', error)
+        })().then(
+          () => true,
+          (error) => {
+            log.warn('[Runtime] Error while stopping capture during dispose:', error)
+            return true
+          },
+        )
+        // Draining summarizes the last activity (stitching + an LLM call),
+        // which can outlast the quit deadline; give up on it rather than hang.
+        const drained = await Promise.race([
+          stopped,
+          new Promise<false>((resolve) => setTimeout(() => resolve(false), SHUTDOWN_DRAIN_MS)),
+        ])
+        if (!drained) {
+          log.warn(
+            `[Runtime] Activity extraction still running after ${SHUTDOWN_DRAIN_MS}ms; dropping it`,
+          )
         }
         step('dispose pipeline harness', () => harness.dispose())
         step('dispose semantic service', () => semanticService.dispose())
