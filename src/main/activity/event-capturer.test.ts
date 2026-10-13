@@ -300,7 +300,7 @@ describe('EventCapturer', () => {
 })
 
 describe('EventCapturer with presence', () => {
-  let present: boolean
+  let activeAt: number | null
   let capturer: EventCapturer
   let stream: InMemoryStream<EventWindow>
   let windows: EventWindow[]
@@ -309,10 +309,10 @@ describe('EventCapturer with presence', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(1000)
-    present = true
+    activeAt = null
     stream = new InMemoryStream<EventWindow>()
     windows = []
-    capturer = new EventCapturer(stream, { isPresent: () => present })
+    capturer = new EventCapturer(stream, { lastActiveAt: () => activeAt })
     windowsSubscription = stream.subscribe({
       startAt: { type: 'now' },
       onRecord: (record) => windows.push(record.payload),
@@ -325,26 +325,27 @@ describe('EventCapturer with presence', () => {
     vi.useRealTimers()
   })
 
-  it('keeps a no-input window open while present and ends it at the last present check', async () => {
+  it('keeps a no-input window open while present and ends it at the last input', async () => {
+    activeAt = 1000
     capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 1000 }))
+    activeAt = 1200
 
     vi.advanceTimersByTime(300)
     await flushAsyncAppends()
     expect(windows).toHaveLength(0)
 
-    present = false
+    activeAt = null
     vi.advanceTimersByTime(100)
     await flushAsyncAppends()
 
     expect(windows).toHaveLength(1)
     expect(windows[0].closedBy).toBe('gap')
     expect(windows[0].startTimestamp).toBe(1000)
-    expect(windows[0].endTimestamp).toBe(1300)
+    expect(windows[0].endTimestamp).toBe(1200)
     expect(windows[0].events).toHaveLength(1)
   })
 
   it('closes at the gap with end at the last event when not present', async () => {
-    present = false
     capturer.handleEvent(makeEvent({ type: 'click', timestamp: 1000 }))
 
     vi.advanceTimersByTime(100)
@@ -355,24 +356,64 @@ describe('EventCapturer with presence', () => {
     expect(windows[0].endTimestamp).toBe(1000)
   })
 
-  it('rolls a present read into a new window at max_duration', async () => {
+  it('rolls a present read into a contiguous window at max_duration', async () => {
+    activeAt = 1050
     capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 1000 }))
 
     vi.advanceTimersByTime(500)
     await flushAsyncAppends()
     expect(windows).toHaveLength(1)
     expect(windows[0].closedBy).toBe('max_duration')
-    expect(windows[0].endTimestamp).toBe(1400)
+    expect(windows[0].endTimestamp).toBe(1500)
 
+    activeAt = 1650
     vi.advanceTimersByTime(200)
-    present = false
+    activeAt = null
     vi.advanceTimersByTime(100)
     await flushAsyncAppends()
 
     expect(windows).toHaveLength(2)
     expect(windows[1].closedBy).toBe('gap')
     expect(windows[1].startTimestamp).toBe(1500)
-    expect(windows[1].endTimestamp).toBe(1700)
+    expect(windows[1].endTimestamp).toBe(1650)
     expect(windows[1].events).toHaveLength(0)
+  })
+
+  it('drops a rolled-over window that ends before any presence or input', async () => {
+    activeAt = 1050
+    capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 1000 }))
+
+    vi.advanceTimersByTime(500)
+    activeAt = null
+    vi.advanceTimersByTime(200)
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].closedBy).toBe('max_duration')
+  })
+
+  it('opens a window for a no-input read when no window is open', async () => {
+    capturer.start()
+
+    vi.advanceTimersByTime(100)
+    await flushAsyncAppends()
+    expect(windows).toHaveLength(0)
+
+    activeAt = 1150
+    vi.advanceTimersByTime(100)
+    activeAt = 1250
+    vi.advanceTimersByTime(100)
+    activeAt = null
+    vi.advanceTimersByTime(100)
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].closedBy).toBe('gap')
+    expect(windows[0].startTimestamp).toBe(1150)
+    expect(windows[0].endTimestamp).toBe(1250)
+
+    vi.advanceTimersByTime(300)
+    await flushAsyncAppends()
+    expect(windows).toHaveLength(1)
   })
 })

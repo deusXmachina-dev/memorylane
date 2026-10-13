@@ -177,10 +177,17 @@ export async function createMainRuntime(params: {
     extractorTransformer: transformer,
     extractorSink: sink,
     retainScreenshots,
-    presence: {
-      isPresent: () =>
-        !host.shouldPause() && host.idleSeconds() < EVENT_CAPTURER_CONFIG.AWAY_IDLE_SECONDS,
-    },
+    presence: EVENT_CAPTURER_CONFIG.PRESENCE_ENABLED
+      ? {
+          lastActiveAt: () => {
+            const idleSeconds = host.idleSeconds()
+            if (host.shouldPause() || idleSeconds >= EVENT_CAPTURER_CONFIG.AWAY_IDLE_SECONDS) {
+              return null
+            }
+            return Date.now() - idleSeconds * 1000
+          },
+        }
+      : undefined,
   })
 
   const capture: RuntimeCaptureController = createCaptureController({
