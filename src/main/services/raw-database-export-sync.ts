@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import log from '@main/utils/logger'
+import { PeriodicJob } from './periodic-job'
 
 const DEFAULT_EXPORT_INTERVAL_MS = 24 * 60 * 60 * 1000
 
@@ -19,72 +20,33 @@ export class RawDatabaseExportSync {
   private readonly storage: RawDatabaseExportStorage
   private readonly getExportDirectory: () => string
   private readonly getInstallationId: () => string
-  private readonly intervalMs: number
-  private timer: ReturnType<typeof setInterval> | null = null
-  private exportRunning = false
-  private rerunRequested = false
-  private inFlight: Promise<void> = Promise.resolve()
+  private readonly runner: PeriodicJob
 
   constructor(params: RawDatabaseExportSyncParams) {
     this.storage = params.storage
     this.getExportDirectory = params.getExportDirectory
     this.getInstallationId = params.getInstallationId
-    this.intervalMs = params.intervalMs ?? DEFAULT_EXPORT_INTERVAL_MS
+    this.runner = new PeriodicJob({
+      name: 'RawDatabaseExportSync',
+      intervalMs: params.intervalMs ?? DEFAULT_EXPORT_INTERVAL_MS,
+      run: (reason) => this.exportOnce(reason),
+    })
   }
 
   public start(): void {
-    if (this.timer !== null) {
-      return
-    }
-
-    this.timer = setInterval(() => {
-      void this.queueExport('interval')
-    }, this.intervalMs)
-    this.timer.unref?.()
-
-    void this.queueExport('startup')
+    this.runner.start()
   }
 
-  public async stop(): Promise<void> {
-    if (this.timer !== null) {
-      clearInterval(this.timer)
-      this.timer = null
-    }
-
-    await this.inFlight.catch(() => undefined)
+  public stop(): Promise<void> {
+    return this.runner.stop()
   }
 
   public onSettingsChanged(): Promise<void> {
-    return this.queueExport('settings_changed')
+    return this.runner.run('settings_changed').catch(() => undefined)
   }
 
   public getExportFileName(): string {
     return `memorylane-${this.getInstallationId()}.db`
-  }
-
-  private async queueExport(reason: string): Promise<void> {
-    if (this.exportRunning) {
-      this.rerunRequested = true
-      return this.inFlight
-    }
-
-    this.exportRunning = true
-    let nextReason = reason
-    this.inFlight = (async () => {
-      do {
-        this.rerunRequested = false
-        await this.exportOnce(nextReason)
-        nextReason = 'coalesced'
-      } while (this.rerunRequested)
-    })()
-      .catch((error) => {
-        log.error(`[RawDatabaseExportSync] Export failed (${reason}):`, error)
-      })
-      .finally(() => {
-        this.exportRunning = false
-      })
-
-    return this.inFlight
   }
 
   private async exportOnce(reason: string): Promise<void> {

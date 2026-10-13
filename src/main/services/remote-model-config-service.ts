@@ -28,10 +28,8 @@ export class RemoteModelConfigService extends RemoteSyncService<RemoteModelConfi
     return `config v${config.version} (${Object.keys(config.models).length} slots)`
   }
 
-  protected async fetchRemote(base: string): Promise<RemoteModelConfig> {
-    const config = coerceRemoteModelConfig(
-      await this.fetchJson(this.endpoint(base, 'api/config/models')),
-    )
+  protected async fetchRemote(): Promise<RemoteModelConfig> {
+    const config = coerceRemoteModelConfig(await this.fetchJson('api/config/models'))
     if (config === null) {
       throw new Error('Remote model config response is malformed')
     }

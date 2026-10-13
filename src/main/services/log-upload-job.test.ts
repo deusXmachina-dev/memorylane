@@ -4,6 +4,7 @@ import * as path from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { logUploadJob, type LogUploadJobParams } from './log-upload-job'
+import { readFormFile } from '@main/utils/test-utils'
 import type { LogUploadState } from './log-upload-store'
 
 const NOW = 1_700_000_000_000
@@ -46,9 +47,8 @@ describe('logUploadJob', () => {
 
   async function uploadOnce(job: ReturnType<typeof makeJob>['job']) {
     const tempPath = path.join(dir, 'bundle.zip')
-    const bytes = await job.produce(tempPath)
+    await job.produce(tempPath)
     await job.onSuccess({} as Response)
-    return bytes
   }
 
   it('is due on the first run', () => {
@@ -85,10 +85,11 @@ describe('logUploadJob', () => {
     const { job, zipFiles } = makeJob()
     const tempPath = path.join(dir, 'bundle.zip')
 
-    const bytes = await job.produce(tempPath)
+    const file = await readFormFile(await job.produce(tempPath))
 
     expect(zipFiles).toHaveBeenCalledWith([logPath, statsPath], tempPath)
-    expect(bytes.toString()).toBe('zip-bytes')
+    expect(file.name).toBe('memorylane-logs.zip')
+    expect(file.bytes.toString()).toBe('zip-bytes')
   })
 
   it('produce throws when there are no log files', async () => {

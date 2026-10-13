@@ -7,9 +7,8 @@ import { logUploadJob } from '@main/services/log-upload-job'
 import { readLogUploadState, writeLogUploadState } from '@main/services/log-upload-store'
 import { RemoteBlacklistService } from '@main/services/remote-blacklist-service'
 import { readRemoteBlacklist, writeRemoteBlacklist } from '@main/services/remote-blacklist-store'
-import { DeviceReportSync } from '@main/services/device-report-sync'
+import { deviceReportJob } from '@main/services/device-report-job'
 import { readDeviceReportState, writeDeviceReportState } from '@main/services/device-report-store'
-import { backendUrlFor } from '@main/system/edition'
 import { listenerSet } from '@main/utils/listeners'
 
 export interface ManagedExclusions {
@@ -29,11 +28,9 @@ export interface AppSync {
 }
 
 export function createSync(runtime: MainRuntime): AppSync {
-  const { edition, settings, deviceIdentity, storage } = runtime
+  const { edition, settings, deviceIdentity, storage, backend } = runtime
   const enterprise = edition === 'enterprise'
   const managedExclusionsChanged = listenerSet()
-  const getBackendUrl = (): string => backendUrlFor(edition)
-  const getDeviceId = (): string => deviceIdentity.getDeviceId()
 
   const databaseExport = new RawDatabaseExportSync({
     storage,
@@ -42,31 +39,30 @@ export function createSync(runtime: MainRuntime): AppSync {
   })
 
   // Both editions report, so the fleet's version distribution is visible server-side.
-  const deviceReport = new DeviceReportSync({
-    getDeviceId,
+  const deviceReport = new BackendUpload({
+    backend,
     isActivated: enterprise ? runtime.isEnterpriseActivated : () => true,
-    getBackendUrl,
-    getVersion: () => app.getVersion(),
-    getKeySource: () => {
-      const { source } = runtime.vendorCredentials.getStatus(settings.get().activeVendor)
-      if (source === 'none') return 'none'
-      return source === 'managed' ? 'managed' : 'byok'
-    },
-    edition,
-    readStored: () => readDeviceReportState(),
-    writeStored: (state) => writeDeviceReportState(state),
+    job: deviceReportJob({
+      getVersion: () => app.getVersion(),
+      getKeySource: () => {
+        const { source } = runtime.vendorCredentials.getStatus(settings.get().activeVendor)
+        if (source === 'none') return 'none'
+        return source === 'managed' ? 'managed' : 'byok'
+      },
+      edition,
+      readStored: () => readDeviceReportState(),
+      writeStored: (state) => writeDeviceReportState(state),
+    }),
   })
 
-  const backend = {
-    getDeviceId,
+  const uploads = {
+    backend,
     isActivated: runtime.isEnterpriseActivated,
     isSyncEnabled: () => settings.get().uploadDetailLevel !== 'off',
-    getBackendUrl,
-    env: runtime.host,
   }
   const databaseUpload = enterprise
     ? new BackendUpload({
-        ...backend,
+        ...uploads,
         job: databaseUploadJob({
           storage,
           getStripOptions: () => ({
@@ -79,7 +75,7 @@ export function createSync(runtime: MainRuntime): AppSync {
     : null
   const logUpload = enterprise
     ? new BackendUpload({
-        ...backend,
+        ...uploads,
         job: logUploadJob({
           readState: () => readLogUploadState(),
           writeState: (state) => writeLogUploadState(state),
@@ -88,9 +84,8 @@ export function createSync(runtime: MainRuntime): AppSync {
     : null
   const remoteBlacklist = enterprise
     ? new RemoteBlacklistService({
-        getDeviceId,
+        backend,
         isActivated: runtime.isEnterpriseActivated,
-        getBackendUrl,
         onChange: (blacklist) => {
           runtime.harness.setManagedExclusions(blacklist)
           managedExclusionsChanged.emit()
@@ -125,14 +120,18 @@ export function createSync(runtime: MainRuntime): AppSync {
         activated = state.isEnterpriseActivated
         if (!activated) return
         kick('activated')
-        void deviceReport.sync()
+        deviceReport.kick('activated')
       })
       runtime.host.onAwake(() => kick('resume'))
     },
     async stop(): Promise<void> {
-      remoteBlacklist?.stop()
-      deviceReport.stop()
-      await Promise.allSettled([databaseExport.stop(), databaseUpload?.stop(), logUpload?.stop()])
+      await Promise.allSettled([
+        databaseExport.stop(),
+        deviceReport.stop(),
+        databaseUpload?.stop(),
+        logUpload?.stop(),
+        remoteBlacklist?.stop(),
+      ])
     },
   }
 }

@@ -19,6 +19,7 @@ import { SummaryModeTracker } from '@main/services/summary-mode-tracker'
 import { TaskMiner } from '@main/services/task-miner'
 import { UserContextBuilder } from '@main/services/user-context-builder'
 import { RemoteModelConfigService } from '@main/services/remote-model-config-service'
+import { BackendClient } from '@main/services/backend-client'
 import {
   readRemoteModelConfig,
   writeRemoteModelConfig,
@@ -57,6 +58,7 @@ export interface MainRuntime {
   inferenceProvider: InferenceProvider
   semanticService: ActivitySemanticService
   accessProvider: AccessProvider
+  backend: BackendClient
   remoteModels: RemoteModelConfigService
   taskMiner: TaskMiner
   userContextBuilder: UserContextBuilder
@@ -98,10 +100,14 @@ export async function createMainRuntime(params: {
     vendorCredentials.getStatus(settings.get().activeVendor).source === 'managed'
   const isEnterpriseActivated = (): boolean => accessProvider.getAccessState().isEnterpriseActivated
 
-  const remoteModels = new RemoteModelConfigService({
+  const backend = new BackendClient({
     getDeviceId: () => deviceIdentity.getDeviceId(),
-    isActivated: () => isManaged() && (edition !== 'enterprise' || isEnterpriseActivated()),
     getBackendUrl: () => backendUrlFor(edition),
+    env: host,
+  })
+  const remoteModels = new RemoteModelConfigService({
+    backend,
+    isActivated: () => isManaged() && (edition !== 'enterprise' || isEnterpriseActivated()),
     onChange: () => applyModels(),
     readStored: () => readRemoteModelConfig(),
     writeStored: (config) => writeRemoteModelConfig(config),
@@ -286,6 +292,7 @@ export async function createMainRuntime(params: {
     inferenceProvider,
     semanticService,
     accessProvider,
+    backend,
     remoteModels,
     taskMiner,
     userContextBuilder,

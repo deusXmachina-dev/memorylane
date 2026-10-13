@@ -1,7 +1,7 @@
 import log from '@main/utils/logger'
 import { isSameDay } from '@main/utils/day'
 import type { StripOptions } from './strip-database-for-upload'
-import type { UploadJob } from './backend-upload'
+import { fileForm, type UploadJob } from './backend-upload'
 
 export type PrepareUpload = (tempPath: string, stripOptions: StripOptions) => Promise<Buffer>
 
@@ -27,7 +27,6 @@ export function databaseUploadJob(params: DatabaseUploadJobParams): UploadJob {
   return {
     name: 'DatabaseUpload',
     endpoint: 'api/device/upload',
-    filename: 'memorylane.db.gz',
     skipReason() {
       const lastUploadAt = params.getLastUploadAt()
       if (lastUploadAt !== null && isSameDay(lastUploadAt, Date.now())) {
@@ -37,7 +36,7 @@ export function databaseUploadJob(params: DatabaseUploadJobParams): UploadJob {
     },
     async produce(tempPath) {
       await params.storage.backupToFile(tempPath)
-      return prepareUpload(tempPath, params.getStripOptions())
+      return fileForm(await prepareUpload(tempPath, params.getStripOptions()), 'memorylane.db.gz')
     },
     async onSuccess(response) {
       const data = (await response.json()) as { upload_id: string; checksum_sha256: string }

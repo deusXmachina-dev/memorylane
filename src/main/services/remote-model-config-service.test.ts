@@ -6,6 +6,8 @@ vi.mock('@main/utils/logger', () => ({
 
 import type { RemoteModelConfig } from '../../shared/remote-model-config'
 import { RemoteModelConfigService } from './remote-model-config-service'
+import { BackendClient } from './backend-client'
+import { ManualHostEnvironment } from '@main/monitoring/host-environment'
 import { jsonResponse } from '@main/utils/test-utils'
 
 const CONFIG_V1: RemoteModelConfig = {
@@ -18,6 +20,7 @@ describe('RemoteModelConfigService', () => {
 
   function makeService(
     overrides: Partial<{
+      env: ManualHostEnvironment
       isActivated: () => boolean
       onChange: (config: RemoteModelConfig) => void
       readStored: () => RemoteModelConfig | null
@@ -26,9 +29,12 @@ describe('RemoteModelConfigService', () => {
   ) {
     const onChange = overrides.onChange ?? vi.fn()
     const service = new RemoteModelConfigService({
-      getDeviceId: () => 'device-123',
+      backend: new BackendClient({
+        getDeviceId: () => 'device-123',
+        getBackendUrl: () => 'https://backend.test',
+        env: overrides.env ?? new ManualHostEnvironment(),
+      }),
       isActivated: overrides.isActivated ?? (() => true),
-      getBackendUrl: () => 'https://backend.test',
       onChange,
       readStored: overrides.readStored,
       writeStored: overrides.writeStored,
@@ -127,5 +133,39 @@ describe('RemoteModelConfigService', () => {
     service.stop()
 
     expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('skips the fetch while suspended and syncs once awake', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => jsonResponse(CONFIG_V1))
+    globalThis.fetch = fetchMock
+    const env = new ManualHostEnvironment()
+    const { service } = makeService({ env })
+
+    env.suspend()
+    await service.sync()
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    env.resume()
+    await service.sync()
+    expect(service.getConfig()).toEqual(CONFIG_V1)
+  })
+
+  it('queues a sync requested mid-flight instead of dropping it', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const fetchMock = vi.fn<typeof fetch>(async () => {
+      await gate
+      return jsonResponse(CONFIG_V1)
+    })
+    globalThis.fetch = fetchMock
+    const { service } = makeService()
+
+    const first = service.sync()
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    const second = service.sync()
+    release()
+    await Promise.all([first, second])
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })

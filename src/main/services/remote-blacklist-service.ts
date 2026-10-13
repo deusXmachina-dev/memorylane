@@ -34,13 +34,12 @@ export class RemoteBlacklistService extends RemoteSyncService<ManagedExclusions>
     return JSON.stringify([blacklist.apps, blacklist.urlPatterns])
   }
 
-  protected async fetchRemote(base: string): Promise<ManagedExclusions> {
-    const url = this.endpoint(base, 'api/license/blacklist')
+  protected async fetchRemote(): Promise<ManagedExclusions> {
     // Narrow app tokens to this platform's identifiers (macOS bundle ids vs.
     // Windows process names); the device can't match the other's.
     const platform = backendPlatformToken()
-    if (platform) url.searchParams.set('platform', platform)
-    const data = (await this.fetchJson(url)) as {
+    const query = platform ? `?${new URLSearchParams({ platform })}` : ''
+    const data = (await this.fetchJson(`api/license/blacklist${query}`)) as {
       excludedApps?: unknown
       excludedUrlPatterns?: unknown
     }

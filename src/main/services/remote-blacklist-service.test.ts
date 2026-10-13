@@ -5,6 +5,8 @@ vi.mock('@main/utils/logger', () => ({
 }))
 
 import { RemoteBlacklistService } from './remote-blacklist-service'
+import { BackendClient } from './backend-client'
+import { ManualHostEnvironment } from '@main/monitoring/host-environment'
 import { jsonResponse } from '@main/utils/test-utils'
 
 describe('RemoteBlacklistService', () => {
@@ -12,6 +14,7 @@ describe('RemoteBlacklistService', () => {
 
   function makeService(
     overrides: Partial<{
+      env: ManualHostEnvironment
       isActivated: () => boolean
       onChange: () => void
       readStored: () => { apps: string[]; urlPatterns: string[] } | null
@@ -20,9 +23,12 @@ describe('RemoteBlacklistService', () => {
   ) {
     const onChange = overrides.onChange ?? vi.fn()
     const service = new RemoteBlacklistService({
-      getDeviceId: () => 'device-123',
+      backend: new BackendClient({
+        getDeviceId: () => 'device-123',
+        getBackendUrl: () => 'https://backend.test',
+        env: overrides.env ?? new ManualHostEnvironment(),
+      }),
       isActivated: overrides.isActivated ?? (() => true),
-      getBackendUrl: () => 'https://backend.test',
       onChange,
       readStored: overrides.readStored,
       writeStored: overrides.writeStored,

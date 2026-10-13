@@ -1,11 +1,12 @@
 import log from '@main/utils/logger'
-import { BACKEND_REQUEST_TIMEOUT_MS } from '../../shared/constants'
+import { BACKEND_REQUEST_TIMEOUT_MS } from '@/shared/constants'
+import type { BackendClient } from './backend-client'
+import { PeriodicJob } from './periodic-job'
 
 export interface RemoteSyncServiceParams<T> {
-  getDeviceId: () => string
+  backend: BackendClient
   /** Gates syncing entirely; polling is skipped while it returns false. */
   isActivated: () => boolean
-  getBackendUrl: () => string
   /** Fired when the value changes (including the cached load on start()). */
   onChange: (value: T) => void
   /** Last-known value cached on disk, or null. Read in the constructor so the
@@ -30,16 +31,18 @@ export abstract class RemoteSyncService<T> {
   private value: T | null = null
   private serialized = ''
   private cachePending = false
-  private timer: ReturnType<typeof setInterval> | null = null
-  private syncing = false
-  private readonly intervalMs: number
+  private readonly runner: PeriodicJob
 
   protected constructor(
     private readonly tag: string,
     private readonly params: RemoteSyncServiceParams<T>,
     defaultIntervalMs: number,
   ) {
-    this.intervalMs = params.intervalMs ?? defaultIntervalMs
+    this.runner = new PeriodicJob({
+      name: tag,
+      intervalMs: params.intervalMs ?? defaultIntervalMs,
+      run: (reason) => this.syncOnce(reason),
+    })
     const cached = params.readStored?.()
     if (cached) {
       this.value = cached
@@ -50,7 +53,7 @@ export abstract class RemoteSyncService<T> {
   }
 
   /** Fetch and parse the remote value; throw on anything but a clean result. */
-  protected abstract fetchRemote(base: string): Promise<T>
+  protected abstract fetchRemote(): Promise<T>
   /** Short human description of a value, for log lines. */
   protected abstract describe(value: T): string
   /** Canonical form used for change detection. */
@@ -63,34 +66,34 @@ export abstract class RemoteSyncService<T> {
   }
 
   start(): void {
-    if (this.timer !== null) return
     // Broadcast the cached value ahead of the first network sync, so a restart
     // doesn't wait on the network.
     if (this.cachePending && this.value !== null) {
       this.cachePending = false
       this.params.onChange(this.value)
     }
-    this.timer = setInterval(() => void this.sync(), this.intervalMs)
-    this.timer.unref?.()
-    void this.sync()
+    this.runner.start()
   }
 
-  stop(): void {
-    if (this.timer !== null) {
-      clearInterval(this.timer)
-      this.timer = null
+  stop(): Promise<void> {
+    return this.runner.stop()
+  }
+
+  /** One sync pass, queued behind any pass in flight. */
+  sync(): Promise<void> {
+    return this.runner.run('manual')
+  }
+
+  private async syncOnce(reason: string): Promise<void> {
+    if (!this.params.isActivated()) return
+    const standDown = await this.params.backend.standDown()
+    if (standDown !== null) {
+      log.debug(`[${this.tag}] Skipping sync (${reason}) — ${standDown}`)
+      return
     }
-  }
-
-  /** One sync pass. Skips while a prior pass is in flight or the device isn't
-   * activated; updates the held value and notifies only on a real change. */
-  async sync(): Promise<void> {
-    if (this.syncing || !this.params.isActivated()) return
-    const base = this.params.getBackendUrl()
-    if (!base) return
-    this.syncing = true
+    const startedAt = Date.now()
     try {
-      const next = await this.fetchRemote(base)
+      const next = await this.fetchRemote()
       const serialized = this.serialize(next)
       if (serialized === this.serialized) return
       this.value = next
@@ -99,23 +102,19 @@ export abstract class RemoteSyncService<T> {
       log.info(`[${this.tag}] Synced ${this.describe(next)}`)
       this.params.onChange(next)
     } catch (error) {
-      log.warn(`[${this.tag}] Sync failed:`, error)
-    } finally {
-      this.syncing = false
+      if (this.params.backend.interrupted(startedAt, error)) {
+        log.info(`[${this.tag}] Sync deferred (${reason}):`, error)
+      } else {
+        log.warn(`[${this.tag}] Sync failed (${reason}):`, error)
+      }
     }
-  }
-
-  /** Resolves an endpoint path against the backend base URL. */
-  protected endpoint(base: string, path: string): URL {
-    return new URL(path, base.replace(/\/?$/, '/'))
   }
 
   /** GET with the device bearer. Any non-200 throws, so the sync loop swallows
    * it and keeps the last-known value; only a clean 200 replaces it. */
-  protected async fetchJson(url: URL): Promise<unknown> {
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${this.params.getDeviceId()}` },
-      signal: AbortSignal.timeout(BACKEND_REQUEST_TIMEOUT_MS),
+  protected async fetchJson(path: string): Promise<unknown> {
+    const response = await this.params.backend.request(path, {
+      timeoutMs: BACKEND_REQUEST_TIMEOUT_MS,
     })
     if (!response.ok) {
       throw new Error(`Request failed (${response.status})`)

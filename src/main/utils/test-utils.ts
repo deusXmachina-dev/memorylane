@@ -1,6 +1,14 @@
 import type { AppSettings } from '../../shared/types'
 import { VENDOR_PRESETS } from '../../shared/vendor-defaults'
 
+export async function readFormFile(
+  body: BodyInit,
+  field = 'file',
+): Promise<{ name: string; bytes: Buffer }> {
+  const file = (body as FormData).get(field) as File
+  return { name: file.name, bytes: Buffer.from(await file.arrayBuffer()) }
+}
+
 export function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return {
     ok,
