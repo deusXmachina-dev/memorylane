@@ -8,7 +8,6 @@ import { InMemoryStream } from '@main/streams/in-memory-stream'
 import type { Frame } from '@main/recorder/screen-capturer'
 import type { EventWindow } from '@/shared/types'
 import type { PipelineHarness } from '@main/activity/pipeline-harness'
-import type { RuntimeCaptureController } from '@main/capture/capture-controller'
 
 vi.mock('@main/utils/logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -30,11 +29,10 @@ let fixturesRoot: string
 let frameStream: InMemoryStream<Frame>
 let eventStream: InMemoryStream<EventWindow>
 let harness: PipelineHarness
-let capture: RuntimeCaptureController
 let setRetain: (value: boolean) => void
 let sweepNow: () => void
-let startCapture: () => void
-let stopCapture: () => void
+let startCapture: () => Promise<void>
+let stopCapture: () => Promise<void>
 let capturing: boolean
 
 beforeEach(() => {
@@ -44,10 +42,10 @@ beforeEach(() => {
   eventStream = new InMemoryStream<EventWindow>()
   setRetain = vi.fn()
   sweepNow = vi.fn()
-  startCapture = vi.fn(() => {
+  startCapture = vi.fn(async () => {
     capturing = true
   })
-  stopCapture = vi.fn(() => {
+  stopCapture = vi.fn(async () => {
     capturing = false
   })
   capturing = false
@@ -63,14 +61,11 @@ beforeEach(() => {
     drainActivities,
     setRetainScreenshots: setRetain,
     sweepNow,
-  } as PipelineHarness
-
-  capture = {
-    isCapturingNow: () => capturing,
-    startCapture,
-    stopCapture,
+    capturing: () => capturing,
+    start: startCapture,
+    stop: stopCapture,
     waitForIdle,
-  } as RuntimeCaptureController
+  } as PipelineHarness
 })
 
 afterEach(() => {
@@ -114,7 +109,7 @@ describe('sanitizeFixtureName', () => {
 
 describe('EvalRecorder', () => {
   it('holds retention, starts capture if off, and promotes on stop', async () => {
-    const recorder = new EvalRecorder({ harness, capture, fixturesRoot })
+    const recorder = new EvalRecorder({ harness, fixturesRoot })
 
     const status = recorder.start('rec1')
     expect(status.recording).toBe(true)
@@ -141,7 +136,7 @@ describe('EvalRecorder', () => {
 
   it('leaves capture running when it was already on', async () => {
     capturing = true
-    const recorder = new EvalRecorder({ harness, capture, fixturesRoot })
+    const recorder = new EvalRecorder({ harness, fixturesRoot })
     recorder.start('rec2')
     expect(startCapture).not.toHaveBeenCalled()
 
@@ -154,7 +149,7 @@ describe('EvalRecorder', () => {
   })
 
   it('cancels without writing a fixture', async () => {
-    const recorder = new EvalRecorder({ harness, capture, fixturesRoot })
+    const recorder = new EvalRecorder({ harness, fixturesRoot })
     recorder.start('rec5')
     await appendFrameAndWindow()
     await recorder.cancel()
@@ -167,14 +162,15 @@ describe('EvalRecorder', () => {
   })
 
   it('rejects a second concurrent recording', () => {
-    const recorder = new EvalRecorder({ harness, capture, fixturesRoot })
+    const recorder = new EvalRecorder({ harness, fixturesRoot })
     recorder.start('rec3')
     expect(() => recorder.start('rec4')).toThrow(/already in progress/)
   })
 
   it.each(['stop', 'cancel'] as const)('can record again after a failed %s', async (method) => {
-    vi.mocked(capture.waitForIdle).mockRejectedValue(new Error('boom'))
-    const recorder = new EvalRecorder({ harness, capture, fixturesRoot })
+    vi.mocked(harness.waitForIdle).mockRejectedValue(new Error('boom'))
+    vi.mocked(harness.stop).mockRejectedValue(new Error('boom'))
+    const recorder = new EvalRecorder({ harness, fixturesRoot })
     recorder.start('rec6')
 
     await expect(recorder[method]()).rejects.toThrow('boom')

@@ -201,7 +201,7 @@ app.on('ready', async () => {
   sync = createSync(rt)
 
   const coordinator = createCaptureCoordinator({
-    capture: rt.capture,
+    harness: rt.harness,
     captureStateManager: captureState,
     isPaused: () => rt.isPurging() || rt.host.shouldPause() || rt.requiresActivation(),
     userContextBuilder: rt.userContextBuilder,
@@ -235,7 +235,7 @@ app.on('ready', async () => {
   })
 
   observation = createObservationController({
-    captureControl: rt.capture,
+    captureControl: rt.harness,
     onUpdate: (state) => sendObservationUpdate(state),
   })
 

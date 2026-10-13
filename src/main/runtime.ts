@@ -24,7 +24,7 @@ import {
   writeRemoteModelConfig,
 } from '@main/services/remote-model-config-store'
 import { pushModelSelections, resolveModelPush } from '@main/ui/apply-models'
-import { createPipelineHarness } from '@main/activity/pipeline-harness'
+import { createPipelineHarness, type PipelineHarness } from '@main/activity/pipeline-harness'
 import { DefaultActivityTransformer } from '@main/activity/activity-transformer'
 import { SqliteActivitySink } from '@main/activity/sqlite-activity-sink'
 import { FfmpegVideoStitcher } from '@main/video/video-stitcher'
@@ -34,10 +34,6 @@ import {
 } from '@main/semantic/activity-semantic-service'
 import { InteractionEventDebugDumper } from '@main/debug/interaction-event-debug-dump'
 import { InferenceProviderImpl, type InferenceProvider } from '@main/llm'
-import {
-  createCaptureController,
-  type RuntimeCaptureController,
-} from '@main/capture/capture-controller'
 import { HostEnvironment } from '@main/monitoring/host-environment'
 import { EvalRecorder } from '@main/eval/eval-recorder'
 import { EvalFixtureStore } from '@main/eval/eval-fixture-store'
@@ -54,7 +50,7 @@ export interface MainRuntime {
   settings: AppSettingsManager
   vendorCredentials: VendorCredentialsManager
   deviceIdentity: DeviceIdentity
-  capture: RuntimeCaptureController
+  harness: PipelineHarness
   host: HostEnvironment
   storage: StorageService
   usageTracker: UsageTracker
@@ -202,12 +198,6 @@ export async function createMainRuntime(params: {
     // Excluded window titles/URLs must never reach the plaintext JSONL.
     onAcceptedEvent: interactionDumper ? (event) => interactionDumper.dump(event) : undefined,
   })
-  const capture = createCaptureController({
-    harness,
-    outputDir,
-    onStateChanged: () => stateChanged.emit(),
-  })
-
   const userContextBuilder = new UserContextBuilder(storage, inferenceProvider)
   const taskMiner = new TaskMiner(storage, inferenceProvider, mlWorker, host)
   taskMiner.setEnabled(initialSettings.patternDetectionEnabled)
@@ -224,7 +214,7 @@ export async function createMainRuntime(params: {
 
   const unsubscribeSettings = settings.onChange((next, previous) =>
     applySettingsChange(
-      { capture, semanticService, inferenceProvider, taskMiner, applyModels },
+      { harness, semanticService, inferenceProvider, taskMiner, applyModels },
       next,
       previous,
     ),
@@ -232,7 +222,7 @@ export async function createMainRuntime(params: {
 
   const evalFixturesRoot = path.join(userDataPath, 'eval-fixtures')
   registerEvalMediaProtocol(evalFixturesRoot)
-  const evalRecorder = new EvalRecorder({ harness, capture, fixturesRoot: evalFixturesRoot })
+  const evalRecorder = new EvalRecorder({ harness, fixturesRoot: evalFixturesRoot })
   const evalFixtureStore = new EvalFixtureStore(evalFixturesRoot)
   const taskFixtureStore = new TaskFixtureStore(path.join(userDataPath, 'task-fixtures'))
 
@@ -240,23 +230,22 @@ export async function createMainRuntime(params: {
   let disposePromise: Promise<void> | null = null
 
   const purgeAll = async (): Promise<void> => {
-    const wasCapturing = capture.isCapturingNow()
+    const wasCapturing = harness.capturing()
+    const resume = (): void => {
+      if (!wasCapturing) return
+      void harness.start().catch((error) => {
+        log.warn('[Runtime] Failed to resume capture after purge:', error)
+      })
+    }
 
     // Stop accepting new work, then drain in-flight work. If quiescing fails
     // the DB may still be receiving writes, so abort instead of racing purge().
-    capture.stopCapture()
     try {
-      await capture.forceClose()
-      await capture.waitForIdle()
+      await harness.flushEvents()
+      await harness.stop()
     } catch (error) {
       log.error('[Runtime] Failed to quiesce capture; aborting purge:', error)
-      if (wasCapturing) {
-        try {
-          capture.startCapture()
-        } catch (resumeError) {
-          log.warn('[Runtime] Failed to resume capture after aborted purge:', resumeError)
-        }
-      }
+      resume()
       throw new Error('Failed to stop capture before purge')
     }
 
@@ -273,14 +262,7 @@ export async function createMainRuntime(params: {
       log.warn('[Runtime] Failed to clear screenshots directory during purge:', error)
     }
 
-    if (wasCapturing) {
-      try {
-        capture.startCapture()
-      } catch (error) {
-        log.warn('[Runtime] Failed to resume capture after purge:', error)
-      }
-    }
-
+    resume()
     log.info('[Runtime] Purge complete')
   }
 
@@ -297,7 +279,7 @@ export async function createMainRuntime(params: {
     settings,
     vendorCredentials,
     deviceIdentity,
-    capture,
+    harness,
     host,
     storage,
     usageTracker,
@@ -348,9 +330,8 @@ export async function createMainRuntime(params: {
         step('stop user context builder', () => userContextBuilder.stop())
         unsubscribeSettings()
         const stopped = (async () => {
-          await capture.forceClose()
-          capture.stopCapture()
-          await capture.waitForIdle()
+          await harness.flushEvents()
+          await harness.stop()
         })().then(
           () => true,
           (error) => {

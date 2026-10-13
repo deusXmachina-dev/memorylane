@@ -1,7 +1,7 @@
 import log from '@main/utils/logger'
 import type { UserContextBuilder } from '@main/services/user-context-builder'
 import type { CaptureStateManager } from '@main/settings/capture-state-manager'
-import type { RuntimeCapture } from './capture-controller'
+import type { PipelineHarness } from '@main/activity/pipeline-harness'
 
 export interface CaptureCoordinatorControls {
   isCapturingNow(): boolean
@@ -25,8 +25,13 @@ export interface CaptureCoordinatorControls {
   }): void
 }
 
+type CaptureHarness = Pick<
+  PipelineHarness,
+  'capturing' | 'start' | 'stop' | 'flushEvents' | 'updateActivityWindowConfig'
+>
+
 export function createCaptureCoordinator(params: {
-  capture: RuntimeCapture
+  harness: CaptureHarness
   captureStateManager: CaptureStateManager
   isPaused: () => boolean
   userContextBuilder: UserContextBuilder | null
@@ -63,6 +68,20 @@ export function createCaptureCoordinator(params: {
     }
   }
 
+  const startCapture = (): void => {
+    void params.harness.start().catch((error) => {
+      log.error('[Main] Failed to start capture:', error)
+      notifyStateChanged()
+    })
+  }
+
+  const stopCapture = (): void => {
+    void params.harness.flushEvents()
+    void params.harness.stop().catch((error) => {
+      log.error('[Main] Failed to stop capture:', error)
+    })
+  }
+
   const clearPauseSweep = (): void => {
     if (pauseSweep) {
       clearInterval(pauseSweep)
@@ -95,7 +114,7 @@ export function createCaptureCoordinator(params: {
       notifyStateChanged()
       return
     }
-    params.capture.startCapture()
+    startCapture()
     scheduleBackgroundAnalyzers()
     notifyStateChanged()
   }
@@ -107,8 +126,7 @@ export function createCaptureCoordinator(params: {
       notifyStateChanged()
       return
     }
-    void params.capture.forceClose()
-    params.capture.stopCapture()
+    stopCapture()
     notifyStateChanged()
   }
 
@@ -120,9 +138,9 @@ export function createCaptureCoordinator(params: {
       notifyStateChanged()
       return
     }
-    if (!params.capture.isCapturingNow() && !params.isPaused()) {
+    if (!params.harness.capturing() && !params.isPaused()) {
       log.info('[Main] Resuming capture from timed pause')
-      params.capture.startCapture()
+      startCapture()
       scheduleBackgroundAnalyzers()
     }
     notifyStateChanged()
@@ -146,22 +164,22 @@ export function createCaptureCoordinator(params: {
 
     // Keep the persisted preference enabled — the intent stays "capture on",
     // we're only taking a break. Halt capture now.
-    void params.capture.forceClose()
-    params.capture.stopCapture()
+    stopCapture()
     log.info(`[Main] Capture paused for ${Math.round(clamped / 1000)}s`)
     notifyStateChanged()
   }
 
   const stopCaptureForShutdown = (): void => {
     clearPauseSweep()
-    params.capture.stopCapture()
+    void params.harness.stop().catch((error) => {
+      log.error('[Main] Failed to stop capture:', error)
+    })
   }
 
   const suspendCapture = (reason: string): void => {
-    if (params.capture.isCapturingNow()) {
-      void params.capture.forceClose()
+    if (params.harness.capturing()) {
       log.info(`[Main] Pausing capture (${reason})`)
-      params.capture.stopCapture()
+      stopCapture()
     }
     notifyStateChanged()
   }
@@ -172,11 +190,11 @@ export function createCaptureCoordinator(params: {
       // A timed pause is in-memory: on startup there is none, but on power-resume
       // an active pause must win so unlocking doesn't cut a pause short.
       !isUserPaused() &&
-      !params.capture.isCapturingNow() &&
+      !params.harness.capturing() &&
       !params.isPaused()
     if (desired) {
       log.info(`[Main] Starting capture from persisted preference (${reason})`)
-      params.capture.startCapture()
+      startCapture()
       scheduleBackgroundAnalyzers()
     }
     notifyStateChanged()
@@ -184,7 +202,7 @@ export function createCaptureCoordinator(params: {
 
   return {
     controls: {
-      isCapturingNow: () => params.capture.isCapturingNow(),
+      isCapturingNow: () => params.harness.capturing(),
       requestStartCapture,
       requestStopCapture,
       pauseCapture,
@@ -192,8 +210,8 @@ export function createCaptureCoordinator(params: {
       isUserPaused,
       getPauseState: () => ({ pausedUntilMs }),
       stopCaptureForShutdown,
-      forceClose: () => params.capture.forceClose(),
-      updateActivityWindowConfig: (input) => params.capture.updateActivityWindowConfig(input),
+      forceClose: () => params.harness.flushEvents(),
+      updateActivityWindowConfig: (input) => params.harness.updateActivityWindowConfig(input),
     },
     resumeCaptureIfDesired,
     suspendCapture,

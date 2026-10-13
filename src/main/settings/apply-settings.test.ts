@@ -5,7 +5,7 @@ import { applySettingsChange, type LiveSettingsTargets } from './apply-settings'
 
 function makeTargets() {
   const targets = {
-    capture: { updateActivityWindowConfig: vi.fn(), updateExclusions: vi.fn() },
+    harness: { updateActivityWindowConfig: vi.fn(), updateExclusions: vi.fn() },
     semanticService: {
       updatePipelinePreference: vi.fn(),
       updateRequestTimeoutMs: vi.fn(),
@@ -29,10 +29,10 @@ describe('applySettingsChange', () => {
 
     applySettingsChange(t, settings, settings)
 
-    expect(t.capture.updateExclusions).toHaveBeenCalledWith(
+    expect(t.harness.updateExclusions).toHaveBeenCalledWith(
       expect.objectContaining({ apps: ['signal'] }),
     )
-    expect(t.capture.updateActivityWindowConfig).toHaveBeenCalledTimes(1)
+    expect(t.harness.updateActivityWindowConfig).toHaveBeenCalledTimes(1)
     expect(t.semanticService.updatePipelinePreference).toHaveBeenCalledWith('video')
     expect(t.semanticService.updateRequestTimeoutMs).toHaveBeenCalledTimes(1)
   })

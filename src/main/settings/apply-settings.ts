@@ -2,7 +2,7 @@ import type { AppSettings, SemanticPipelineMode } from '@types'
 import type { CaptureExclusions } from '@main/activity/pipeline-harness'
 
 export interface LiveSettingsTargets {
-  capture: {
+  harness: {
     updateActivityWindowConfig(input: {
       minActivityDurationMs: number
       maxActivityDurationMs: number
@@ -31,11 +31,11 @@ export function applySettingsChange(
   next: AppSettings,
   previous: AppSettings,
 ): void {
-  t.capture.updateActivityWindowConfig({
+  t.harness.updateActivityWindowConfig({
     minActivityDurationMs: next.minActivityDurationMs,
     maxActivityDurationMs: next.maxActivityDurationMs,
   })
-  t.capture.updateExclusions({
+  t.harness.updateExclusions({
     apps: next.excludedApps,
     urlPatterns: next.excludedUrlPatterns,
     excludePrivateBrowsing: next.excludePrivateBrowsing,

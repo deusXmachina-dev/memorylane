@@ -500,6 +500,34 @@ describe('pipeline harness', () => {
     expect(interactions.listenerCount()).toBe(0)
   })
 
+  it('tears down the pipeline when the interaction source fails to start', async () => {
+    const interactions = fakeInteractionSource()
+    interactions.startInteractionMonitoring = () => {
+      throw new Error('accessibility denied')
+    }
+    const harness = createPipelineHarness({
+      outputDir: path.join(process.cwd(), '.tmp-harness-start-failure'),
+      frameIntervalMs: 10,
+      interactions,
+    })
+
+    const started = harness.start()
+    expect(harness.capturing()).toBe(true)
+    await expect(started).rejects.toThrow('accessibility denied')
+    expect(harness.capturing()).toBe(false)
+    expect(harness.screenCapturer.capturing).toBe(false)
+
+    interactions.startInteractionMonitoring = () => {
+      interactions.running = true
+    }
+    await harness.start()
+    expect(harness.capturing()).toBe(true)
+    expect(harness.screenCapturer.capturing).toBe(true)
+    await harness.stop()
+    expect(harness.capturing()).toBe(false)
+    harness.dispose()
+  })
+
   it('routes source events through the blacklist', async () => {
     const interactions = fakeInteractionSource()
     const accepted: InteractionContext[] = []

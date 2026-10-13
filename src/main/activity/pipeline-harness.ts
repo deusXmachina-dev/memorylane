@@ -49,6 +49,10 @@ export interface PipelineHarness {
   activityExtractor?: ActivityExtractor
   start(): Promise<void>
   stop(): Promise<void>
+  /** True from the moment start() is requested until stop() is requested or start fails. */
+  capturing(): boolean
+  /** Resolves once every queued start/stop/suppression transition has settled. */
+  waitForIdle(): Promise<void>
   /**
    * Drain the producer→extractor pipeline without stopping capture: close the
    * open event window, finalize the pending activity, and wait until the
@@ -141,12 +145,17 @@ export function createPipelineHarness(params: {
 
   let cleanupTimer: ReturnType<typeof setInterval> | null = null
   let running = false
+  let desired = false
+  let startRequests = 0
   let frameCaptureSuppressed = false
-  let lifecycle: Promise<unknown> = Promise.resolve()
+  let queue: Promise<void> = Promise.resolve()
   const serial = <T>(task: () => Promise<T>): Promise<T> => {
-    const run = lifecycle.then(task)
-    lifecycle = run.catch(() => undefined)
-    return run
+    const result = queue.then(task)
+    queue = result.then(
+      () => undefined,
+      () => undefined,
+    )
+    return result
   }
 
   const handleEvent = (event: InteractionContext): void => {
@@ -168,6 +177,25 @@ export function createPipelineHarness(params: {
   }
   const setFrameCaptureSuppressed = (suppressed: boolean): Promise<void> =>
     serial(() => applyFrameCaptureSuppressed(suppressed))
+
+  const teardown = async (): Promise<void> => {
+    try {
+      params.interactions?.stopInteractionMonitoring()
+    } catch (error) {
+      log.error('[PipelineHarness] Failed to stop interaction monitor:', error)
+    }
+    if (cleanupTimer) {
+      clearInterval(cleanupTimer)
+      cleanupTimer = null
+    }
+    await screenCapturer.stop()
+    await eventCapturer.flushAndWait()
+    await activityProducer.stop()
+    if (activityExtractor) {
+      await activityExtractor.stop()
+    }
+    eventCapturer.destroy()
+  }
 
   const blacklist = createCaptureBlacklistCoordinator({
     initialExcludedApps: params.exclusions?.apps,
@@ -206,8 +234,10 @@ export function createPipelineHarness(params: {
     eventCapturer,
     activityProducer,
     activityExtractor,
-    start: () =>
-      serial(async () => {
+    start: () => {
+      desired = true
+      const request = ++startRequests
+      return serial(async () => {
         if (running) return
         running = true
         try {
@@ -234,37 +264,28 @@ export function createPipelineHarness(params: {
           log.info('[PipelineHarness] Pipeline started')
         } catch (error) {
           running = false
-          try {
-            params.interactions?.stopInteractionMonitoring()
-          } catch {
-            // best-effort cleanup
-          }
+          if (request === startRequests) desired = false
           log.error('[PipelineHarness] Failed to start pipeline:', error)
+          try {
+            await teardown()
+          } catch (teardownError) {
+            log.error('[PipelineHarness] Failed to tear down after start error:', teardownError)
+          }
           throw error
         }
-      }),
-    stop: () =>
-      serial(async () => {
+      })
+    },
+    stop: () => {
+      desired = false
+      return serial(async () => {
         if (!running) return
         running = false
-        try {
-          params.interactions?.stopInteractionMonitoring()
-        } catch (error) {
-          log.error('[PipelineHarness] Failed to stop interaction monitor:', error)
-        }
-        if (cleanupTimer) {
-          clearInterval(cleanupTimer)
-          cleanupTimer = null
-        }
-        await screenCapturer.stop()
-        await eventCapturer.flushAndWait()
-        await activityProducer.stop()
-        if (activityExtractor) {
-          await activityExtractor.stop()
-        }
-        eventCapturer.destroy()
+        await teardown()
         log.info('[PipelineHarness] Pipeline stopped')
-      }),
+      })
+    },
+    capturing: () => desired,
+    waitForIdle: () => queue,
     async drainActivities() {
       if (!running) return
       await eventCapturer.flushAndWait()

@@ -92,7 +92,7 @@ export function createSync(runtime: MainRuntime): AppSync {
         isActivated: runtime.isEnterpriseActivated,
         getBackendUrl,
         onChange: (blacklist) => {
-          runtime.capture.setManagedExclusions(blacklist)
+          runtime.harness.setManagedExclusions(blacklist)
           managedExclusionsChanged.emit()
         },
         readStored: () => readRemoteBlacklist(),

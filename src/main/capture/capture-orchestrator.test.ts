@@ -1,14 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createCaptureCoordinator } from './capture-orchestrator'
 
-function createCaptureMock() {
+function createHarnessMock() {
   return {
-    isCapturingNow: vi.fn().mockReturnValue(false),
-    startCapture: vi.fn(),
-    stopCapture: vi.fn(),
-    forceClose: vi.fn().mockResolvedValue(undefined),
-    getScreenshotsDir: vi.fn().mockReturnValue('/tmp'),
-    setFrameCaptureSuppressed: vi.fn(),
+    capturing: vi.fn().mockReturnValue(false),
+    start: vi.fn().mockResolvedValue(undefined),
+    stop: vi.fn().mockResolvedValue(undefined),
+    flushEvents: vi.fn().mockResolvedValue(undefined),
     updateActivityWindowConfig: vi.fn(),
   }
 }
@@ -22,12 +20,12 @@ function createCaptureStateManagerMock() {
 
 describe('createCaptureCoordinator', () => {
   it('schedules background analyzers on manual start when not paused', () => {
-    const capture = createCaptureMock()
+    const harness = createHarnessMock()
     const stateManager = createCaptureStateManagerMock()
     const userContextBuilder = { scheduleRun: vi.fn() }
 
     const coordinator = createCaptureCoordinator({
-      capture,
+      harness,
       captureStateManager: stateManager as never,
       isPaused: () => false,
       userContextBuilder: userContextBuilder as never,
@@ -36,18 +34,18 @@ describe('createCaptureCoordinator', () => {
     coordinator.controls.requestStartCapture()
 
     expect(stateManager.setCaptureEnabled).toHaveBeenCalledWith(true)
-    expect(capture.startCapture).toHaveBeenCalledTimes(1)
+    expect(harness.start).toHaveBeenCalledTimes(1)
     expect(userContextBuilder.scheduleRun).toHaveBeenCalledTimes(1)
   })
 
   it('persists the preference on manual start while paused and defers the start', () => {
-    const capture = createCaptureMock()
+    const harness = createHarnessMock()
     const stateManager = createCaptureStateManagerMock()
     const userContextBuilder = { scheduleRun: vi.fn() }
     const onStateChanged = vi.fn()
 
     const coordinator = createCaptureCoordinator({
-      capture,
+      harness,
       captureStateManager: stateManager as never,
       isPaused: () => true,
       userContextBuilder: userContextBuilder as never,
@@ -57,18 +55,18 @@ describe('createCaptureCoordinator', () => {
     coordinator.controls.requestStartCapture()
 
     expect(stateManager.setCaptureEnabled).toHaveBeenCalledWith(true)
-    expect(capture.startCapture).not.toHaveBeenCalled()
+    expect(harness.start).not.toHaveBeenCalled()
     expect(userContextBuilder.scheduleRun).not.toHaveBeenCalled()
     expect(onStateChanged).toHaveBeenCalledTimes(1)
   })
 
   it('keeps scheduling behavior on resume path', () => {
-    const capture = createCaptureMock()
+    const harness = createHarnessMock()
     const stateManager = createCaptureStateManagerMock()
     const userContextBuilder = { scheduleRun: vi.fn() }
 
     const coordinator = createCaptureCoordinator({
-      capture,
+      harness,
       captureStateManager: stateManager as never,
       isPaused: () => false,
       userContextBuilder: userContextBuilder as never,
@@ -76,7 +74,7 @@ describe('createCaptureCoordinator', () => {
 
     coordinator.resumeCaptureIfDesired('resume')
 
-    expect(capture.startCapture).toHaveBeenCalledTimes(1)
+    expect(harness.start).toHaveBeenCalledTimes(1)
     expect(userContextBuilder.scheduleRun).toHaveBeenCalledTimes(1)
   })
 })
@@ -91,25 +89,25 @@ describe('createCaptureCoordinator timed pause', () => {
   })
 
   function makeCoordinator(overrides?: { isPaused?: () => boolean }) {
-    const capture = createCaptureMock()
+    const harness = createHarnessMock()
     const stateManager = createCaptureStateManagerMock()
     const onStateChanged = vi.fn()
     const coordinator = createCaptureCoordinator({
-      capture,
+      harness,
       captureStateManager: stateManager as never,
       isPaused: overrides?.isPaused ?? (() => false),
       userContextBuilder: { scheduleRun: vi.fn() } as never,
       onStateChanged,
     })
-    return { capture, stateManager, onStateChanged, coordinator }
+    return { harness, stateManager, onStateChanged, coordinator }
   }
 
   it('stops capture and records a deadline without disabling the preference', () => {
-    const { capture, stateManager, onStateChanged, coordinator } = makeCoordinator()
+    const { harness, stateManager, onStateChanged, coordinator } = makeCoordinator()
 
     coordinator.controls.pauseCapture(30 * 60_000)
 
-    expect(capture.stopCapture).toHaveBeenCalledTimes(1)
+    expect(harness.stop).toHaveBeenCalledTimes(1)
     expect(stateManager.setCaptureEnabled).not.toHaveBeenCalled()
     expect(coordinator.controls.isUserPaused()).toBe(true)
     expect(coordinator.controls.getPauseState().pausedUntilMs).not.toBeNull()
@@ -117,23 +115,23 @@ describe('createCaptureCoordinator timed pause', () => {
   })
 
   it('auto-resumes capture when the timer elapses', () => {
-    const { capture, coordinator } = makeCoordinator()
+    const { harness, coordinator } = makeCoordinator()
 
     coordinator.controls.pauseCapture(30 * 60_000)
-    expect(capture.startCapture).not.toHaveBeenCalled()
+    expect(harness.start).not.toHaveBeenCalled()
 
     vi.advanceTimersByTime(30 * 60_000)
 
-    expect(capture.startCapture).toHaveBeenCalledTimes(1)
+    expect(harness.start).toHaveBeenCalledTimes(1)
     expect(coordinator.controls.isUserPaused()).toBe(false)
     expect(coordinator.controls.getPauseState().pausedUntilMs).toBeNull()
   })
 
   it('resumes after the deadline even if the sweep was suspended during sleep', () => {
-    const { capture, coordinator } = makeCoordinator()
+    const { harness, coordinator } = makeCoordinator()
 
     coordinator.controls.pauseCapture(30 * 60_000)
-    expect(capture.startCapture).not.toHaveBeenCalled()
+    expect(harness.start).not.toHaveBeenCalled()
 
     // Simulate the Mac sleeping past the deadline: the wall clock jumps forward
     // by more than the pause duration while the sweep interval never ticks.
@@ -141,23 +139,23 @@ describe('createCaptureCoordinator timed pause', () => {
     // The first sweep tick after wake compares the absolute deadline and resumes.
     vi.advanceTimersByTime(15_000)
 
-    expect(capture.startCapture).toHaveBeenCalledTimes(1)
+    expect(harness.start).toHaveBeenCalledTimes(1)
     expect(coordinator.controls.isUserPaused()).toBe(false)
     expect(coordinator.controls.getPauseState().pausedUntilMs).toBeNull()
   })
 
   it('resumeCapture starts capture immediately and cancels the sweep', () => {
-    const { capture, coordinator } = makeCoordinator()
+    const { harness, coordinator } = makeCoordinator()
 
     coordinator.controls.pauseCapture(30 * 60_000)
     coordinator.controls.resumeCapture()
 
-    expect(capture.startCapture).toHaveBeenCalledTimes(1)
+    expect(harness.start).toHaveBeenCalledTimes(1)
     expect(coordinator.controls.isUserPaused()).toBe(false)
 
     // Timer must not fire a second start after a manual resume.
     vi.advanceTimersByTime(30 * 60_000)
-    expect(capture.startCapture).toHaveBeenCalledTimes(1)
+    expect(harness.start).toHaveBeenCalledTimes(1)
   })
 
   it('requestStopCapture cancels an active pause and disables the preference', () => {
@@ -171,53 +169,53 @@ describe('createCaptureCoordinator timed pause', () => {
   })
 
   it('resumeCaptureIfDesired does not override an active pause', () => {
-    const { capture, coordinator } = makeCoordinator()
+    const { harness, coordinator } = makeCoordinator()
 
     coordinator.controls.pauseCapture(30 * 60_000)
     coordinator.resumeCaptureIfDesired('resume')
 
-    expect(capture.startCapture).not.toHaveBeenCalled()
+    expect(harness.start).not.toHaveBeenCalled()
     expect(coordinator.controls.isUserPaused()).toBe(true)
   })
 
   it('suspendCapture stops a running capture without changing the preference', () => {
-    const { capture, stateManager, onStateChanged, coordinator } = makeCoordinator()
-    capture.isCapturingNow.mockReturnValue(true)
+    const { harness, stateManager, onStateChanged, coordinator } = makeCoordinator()
+    harness.capturing.mockReturnValue(true)
 
     coordinator.suspendCapture('device not activated')
 
-    expect(capture.forceClose).toHaveBeenCalledTimes(1)
-    expect(capture.stopCapture).toHaveBeenCalledTimes(1)
+    expect(harness.flushEvents).toHaveBeenCalledTimes(1)
+    expect(harness.stop).toHaveBeenCalledTimes(1)
     expect(stateManager.setCaptureEnabled).not.toHaveBeenCalled()
     expect(onStateChanged).toHaveBeenCalledTimes(1)
   })
 
   it('suspendCapture only refreshes the UI when capture is not running', () => {
-    const { capture, onStateChanged, coordinator } = makeCoordinator()
+    const { harness, onStateChanged, coordinator } = makeCoordinator()
 
     coordinator.suspendCapture('device not activated')
 
-    expect(capture.forceClose).not.toHaveBeenCalled()
-    expect(capture.stopCapture).not.toHaveBeenCalled()
+    expect(harness.flushEvents).not.toHaveBeenCalled()
+    expect(harness.stop).not.toHaveBeenCalled()
     expect(onStateChanged).toHaveBeenCalledTimes(1)
   })
 
   it('resumeCaptureIfDesired restarts capture after reactivation when still desired', () => {
-    const { capture, onStateChanged, coordinator } = makeCoordinator()
+    const { harness, onStateChanged, coordinator } = makeCoordinator()
 
     coordinator.resumeCaptureIfDesired('reactivated')
 
-    expect(capture.startCapture).toHaveBeenCalledTimes(1)
+    expect(harness.start).toHaveBeenCalledTimes(1)
     expect(onStateChanged).toHaveBeenCalledTimes(1)
   })
 
   it('resumeCaptureIfDesired does not start while the device still requires activation', () => {
-    const { capture, onStateChanged, coordinator } = makeCoordinator({ isPaused: () => true })
+    const { harness, onStateChanged, coordinator } = makeCoordinator({ isPaused: () => true })
 
     coordinator.resumeCaptureIfDesired('startup')
     coordinator.resumeCaptureIfDesired('reactivated')
 
-    expect(capture.startCapture).not.toHaveBeenCalled()
+    expect(harness.start).not.toHaveBeenCalled()
     expect(onStateChanged).toHaveBeenCalledTimes(2)
   })
 })
