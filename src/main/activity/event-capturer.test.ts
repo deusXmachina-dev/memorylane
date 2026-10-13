@@ -391,4 +391,51 @@ describe('EventCapturer idle and boundary ends', () => {
     expect(windows).toHaveLength(1)
     expect(windows[0].closedBy).toBe('max_duration')
   })
+
+  it('does not open a window on app_change while away', async () => {
+    capturer.handleEvent(makeEvent({ type: 'click', timestamp: 1000 }))
+    capturer.closeIdle(1000)
+    await flushAsyncAppends()
+    expect(windows).toHaveLength(1)
+
+    vi.setSystemTime(2000)
+    capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 2000 }))
+    vi.advanceTimersByTime(1500)
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+  })
+
+  it('opens on the first input after away and carries the latest app_change as context', async () => {
+    const screensaver = { title: '', processName: 'ScreenSaverEngine' }
+    const chrome = { title: 'Inbox', processName: 'Google Chrome' }
+    capturer.closeIdle(1000)
+    capturer.handleEvent(
+      makeEvent({ type: 'app_change', timestamp: 2000, activeWindow: screensaver }),
+    )
+    capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 3000, activeWindow: chrome }))
+
+    vi.setSystemTime(5000)
+    capturer.handleEvent(makeEvent({ type: 'click', timestamp: 5000 }))
+    capturer.closeIdle(5000)
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].startTimestamp).toBe(5000)
+    expect(windows[0].endTimestamp).toBe(5000)
+    expect(windows[0].events.map((event) => event.type)).toEqual(['app_change', 'click'])
+    expect(windows[0].events[0].timestamp).toBe(5000)
+    expect(windows[0].events[0].activeWindow).toEqual(chrome)
+  })
+
+  it('splits on app_change again once input has ended the away state', async () => {
+    capturer.closeIdle(1000)
+    capturer.handleEvent(makeEvent({ type: 'click', timestamp: 2000 }))
+    capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 2500 }))
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].closedBy).toBe('app_change')
+    expect(windows[0].endTimestamp).toBe(2500)
+  })
 })

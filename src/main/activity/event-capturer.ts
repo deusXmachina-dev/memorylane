@@ -41,6 +41,8 @@ export class EventCapturer {
    * switch boundary. Other close reasons open at the next observed event.
    */
   private nextWindowStartTimestamp: number | null = null
+  private away = false
+  private awayContext: InteractionContext | null = null
   private pendingWindows: PendingWindow[] = []
 
   private maxDurationTimer: NodeJS.Timeout | null = null
@@ -51,30 +53,36 @@ export class EventCapturer {
   }
 
   handleEvent(event: InteractionContext): void {
-    // App change splits the current window before opening a new one
-    if (event.type === 'app_change' && this.currentWindow !== null) {
-      this.closeWindow('app_change', {
-        boundaryTimestamp: event.timestamp,
-        includeBoundaryTimestamp: false,
-      })
-    }
-
-    // Route late debounced events into recently closed windows when they
-    // occurred before that window's close boundary.
-    if (event.type !== 'app_change' && this.tryAttachToPendingWindow(event)) {
+    if (event.type === 'app_change') {
+      if (this.away) {
+        this.awayContext = event
+        return
+      }
+      if (this.currentWindow !== null) {
+        this.closeWindow('app_change', {
+          boundaryTimestamp: event.timestamp,
+          includeBoundaryTimestamp: false,
+        })
+      }
+    } else if (this.tryAttachToPendingWindow(event)) {
       return
     }
 
-    // Lazy open: create a new window on the first event
     if (this.currentWindow === null) {
       this.currentWindow = this.openWindow(this.nextWindowStartTimestamp ?? event.timestamp)
       this.nextWindowStartTimestamp = null
+      if (this.awayContext !== null) {
+        this.currentWindow.events.push({ ...this.awayContext, timestamp: event.timestamp })
+        this.awayContext = null
+      }
     }
 
+    this.away = false
     this.currentWindow.events.push(event)
   }
 
   closeIdle(lastInputAt: number): void {
+    this.away = true
     if (this.currentWindow === null) return
     this.closeWindow('gap', { lastInputAt })
   }
@@ -116,6 +124,8 @@ export class EventCapturer {
     }
     this.currentWindow = null
     this.nextWindowStartTimestamp = null
+    this.away = false
+    this.awayContext = null
     this.clearPendingWindows()
   }
 
