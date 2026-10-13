@@ -12,7 +12,10 @@ const macTargets = isEnterprise
       { target: 'dmg', arch: ['arm64'] },
     ]
 
+const appFiles = ['out/**/*', 'package.json', '!node_modules/onnxruntime-web/**']
+
 const macConfig = {
+  minimumSystemVersion: '13.0',
   notarize: false,
   category: 'public.app-category.productivity',
   extendInfo: {
@@ -25,6 +28,11 @@ const macConfig = {
   entitlementsInherit: 'build/entitlements.mac.inherit.plist',
   artifactName: '${productName}-${arch}-mac.${ext}',
   target: macTargets,
+  files: [
+    ...appFiles,
+    '!node_modules/onnxruntime-node/bin/*/{linux,win32}/**',
+    '!node_modules/onnxruntime-node/bin/*/darwin/*/libonnxruntime.*.*.*.dylib',
+  ],
 }
 
 const winTargets = isEnterprise
@@ -55,7 +63,7 @@ module.exports = {
     buildResources: 'assets',
     output: `dist/${edition}`,
   },
-  files: ['out/**/*', 'package.json'],
+  files: appFiles,
   extraMetadata: {
     name: packageName,
     productName,
@@ -117,6 +125,11 @@ module.exports = {
       codeSigningAccountName: 'azure-signing-dxm',
     },
     target: winTargets,
+    files: [
+      ...appFiles,
+      '!node_modules/onnxruntime-node/bin/*/{darwin,linux}/**',
+      '!node_modules/onnxruntime-node/bin/*/win32/arm64/**',
+    ],
   },
   nsis: {
     artifactName: '${productName}-Setup.${ext}',

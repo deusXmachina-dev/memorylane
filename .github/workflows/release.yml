@@ -19,7 +19,6 @@ permissions:
   contents: write
 
 env:
-  NODE_VERSION: '22'
   RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
 
 jobs:
@@ -41,7 +40,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version-file: ${{ hashFiles('.nvmrc') != '' && '.nvmrc' || '' }}
+          node-version: ${{ hashFiles('.nvmrc') == '' && '22' || '' }}
 
       - name: Check tag matches package version
         id: version
@@ -118,7 +118,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version-file: ${{ hashFiles('.nvmrc') != '' && '.nvmrc' || '' }}
+          node-version: ${{ hashFiles('.nvmrc') == '' && '22' || '' }}
           cache: npm
 
       - name: Install dependencies
@@ -188,7 +189,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version-file: ${{ hashFiles('.nvmrc') != '' && '.nvmrc' || '' }}
+          node-version: ${{ hashFiles('.nvmrc') == '' && '22' || '' }}
           cache: npm
 
       - name: Install dependencies
@@ -254,7 +256,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version-file: ${{ hashFiles('.nvmrc') != '' && '.nvmrc' || '' }}
+          node-version: ${{ hashFiles('.nvmrc') == '' && '22' || '' }}
           cache: npm
 
       - name: Setup Rust
@@ -302,7 +305,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version-file: ${{ hashFiles('.nvmrc') != '' && '.nvmrc' || '' }}
+          node-version: ${{ hashFiles('.nvmrc') == '' && '22' || '' }}
           cache: npm
 
       - name: Setup Rust

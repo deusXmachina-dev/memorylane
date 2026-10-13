@@ -1,13 +1,15 @@
-# MemoryLane v1.5.11-alpha.1
+# MemoryLane v1.5.11-alpha.2
 
-Refreshed default models and faster first uploads after activation.
+Electron 44 and dependency updates, smaller installers.
 
 ## What's Changed
 
-- **New summarization models**: refreshed default model chains; video is sent in the `video_url` format OpenRouter expects. Existing installs switch to the new defaults (#295).
-- **New task-mining default**: task mining, user context and cluster review default to glm-5.3-flash, falling back to mimo-v2.6-flash and minimax-m3 (#294).
-- **Uploads start on activation**: activating a device, or turning sharing on, starts uploads right away instead of waiting for the hourly check (#291).
-- **Device report includes key source**: reports whether the device uses a managed key, its own key, or none (#293).
+- **Electron 44**: upgraded Electron, Node 24, transformers 4 and other dependencies; npm audit fixes.
+- **Requires macOS 13+**: macOS 12 no longer receives updates.
+- **Smaller installers**: only the current platform's ML runtime is bundled.
+- **Import dialog opens in Documents**, where exports are saved.
+- **Links open in the system browser** (#296).
+- **Fewer false app switches**: title changes of only symbols are ignored (#297).
 
 ## Known Issues & Limitations
 
@@ -25,4 +27,4 @@ Refreshed default models and faster first uploads after activation.
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.10...v1.5.11-alpha.1
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.11-alpha.1...v1.5.11-alpha.2
