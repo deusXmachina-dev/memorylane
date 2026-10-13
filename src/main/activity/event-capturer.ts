@@ -100,13 +100,13 @@ export class EventCapturer {
     }
 
     // Lazy open: create a new window on the first event
-    let window = this.currentWindow
-    if (window === null) {
-      window = this.openWindow(this.nextWindowStartTimestamp ?? event.timestamp)
+    if (this.currentWindow === null) {
+      this.currentWindow = this.newWindow(this.nextWindowStartTimestamp ?? event.timestamp)
       this.nextWindowStartTimestamp = null
+      this.startMaxDurationTimer()
     }
 
-    window.events.push(event)
+    this.currentWindow.events.push(event)
     this.resetGapTimer()
   }
 
@@ -201,11 +201,8 @@ export class EventCapturer {
     this.schedulePendingWindowFinalize(pendingWindow, finalizeDelayMs)
   }
 
-  private openWindow(startTimestamp: number): NonNullable<EventCapturer['currentWindow']> {
-    const window = { id: uuidv4(), startTimestamp, events: [] }
-    this.currentWindow = window
-    this.startMaxDurationTimer()
-    return window
+  private newWindow(startTimestamp: number): NonNullable<EventCapturer['currentWindow']> {
+    return { id: uuidv4(), startTimestamp, events: [] }
   }
 
   private isPresent(): boolean {
@@ -233,7 +230,8 @@ export class EventCapturer {
       const boundaryTimestamp = Date.now()
       this.closeWindow('max_duration', { boundaryTimestamp })
       if (this.isPresent()) {
-        this.openWindow(boundaryTimestamp)
+        this.currentWindow = this.newWindow(boundaryTimestamp)
+        this.startMaxDurationTimer()
         this.resetGapTimer()
       }
     }, EVENT_CAPTURER_CONFIG.MAX_WINDOW_DURATION_MS)
