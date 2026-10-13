@@ -76,7 +76,6 @@ export function createCaptureCoordinator(params: {
   }
 
   const stopCapture = (): void => {
-    void params.harness.flushEvents()
     void params.harness.stop().catch((error) => {
       log.error('[Main] Failed to stop capture:', error)
     })

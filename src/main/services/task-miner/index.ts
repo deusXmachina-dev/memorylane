@@ -124,6 +124,7 @@ export class TaskMiner {
    * begins its 60-day seed a few minutes in without any external trigger.
    */
   startup(): void {
+    if (this.stopped) return
     const recovered = this.storage.miningDays.resetStaleRunning(TASK_BACKFILL.MAX_DAY_ATTEMPTS)
     if (recovered) log.info(`[TaskMiner] Recovered ${recovered} interrupted mining day(s)`)
     if (!this.pollTimer) {

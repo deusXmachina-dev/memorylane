@@ -184,7 +184,6 @@ describe('createCaptureCoordinator timed pause', () => {
 
     coordinator.suspendCapture('device not activated')
 
-    expect(harness.flushEvents).toHaveBeenCalledTimes(1)
     expect(harness.stop).toHaveBeenCalledTimes(1)
     expect(stateManager.setCaptureEnabled).not.toHaveBeenCalled()
     expect(onStateChanged).toHaveBeenCalledTimes(1)

@@ -28,7 +28,7 @@ export interface AppSync {
   onManagedExclusionsChanged(listener: () => void): () => void
   kick(reason: string): void
   start(): void
-  stop(): Promise<void>
+  stop(): Array<[name: string, step: Promise<void>]>
 }
 
 export function createSync(runtime: MainRuntime): AppSync {
@@ -136,15 +136,12 @@ export function createSync(runtime: MainRuntime): AppSync {
         }
       })
     },
-    async stop(): Promise<void> {
+    stop(): Array<[name: string, step: Promise<void>]> {
       unsubscribeSettings()
-      await Promise.allSettled([
-        remoteModels.stop(),
-        deviceReport.stop(),
-        databaseUpload?.stop(),
-        logUpload?.stop(),
-        remoteBlacklist?.stop(),
-      ])
+      const jobs = { remoteModels, deviceReport, databaseUpload, logUpload, remoteBlacklist }
+      return Object.entries(jobs).flatMap(([name, job]) =>
+        job ? [[`${name}.stop`, job.stop()] as [string, Promise<void>]] : [],
+      )
     },
   }
 }
