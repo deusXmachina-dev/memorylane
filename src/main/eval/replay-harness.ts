@@ -21,7 +21,7 @@ import type { Frame } from '@main/recorder/screen-capturer'
 import type { EventWindow } from '@/shared/types'
 import type { SemanticRunDiagnostics } from '@main/semantic/types'
 import type { DumpedFrame, ReplayActivity } from './types'
-import { dropLegacyEvents, readJsonl } from './jsonl'
+import { readJsonl } from './jsonl'
 
 /**
  * Replays a captured fixture (frames + event windows) through the *real*
@@ -141,7 +141,7 @@ export async function replayFixture(params: ReplayFixtureParams): Promise<Replay
       id: w.id,
       startTimestamp: w.startTimestamp,
       endTimestamp: w.endTimestamp,
-      events: dropLegacyEvents(w.events),
+      events: w.events,
       closedBy: w.closedBy,
     }))
     .sort((a, b) => a.startTimestamp - b.startTimestamp || a.endTimestamp - b.endTimestamp)

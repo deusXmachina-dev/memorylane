@@ -19,7 +19,7 @@ import type {
   ScriptCheck,
 } from '@/shared/eval-review'
 import type { EventWindow, InteractionContext } from '@/shared/types'
-import { dropLegacyEvents, readJsonl } from './jsonl'
+import { readJsonl } from './jsonl'
 import { describeInteraction } from '@main/semantic/prompt'
 import { evalMediaUrl } from './eval-media-protocol'
 import { formatGoldenMd, parseGoldenMd } from './golden-md'
@@ -116,7 +116,7 @@ export class EvalFixtureStore {
 
     const sessionStartMs = this.sessionStartMs(dir, windows)
     return windows.map((w) => {
-      const events = dropLegacyEvents(w.events).sort((a, b) => a.timestamp - b.timestamp)
+      const events = [...w.events].sort((a, b) => a.timestamp - b.timestamp)
       return {
         startOffsetMs: w.startTimestamp - sessionStartMs,
         endOffsetMs: w.endTimestamp - sessionStartMs,
