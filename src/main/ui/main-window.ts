@@ -32,7 +32,7 @@ import type { RemoteModelConfig } from '../../shared/remote-model-config'
 import { applyVendorSwitch } from './vendor-switch'
 import { applyModelSettings } from './model-settings'
 import type { EvalRecorder } from '../eval/eval-recorder'
-import { importRecordingScripts, listRecordingScripts } from '../eval/recording-scripts'
+import { importRecordingScripts, listRecordingScripts } from '@main/eval/recording-scripts'
 import type { EvalFixtureStore } from '../eval/eval-fixture-store'
 import type { TaskFixtureStore } from '../eval/task-fixture-store'
 import {
@@ -41,17 +41,13 @@ import {
   renderSightingGoldenMd,
 } from '../eval/task-fixture-build'
 import { TASK_FIXTURE_SCHEMA_VERSION } from '../eval/task-types'
-import type { PromoteCaptureResult } from '../eval/promote-fixture'
-import type {
-  EvalRecordingStatus,
-  GoldenBlock,
-  TaskSightingSummary,
-} from '../../shared/eval-review'
+import type { PromoteCaptureResult } from '@main/eval/promote-fixture'
+import type { EvalRecordingStatus, GoldenBlock, TaskSightingSummary } from '@/shared/eval-review'
 import {
   closeRecordingGuide,
   resizeRecordingGuide,
   showRecordingGuide,
-} from './recording-guide-window'
+} from '@main/ui/recording-guide-window'
 import type { AccessProvider } from '../access'
 import type {
   AccessState,
