@@ -10,6 +10,8 @@ import type {
   CapturedFrame,
 } from '@main/recorder/native-screenshot'
 
+const away = { isPresent: () => false, lastInputAt: () => 0 }
+
 vi.mock('@main/utils/logger', () => ({
   default: {
     debug: vi.fn(),
@@ -120,6 +122,7 @@ describe('pipeline harness', () => {
 
   it('wires screen + event + activity producer with in-memory streams', async () => {
     const harness = createPipelineHarness({
+      presence: away,
       outputDir: path.join(process.cwd(), '.tmp-harness'),
       frameIntervalMs: 10,
       activityProducerConfig: {
@@ -172,6 +175,7 @@ describe('pipeline harness', () => {
 
   it('retargets captures when app_change reports a different display', async () => {
     const harness = createPipelineHarness({
+      presence: away,
       outputDir: path.join(process.cwd(), '.tmp-harness-display-retarget'),
       frameIntervalMs: 20,
       activityProducerConfig: {
@@ -210,6 +214,7 @@ describe('pipeline harness', () => {
     const persistedActivityIds: string[] = []
 
     const harness = createPipelineHarness({
+      presence: away,
       outputDir: path.join(process.cwd(), '.tmp-harness-extractor'),
       frameIntervalMs: 10,
       activityProducerConfig: {
@@ -305,6 +310,7 @@ describe('pipeline harness', () => {
     const persistedActivityIds: string[] = []
 
     const harness = createPipelineHarness({
+      presence: away,
       outputDir: path.join(process.cwd(), '.tmp-harness-retain'),
       frameIntervalMs: 10,
       retainScreenshots: true,
@@ -367,6 +373,7 @@ describe('pipeline harness', () => {
 
   it('suppresses and resumes frame capture while running', async () => {
     const harness = createPipelineHarness({
+      presence: away,
       outputDir: path.join(process.cwd(), '.tmp-harness-suppression'),
       frameIntervalMs: 10,
     })
@@ -397,6 +404,7 @@ describe('pipeline harness', () => {
 
   it('does not churn start/stop calls when suppression state is set repeatedly', async () => {
     const harness = createPipelineHarness({
+      presence: away,
       outputDir: path.join(process.cwd(), '.tmp-harness-suppression-idempotent'),
       frameIntervalMs: 10,
     })
@@ -419,6 +427,7 @@ describe('pipeline harness', () => {
 
   it('respects suppression set before start', async () => {
     const harness = createPipelineHarness({
+      presence: away,
       outputDir: path.join(process.cwd(), '.tmp-harness-suppression-prestart'),
       frameIntervalMs: 10,
     })

@@ -23,6 +23,8 @@ vi.mock('@main/utils/logger', () => ({
 
 import { EventCapturer } from './event-capturer'
 
+const away = { isPresent: () => false, lastInputAt: () => 0 }
+
 function makeEvent(
   overrides: Partial<InteractionContext> & { type: InteractionContext['type'] },
 ): InteractionContext {
@@ -47,7 +49,7 @@ describe('EventCapturer', () => {
     vi.useFakeTimers()
     stream = new InMemoryStream<EventWindow>()
     windows = []
-    capturer = new EventCapturer(stream)
+    capturer = new EventCapturer(stream, away)
     windowsSubscription = stream.subscribe({
       startAt: { type: 'now' },
       onRecord: (record) => windows.push(record.payload),

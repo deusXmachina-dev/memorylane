@@ -12,7 +12,7 @@ interface PendingWindow {
   boundaryTimestamp: number
   includeBoundaryTimestamp: boolean
   endTimestampOverride?: number
-  lastInputAt?: number
+  lastInputAt: number
   finalizeTimer: NodeJS.Timeout | null
 }
 
@@ -68,7 +68,7 @@ export class EventCapturer {
 
   constructor(
     eventStream: DurableStream<EventWindow>,
-    private readonly presence?: PresenceProbe,
+    private readonly presence: PresenceProbe,
   ) {
     this.eventStream = eventStream
     this.lateEventGraceMs = EVENT_CAPTURER_CONFIG.LATE_EVENT_GRACE_MS ?? 0
@@ -176,8 +176,8 @@ export class EventCapturer {
 
     const boundaryTimestamp = options?.boundaryTimestamp ?? Date.now()
     const { startTimestamp, events } = this.currentWindow
-    const lastInputAt = this.presence && Math.min(this.presence.lastInputAt(), boundaryTimestamp)
-    if (events.length === 0 && (lastInputAt ?? startTimestamp) <= startTimestamp) {
+    const lastInputAt = Math.min(this.presence.lastInputAt(), boundaryTimestamp)
+    if (events.length === 0 && lastInputAt <= startTimestamp) {
       this.currentWindow = null
       this.nextWindowStartTimestamp = null
       return
@@ -218,7 +218,7 @@ export class EventCapturer {
     }
     this.gapTimer = setTimeout(() => {
       this.gapTimer = null
-      if (this.presence?.isPresent()) {
+      if (this.presence.isPresent()) {
         this.resetGapTimer()
         return
       }
@@ -230,7 +230,7 @@ export class EventCapturer {
     this.maxDurationTimer = setTimeout(() => {
       this.maxDurationTimer = null
       const boundaryTimestamp = Date.now()
-      const present = this.presence?.isPresent() ?? false
+      const present = this.presence.isPresent()
       this.closeWindow('max_duration', { boundaryTimestamp })
       if (present) {
         this.currentWindow = this.openWindow(boundaryTimestamp)
@@ -319,7 +319,7 @@ export class EventCapturer {
     startTimestamp: number
     events: InteractionContext[]
     endTimestampOverride?: number
-    lastInputAt?: number
+    lastInputAt: number
   }): {
     startTimestamp: number
     endTimestamp: number
@@ -334,7 +334,7 @@ export class EventCapturer {
     const timestamps = window.events
       .map((event) => event.timestamp)
       .filter((timestamp) => Number.isFinite(timestamp))
-    if (window.lastInputAt !== undefined) timestamps.push(window.lastInputAt)
+    timestamps.push(window.lastInputAt)
     if (timestamps.length === 0) {
       return {
         startTimestamp: window.startTimestamp,

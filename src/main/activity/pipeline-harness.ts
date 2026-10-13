@@ -59,7 +59,7 @@ export function createPipelineHarness(params: {
   // and the periodic stale-file sweep is disabled, so screenshots survive for
   // inspection. Lets the screenshots dir grow unbounded — dev use only.
   retainScreenshots?: boolean
-  presence?: PresenceProbe
+  presence: PresenceProbe
 }): PipelineHarness {
   // Mutable so the eval recorder can hold retention open for a recording and
   // release it afterwards, without a restart. Read live at the cleanup callsites.
