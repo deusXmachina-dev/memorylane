@@ -1,16 +1,14 @@
-# MemoryLane v1.5.11-alpha.3
+# MemoryLane v1.5.11-alpha.4
 
-Electron 44 and dependency updates, smaller installers.
+Main-process cleanup, faster quit, better reading-time windows.
 
 ## What's Changed
 
-- **Electron 44**: upgraded Electron, Node 24, transformers 4 and other dependencies; npm audit fixes.
-- **Requires macOS 13+**: macOS 12 no longer receives updates.
-- **Smaller installers**: only the current platform's ML runtime is bundled.
-- **Import dialog opens in Documents**, where exports are saved.
-- **Links open in the system browser** (#296).
-- **Fewer false app switches**: title changes of only symbols are ignored (#297).
-- **Scripted eval recordings** in Developer mode, with an on-screen step guide (#302).
+- **Reading time ends at your last input**: the presence heartbeat is replaced by an idle-aware window close, so windows no longer stretch past when you stopped reading (#303).
+- **Faster quit**: the last activity's summary is given 3s at shutdown instead of blocking exit.
+- **Periodic export folder removed**: the manual ZIP export stays; a stale folder setting is ignored.
+- **Main-process wiring cleanup**: settings apply in one place, background sync has its own module, and the task miner stops cleanly at quit (#304).
+- **Removed legacy migrations** for pre-v2 vendor credentials and pre-bundle-id excluded apps.
 
 ## Known Issues & Limitations
 
@@ -28,4 +26,4 @@ Electron 44 and dependency updates, smaller installers.
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.11-alpha.2...v1.5.11-alpha.3
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.11-alpha.3...v1.5.11-alpha.4
