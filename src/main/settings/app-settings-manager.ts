@@ -3,7 +3,7 @@ import * as os from 'os'
 import * as path from 'path'
 import log from '@main/utils/logger'
 import type {
-  CaptureSettings,
+  AppSettings,
   SemanticPipelineMode,
   Vendor,
   VendorModelSelection,
@@ -107,13 +107,13 @@ function validateExportDir(value: unknown): ExportDirResult {
 function normalizeDatabaseExportDirectory(value: string | null | undefined): string {
   const result = validateExportDir(value)
   if (result.ok) return result.value
-  log.warn(`[CaptureSettings] Rejecting databaseExportDirectory (${result.reason}): ${value}`)
+  log.warn(`[AppSettings] Rejecting databaseExportDirectory (${result.reason}): ${value}`)
   return ''
 }
 
 const OPENROUTER_DEFAULTS = getVendorDefaults('openrouter')
 
-function defaultUploadDetailLevel(edition: AppEdition): CaptureSettings['uploadDetailLevel'] {
+function defaultUploadDetailLevel(edition: AppEdition): AppSettings['uploadDetailLevel'] {
   // Enterprise installs opt into syncing by default — the backend is the
   // whole reason the edition exists. Customer installs default to off so
   // nothing leaves the device until the user explicitly turns it on.
@@ -126,7 +126,7 @@ function defaultUploadDetailLevel(edition: AppEdition): CaptureSettings['uploadD
 // their old "contains" behavior carries over as a wildcard.
 const URL_MATCH_SCHEMA_VERSION = 1
 
-const DEFAULTS: CaptureSettings = {
+const DEFAULTS: AppSettings = {
   autoStartEnabled: true,
   visualThreshold: VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT,
   typingDebounceMs: INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS,
@@ -228,22 +228,22 @@ function normalizeModelsByVendor(value: unknown): Partial<Record<Vendor, VendorM
   return out
 }
 
-export interface CaptureSettingsManagerOptions {
+export interface AppSettingsManagerOptions {
   configPath?: string
   edition?: AppEdition
 }
 
-export type CaptureSettingsListener = (next: CaptureSettings, previous: CaptureSettings) => void
+export type AppSettingsListener = (next: AppSettings, previous: AppSettings) => void
 
-export class CaptureSettingsManager {
+export class AppSettingsManager {
   private configPath: string
-  private settings: CaptureSettings
-  private defaults: CaptureSettings
+  private settings: AppSettings
+  private defaults: AppSettings
   private modelDefaultsUpgraded = false
-  private readonly listeners = new Set<CaptureSettingsListener>()
+  private readonly listeners = new Set<AppSettingsListener>()
 
-  constructor(options: CaptureSettingsManagerOptions | string = {}) {
-    const opts: CaptureSettingsManagerOptions =
+  constructor(options: AppSettingsManagerOptions | string = {}) {
+    const opts: AppSettingsManagerOptions =
       typeof options === 'string' ? { configPath: options } : options
     if (opts.configPath !== undefined) {
       this.configPath = opts.configPath
@@ -263,15 +263,15 @@ export class CaptureSettingsManager {
     }
   }
 
-  private load(): CaptureSettings {
+  private load(): AppSettings {
     try {
       if (fs.existsSync(this.configPath)) {
-        type StoredCaptureSettings = Partial<CaptureSettings> & {
+        type StoredAppSettings = Partial<AppSettings> & {
           pauseHotkeyAccelerator?: string
           semanticRequestTimeoutMs?: number
           remoteModelConfigVersion?: number
         }
-        const data = JSON.parse(fs.readFileSync(this.configPath, 'utf-8')) as StoredCaptureSettings
+        const data = JSON.parse(fs.readFileSync(this.configPath, 'utf-8')) as StoredAppSettings
         delete data.remoteModelConfigVersion
         const activeVendor = normalizeVendor(data.activeVendor)
         const vendorDefaults = getVendorDefaults(activeVendor)
@@ -327,7 +327,7 @@ export class CaptureSettingsManager {
           }
           this.modelDefaultsUpgraded = true
           log.info(
-            `[CaptureSettings] Model defaults v${data.modelDefaultsVersion ?? 0} → v${MODEL_DEFAULTS_VERSION}: overriding stored model picks with vendor defaults`,
+            `[AppSettings] Model defaults v${data.modelDefaultsVersion ?? 0} → v${MODEL_DEFAULTS_VERSION}: overriding stored model picks with vendor defaults`,
           )
         }
         // Migrate pre-v1 URL patterns (substring era): wrap patterns without a
@@ -374,28 +374,28 @@ export class CaptureSettingsManager {
         }
       }
     } catch (error) {
-      log.warn('[CaptureSettings] Failed to load settings, using defaults:', error)
+      log.warn('[AppSettings] Failed to load settings, using defaults:', error)
     }
     return { ...this.defaults }
   }
 
-  public get(): CaptureSettings {
+  public get(): AppSettings {
     return { ...this.settings }
   }
 
-  public onChange(listener: CaptureSettingsListener): () => void {
+  public onChange(listener: AppSettingsListener): () => void {
     this.listeners.add(listener)
     return () => {
       this.listeners.delete(listener)
     }
   }
 
-  private notify(previous: CaptureSettings): void {
+  private notify(previous: AppSettings): void {
     for (const listener of this.listeners) listener(this.get(), previous)
   }
 
-  public save(partial: Partial<CaptureSettings>): void {
-    const merged: CaptureSettings = {
+  public save(partial: Partial<AppSettings>): void {
+    const merged: AppSettings = {
       ...this.settings,
       ...partial,
       captureHotkeyAccelerator: normalizeCaptureHotkeyAccelerator(
@@ -433,9 +433,9 @@ export class CaptureSettingsManager {
     this.settings = merged
     try {
       fs.writeFileSync(this.configPath, JSON.stringify(this.settings, null, 2))
-      log.info('[CaptureSettings] Settings saved')
+      log.info('[AppSettings] Settings saved')
     } catch (error) {
-      log.error('[CaptureSettings] Failed to save settings:', error)
+      log.error('[AppSettings] Failed to save settings:', error)
       throw error
     }
     this.notify(previous)
@@ -495,15 +495,15 @@ export class CaptureSettingsManager {
       if (fs.existsSync(this.configPath)) {
         fs.unlinkSync(this.configPath)
       }
-      log.info('[CaptureSettings] Settings reset to defaults')
+      log.info('[AppSettings] Settings reset to defaults')
     } catch (error) {
-      log.error('[CaptureSettings] Failed to reset settings:', error)
+      log.error('[AppSettings] Failed to reset settings:', error)
       throw error
     }
     this.notify(previous)
   }
 
-  public getDefaults(): CaptureSettings {
+  public getDefaults(): AppSettings {
     return { ...this.defaults }
   }
 

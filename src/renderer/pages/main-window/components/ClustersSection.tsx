@@ -52,7 +52,7 @@ export function ClustersSection({
 
   useEffect(() => {
     api
-      .getCaptureSettings()
+      .getAppSettings()
       .then((s) => setDetectionEnabled(s.patternDetectionEnabled))
       .catch(() => setDetectionEnabled(true))
   }, [api])
@@ -95,7 +95,7 @@ export function ClustersSection({
           size="sm"
           onClick={() => {
             setDetectionEnabled(true)
-            api.saveCaptureSettings({ patternDetectionEnabled: true }).then((result) => {
+            api.saveAppSettings({ patternDetectionEnabled: true }).then((result) => {
               if (result.success) toast.success('Task discovery enabled')
             })
           }}

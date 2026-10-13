@@ -1,7 +1,7 @@
-import type { CaptureSettings } from '@types'
+import type { AppSettings } from '@types'
 
 export type NumericCaptureSetting = Exclude<
-  keyof CaptureSettings,
+  keyof AppSettings,
   | 'autoStartEnabled'
   | 'semanticPipelineMode'
   | 'captureHotkeyAccelerator'

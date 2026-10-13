@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { ExclusionsManager } from '../advanced-settings/exclusions/ExclusionsManager'
 import { OnboardingStep } from './OnboardingStep'
-import type { CaptureSettings, MainWindowAPI } from '@types'
+import type { AppSettings, MainWindowAPI } from '@types'
 
 interface BlacklistStepProps {
   api: MainWindowAPI
@@ -10,10 +10,10 @@ interface BlacklistStepProps {
 }
 
 export function BlacklistStep({ api, onContinue }: BlacklistStepProps): React.JSX.Element {
-  const [settings, setSettings] = useState<CaptureSettings | null>(null)
+  const [settings, setSettings] = useState<AppSettings | null>(null)
 
   const load = useCallback(async () => {
-    setSettings(await api.getCaptureSettings())
+    setSettings(await api.getAppSettings())
   }, [api])
 
   useEffect(() => {
@@ -21,9 +21,9 @@ export function BlacklistStep({ api, onContinue }: BlacklistStepProps): React.JS
   }, [load])
 
   const save = useCallback(
-    (patch: Partial<CaptureSettings>) => {
+    (patch: Partial<AppSettings>) => {
       setSettings((prev) => (prev ? { ...prev, ...patch } : prev))
-      void api.saveCaptureSettings(patch).then((result) => {
+      void api.saveAppSettings(patch).then((result) => {
         if (!result.success) toast.error(result.error ?? 'Failed to save')
       })
     },

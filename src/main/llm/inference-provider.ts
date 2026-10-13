@@ -36,7 +36,7 @@ export interface InferenceProviderOptions {
   credentials: VendorCredentialsManager
   /**
    * Accessor returning the currently active vendor. Typically reads from
-   * CaptureSettingsManager.
+   * AppSettingsManager.
    */
   getActiveVendor: () => Vendor
   /** Optional fetch override forwarded to all underlying SDK providers (tests). */

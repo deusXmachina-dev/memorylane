@@ -4,7 +4,7 @@ import { app } from 'electron'
 import log from '@main/utils/logger'
 import * as interactionMonitor from '@main/recorder/interaction-monitor'
 import type { VendorCredentialsManager } from '@main/settings/vendor-credentials-manager'
-import type { CaptureSettingsManager } from '@main/settings/capture-settings-manager'
+import type { AppSettingsManager } from '@main/settings/app-settings-manager'
 import type { DeviceIdentity } from '@main/settings/device-identity'
 import { applySettingsChange } from '@main/settings/apply-settings'
 import { createAccessProvider, type AccessProvider } from '@main/access'
@@ -49,7 +49,7 @@ import { listenerSet } from '@main/utils/listeners'
 
 export interface MainRuntime {
   edition: AppEdition
-  settings: CaptureSettingsManager
+  settings: AppSettingsManager
   vendorCredentials: VendorCredentialsManager
   deviceIdentity: DeviceIdentity
   capture: RuntimeCaptureController
@@ -81,7 +81,7 @@ export interface MainRuntime {
 
 export async function createMainRuntime(params: {
   edition: AppEdition
-  settings: CaptureSettingsManager
+  settings: AppSettingsManager
   vendorCredentials: VendorCredentialsManager
   deviceIdentity: DeviceIdentity
 }): Promise<MainRuntime> {

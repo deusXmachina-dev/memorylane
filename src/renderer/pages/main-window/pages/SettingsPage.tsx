@@ -4,7 +4,7 @@ import { Button } from '@components/ui/button'
 import { Tabs, TabsList, TabsContent, TabsTrigger } from '@components/ui/tabs'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import type { AppEditionConfig } from '@/shared/edition'
-import type { CaptureSettings, SemanticPipelineMode, Vendor, VendorStatus } from '@types'
+import type { AppSettings, SemanticPipelineMode, Vendor, VendorStatus } from '@types'
 import { AiModelsSection } from '../components/advanced-settings/AiModelsSection'
 import { CapturePrivacySection } from '../components/advanced-settings/CapturePrivacySection'
 import { DataTabPanel } from '../components/advanced-settings/DataTabPanel'
@@ -29,20 +29,20 @@ export function SettingsPage({
   const api = useMainWindowAPI()
   const hotkeyPlatform = useMemo(() => detectHotkeyPlatform(), [])
   const [editionConfig, setEditionConfig] = useState<AppEditionConfig | null>(null)
-  const [form, setForm] = useState<CaptureSettings | null>(null)
+  const [form, setForm] = useState<AppSettings | null>(null)
   const [credentialStatuses, setCredentialStatuses] = useState<Record<Vendor, VendorStatus> | null>(
     null,
   )
   const [recordingHotkey, setRecordingHotkey] = useState(false)
 
   const load = useCallback(async () => {
-    const [config, captureSettings, statuses] = await Promise.all([
+    const [config, appSettings, statuses] = await Promise.all([
       api.getEditionConfig(),
-      api.getCaptureSettings(),
+      api.getAppSettings(),
       api.getCredentialStatuses(),
     ])
     setEditionConfig(config)
-    setForm(captureSettings)
+    setForm(appSettings)
     setCredentialStatuses(statuses)
   }, [api])
 
@@ -51,8 +51,8 @@ export function SettingsPage({
   }, [load])
 
   const save = useCallback(
-    (settings: Partial<CaptureSettings>, successMessage = 'Settings saved') => {
-      void api.saveCaptureSettings(settings).then((result) => {
+    (settings: Partial<AppSettings>, successMessage = 'Settings saved') => {
+      void api.saveAppSettings(settings).then((result) => {
         if (!result.success) {
           toast.error(result.error ?? 'Failed to save settings', {
             id: 'auto-save-error',
@@ -74,7 +74,7 @@ export function SettingsPage({
   const commitNumericSetting = useCallback(
     (key: NumericCaptureSetting, value: number): void => {
       setForm((prev) => (prev ? { ...prev, [key]: value } : prev))
-      const patch: Partial<Pick<CaptureSettings, NumericCaptureSetting>> = { [key]: value }
+      const patch: Partial<Pick<AppSettings, NumericCaptureSetting>> = { [key]: value }
       save(patch)
     },
     [save],
@@ -211,7 +211,7 @@ export function SettingsPage({
   const refreshActiveVendor = useCallback(async (): Promise<void> => {
     const [statuses, settings] = await Promise.all([
       api.getCredentialStatuses(),
-      api.getCaptureSettings(),
+      api.getAppSettings(),
     ])
     setCredentialStatuses(statuses)
     setForm(settings)
@@ -219,7 +219,7 @@ export function SettingsPage({
   }, [api, onCredentialsChanged])
 
   const handleReset = useCallback(async (): Promise<void> => {
-    await api.resetCaptureSettings()
+    await api.resetAppSettings()
     await load()
   }, [api, load])
 
@@ -241,7 +241,7 @@ export function SettingsPage({
       setCaptureHotkeyAccelerator(accelerator)
       setRecordingHotkey(false)
       void api
-        .saveCaptureSettings({ captureHotkeyAccelerator: accelerator })
+        .saveAppSettings({ captureHotkeyAccelerator: accelerator })
         .then(async (result) => {
           if (!result.success) {
             toast.error(result.error ?? 'Failed to save settings', {

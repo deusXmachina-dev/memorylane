@@ -2,7 +2,7 @@
  * CLI plumbing for the InferenceProvider.
  *
  * Mirrors what the Electron main process does at startup: raise the undici
- * transport ceiling, load VendorCredentialsManager + CaptureSettingsManager
+ * transport ceiling, load VendorCredentialsManager + AppSettingsManager
  * from the on-disk userData dir, then construct an InferenceProvider against
  * the active vendor.
  *
@@ -16,7 +16,7 @@
  */
 
 import * as path from 'path'
-import { CaptureSettingsManager } from '../src/main/settings/capture-settings-manager'
+import { AppSettingsManager } from '../src/main/settings/app-settings-manager'
 import { VendorCredentialsManager } from '../src/main/settings/vendor-credentials-manager'
 import { InferenceProviderImpl } from '../src/main/llm'
 import type { InferenceProvider } from '../src/main/llm'
@@ -61,8 +61,8 @@ export function loadCliInferenceProvider(
 
   const userData = options.userDataPath ?? getAppDataPath()
 
-  const captureSettings = new CaptureSettingsManager(path.join(userData, 'capture-settings.json'))
-  const settings = captureSettings.get()
+  const appSettings = new AppSettingsManager(path.join(userData, 'capture-settings.json'))
+  const settings = appSettings.get()
 
   let vendor: Vendor
   if (options.vendorOverride) {

@@ -1,7 +1,7 @@
 import { Keyboard, ShieldCheck } from 'lucide-react'
 import { Input } from '@components/ui/input'
 import { Switch } from '@components/ui/switch'
-import type { CaptureSettings } from '@types'
+import type { AppSettings } from '@types'
 import { formatHotkeyForDisplay, type HotkeyPlatform } from '../../hotkey-utils'
 import { ExclusionsManager } from './exclusions/ExclusionsManager'
 import { HelpTooltip } from './exclusions/HelpTooltip'
@@ -9,7 +9,7 @@ import { SettingsRow } from './SettingsRow'
 import { SettingsSection } from './SettingsSection'
 
 interface CapturePrivacySectionProps {
-  form: CaptureSettings
+  form: AppSettings
   hotkeyPlatform: HotkeyPlatform
   showAutoStart: boolean
   onToggleRecordingHotkey: () => void

@@ -64,10 +64,10 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   listInstalledApps: () => ipcRenderer.invoke('main-window:listInstalledApps'),
   listSeenDomains: () => ipcRenderer.invoke('main-window:listSeenDomains'),
   // Capture settings
-  getCaptureSettings: () => ipcRenderer.invoke('main-window:getCaptureSettings'),
-  saveCaptureSettings: (settings: Record<string, unknown>) =>
-    ipcRenderer.invoke('main-window:saveCaptureSettings', settings),
-  resetCaptureSettings: () => ipcRenderer.invoke('main-window:resetCaptureSettings'),
+  getAppSettings: () => ipcRenderer.invoke('main-window:getAppSettings'),
+  saveAppSettings: (settings: Record<string, unknown>) =>
+    ipcRenderer.invoke('main-window:saveAppSettings', settings),
+  resetAppSettings: () => ipcRenderer.invoke('main-window:resetAppSettings'),
   // Patterns (task clusters) — new TaskMiner view
   getClusters: () => ipcRenderer.invoke('main-window:getClusters'),
   getClusterDetail: (id: string) => ipcRenderer.invoke('main-window:getClusterDetail', id),

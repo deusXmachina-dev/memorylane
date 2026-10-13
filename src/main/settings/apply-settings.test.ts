@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { CaptureSettings } from '@types'
-import { makeCaptureSettings } from '@main/utils/test-utils'
+import type { AppSettings } from '@types'
+import { makeAppSettings } from '@main/utils/test-utils'
 import { applySettingsChange, type LiveSettingsTargets } from './apply-settings'
 
 function makeTargets() {
@@ -18,8 +18,8 @@ function makeTargets() {
   return targets
 }
 
-function makeSettings(overrides: Partial<CaptureSettings> = {}): CaptureSettings {
-  return makeCaptureSettings({ semanticPipelineMode: 'image', ...overrides })
+function makeSettings(overrides: Partial<AppSettings> = {}): AppSettings {
+  return makeAppSettings({ semanticPipelineMode: 'image', ...overrides })
 }
 
 describe('applySettingsChange', () => {

@@ -49,7 +49,7 @@ import type {
   MainWindowStatus,
   MainWindowStats,
   MiningStatus,
-  CaptureSettings,
+  AppSettings,
   McpRegistrationStatus,
   ObservationState,
   SubscriptionPlan,
@@ -341,13 +341,13 @@ async function buildStats(): Promise<MainWindowStats> {
 }
 
 /**
- * Log user-initiated capture-settings changes as a concise per-field timeline.
+ * Log user-initiated settings changes as a concise per-field timeline.
  * Only fields that actually changed are logged; arrays are reported by entry
  * count so a single line stays readable. High-signal, low-frequency — exactly
  * the breadcrumbs needed when debugging "why did X stop working".
  */
-function logCaptureSettingsChanges(previous: CaptureSettings, updated: CaptureSettings): void {
-  const scalarFields: (keyof CaptureSettings)[] = [
+function logAppSettingsChanges(previous: AppSettings, updated: AppSettings): void {
+  const scalarFields: (keyof AppSettings)[] = [
     'autoStartEnabled',
     'visualThreshold',
     'maxScreenshotsForLlm',
@@ -373,7 +373,7 @@ function logCaptureSettingsChanges(previous: CaptureSettings, updated: CaptureSe
       )
     }
   }
-  const arrayFields: (keyof CaptureSettings)[] = ['excludedApps', 'excludedUrlPatterns']
+  const arrayFields: (keyof AppSettings)[] = ['excludedApps', 'excludedUrlPatterns']
   for (const field of arrayFields) {
     const before = previous[field] as string[]
     const after = updated[field] as string[]
@@ -910,21 +910,21 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   })
 
   // Capture settings
-  ipcMain.handle('main-window:getCaptureSettings', () => {
+  ipcMain.handle('main-window:getAppSettings', () => {
     if (!deps) return null
     return deps.runtime.settings.get()
   })
 
   ipcMain.handle(
-    'main-window:saveCaptureSettings',
-    (_event: IpcMainInvokeEvent, partial: Partial<CaptureSettings>) => {
+    'main-window:saveAppSettings',
+    (_event: IpcMainInvokeEvent, partial: Partial<AppSettings>) => {
       if (!deps) return { success: false, error: 'Dependencies not initialized' }
       const previous = deps.runtime.settings.get()
       // databaseExportDirectory is renderer-untrusted (path-traversal sink).
       // The only legitimate write path is `main-window:setDatabaseExportDirectory`,
       // which runs realpath + safe-root containment. Drop it here regardless of
       // value so a malicious renderer can't bypass that check.
-      const sanitized: Partial<CaptureSettings> = { ...partial }
+      const sanitized: Partial<AppSettings> = { ...partial }
       if ('databaseExportDirectory' in sanitized) {
         delete sanitized.databaseExportDirectory
       }
@@ -945,7 +945,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         deps.runtime.settings.save(sanitized)
         deps.runtime.settings.applyToConstants()
         const updated = deps.runtime.settings.get()
-        logCaptureSettingsChanges(previous, updated)
+        logAppSettingsChanges(previous, updated)
         if (previous.uploadDetailLevel === 'off' && updated.uploadDetailLevel !== 'off') {
           deps.sync.databaseUpload?.kick('sharing enabled')
           deps.sync.logUpload?.kick('sharing enabled')
@@ -982,7 +982,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     },
   )
 
-  ipcMain.handle('main-window:resetCaptureSettings', () => {
+  ipcMain.handle('main-window:resetAppSettings', () => {
     if (!deps) return { success: false, error: 'Dependencies not initialized' }
     const previous = deps.runtime.settings.get()
     try {

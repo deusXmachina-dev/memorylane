@@ -1,4 +1,4 @@
-import type { CaptureSettings, SemanticPipelineMode } from '@types'
+import type { AppSettings, SemanticPipelineMode } from '@types'
 import type { CaptureExclusions } from '@main/activity/pipeline-harness'
 
 export interface LiveSettingsTargets {
@@ -28,8 +28,8 @@ const MODEL_KEYS = [
 
 export function applySettingsChange(
   t: LiveSettingsTargets,
-  next: CaptureSettings,
-  previous: CaptureSettings,
+  next: AppSettings,
+  previous: AppSettings,
 ): void {
   t.capture.updateActivityWindowConfig({
     minActivityDurationMs: next.minActivityDurationMs,

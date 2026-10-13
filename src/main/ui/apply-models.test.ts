@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { resolveModelPush, pushModelSelections } from './apply-models'
 import { VENDOR_PRESETS, buildModelChain } from '../../shared/vendor-defaults'
-import { makeCaptureSettings } from '@main/utils/test-utils'
+import { makeAppSettings } from '@main/utils/test-utils'
 import type { RemoteModelConfig } from '../../shared/remote-model-config'
 
 const remote: RemoteModelConfig = {
@@ -17,7 +17,7 @@ const remote: RemoteModelConfig = {
 
 describe('resolveModelPush', () => {
   it('managed: returns remote chains verbatim and ignores stored picks', () => {
-    const settings = makeCaptureSettings({
+    const settings = makeAppSettings({
       semanticVideoModel: 'stored/video',
       semanticSnapshotModel: 'stored/snapshot',
       patternDetectionModel: 'stored/miner',
@@ -33,7 +33,7 @@ describe('resolveModelPush', () => {
   })
 
   it('managed: no config yet resolves to the baked vendor defaults, ignoring stored picks', () => {
-    const settings = makeCaptureSettings({ semanticVideoModel: 'stored/video' })
+    const settings = makeAppSettings({ semanticVideoModel: 'stored/video' })
 
     const r = resolveModelPush(settings, null, true)
 
@@ -45,7 +45,7 @@ describe('resolveModelPush', () => {
   })
 
   it('managed: baked defaults follow the active vendor', () => {
-    const settings = makeCaptureSettings({ activeVendor: 'google' })
+    const settings = makeAppSettings({ activeVendor: 'google' })
 
     const r = resolveModelPush(settings, null, true)
 
@@ -53,7 +53,7 @@ describe('resolveModelPush', () => {
   })
 
   it('managed: empty slots fall back to the baked defaults per slot', () => {
-    const settings = makeCaptureSettings()
+    const settings = makeAppSettings()
 
     const partial = resolveModelPush(
       settings,
@@ -75,7 +75,7 @@ describe('resolveModelPush', () => {
 
   it('byok: builds pick-headed chains from the baked presets', () => {
     const pick = VENDOR_PRESETS.openrouter.semanticVideo[1].id
-    const settings = makeCaptureSettings({ semanticVideoModel: pick })
+    const settings = makeAppSettings({ semanticVideoModel: pick })
 
     const r = resolveModelPush(settings, null, false)
 
@@ -87,14 +87,14 @@ describe('resolveModelPush', () => {
   })
 
   it('byok: never consults the remote config', () => {
-    const settings = makeCaptureSettings()
+    const settings = makeAppSettings()
     expect(resolveModelPush(settings, remote, false)).toEqual(
       resolveModelPush(settings, null, false),
     )
   })
 
   it('byok: vendors without presets yield empty chains for empty picks', () => {
-    const settings = makeCaptureSettings({
+    const settings = makeAppSettings({
       activeVendor: 'openai-compatible',
       semanticVideoModel: '',
       semanticSnapshotModel: 'my-local-model',
@@ -117,7 +117,7 @@ describe('pushModelSelections', () => {
 
     pushModelSelections(
       { semanticService, taskMiner, userContextBuilder },
-      makeCaptureSettings(),
+      makeAppSettings(),
       remote,
       true,
     )

@@ -222,7 +222,7 @@ export interface MainWindowStats {
   apiUsage: { requestCount: number; totalCost: number } | null
 }
 
-export interface CaptureSettings {
+export interface AppSettings {
   autoStartEnabled: boolean
   visualThreshold: number
   typingDebounceMs: number
@@ -422,9 +422,9 @@ export interface MainWindowAPI {
   listInstalledApps: () => Promise<InstalledApp[]>
   listSeenDomains: () => Promise<SeenDomain[]>
   // Capture settings
-  getCaptureSettings: () => Promise<CaptureSettings>
-  saveCaptureSettings: (settings: Partial<CaptureSettings>) => Promise<SaveResult>
-  resetCaptureSettings: () => Promise<SaveResult>
+  getAppSettings: () => Promise<AppSettings>
+  saveAppSettings: (settings: Partial<AppSettings>) => Promise<SaveResult>
+  resetAppSettings: () => Promise<SaveResult>
   // Patterns (task clusters) — new TaskMiner view
   getClusters: () => Promise<ClustersView>
   getClusterDetail: (id: string) => Promise<ClusterDetailInfo | null>

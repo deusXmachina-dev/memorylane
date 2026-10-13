@@ -9,7 +9,7 @@ export interface ModelPreset {
  * Bump whenever the preset lists below change in a way that should be pushed to
  * existing installs. On load, a stored `modelDefaultsVersion` older than this
  * causes the manager to overwrite the user's remembered model picks with the
- * current vendor defaults (see CaptureSettingsManager.load). Curated defaults
+ * current vendor defaults (see AppSettingsManager.load). Curated defaults
  * are authoritative — an upgrade replaces stale/retired ids rather than
  * stranding a seat on them.
  */

@@ -21,7 +21,7 @@ import log from '@main/utils/logger'
 import '@main/utils/logger-electron'
 import { configureHttpTransport } from '@main/system/http-transport'
 import { CaptureStateManager } from '@main/settings/capture-state-manager'
-import { CaptureSettingsManager } from '@main/settings/capture-settings-manager'
+import { AppSettingsManager } from '@main/settings/app-settings-manager'
 import { DeviceIdentity } from '@main/settings/device-identity'
 import { VendorCredentialsManager } from '@main/settings/vendor-credentials-manager'
 import { createMainRuntime, type MainRuntime } from '@main/runtime'
@@ -182,7 +182,7 @@ app.on('ready', async () => {
   const { edition } = editionConfig
 
   const vendorCredentials = new VendorCredentialsManager()
-  const settings = new CaptureSettingsManager({ edition })
+  const settings = new AppSettingsManager({ edition })
   const captureState = new CaptureStateManager()
   settings.applyToConstants()
 

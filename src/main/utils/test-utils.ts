@@ -1,4 +1,4 @@
-import type { CaptureSettings } from '../../shared/types'
+import type { AppSettings } from '../../shared/types'
 import { VENDOR_PRESETS } from '../../shared/vendor-defaults'
 
 export function jsonResponse(body: unknown, ok = true, status = 200): Response {
@@ -10,7 +10,7 @@ export function jsonResponse(body: unknown, ok = true, status = 200): Response {
   } as Response
 }
 
-export function makeCaptureSettings(overrides: Partial<CaptureSettings> = {}): CaptureSettings {
+export function makeAppSettings(overrides: Partial<AppSettings> = {}): AppSettings {
   return {
     autoStartEnabled: true,
     visualThreshold: 8,
