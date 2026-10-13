@@ -2,9 +2,9 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { RawDatabaseExportSync } from './raw-database-export-sync'
+import { DatabaseExport } from './database-export'
 
-describe('RawDatabaseExportSync', () => {
+describe('DatabaseExport', () => {
   let tmpDir: string | null = null
 
   afterEach(async () => {
@@ -21,13 +21,13 @@ describe('RawDatabaseExportSync', () => {
       fs.writeFileSync(destinationPath, 'snapshot')
     })
 
-    const sync = new RawDatabaseExportSync({
+    const sync = new DatabaseExport({
       storage: { backupToFile },
       getExportDirectory: () => tmpDir ?? '',
       getInstallationId: () => 'abc123def4567890',
     })
 
-    await sync.onSettingsChanged()
+    await sync.exportNow('test')
 
     const outputPath = path.join(tmpDir, 'memorylane-abc123def4567890.db')
     expect(backupToFile).toHaveBeenCalledTimes(1)
@@ -39,13 +39,13 @@ describe('RawDatabaseExportSync', () => {
       fs.writeFileSync(destinationPath, 'snapshot')
     })
 
-    const sync = new RawDatabaseExportSync({
+    const sync = new DatabaseExport({
       storage: { backupToFile },
       getExportDirectory: () => '',
       getInstallationId: () => 'abc123def4567890',
     })
 
-    await sync.onSettingsChanged()
+    await sync.exportNow('test')
 
     expect(backupToFile).not.toHaveBeenCalled()
   })
@@ -57,7 +57,7 @@ describe('RawDatabaseExportSync', () => {
       fs.writeFileSync(destinationPath, 'snapshot')
     })
 
-    const sync = new RawDatabaseExportSync({
+    const sync = new DatabaseExport({
       storage: { backupToFile },
       getExportDirectory: () => tmpDir ?? '',
       getInstallationId: () => 'abc123def4567890',

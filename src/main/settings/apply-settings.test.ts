@@ -13,6 +13,7 @@ function makeTargets() {
     },
     inferenceProvider: { notifyConfigChanged: vi.fn() },
     taskMiner: { setEnabled: vi.fn() },
+    databaseExport: { exportNow: vi.fn().mockResolvedValue(undefined) },
     applyModels: vi.fn(),
   } satisfies LiveSettingsTargets
   return targets
@@ -46,6 +47,17 @@ describe('applySettingsChange', () => {
 
     applySettingsChange(t, makeSettings({ patternDetectionModel: 'b' }), settings)
     expect(t.applyModels).toHaveBeenCalledTimes(1)
+  })
+
+  it('exports the database only when the export directory changed', () => {
+    const t = makeTargets()
+    const settings = makeSettings({ databaseExportDirectory: '/a' })
+
+    applySettingsChange(t, settings, settings)
+    expect(t.databaseExport.exportNow).not.toHaveBeenCalled()
+
+    applySettingsChange(t, makeSettings({ databaseExportDirectory: '/b' }), settings)
+    expect(t.databaseExport.exportNow).toHaveBeenCalledTimes(1)
   })
 
   it('toggles the task miner when patternDetectionEnabled flips', () => {

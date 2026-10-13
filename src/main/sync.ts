@@ -1,6 +1,5 @@
 import { app } from 'electron'
 import type { MainRuntime } from '@main/runtime'
-import { RawDatabaseExportSync } from '@main/services/raw-database-export-sync'
 import { BackendUpload } from '@main/services/backend-upload'
 import { databaseUploadJob } from '@main/services/database-upload-job'
 import { logUploadJob } from '@main/services/log-upload-job'
@@ -22,7 +21,6 @@ export interface ManagedExclusions {
 }
 
 export interface AppSync {
-  databaseExport: RawDatabaseExportSync
   remoteModels: RemoteModelConfigService
   databaseUpload: BackendUpload | null
   logUpload: BackendUpload | null
@@ -34,15 +32,9 @@ export interface AppSync {
 }
 
 export function createSync(runtime: MainRuntime): AppSync {
-  const { edition, settings, deviceIdentity, storage, backend } = runtime
+  const { edition, settings, storage, backend } = runtime
   const enterprise = edition === 'enterprise'
   const managedExclusionsChanged = listenerSet()
-
-  const databaseExport = new RawDatabaseExportSync({
-    storage,
-    getExportDirectory: () => settings.get().databaseExportDirectory,
-    getInstallationId: () => deviceIdentity.getPublicInstallationId(),
-  })
 
   const remoteModels = new RemoteModelConfigService({
     backend,
@@ -109,13 +101,13 @@ export function createSync(runtime: MainRuntime): AppSync {
       })
     : null
 
+  let unsubscribeSettings = (): void => {}
   const kick = (reason: string): void => {
     databaseUpload?.kick(reason)
     logUpload?.kick(reason)
   }
 
   return {
-    databaseExport,
     remoteModels,
     databaseUpload,
     logUpload,
@@ -123,7 +115,6 @@ export function createSync(runtime: MainRuntime): AppSync {
     onManagedExclusionsChanged: managedExclusionsChanged.add,
     kick,
     start(): void {
-      databaseExport.start()
       remoteModels.start()
       deviceReport.start()
       databaseUpload?.start()
@@ -139,10 +130,15 @@ export function createSync(runtime: MainRuntime): AppSync {
         deviceReport.kick('activated')
       })
       runtime.host.onAwake(() => kick('resume'))
+      unsubscribeSettings = settings.onChange((next, previous) => {
+        if (previous.uploadDetailLevel === 'off' && next.uploadDetailLevel !== 'off') {
+          kick('sharing enabled')
+        }
+      })
     },
     async stop(): Promise<void> {
+      unsubscribeSettings()
       await Promise.allSettled([
-        databaseExport.stop(),
         remoteModels.stop(),
         deviceReport.stop(),
         databaseUpload?.stop(),

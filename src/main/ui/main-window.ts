@@ -946,13 +946,8 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         deps.runtime.settings.applyToConstants()
         const updated = deps.runtime.settings.get()
         logAppSettingsChanges(previous, updated)
-        if (previous.uploadDetailLevel === 'off' && updated.uploadDetailLevel !== 'off') {
-          deps.sync.databaseUpload?.kick('sharing enabled')
-          deps.sync.logUpload?.kick('sharing enabled')
-        }
         syncAutoStartSetting(updated.autoStartEnabled)
         deps.runtime.notifyStateChanged()
-        void deps.sync.databaseExport.onSettingsChanged()
         return { success: true }
       } catch (error) {
         if (
@@ -973,7 +968,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       if (!deps) return { success: false, error: 'Dependencies not initialized' }
       try {
         deps.runtime.settings.setDatabaseExportDirectory(requestedPath)
-        void deps.sync.databaseExport.onSettingsChanged()
         return { success: true }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'
@@ -1000,7 +994,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       }
       syncAutoStartSetting(updated.autoStartEnabled)
       deps.runtime.notifyStateChanged()
-      void deps.sync.databaseExport.onSettingsChanged()
       return { success: true }
     } catch (error) {
       deps.hotkey.reconfigure(previous.captureHotkeyAccelerator)

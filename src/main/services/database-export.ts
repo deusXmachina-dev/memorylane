@@ -5,29 +5,29 @@ import { PeriodicJob } from './periodic-job'
 
 const DEFAULT_EXPORT_INTERVAL_MS = 24 * 60 * 60 * 1000
 
-export interface RawDatabaseExportStorage {
+export interface DatabaseExportStorage {
   backupToFile(destinationPath: string): Promise<void>
 }
 
-export interface RawDatabaseExportSyncParams {
-  storage: RawDatabaseExportStorage
+export interface DatabaseExportParams {
+  storage: DatabaseExportStorage
   getExportDirectory: () => string
   getInstallationId: () => string
   intervalMs?: number
 }
 
-export class RawDatabaseExportSync {
-  private readonly storage: RawDatabaseExportStorage
+export class DatabaseExport {
+  private readonly storage: DatabaseExportStorage
   private readonly getExportDirectory: () => string
   private readonly getInstallationId: () => string
   private readonly runner: PeriodicJob
 
-  constructor(params: RawDatabaseExportSyncParams) {
+  constructor(params: DatabaseExportParams) {
     this.storage = params.storage
     this.getExportDirectory = params.getExportDirectory
     this.getInstallationId = params.getInstallationId
     this.runner = new PeriodicJob({
-      name: 'RawDatabaseExportSync',
+      name: 'DatabaseExport',
       intervalMs: params.intervalMs ?? DEFAULT_EXPORT_INTERVAL_MS,
       run: (reason) => this.exportOnce(reason),
     })
@@ -41,8 +41,8 @@ export class RawDatabaseExportSync {
     return this.runner.stop()
   }
 
-  public onSettingsChanged(): Promise<void> {
-    return this.runner.run('settings_changed').catch(() => undefined)
+  public exportNow(reason: string): Promise<void> {
+    return this.runner.run(reason).catch(() => undefined)
   }
 
   public getExportFileName(): string {
@@ -67,7 +67,7 @@ export class RawDatabaseExportSync {
         fs.rmSync(targetPath, { force: true })
       }
       fs.renameSync(tempPath, targetPath)
-      log.info(`[RawDatabaseExportSync] Exported raw database (${reason}) to ${targetPath}`)
+      log.info(`[DatabaseExport] Exported raw database (${reason}) to ${targetPath}`)
     } catch (error) {
       if (fs.existsSync(tempPath)) {
         fs.rmSync(tempPath, { force: true })
