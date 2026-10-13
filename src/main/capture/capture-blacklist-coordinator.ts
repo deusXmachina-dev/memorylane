@@ -30,7 +30,7 @@ export function createCaptureBlacklistCoordinator(params: {
   initialExcludeLoginScreens?: boolean
   onPrivacyBlockingChanged?: (blocked: boolean) => void
   forwardInteraction: (event: InteractionContext) => void
-  flushEvents: () => void
+  flushEvents: (boundaryTimestamp?: number) => void
   setScreenshotsSuppressed: (suppressed: boolean) => void
 }): CaptureBlacklistCoordinator {
   // Two layers — the device user's own exclusions and the org's centrally-synced
@@ -97,6 +97,7 @@ export function createCaptureBlacklistCoordinator(params: {
     anonymousModeMatch: string | null,
     loginScreenMatch: string | null,
     reason: string,
+    boundaryTimestamp?: number,
   ): void => {
     const nextBlockedByExcludedApp = excludedAppMatch !== null
     const nextBlockedByExcludedUrl = excludedUrlMatch !== null
@@ -126,7 +127,7 @@ export function createCaptureBlacklistCoordinator(params: {
     params.setScreenshotsSuppressed(blocked)
 
     if (blocked) {
-      params.flushEvents()
+      params.flushEvents(boundaryTimestamp)
       const details: string[] = []
       if (excludedAppMatch !== null) details.push(`excluded_app=${excludedAppMatch}`)
       if (excludedUrlMatch !== null) details.push(`excluded_url=${excludedUrlMatch}`)
@@ -142,6 +143,7 @@ export function createCaptureBlacklistCoordinator(params: {
   const reconcileBlockingState = (
     reason: string,
     activeWindow: InteractionContext['activeWindow'],
+    boundaryTimestamp?: number,
   ): boolean => {
     const excludedAppMatch = getExcludedAppMatch(activeWindow, excludedApps)
     const excludedUrlMatch = getExcludedUrlMatch(activeWindow, excludedUrlPatterns)
@@ -156,7 +158,14 @@ export function createCaptureBlacklistCoordinator(params: {
         `anon=${anonymousModeMatch ?? '(none)'} login=${loginScreenMatch ?? '(none)'} ` +
         `urlPatterns=${excludedUrlPatterns.length}`,
     )
-    setBlocked(excludedAppMatch, excludedUrlMatch, anonymousModeMatch, loginScreenMatch, reason)
+    setBlocked(
+      excludedAppMatch,
+      excludedUrlMatch,
+      anonymousModeMatch,
+      loginScreenMatch,
+      reason,
+      boundaryTimestamp,
+    )
     return (
       excludedAppMatch === null &&
       excludedUrlMatch === null &&
@@ -169,7 +178,7 @@ export function createCaptureBlacklistCoordinator(params: {
     handleInteraction(event: InteractionContext): void {
       if (event.type === 'app_change') {
         lastActiveWindow = event.activeWindow
-        if (!reconcileBlockingState('app_change', event.activeWindow)) {
+        if (!reconcileBlockingState('app_change', event.activeWindow, event.timestamp)) {
           return
         }
 

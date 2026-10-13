@@ -198,8 +198,8 @@ export async function createMainRuntime(params: {
       interactionDumper?.dump(event)
       harness.handleEvent(event)
     },
-    flushEvents: () => {
-      harness.eventCapturer.flush()
+    flushEvents: (boundaryTimestamp) => {
+      harness.eventCapturer.flush(boundaryTimestamp)
     },
     setScreenshotsSuppressed: (suppressed) => {
       capture.setFrameCaptureSuppressed(suppressed)

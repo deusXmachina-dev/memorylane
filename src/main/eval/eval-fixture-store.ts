@@ -24,6 +24,13 @@ import { describeInteraction } from '@main/semantic/prompt'
 import { evalMediaUrl } from './eval-media-protocol'
 import { formatGoldenMd, parseGoldenMd } from './golden-md'
 
+const INTERACTION_TYPES = new Set<InteractionContext['type']>([
+  'click',
+  'keyboard',
+  'scroll',
+  'app_change',
+])
+
 /** Staging dir for in-progress recordings — never listed as a fixture. */
 const STAGING_DIR = '.staging'
 
@@ -116,7 +123,9 @@ export class EvalFixtureStore {
 
     const sessionStartMs = this.sessionStartMs(dir, windows)
     return windows.map((w) => {
-      const events = [...w.events].sort((a, b) => a.timestamp - b.timestamp)
+      const events = w.events
+        .filter((e) => INTERACTION_TYPES.has(e.type))
+        .sort((a, b) => a.timestamp - b.timestamp)
       return {
         startOffsetMs: w.startTimestamp - sessionStartMs,
         endOffsetMs: w.endTimestamp - sessionStartMs,

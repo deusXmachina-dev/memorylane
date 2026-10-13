@@ -22,7 +22,7 @@ vi.mock('@main/utils/logger', () => ({
 
 import { EventCapturer } from './event-capturer'
 
-const away = { isPresent: () => false, lastInputAt: () => 0 }
+import { away } from './test-utils'
 
 function makeEvent(
   overrides: Partial<InteractionContext> & { type: InteractionContext['type']; timestamp: number },

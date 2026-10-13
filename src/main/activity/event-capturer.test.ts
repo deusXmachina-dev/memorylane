@@ -23,7 +23,7 @@ vi.mock('@main/utils/logger', () => ({
 
 import { EventCapturer } from './event-capturer'
 
-const away = { isPresent: () => false, lastInputAt: () => 0 }
+import { away } from './test-utils'
 
 function makeEvent(
   overrides: Partial<InteractionContext> & { type: InteractionContext['type'] },
@@ -350,6 +350,32 @@ describe('EventCapturer with presence', () => {
     expect(windows[0].startTimestamp).toBe(1000)
     expect(windows[0].endTimestamp).toBe(1200)
     expect(windows[0].events).toHaveLength(1)
+  })
+
+  it('flush with a boundary ends the window at the boundary, not the later OS input', async () => {
+    capturer.handleEvent(makeEvent({ type: 'click', timestamp: 1000 }))
+    lastInput = 1900
+    vi.setSystemTime(2000)
+
+    capturer.flush(1300)
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].closedBy).toBe('flush')
+    expect(windows[0].endTimestamp).toBe(1300)
+  })
+
+  it('falls back to now when the close boundary is not finite', async () => {
+    capturer.handleEvent(makeEvent({ type: 'click', timestamp: 1000 }))
+    lastInput = 1500
+    vi.setSystemTime(2000)
+
+    capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: NaN }))
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].closedBy).toBe('app_change')
+    expect(windows[0].endTimestamp).toBe(2000)
   })
 
   it('closes at the gap with end at the last event when not present', async () => {

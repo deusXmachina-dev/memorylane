@@ -10,7 +10,7 @@ import type {
   CapturedFrame,
 } from '@main/recorder/native-screenshot'
 
-const away = { isPresent: () => false, lastInputAt: () => 0 }
+import { away } from './test-utils'
 
 vi.mock('@main/utils/logger', () => ({
   default: {
