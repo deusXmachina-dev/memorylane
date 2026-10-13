@@ -70,6 +70,7 @@ export const BACKEND_REQUEST_TIMEOUT_MS = 30_000
 export const BACKEND_UPLOAD_TIMEOUT_MS = 30 * 60_000
 export const HOST_RESOLVE_TIMEOUT_MS = 5_000
 export const AWAY_IDLE_SECONDS = 90
+export const IDLE_POLL_MS = 5_000
 
 // Activity Window Configuration
 export const ACTIVITY_CONFIG = {
@@ -87,10 +88,9 @@ export const LLM_HEALTH_CONFIG = {
   RECOVERY_PROBE_INTERVAL_MS: 60_000, // Re-probe cadence while health is failing
 }
 
-// Event Capturer Configuration (gap-based session windowing)
+// Event Capturer Configuration
 export const EVENT_CAPTURER_CONFIG = {
-  GAP_TIMEOUT_MS: 5_000,
-  MAX_WINDOW_DURATION_MS: 5 * 60 * 1000, // Safety cap only — most windows close via gap timer
+  MAX_WINDOW_DURATION_MS: 5 * 60 * 1000,
   LATE_EVENT_GRACE_MS: 3_500, // Hold closed windows briefly to absorb debounced late arrivals
 }
 

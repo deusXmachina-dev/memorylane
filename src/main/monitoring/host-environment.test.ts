@@ -6,7 +6,7 @@ import {
   ManualHostEnvironment,
   remoteHost,
 } from './host-environment'
-import { AWAY_IDLE_SECONDS, HOST_RESOLVE_TIMEOUT_MS } from '@/shared/constants'
+import { AWAY_IDLE_SECONDS, HOST_RESOLVE_TIMEOUT_MS, IDLE_POLL_MS } from '@/shared/constants'
 
 vi.mock('electron', async () => {
   const { EventEmitter } = await import('node:events')
@@ -97,7 +97,7 @@ describe('power events', () => {
   })
 })
 
-describe('presence', () => {
+describe('idle', () => {
   afterEach(() => {
     vi.useRealTimers()
   })
@@ -108,26 +108,44 @@ describe('presence', () => {
     const host = new ManualHostEnvironment()
     vi.spyOn(host, 'idleSeconds').mockReturnValue(30)
     expect(host.lastInputAt()).toBe(70_000)
-    expect(host.isPresent()).toBe(true)
   })
 
-  it('is away once idle reaches the threshold', () => {
+  it('emits once when idle crosses the threshold, again after a return', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(200_000)
     const host = new ManualHostEnvironment()
-    vi.spyOn(host, 'idleSeconds').mockReturnValue(AWAY_IDLE_SECONDS)
-    expect(host.isPresent()).toBe(false)
+    const idle = vi.spyOn(host, 'idleSeconds')
+    const onIdle = vi.fn()
+    host.onIdle(onIdle)
+
+    idle.mockReturnValue(30)
+    host.checkIdle()
+    idle.mockReturnValue(AWAY_IDLE_SECONDS)
+    host.checkIdle()
+    idle.mockReturnValue(AWAY_IDLE_SECONDS + 5)
+    host.checkIdle()
+    expect(onIdle).toHaveBeenCalledTimes(1)
+    expect(onIdle).toHaveBeenCalledWith(200_000 - AWAY_IDLE_SECONDS * 1000)
+
+    idle.mockReturnValue(0)
+    host.checkIdle()
+    idle.mockReturnValue(AWAY_IDLE_SECONDS)
+    host.checkIdle()
+    expect(onIdle).toHaveBeenCalledTimes(2)
   })
 
-  it('is away while the screen is locked or the system suspended', async () => {
+  it('polls idle once started', async () => {
+    vi.useFakeTimers()
     const emitter = (await import('electron')).powerMonitor as unknown as EventEmitter
     emitter.removeAllListeners()
     const host = new HostEnvironment()
+    const onIdle = vi.fn()
+    host.onIdle(onIdle)
     host.start(vi.fn())
-    emitter.emit('lock-screen')
-    expect(host.isPresent()).toBe(false)
-    emitter.emit('unlock-screen')
-    expect(host.isPresent()).toBe(true)
-    emitter.emit('suspend')
-    expect(host.isPresent()).toBe(false)
+    vi.spyOn(host, 'idleSeconds').mockReturnValue(AWAY_IDLE_SECONDS)
+
+    vi.advanceTimersByTime(IDLE_POLL_MS)
+    expect(onIdle).toHaveBeenCalledTimes(1)
   })
 })
 

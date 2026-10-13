@@ -5,7 +5,6 @@ import type { StreamSubscription } from '@main/streams/stream'
 
 vi.mock('@constants', () => ({
   EVENT_CAPTURER_CONFIG: {
-    GAP_TIMEOUT_MS: 100,
     MAX_WINDOW_DURATION_MS: 500,
     LATE_EVENT_GRACE_MS: 80,
   },
@@ -21,8 +20,6 @@ vi.mock('@main/utils/logger', () => ({
 }))
 
 import { EventCapturer } from './event-capturer'
-
-import { away } from './test-utils'
 
 function makeEvent(
   overrides: Partial<InteractionContext> & { type: InteractionContext['type']; timestamp: number },
@@ -47,7 +44,7 @@ describe('EventCapturer late event handling', () => {
     vi.useFakeTimers()
     stream = new InMemoryStream<EventWindow>()
     windows = []
-    capturer = new EventCapturer(stream, away)
+    capturer = new EventCapturer(stream)
     windowsSubscription = stream.subscribe({
       startAt: { type: 'now' },
       onRecord: (record) => windows.push(record.payload),
@@ -85,14 +82,14 @@ describe('EventCapturer late event handling', () => {
     expect(windows[0].startTimestamp).toBe(1_000)
     expect(windows[0].endTimestamp).toBe(2_000)
 
-    capturer.flush()
+    capturer.flush(2_500)
     await flushAsyncAppends()
     expect(windows).toHaveLength(2)
     expect(windows[1].closedBy).toBe('flush')
     expect(windows[1].events).toHaveLength(1)
     expect(windows[1].events[0].type).toBe('app_change')
     expect(windows[1].startTimestamp).toBe(2_000)
-    expect(windows[1].endTimestamp).toBe(2_000)
+    expect(windows[1].endTimestamp).toBe(2_500)
   })
 
   it('emits windows in close order when capture stops while an earlier window is still in grace', async () => {

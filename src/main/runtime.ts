@@ -176,7 +176,9 @@ export async function createMainRuntime(params: {
     extractorTransformer: transformer,
     extractorSink: sink,
     retainScreenshots,
-    presence: host,
+  })
+  host.onIdle((lastInputAt) => {
+    harness.eventCapturer.closeIdle(lastInputAt)
   })
 
   const capture: RuntimeCaptureController = createCaptureController({

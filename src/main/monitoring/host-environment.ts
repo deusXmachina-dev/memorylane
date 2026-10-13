@@ -4,7 +4,7 @@ import { isIP } from 'node:net'
 import log from '@main/utils/logger'
 import { describeNetworkError } from '@main/utils/network-error'
 import { isLoopbackUrl } from '@/shared/url-utils'
-import { AWAY_IDLE_SECONDS, HOST_RESOLVE_TIMEOUT_MS } from '@/shared/constants'
+import { AWAY_IDLE_SECONDS, HOST_RESOLVE_TIMEOUT_MS, IDLE_POLL_MS } from '@/shared/constants'
 
 export type StandDownReason = 'suspended' | 'offline' | 'unresolved'
 
@@ -26,6 +26,8 @@ export class HostEnvironment {
   private onBattery = false
   private suspendedAt = 0
   private onPauseChange: ((pause: boolean) => void) | null = null
+  private idle = false
+  private readonly idleListeners = new Set<(lastInputAt: number) => void>()
   protected readonly suspendListeners = new Set<() => void>()
   protected readonly resumeListeners = new Set<() => void>()
 
@@ -60,6 +62,7 @@ export class HostEnvironment {
       this.onBattery = true
     })
 
+    setInterval(() => this.checkIdle(), IDLE_POLL_MS)
     log.info(`[Power] Monitoring started (onBattery=${this.onBattery})`)
   }
 
@@ -86,12 +89,24 @@ export class HostEnvironment {
     return powerMonitor.getSystemIdleTime()
   }
 
-  isPresent(): boolean {
-    return !this.shouldPause() && this.idleSeconds() < AWAY_IDLE_SECONDS
-  }
-
   lastInputAt(): number {
     return Date.now() - this.idleSeconds() * 1000
+  }
+
+  onIdle(listener: (lastInputAt: number) => void): () => void {
+    this.idleListeners.add(listener)
+    return () => {
+      this.idleListeners.delete(listener)
+    }
+  }
+
+  checkIdle(): void {
+    const idle = this.idleSeconds() >= AWAY_IDLE_SECONDS
+    if (idle === this.idle) return
+    this.idle = idle
+    if (!idle) return
+    const lastInputAt = this.lastInputAt()
+    for (const listener of this.idleListeners) listener(lastInputAt)
   }
 
   resolves(host: string): Promise<boolean> {
