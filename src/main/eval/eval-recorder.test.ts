@@ -171,4 +171,16 @@ describe('EvalRecorder', () => {
     recorder.start('rec3')
     expect(() => recorder.start('rec4')).toThrow(/already in progress/)
   })
+
+  it.each(['stop', 'cancel'] as const)('can record again after a failed %s', async (method) => {
+    vi.mocked(capture.waitForIdle).mockRejectedValue(new Error('boom'))
+    const recorder = new EvalRecorder({ harness, capture, fixturesRoot })
+    recorder.start('rec6')
+
+    await expect(recorder[method]()).rejects.toThrow('boom')
+
+    expect(recorder.isRecording()).toBe(false)
+    expect(setRetain).toHaveBeenLastCalledWith(false)
+    expect(() => recorder.start('rec7')).not.toThrow()
+  })
 })

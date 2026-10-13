@@ -144,15 +144,15 @@ export class EvalRecorder {
     // capture, fixing the prior race where an already-running capture skipped the
     // extractor drain. The dumpers stay subscribed through this so the final
     // window/frame/activity is dumped.
-    await this.capture.waitForIdle()
     try {
-      await this.harness.drainActivities()
-    } catch (error) {
-      log.warn('[EvalRecorder] drainActivities failed:', error)
-    }
-    await this.detach()
+      await this.capture.waitForIdle()
+      try {
+        await this.harness.drainActivities()
+      } catch (error) {
+        log.warn('[EvalRecorder] drainActivities failed:', error)
+      }
+      await this.detach()
 
-    try {
       const result = await promoteCapture({
         sourceDir: stagingDir,
         fixturesRoot: this.fixturesRoot,
@@ -177,25 +177,30 @@ export class EvalRecorder {
     if (!this.activeName || !stagingDir) throw new Error('No recording in progress')
     if (this.stopping) throw new Error('Recording is already stopping')
     this.stopping = true
-    await this.detach()
-    this.release(stagingDir)
+    try {
+      await this.detach()
+    } finally {
+      this.release(stagingDir)
+    }
     log.info('[EvalRecorder] Recording canceled')
   }
 
   private async detach(): Promise<void> {
-    if (this.startedCapture) {
-      // We turned capture on for this recording; turn it back off to restore the
-      // operator's prior "capture off" state.
-      this.capture.stopCapture()
-      await this.capture.waitForIdle()
+    try {
+      if (this.startedCapture) {
+        // We turned capture on for this recording; turn it back off to restore the
+        // operator's prior "capture off" state.
+        this.capture.stopCapture()
+        await this.capture.waitForIdle()
+      }
+    } finally {
+      this.frameSub?.unsubscribe()
+      this.eventSub?.unsubscribe()
+      this.activityUnsub?.()
+      this.frameSub = null
+      this.eventSub = null
+      this.activityUnsub = null
     }
-
-    this.frameSub?.unsubscribe()
-    this.eventSub?.unsubscribe()
-    this.activityUnsub?.()
-    this.frameSub = null
-    this.eventSub = null
-    this.activityUnsub = null
   }
 
   private release(stagingDir: string): void {
