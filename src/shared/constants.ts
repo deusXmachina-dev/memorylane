@@ -95,27 +95,14 @@ export const LLM_HEALTH_CONFIG = {
   RECOVERY_PROBE_INTERVAL_MS: 60_000, // Re-probe cadence while health is failing
 }
 
-// Presence Heartbeat Configuration
-// Keeps an event window alive while the user is present but not providing input
-// (reading), so a no-input view isn't dropped when the idle gap fires.
-export const PRESENCE_MONITOR_CONFIG = {
-  ENABLED: true,
-  // Heartbeat cadence. The binding invariant is
-  // HEARTBEAT_INTERVAL_MS < EVENT_CAPTURER_CONFIG.GAP_TIMEOUT_MS — otherwise the
-  // window dies between heartbeats (guarded by a test). Mirrors the
-  // INTERACTION_MONITOR_CONFIG.MAX_SESSION_MS keep-alive for active sessions.
-  HEARTBEAT_INTERVAL_MS: 4_000,
-  // Stop heartbeating once the OS reports this many seconds with no input. Mouse
-  // movement resets the OS idle timer, so a present reader counts as active; a
-  // genuine walk-away is cut roughly this long after their last movement.
-  AWAY_IDLE_SECONDS: 90,
-}
-
 // Event Capturer Configuration (gap-based session windowing)
 export const EVENT_CAPTURER_CONFIG = {
   GAP_TIMEOUT_MS: 5_000,
   MAX_WINDOW_DURATION_MS: 5 * 60 * 1000, // Safety cap only — most windows close via gap timer
   LATE_EVENT_GRACE_MS: 3_500, // Hold closed windows briefly to absorb debounced late arrivals
+  // While OS idle (mouse movement counts) is below this and the screen is unlocked,
+  // the gap timer keeps a no-input window (reading) open instead of closing it.
+  AWAY_IDLE_SECONDS: 90,
 }
 
 // OCR Pipeline Configuration

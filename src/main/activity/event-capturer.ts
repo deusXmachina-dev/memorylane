@@ -12,6 +12,7 @@ interface PendingWindow {
   boundaryTimestamp: number
   includeBoundaryTimestamp: boolean
   endTimestampOverride?: number
+  lastPresentAt?: number
   finalizeTimer: NodeJS.Timeout | null
 }
 
@@ -19,6 +20,10 @@ interface CloseWindowOptions {
   boundaryTimestamp?: number
   includeBoundaryTimestamp?: boolean
   waitForLateEvents?: boolean
+}
+
+export interface PresenceProbe {
+  isPresent(): boolean
 }
 
 export class EventCapturer {
@@ -36,6 +41,7 @@ export class EventCapturer {
     id: string
     startTimestamp: number
     events: InteractionContext[]
+    lastPresentAt?: number
   } | null = null
 
   /**
@@ -48,8 +54,9 @@ export class EventCapturer {
 
   /**
    * Gap timer handle. Restarted on every handleEvent() call. When it fires
-   * (no new event within GAP_TIMEOUT_MS), the current window closes with
-   * closedBy: 'gap'. This is the primary close mechanism.
+   * (no new event within GAP_TIMEOUT_MS) and the user is no longer present, the
+   * current window closes with closedBy: 'gap'. While present (reading without
+   * input) it re-arms and extends the window to now.
    */
   private gapTimer: NodeJS.Timeout | null = null
 
@@ -60,7 +67,10 @@ export class EventCapturer {
    */
   private maxDurationTimer: NodeJS.Timeout | null = null
 
-  constructor(eventStream: DurableStream<EventWindow>) {
+  constructor(
+    eventStream: DurableStream<EventWindow>,
+    private readonly presence?: PresenceProbe,
+  ) {
     this.eventStream = eventStream
     this.lateEventGraceMs = EVENT_CAPTURER_CONFIG.LATE_EVENT_GRACE_MS ?? 0
   }
@@ -90,18 +100,13 @@ export class EventCapturer {
     }
 
     // Lazy open: create a new window on the first event
-    if (this.currentWindow === null) {
-      const startTimestamp = this.nextWindowStartTimestamp ?? event.timestamp
+    let window = this.currentWindow
+    if (window === null) {
+      window = this.openWindow(this.nextWindowStartTimestamp ?? event.timestamp)
       this.nextWindowStartTimestamp = null
-      this.currentWindow = {
-        id: uuidv4(),
-        startTimestamp,
-        events: [],
-      }
-      this.startMaxDurationTimer()
     }
 
-    this.currentWindow.events.push(event)
+    window.events.push(event)
     this.resetGapTimer()
   }
 
@@ -183,6 +188,7 @@ export class EventCapturer {
         reason === 'app_change' && Number.isFinite(boundaryTimestamp)
           ? boundaryTimestamp
           : undefined,
+      lastPresentAt: this.currentWindow.lastPresentAt,
       finalizeTimer: null,
     }
 
@@ -195,12 +201,28 @@ export class EventCapturer {
     this.schedulePendingWindowFinalize(pendingWindow, finalizeDelayMs)
   }
 
+  private openWindow(startTimestamp: number): NonNullable<EventCapturer['currentWindow']> {
+    const window = { id: uuidv4(), startTimestamp, events: [] }
+    this.currentWindow = window
+    this.startMaxDurationTimer()
+    return window
+  }
+
+  private isPresent(): boolean {
+    return this.presence?.isPresent() ?? false
+  }
+
   private resetGapTimer(): void {
     if (this.gapTimer !== null) {
       clearTimeout(this.gapTimer)
     }
     this.gapTimer = setTimeout(() => {
       this.gapTimer = null
+      if (this.currentWindow !== null && this.isPresent()) {
+        this.currentWindow.lastPresentAt = Date.now()
+        this.resetGapTimer()
+        return
+      }
       this.closeWindow('gap')
     }, EVENT_CAPTURER_CONFIG.GAP_TIMEOUT_MS)
   }
@@ -208,7 +230,12 @@ export class EventCapturer {
   private startMaxDurationTimer(): void {
     this.maxDurationTimer = setTimeout(() => {
       this.maxDurationTimer = null
-      this.closeWindow('max_duration')
+      const boundaryTimestamp = Date.now()
+      this.closeWindow('max_duration', { boundaryTimestamp })
+      if (this.isPresent()) {
+        this.openWindow(boundaryTimestamp)
+        this.resetGapTimer()
+      }
     }, EVENT_CAPTURER_CONFIG.MAX_WINDOW_DURATION_MS)
   }
 
@@ -292,6 +319,7 @@ export class EventCapturer {
     startTimestamp: number
     events: InteractionContext[]
     endTimestampOverride?: number
+    lastPresentAt?: number
   }): {
     startTimestamp: number
     endTimestamp: number
@@ -303,9 +331,10 @@ export class EventCapturer {
       }
     }
 
-    const timestamps = window.events
-      .map((event) => event.timestamp)
-      .filter((timestamp) => Number.isFinite(timestamp))
+    const timestamps = [
+      ...window.events.map((event) => event.timestamp),
+      window.lastPresentAt ?? Number.NaN,
+    ].filter((timestamp) => Number.isFinite(timestamp))
     if (timestamps.length === 0) {
       return {
         startTimestamp: window.startTimestamp,

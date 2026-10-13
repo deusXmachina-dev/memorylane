@@ -211,14 +211,6 @@ describe('DefaultActivityTransformer', () => {
     it.each([
       ['empty interactions', []],
       ['app_change only', [{ type: 'app_change' as const, timestamp: 1500 }]],
-      [
-        'app_change + presence heartbeats',
-        [
-          { type: 'app_change' as const, timestamp: 1100 },
-          { type: 'presence' as const, timestamp: 1500 },
-          { type: 'presence' as const, timestamp: 1900 },
-        ],
-      ],
     ])('skips the LLM and labels "Viewed <title>" for %s', async (_name, interactions) => {
       const { stitcher, ocr, semantic, embedder } = makeDeps()
       const transformer = new DefaultActivityTransformer(stitcher, ocr, semantic, embedder, {

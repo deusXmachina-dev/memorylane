@@ -12,8 +12,8 @@ interface TimeBounded {
  *
  * - `startedAt` / `endedAt`: min start / max end across the activities.
  * - `interactionMin`: union of the activities' [start, end] intervals. Gaps
- *   never count — a presence heartbeat keeps a window alive while the user is at
- *   the machine, so read and think time is already inside the activities, and a
+ *   never count — the event window stays open while the user is at the
+ *   machine, so read and think time is already inside the activities, and a
  *   gap is time spent elsewhere. Overlapping or nested activities are not
  *   double-counted, so active time never exceeds the wall-clock span, which is
  *   just `endedAt - startedAt`, derived on read.

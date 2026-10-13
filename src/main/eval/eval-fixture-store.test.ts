@@ -108,7 +108,7 @@ describe('EvalFixtureStore', () => {
     expect(w.startOffsetMs).toBe(0) // T0+1000 - sessionStart(T0+1000)
     expect(w.endOffsetMs).toBe(3_000)
     expect(w.appLabel).toBe('Chrome — github.com')
-    // Presence dropped; remaining sorted by timestamp; text matches the prompt formatter.
+    // Legacy presence dropped; remaining sorted by timestamp; text matches the prompt formatter.
     expect(w.events).toEqual([
       { offsetMs: 1_000, type: 'keyboard', text: 'typing session (45 keys)' },
       { offsetMs: 2_000, type: 'click', text: 'mouse click' },

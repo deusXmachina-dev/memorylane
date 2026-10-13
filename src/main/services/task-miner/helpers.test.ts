@@ -15,8 +15,8 @@ describe('computeEpisodeWindow', () => {
   })
 
   it('excludes a short gap — the user was in another app', () => {
-    // 2-min activity, 2-min gap, 2-min activity. The presence heartbeat keeps a
-    // window alive while the user is at the machine, so the gap is elsewhere.
+    // 2-min activity, 2-min gap, 2-min activity. The event window stays open
+    // while the user is at the machine, so the gap is elsewhere.
     const w = computeEpisodeWindow([
       { startTimestamp: 0, endTimestamp: 120_000 },
       { startTimestamp: 240_000, endTimestamp: 360_000 },

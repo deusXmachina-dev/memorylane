@@ -28,14 +28,6 @@ describe('isPassiveView', () => {
   it.each([
     ['empty interactions', []],
     ['app_change only', [{ type: 'app_change' as const, timestamp: 1500 }]],
-    [
-      'app_change + presence heartbeats',
-      [
-        { type: 'app_change' as const, timestamp: 1100 },
-        { type: 'presence' as const, timestamp: 1500 },
-        { type: 'presence' as const, timestamp: 1900 },
-      ],
-    ],
   ])('is true for %s', (_name, interactions) => {
     expect(isPassiveView(makeActivity(interactions))).toBe(true)
   })

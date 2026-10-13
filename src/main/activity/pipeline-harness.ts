@@ -1,6 +1,6 @@
 import type { InteractionContext, EventWindow } from '@/shared/types'
 import { SCREENSHOT_CLEANUP_CONFIG } from '@constants'
-import { EventCapturer } from './event-capturer'
+import { EventCapturer, type PresenceProbe } from './event-capturer'
 import { ActivityProducer } from './activity-producer'
 import type { Activity, ActivityProducerConfig } from './activity-types'
 import { ActivityExtractor } from './activity-extractor'
@@ -59,6 +59,7 @@ export function createPipelineHarness(params: {
   // and the periodic stale-file sweep is disabled, so screenshots survive for
   // inspection. Lets the screenshots dir grow unbounded — dev use only.
   retainScreenshots?: boolean
+  presence?: PresenceProbe
 }): PipelineHarness {
   // Mutable so the eval recorder can hold retention open for a recording and
   // release it afterwards, without a restart. Read live at the cleanup callsites.
@@ -72,7 +73,7 @@ export function createPipelineHarness(params: {
     outputDir: params.outputDir,
     stream: frameStream,
   })
-  const eventCapturer = new EventCapturer(eventStream)
+  const eventCapturer = new EventCapturer(eventStream, params.presence)
   const activityProducer = new ActivityProducer({
     frameStream,
     eventStream,

@@ -298,3 +298,81 @@ describe('EventCapturer', () => {
     expect(windows[0].events).toHaveLength(2)
   })
 })
+
+describe('EventCapturer with presence', () => {
+  let present: boolean
+  let capturer: EventCapturer
+  let stream: InMemoryStream<EventWindow>
+  let windows: EventWindow[]
+  let windowsSubscription: StreamSubscription
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1000)
+    present = true
+    stream = new InMemoryStream<EventWindow>()
+    windows = []
+    capturer = new EventCapturer(stream, { isPresent: () => present })
+    windowsSubscription = stream.subscribe({
+      startAt: { type: 'now' },
+      onRecord: (record) => windows.push(record.payload),
+    })
+  })
+
+  afterEach(() => {
+    windowsSubscription.unsubscribe()
+    capturer.destroy()
+    vi.useRealTimers()
+  })
+
+  it('keeps a no-input window open while present and ends it at the last present check', async () => {
+    capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 1000 }))
+
+    vi.advanceTimersByTime(300)
+    await flushAsyncAppends()
+    expect(windows).toHaveLength(0)
+
+    present = false
+    vi.advanceTimersByTime(100)
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].closedBy).toBe('gap')
+    expect(windows[0].startTimestamp).toBe(1000)
+    expect(windows[0].endTimestamp).toBe(1300)
+    expect(windows[0].events).toHaveLength(1)
+  })
+
+  it('closes at the gap with end at the last event when not present', async () => {
+    present = false
+    capturer.handleEvent(makeEvent({ type: 'click', timestamp: 1000 }))
+
+    vi.advanceTimersByTime(100)
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].closedBy).toBe('gap')
+    expect(windows[0].endTimestamp).toBe(1000)
+  })
+
+  it('rolls a present read into a new window at max_duration', async () => {
+    capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 1000 }))
+
+    vi.advanceTimersByTime(500)
+    await flushAsyncAppends()
+    expect(windows).toHaveLength(1)
+    expect(windows[0].closedBy).toBe('max_duration')
+    expect(windows[0].endTimestamp).toBe(1400)
+
+    vi.advanceTimersByTime(200)
+    present = false
+    vi.advanceTimersByTime(100)
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(2)
+    expect(windows[1].closedBy).toBe('gap')
+    expect(windows[1].startTimestamp).toBe(1500)
+    expect(windows[1].endTimestamp).toBe(1700)
+    expect(windows[1].events).toHaveLength(0)
+  })
+})
