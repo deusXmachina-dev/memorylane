@@ -1,7 +1,6 @@
 import log from '@main/utils/logger'
-import type { PipelineHarness } from '@main/activity/pipeline-harness'
+import type { CaptureExclusions, PipelineHarness } from '@main/activity/pipeline-harness'
 
-type InteractionMonitorModule = typeof import('@main/recorder/interaction-monitor')
 type CaptureState = 'stopped' | 'starting' | 'running' | 'stopping'
 
 export interface RuntimeCapture {
@@ -19,11 +18,12 @@ export interface RuntimeCapture {
 
 export interface RuntimeCaptureController extends RuntimeCapture {
   waitForIdle(): Promise<void>
+  updateExclusions(exclusions: CaptureExclusions): void
+  setManagedExclusions(managed: { apps: string[]; urlPatterns: string[] }): void
 }
 
 export function createCaptureController(params: {
   harness: PipelineHarness
-  interactionMonitor: InteractionMonitorModule
   outputDir: string
   onStateChanged: () => void
 }): RuntimeCaptureController {
@@ -57,16 +57,10 @@ export function createCaptureController(params: {
       runTransition(async () => {
         try {
           await params.harness.start()
-          params.interactionMonitor.startInteractionMonitoring()
           state = 'running'
           log.info('[Capture] Started')
         } catch (error) {
           state = 'stopped'
-          try {
-            params.interactionMonitor.stopInteractionMonitoring()
-          } catch {
-            // best-effort cleanup
-          }
           throw error
         }
       })
@@ -78,12 +72,6 @@ export function createCaptureController(params: {
 
       runTransition(async () => {
         try {
-          params.interactionMonitor.stopInteractionMonitoring()
-        } catch (error) {
-          log.error('[Capture] Failed to stop interaction monitor:', error)
-        }
-
-        try {
           await params.harness.stop()
           log.info('[Capture] Stopped')
         } finally {
@@ -91,9 +79,8 @@ export function createCaptureController(params: {
         }
       })
     },
-    async forceClose(): Promise<void> {
-      params.harness.eventCapturer.flush()
-      await params.harness.eventCapturer.waitForIdle()
+    forceClose(): Promise<void> {
+      return params.harness.flushEvents()
     },
     getScreenshotsDir(): string {
       return params.outputDir
@@ -108,6 +95,12 @@ export function createCaptureController(params: {
     },
     updateActivityWindowConfig(input): void {
       params.harness.updateActivityWindowConfig(input)
+    },
+    updateExclusions(exclusions): void {
+      params.harness.updateExclusions(exclusions)
+    },
+    setManagedExclusions(managed): void {
+      params.harness.setManagedExclusions(managed)
     },
   }
 }

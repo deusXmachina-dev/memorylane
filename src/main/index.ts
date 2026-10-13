@@ -351,7 +351,7 @@ app.on('ready', async () => {
       isActivated: isEnterpriseActivated,
       getBackendUrl: () => ENTERPRISE_BACKEND_CONFIG.BACKEND_URL,
       onChange: (blacklist) => {
-        runtime?.setManagedExclusions(blacklist)
+        runtime?.capture.setManagedExclusions(blacklist)
         sendManagedExclusionsUpdate()
       },
       readStored: () => readRemoteBlacklist(),
@@ -528,7 +528,7 @@ app.on('ready', async () => {
     syncRemoteModelConfig: () => void remoteModelConfig?.sync(),
     getCaptureHotkeyLabel: hotkeyManager.getLabel,
     reconfigureCaptureHotkey,
-    updateExclusions: (exclusions) => runtime?.updateExclusions(exclusions),
+    updateExclusions: (exclusions) => runtime?.capture.updateExclusions(exclusions),
     getManagedExclusions: () => remoteBlacklist?.getBlacklist() ?? { apps: [], urlPatterns: [] },
     databaseExportSync: rawDatabaseExportSync,
     databaseUpload: databaseUpload ?? undefined,

@@ -25,10 +25,8 @@ import type { SemanticPipelinePreference } from '@main/semantic/activity-semanti
 import { InteractionEventDebugDumper } from '@main/debug/interaction-event-debug-dump'
 import { InferenceProviderImpl, type InferenceProvider } from '@main/llm'
 import type { Vendor } from '@types'
-import { createCaptureBlacklistCoordinator } from '@main/capture/capture-blacklist-coordinator'
 import {
   createCaptureController,
-  type RuntimeCapture,
   type RuntimeCaptureController,
 } from '@main/capture/capture-controller'
 import { HostEnvironment } from '@main/monitoring/host-environment'
@@ -38,7 +36,7 @@ import { TaskFixtureStore } from '@main/eval/task-fixture-store'
 import { MlWorkerClient } from '@main/services/ml-worker-client'
 
 export interface MainRuntime {
-  capture: RuntimeCapture
+  capture: RuntimeCaptureController
   host: HostEnvironment
   storage: StorageService
   mlWorker: MlWorkerClient
@@ -51,13 +49,6 @@ export interface MainRuntime {
   evalFixtureStore: EvalFixtureStore
   taskFixtureStore: TaskFixtureStore
   evalFixturesRoot: string
-  updateExclusions(exclusions: {
-    apps: string[]
-    urlPatterns: string[]
-    excludePrivateBrowsing: boolean
-    excludeLoginScreens: boolean
-  }): void
-  setManagedExclusions(managed: { apps: string[]; urlPatterns: string[] }): void
   purgeAll(): Promise<void>
   dispose(): Promise<void>
 }
@@ -175,44 +166,23 @@ export async function createMainRuntime(params: {
     extractorTransformer: transformer,
     extractorSink: sink,
     retainScreenshots,
+    interactions: interactionMonitor,
+    idle: host,
+    exclusions: {
+      apps: params.excludedApps,
+      urlPatterns: params.excludedUrlPatterns,
+      excludePrivateBrowsing: params.excludePrivateBrowsing,
+      excludeLoginScreens: params.excludeLoginScreens,
+    },
+    onPrivacyBlockingChanged: params.onPrivacyBlockingChanged,
+    // Excluded window titles/URLs must never reach the plaintext JSONL.
+    onAcceptedEvent: interactionDumper ? (event) => interactionDumper.dump(event) : undefined,
   })
   const capture: RuntimeCaptureController = createCaptureController({
     harness,
-    interactionMonitor,
     outputDir,
     onStateChanged: () => onCaptureStateChanged(),
   })
-  host.onIdle((lastInputAt) => {
-    harness.eventCapturer.closeIdle(lastInputAt)
-  })
-  host.onReturn((at) => {
-    if (capture.isCapturingNow()) harness.eventCapturer.openReturn(at)
-  })
-
-  const blacklistCoordinator = createCaptureBlacklistCoordinator({
-    initialExcludedApps: params.excludedApps,
-    initialExcludedUrlPatterns: params.excludedUrlPatterns,
-    initialExcludePrivateBrowsing: params.excludePrivateBrowsing,
-    initialExcludeLoginScreens: params.excludeLoginScreens,
-    onPrivacyBlockingChanged: params.onPrivacyBlockingChanged,
-    forwardInteraction: (event) => {
-      // Dump only events that passed the blacklist — excluded window
-      // titles/URLs must never reach the plaintext JSONL.
-      interactionDumper?.dump(event)
-      harness.handleEvent(event)
-    },
-    flushEvents: (boundaryTimestamp) => {
-      harness.eventCapturer.flush(boundaryTimestamp)
-    },
-    setScreenshotsSuppressed: (suppressed) => {
-      capture.setFrameCaptureSuppressed(suppressed)
-    },
-  })
-
-  const interactionHandler = (event: Parameters<typeof harness.handleEvent>[0]): void => {
-    blacklistCoordinator.handleInteraction(event)
-  }
-  interactionMonitor.onInteraction(interactionHandler)
 
   const deviceIdentity = params.deviceIdentity ?? new DeviceIdentity()
   const accessProvider = createAccessProvider(params.edition, deviceIdentity)
@@ -244,12 +214,6 @@ export async function createMainRuntime(params: {
     evalFixtureStore,
     taskFixtureStore,
     evalFixturesRoot,
-    updateExclusions(exclusions): void {
-      blacklistCoordinator.updateExclusions(exclusions)
-    },
-    setManagedExclusions(managed): void {
-      blacklistCoordinator.setManagedExclusions(managed)
-    },
     async purgeAll(): Promise<void> {
       const wasCapturing = capture.isCapturingNow()
 
@@ -308,9 +272,9 @@ export async function createMainRuntime(params: {
         }
 
         try {
-          interactionMonitor.clearInteractionCallback(interactionHandler)
+          harness.dispose()
         } catch (error) {
-          log.warn('[Runtime] Failed to clear interaction callback:', error)
+          log.warn('[Runtime] Failed to dispose pipeline harness:', error)
         }
 
         try {

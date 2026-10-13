@@ -12,7 +12,32 @@ import type {
 import { InMemoryStream } from '@main/streams/in-memory-stream'
 import { ScreenCapturer, type Frame } from '@main/recorder/screen-capturer'
 import { cleanupActivityFiles, sweepStaleFiles } from './activity-cleanup'
+import {
+  createCaptureBlacklistCoordinator,
+  type CaptureBlacklistCoordinator,
+} from '@main/capture/capture-blacklist-coordinator'
 import log from '@main/utils/logger'
+
+type InteractionListener = (event: InteractionContext) => void
+
+export interface InteractionSource {
+  startInteractionMonitoring(): void
+  stopInteractionMonitoring(): void
+  onInteraction(listener: InteractionListener): void
+  clearInteractionCallback(listener: InteractionListener): void
+}
+
+export interface IdleSource {
+  onIdle(listener: (lastInputAt: number) => void): () => void
+  onReturn(listener: (at: number) => void): () => void
+}
+
+export interface CaptureExclusions {
+  apps: string[]
+  urlPatterns: string[]
+  excludePrivateBrowsing: boolean
+  excludeLoginScreens: boolean
+}
 
 export interface PipelineHarness {
   frameStream: InMemoryStream<Frame>
@@ -32,6 +57,9 @@ export interface PipelineHarness {
    */
   drainActivities(): Promise<void>
   handleEvent(event: InteractionContext): void
+  flushEvents(): Promise<void>
+  updateExclusions: CaptureBlacklistCoordinator['updateExclusions']
+  setManagedExclusions: CaptureBlacklistCoordinator['setManagedExclusions']
   setFrameCaptureSuppressed(suppressed: boolean): Promise<void>
   updateActivityWindowConfig(input: {
     minActivityDurationMs: number
@@ -46,6 +74,7 @@ export interface PipelineHarness {
   setRetainScreenshots(value: boolean): void
   /** Run the stale-file sweep immediately (e.g. to reclaim after retention off). */
   sweepNow(): void
+  dispose(): void
 }
 
 export function createPipelineHarness(params: {
@@ -59,6 +88,12 @@ export function createPipelineHarness(params: {
   // and the periodic stale-file sweep is disabled, so screenshots survive for
   // inspection. Lets the screenshots dir grow unbounded — dev use only.
   retainScreenshots?: boolean
+  interactions?: InteractionSource
+  idle?: IdleSource
+  exclusions?: Partial<CaptureExclusions>
+  onPrivacyBlockingChanged?: (blocked: boolean) => void
+  // Sees only events that passed the blacklist.
+  onAcceptedEvent?: InteractionListener
 }): PipelineHarness {
   // Mutable so the eval recorder can hold retention open for a recording and
   // release it afterwards, without a restart. Read live at the cleanup callsites.
@@ -107,6 +142,61 @@ export function createPipelineHarness(params: {
   let cleanupTimer: ReturnType<typeof setInterval> | null = null
   let running = false
   let frameCaptureSuppressed = false
+  let lifecycle: Promise<unknown> = Promise.resolve()
+  const serial = <T>(task: () => Promise<T>): Promise<T> => {
+    const run = lifecycle.then(task)
+    lifecycle = run.catch(() => undefined)
+    return run
+  }
+
+  const handleEvent = (event: InteractionContext): void => {
+    if (event.type === 'app_change' && event.displayId !== undefined) {
+      screenCapturer.setDisplayId(event.displayId)
+    }
+    eventCapturer.handleEvent(event)
+  }
+
+  const applyFrameCaptureSuppressed = async (suppressed: boolean): Promise<void> => {
+    if (frameCaptureSuppressed === suppressed) return
+    frameCaptureSuppressed = suppressed
+    if (!running) return
+    if (suppressed) {
+      if (screenCapturer.capturing) await screenCapturer.stop()
+    } else if (!screenCapturer.capturing) {
+      await screenCapturer.start()
+    }
+  }
+  const setFrameCaptureSuppressed = (suppressed: boolean): Promise<void> =>
+    serial(() => applyFrameCaptureSuppressed(suppressed))
+
+  const blacklist = createCaptureBlacklistCoordinator({
+    initialExcludedApps: params.exclusions?.apps,
+    initialExcludedUrlPatterns: params.exclusions?.urlPatterns,
+    initialExcludePrivateBrowsing: params.exclusions?.excludePrivateBrowsing,
+    initialExcludeLoginScreens: params.exclusions?.excludeLoginScreens,
+    onPrivacyBlockingChanged: params.onPrivacyBlockingChanged,
+    forwardInteraction: (event) => {
+      params.onAcceptedEvent?.(event)
+      handleEvent(event)
+    },
+    flushEvents: (boundaryTimestamp) => eventCapturer.flush(boundaryTimestamp),
+    setScreenshotsSuppressed: (suppressed) => {
+      void setFrameCaptureSuppressed(suppressed).catch((error) => {
+        log.error('[PipelineHarness] Failed to toggle frame capture:', error)
+      })
+    },
+  })
+
+  const onInteraction: InteractionListener = (event) => blacklist.handleInteraction(event)
+  params.interactions?.onInteraction(onInteraction)
+  const idleUnsubscribers = params.idle
+    ? [
+        params.idle.onIdle((lastInputAt) => eventCapturer.closeIdle(lastInputAt)),
+        params.idle.onReturn((at) => {
+          if (running) eventCapturer.openReturn(at)
+        }),
+      ]
+    : []
 
   return {
     frameStream,
@@ -116,52 +206,65 @@ export function createPipelineHarness(params: {
     eventCapturer,
     activityProducer,
     activityExtractor,
-    async start() {
-      if (running) return
-      running = true
-      try {
-        await activityProducer.start()
-        if (activityExtractor) {
-          await activityExtractor.start()
-        }
-        if (!frameCaptureSuppressed) {
-          await screenCapturer.start()
-        }
+    start: () =>
+      serial(async () => {
+        if (running) return
+        running = true
+        try {
+          await activityProducer.start()
+          if (activityExtractor) {
+            await activityExtractor.start()
+          }
+          if (!frameCaptureSuppressed) {
+            await screenCapturer.start()
+          }
 
-        if (retainScreenshots) {
-          log.warn(
-            '[PipelineHarness] retainScreenshots enabled — activity frames/videos are kept and the ' +
-              'stale-file sweep is disabled. The screenshots dir will grow unbounded (debug only).',
-          )
+          if (retainScreenshots) {
+            log.warn(
+              '[PipelineHarness] retainScreenshots enabled — activity frames/videos are kept and the ' +
+                'stale-file sweep is disabled. The screenshots dir will grow unbounded (debug only).',
+            )
+          }
+          // Timer always runs; the sweep itself is skipped while retention is on,
+          // so toggling `setRetainScreenshots` at runtime takes effect immediately.
+          cleanupTimer = setInterval(() => {
+            if (!retainScreenshots) sweepStaleFiles(params.outputDir)
+          }, SCREENSHOT_CLEANUP_CONFIG.CLEANUP_INTERVAL_MS)
+          params.interactions?.startInteractionMonitoring()
+          log.info('[PipelineHarness] Pipeline started')
+        } catch (error) {
+          running = false
+          try {
+            params.interactions?.stopInteractionMonitoring()
+          } catch {
+            // best-effort cleanup
+          }
+          log.error('[PipelineHarness] Failed to start pipeline:', error)
+          throw error
         }
-        // Timer always runs; the sweep itself is skipped while retention is on,
-        // so toggling `setRetainScreenshots` at runtime takes effect immediately.
-        cleanupTimer = setInterval(() => {
-          if (!retainScreenshots) sweepStaleFiles(params.outputDir)
-        }, SCREENSHOT_CLEANUP_CONFIG.CLEANUP_INTERVAL_MS)
-        log.info('[PipelineHarness] Pipeline started')
-      } catch (error) {
+      }),
+    stop: () =>
+      serial(async () => {
+        if (!running) return
         running = false
-        log.error('[PipelineHarness] Failed to start pipeline:', error)
-        throw error
-      }
-    },
-    async stop() {
-      if (!running) return
-      running = false
-      if (cleanupTimer) {
-        clearInterval(cleanupTimer)
-        cleanupTimer = null
-      }
-      await screenCapturer.stop()
-      await eventCapturer.flushAndWait()
-      await activityProducer.stop()
-      if (activityExtractor) {
-        await activityExtractor.stop()
-      }
-      eventCapturer.destroy()
-      log.info('[PipelineHarness] Pipeline stopped')
-    },
+        try {
+          params.interactions?.stopInteractionMonitoring()
+        } catch (error) {
+          log.error('[PipelineHarness] Failed to stop interaction monitor:', error)
+        }
+        if (cleanupTimer) {
+          clearInterval(cleanupTimer)
+          cleanupTimer = null
+        }
+        await screenCapturer.stop()
+        await eventCapturer.flushAndWait()
+        await activityProducer.stop()
+        if (activityExtractor) {
+          await activityExtractor.stop()
+        }
+        eventCapturer.destroy()
+        log.info('[PipelineHarness] Pipeline stopped')
+      }),
     async drainActivities() {
       if (!running) return
       await eventCapturer.flushAndWait()
@@ -170,29 +273,14 @@ export function createPipelineHarness(params: {
         await activityExtractor.waitForIdle()
       }
     },
-    handleEvent(event: InteractionContext) {
-      if (event.type === 'app_change' && event.displayId !== undefined) {
-        screenCapturer.setDisplayId(event.displayId)
-      }
-      eventCapturer.handleEvent(event)
+    handleEvent,
+    async flushEvents() {
+      eventCapturer.flush()
+      await eventCapturer.waitForIdle()
     },
-    async setFrameCaptureSuppressed(suppressed: boolean) {
-      if (frameCaptureSuppressed === suppressed) return
-      frameCaptureSuppressed = suppressed
-
-      if (!running) return
-
-      if (suppressed) {
-        if (screenCapturer.capturing) {
-          await screenCapturer.stop()
-        }
-        return
-      }
-
-      if (!screenCapturer.capturing) {
-        await screenCapturer.start()
-      }
-    },
+    updateExclusions: (exclusions) => blacklist.updateExclusions(exclusions),
+    setManagedExclusions: (managed) => blacklist.setManagedExclusions(managed),
+    setFrameCaptureSuppressed,
     updateActivityWindowConfig(input) {
       activityProducer.updateActivityWindowConfig({
         ...input,
@@ -205,6 +293,10 @@ export function createPipelineHarness(params: {
     },
     sweepNow() {
       sweepStaleFiles(params.outputDir)
+    },
+    dispose() {
+      params.interactions?.clearInteractionCallback(onInteraction)
+      for (const unsubscribe of idleUnsubscribers) unsubscribe()
     },
   }
 }

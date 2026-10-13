@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ExtractedActivity } from './activity-extraction-types'
 import type { Activity } from './activity-types'
 import type { StreamSubscription } from '@main/streams/stream'
-import { createPipelineHarness } from './pipeline-harness'
+import { createPipelineHarness, type IdleSource, type InteractionSource } from './pipeline-harness'
+import type { InteractionContext } from '@/shared/types'
 import type {
   CaptureBackendConfig,
   CaptureBackendCommand,
@@ -80,6 +81,51 @@ vi.mock('./activity-cleanup', () => ({
   cleanupActivityFiles: cleanupSpy,
   sweepStaleFiles: sweepSpy,
 }))
+
+function fakeInteractionSource(): InteractionSource & {
+  emit(event: InteractionContext): void
+  running: boolean
+  listenerCount(): number
+} {
+  const listeners = new Set<(event: InteractionContext) => void>()
+  const source = {
+    running: false,
+    startInteractionMonitoring: () => {
+      source.running = true
+    },
+    stopInteractionMonitoring: () => {
+      source.running = false
+    },
+    onInteraction: (listener: (event: InteractionContext) => void) => {
+      listeners.add(listener)
+    },
+    clearInteractionCallback: (listener: (event: InteractionContext) => void) => {
+      listeners.delete(listener)
+    },
+    emit: (event: InteractionContext) => {
+      for (const listener of listeners) listener(event)
+    },
+    listenerCount: () => listeners.size,
+  }
+  return source
+}
+
+function fakeIdleSource(): IdleSource & { idle(at: number): void; back(at: number): void } {
+  const idleListeners = new Set<(lastInputAt: number) => void>()
+  const returnListeners = new Set<(at: number) => void>()
+  return {
+    onIdle: (listener) => {
+      idleListeners.add(listener)
+      return () => idleListeners.delete(listener)
+    },
+    onReturn: (listener) => {
+      returnListeners.add(listener)
+      return () => returnListeners.delete(listener)
+    },
+    idle: (at) => idleListeners.forEach((listener) => listener(at)),
+    back: (at) => returnListeners.forEach((listener) => listener(at)),
+  }
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -435,5 +481,88 @@ describe('pipeline harness', () => {
     expect(mockBackendState.frameTimer).not.toBeNull()
 
     await harness.stop()
+  })
+
+  it('starts and stops the interaction source with the pipeline', async () => {
+    const interactions = fakeInteractionSource()
+    const harness = createPipelineHarness({
+      outputDir: path.join(process.cwd(), '.tmp-harness-source-lifecycle'),
+      frameIntervalMs: 10,
+      interactions,
+    })
+
+    expect(interactions.listenerCount()).toBe(1)
+    await harness.start()
+    expect(interactions.running).toBe(true)
+    await harness.stop()
+    expect(interactions.running).toBe(false)
+    harness.dispose()
+    expect(interactions.listenerCount()).toBe(0)
+  })
+
+  it('routes source events through the blacklist', async () => {
+    const interactions = fakeInteractionSource()
+    const accepted: InteractionContext[] = []
+    const privacy: boolean[] = []
+    const harness = createPipelineHarness({
+      outputDir: path.join(process.cwd(), '.tmp-harness-blacklist'),
+      frameIntervalMs: 10,
+      activityProducerConfig: { frameJoinGraceMs: 0, maxFrameWaitMs: 0, minActivityDurationMs: 0 },
+      interactions,
+      exclusions: { apps: ['signal'] },
+      onPrivacyBlockingChanged: (blocked) => privacy.push(blocked),
+      onAcceptedEvent: (event) => accepted.push(event),
+    })
+    await harness.start()
+    await waitFor(() => mockBackendState.startCalls >= 1, 'Expected frame capture to start')
+
+    interactions.emit({
+      type: 'app_change',
+      timestamp: Date.now(),
+      activeWindow: { title: 'Chat', processName: 'Signal' },
+    })
+    interactions.emit({ type: 'keyboard', timestamp: Date.now(), keyCount: 1, durationMs: 10 })
+
+    await waitFor(() => mockBackendState.stopCalls >= 1, 'Expected frame capture suppressed')
+    expect(accepted).toEqual([])
+    expect(privacy).toEqual([true])
+
+    harness.updateExclusions({
+      apps: [],
+      urlPatterns: [],
+      excludePrivateBrowsing: true,
+      excludeLoginScreens: true,
+    })
+    await waitFor(() => mockBackendState.startCalls >= 2, 'Expected frame capture resumed')
+    expect(privacy).toEqual([true, false])
+
+    interactions.emit({ type: 'keyboard', timestamp: Date.now(), keyCount: 1, durationMs: 10 })
+    expect(accepted.map((event) => event.type)).toEqual(['keyboard'])
+
+    await harness.stop()
+    harness.dispose()
+  })
+
+  it('ignores host return while stopped', async () => {
+    const idle = fakeIdleSource()
+    const harness = createPipelineHarness({
+      outputDir: path.join(process.cwd(), '.tmp-harness-idle'),
+      frameIntervalMs: 10,
+      activityProducerConfig: { frameJoinGraceMs: 0, maxFrameWaitMs: 0, minActivityDurationMs: 0 },
+      idle,
+    })
+    const openReturn = vi.spyOn(harness.eventCapturer, 'openReturn')
+
+    idle.back(Date.now())
+    expect(openReturn).not.toHaveBeenCalled()
+
+    await harness.start()
+    idle.back(Date.now())
+    expect(openReturn).toHaveBeenCalledTimes(1)
+
+    await harness.stop()
+    harness.dispose()
+    idle.back(Date.now())
+    expect(openReturn).toHaveBeenCalledTimes(1)
   })
 })
