@@ -5,30 +5,17 @@
 import { app, Tray, Menu, nativeImage } from 'electron'
 import path from 'node:path'
 import log from '@main/utils/logger'
-import { formatBytes, formatNumber } from '../utils/formatters'
-import type { StorageService } from '../storage'
-import { openMainWindow } from './main-window'
+import { formatBytes, formatNumber } from '@main/utils/formatters'
+import type { MainRuntime } from '@main/runtime'
+import type { CaptureCoordinatorControls } from '@main/capture/capture-orchestrator'
+import { openMainWindow, stopEvalRecordingFromTray } from '@main/ui/main-window'
 import { getUpdateState, quitAndInstall } from '@main/system/updater'
-import { createTrayPrivacyState } from './tray-privacy-state'
-import { CAPTURE_PAUSE_CONFIG, formatPauseDuration } from '../../shared/constants'
+import { createTrayPrivacyState } from '@main/ui/tray-privacy-state'
+import { CAPTURE_PAUSE_CONFIG, formatPauseDuration } from '@constants'
 
 interface TrayDependencies {
-  capture: {
-    isCapturingNow: () => boolean
-    requestStartCapture: () => void
-    requestStopCapture: () => void
-    pauseCapture: (durationMs: number) => void
-    resumeCapture: () => void
-    getPauseState: () => { pausedUntilMs: number | null }
-    stopCaptureForShutdown: () => void
-    forceClose: () => Promise<void>
-  }
-  requiresActivation: () => boolean
-  storage: StorageService
-  evalRecording: {
-    isRecording: () => boolean
-    stop: () => void
-  }
+  runtime: MainRuntime
+  capture: CaptureCoordinatorControls
 }
 
 // Tray menus are static once set; while paused we periodically rebuild so the
@@ -57,7 +44,7 @@ const trayPrivacyState = createTrayPrivacyState({
   },
 })
 
-export const setPrivacyBlockedState = (blocked: boolean): void => {
+const setPrivacyBlockedState = (blocked: boolean): void => {
   trayPrivacyState.setBlocked(blocked)
   void updateTrayMenu()
 }
@@ -78,7 +65,7 @@ app.on('before-quit', () => {
 const buildUsageStatsSubmenu = async (): Promise<Electron.MenuItemConstructorOptions[]> => {
   const submenu: Electron.MenuItemConstructorOptions[] = []
 
-  if (!deps?.storage) {
+  if (!deps) {
     submenu.push({
       label: 'Stats not available',
       enabled: false,
@@ -87,8 +74,8 @@ const buildUsageStatsSubmenu = async (): Promise<Electron.MenuItemConstructorOpt
   }
 
   try {
-    const activityCount = deps.storage.activities.count()
-    const dbSize = deps.storage.getDbSize()
+    const activityCount = deps.runtime.storage.activities.count()
+    const dbSize = deps.runtime.storage.getDbSize()
 
     submenu.push(
       {
@@ -161,13 +148,13 @@ const buildCaptureMenuItems = (state: {
 /**
  * Update the tray context menu with current state
  */
-export const updateTrayMenu = async (): Promise<void> => {
+const updateTrayMenu = async (): Promise<void> => {
   if (!tray || !deps) return
 
   const isCapturing = deps.capture.isCapturingNow()
   const { pausedUntilMs } = deps.capture.getPauseState()
   const isUserPaused = pausedUntilMs !== null
-  const requiresActivation = !isCapturing && deps.requiresActivation()
+  const requiresActivation = !isCapturing && deps.runtime.requiresActivation()
   const { isPrivacyBlocked, blockedRecently } = trayPrivacyState.getStatus(isCapturing)
 
   // Keep the countdown label fresh while paused; stop refreshing otherwise.
@@ -198,9 +185,9 @@ export const updateTrayMenu = async (): Promise<void> => {
 
   const updateState = getUpdateState()
   const contextMenu = Menu.buildFromTemplate([
-    ...(deps.evalRecording.isRecording()
+    ...(deps.runtime.evalRecorder.isRecording()
       ? [
-          { label: 'Stop eval recording', click: () => deps!.evalRecording.stop() },
+          { label: 'Stop eval recording', click: () => void stopEvalRecordingFromTray() },
           { type: 'separator' as const },
         ]
       : []),
@@ -280,5 +267,7 @@ export const setupTray = (dependencies: TrayDependencies): void => {
 
   tray = new Tray(icon)
 
+  dependencies.runtime.onStateChanged(() => void updateTrayMenu())
+  dependencies.runtime.onPrivacyBlockingChanged(setPrivacyBlockedState)
   void updateTrayMenu()
 }

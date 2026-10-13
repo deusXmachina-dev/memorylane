@@ -3,9 +3,12 @@ import * as path from 'path'
 import { app } from 'electron'
 import log from '@main/utils/logger'
 import * as interactionMonitor from '@main/recorder/interaction-monitor'
-import { VendorCredentialsManager } from '@main/settings/vendor-credentials-manager'
-import { DeviceIdentity } from '@main/settings/device-identity'
+import type { VendorCredentialsManager } from '@main/settings/vendor-credentials-manager'
+import type { CaptureSettingsManager } from '@main/settings/capture-settings-manager'
+import type { DeviceIdentity } from '@main/settings/device-identity'
+import { applySettingsChange } from '@main/settings/apply-settings'
 import { createAccessProvider, type AccessProvider } from '@main/access'
+import { requiresActivation } from '@main/access/types'
 import type { AppEdition } from '@/shared/edition'
 import { StorageService } from '@main/storage'
 import { applyMigrations } from '@main/storage/migrator'
@@ -13,6 +16,14 @@ import { applyPendingDatabaseImport } from '@main/ui/database-import'
 import { activityOcrService } from '@main/processor/ocr'
 import { UsageTracker } from '@main/services/usage-tracker'
 import { SummaryModeTracker } from '@main/services/summary-mode-tracker'
+import { TaskMiner } from '@main/services/task-miner'
+import { UserContextBuilder } from '@main/services/user-context-builder'
+import { RemoteModelConfigService } from '@main/services/remote-model-config-service'
+import {
+  readRemoteModelConfig,
+  writeRemoteModelConfig,
+} from '@main/services/remote-model-config-store'
+import { pushModelSelections, resolveModelPush } from '@main/ui/apply-models'
 import { createPipelineHarness } from '@main/activity/pipeline-harness'
 import { DefaultActivityTransformer } from '@main/activity/activity-transformer'
 import { SqliteActivitySink } from '@main/activity/sqlite-activity-sink'
@@ -21,10 +32,8 @@ import {
   ActivitySemanticService,
   SemanticFileDebugDumper,
 } from '@main/semantic/activity-semantic-service'
-import type { SemanticPipelinePreference } from '@main/semantic/activity-semantic-service'
 import { InteractionEventDebugDumper } from '@main/debug/interaction-event-debug-dump'
 import { InferenceProviderImpl, type InferenceProvider } from '@main/llm'
-import type { Vendor } from '@types'
 import {
   createCaptureController,
   type RuntimeCaptureController,
@@ -33,54 +42,77 @@ import { HostEnvironment } from '@main/monitoring/host-environment'
 import { EvalRecorder } from '@main/eval/eval-recorder'
 import { EvalFixtureStore } from '@main/eval/eval-fixture-store'
 import { TaskFixtureStore } from '@main/eval/task-fixture-store'
+import { registerEvalMediaProtocol } from '@main/eval/eval-media-protocol'
 import { MlWorkerClient } from '@main/services/ml-worker-client'
+import { backendUrlFor } from '@main/system/edition'
+import { listenerSet } from '@main/utils/listeners'
 
 export interface MainRuntime {
+  edition: AppEdition
+  settings: CaptureSettingsManager
+  vendorCredentials: VendorCredentialsManager
+  deviceIdentity: DeviceIdentity
   capture: RuntimeCaptureController
   host: HostEnvironment
   storage: StorageService
-  mlWorker: MlWorkerClient
   usageTracker: UsageTracker
-  vendorCredentials: VendorCredentialsManager
   inferenceProvider: InferenceProvider
   semanticService: ActivitySemanticService
   accessProvider: AccessProvider
+  remoteModels: RemoteModelConfigService
+  taskMiner: TaskMiner
+  userContextBuilder: UserContextBuilder
   evalRecorder: EvalRecorder
   evalFixtureStore: EvalFixtureStore
   taskFixtureStore: TaskFixtureStore
-  evalFixturesRoot: string
+  isManaged(): boolean
+  isEnterpriseActivated(): boolean
+  requiresActivation(): boolean
+  isPurging(): boolean
+  applyModels(): void
+  credentialsChanged(): void
+  onStateChanged(listener: () => void): () => void
+  notifyStateChanged(): void
+  onPrivacyBlockingChanged(listener: (blocked: boolean) => void): () => void
+  start(): void
   purgeAll(): Promise<void>
   dispose(): Promise<void>
 }
 
 export async function createMainRuntime(params: {
-  onCaptureStateChanged?: () => void
-  onPrivacyBlockingChanged?: (blocked: boolean) => void
-  semanticPipelinePreference?: SemanticPipelinePreference
-  semanticRequestTimeoutMs?: number
-  excludedApps?: string[]
-  excludedUrlPatterns?: string[]
-  excludePrivateBrowsing?: boolean
-  excludeLoginScreens?: boolean
-  deviceIdentity?: DeviceIdentity
   edition: AppEdition
+  settings: CaptureSettingsManager
   vendorCredentials: VendorCredentialsManager
-  getActiveVendor: () => Vendor
-  initialVideoModels?: string[]
-  initialSnapshotModels?: string[]
+  deviceIdentity: DeviceIdentity
 }): Promise<MainRuntime> {
-  const onCaptureStateChanged = params.onCaptureStateChanged ?? (() => undefined)
+  const { edition, settings, vendorCredentials, deviceIdentity } = params
+  const stateChanged = listenerSet<[]>()
+  const privacyBlockingChanged = listenerSet<[boolean]>()
+  const initialSettings = settings.get()
 
   const host = new HostEnvironment()
-  const vendorCredentials = params.vendorCredentials
   const inferenceProvider = new InferenceProviderImpl({
     credentials: vendorCredentials,
-    getActiveVendor: params.getActiveVendor,
+    getActiveVendor: () => settings.get().activeVendor,
   })
+  const accessProvider = createAccessProvider(edition, deviceIdentity)
+  const isManaged = (): boolean =>
+    vendorCredentials.getStatus(settings.get().activeVendor).source === 'managed'
+  const isEnterpriseActivated = (): boolean => accessProvider.getAccessState().isEnterpriseActivated
+
+  const remoteModels = new RemoteModelConfigService({
+    getDeviceId: () => deviceIdentity.getDeviceId(),
+    isActivated: () => isManaged() && (edition !== 'enterprise' || isEnterpriseActivated()),
+    getBackendUrl: () => backendUrlFor(edition),
+    onChange: () => applyModels(),
+    readStored: () => readRemoteModelConfig(),
+    writeStored: (config) => writeRemoteModelConfig(config),
+  })
+  const getRemoteModelConfig = () => (isManaged() ? remoteModels.getConfig() : null)
+
   const dev = !app.isPackaged
   const userDataPath = app.getPath('userData')
-  const dbFile = dev ? 'memorylane-dev.db' : 'memorylane.db'
-  const dbPath = path.join(userDataPath, dbFile)
+  const dbPath = path.join(userDataPath, dev ? 'memorylane-dev.db' : 'memorylane.db')
   applyPendingDatabaseImport(dbPath)
   const storage = new StorageService(dbPath)
   applyMigrations(storage.getDatabase())
@@ -89,7 +121,7 @@ export async function createMainRuntime(params: {
 
   const debugPipelineDir = path.join(app.getAppPath(), '.debug-pipeline')
   const debugDumper =
-    !app.isPackaged && process.env.DEBUG_PIPELINE
+    dev && process.env.DEBUG_PIPELINE
       ? new SemanticFileDebugDumper({
           rootDir: debugPipelineDir,
           cleanRootDir: true,
@@ -101,9 +133,6 @@ export async function createMainRuntime(params: {
     ? new InteractionEventDebugDumper(debugPipelineDir)
     : undefined
 
-  // Debug-only: keep screenshots (skip per-activity cleanup + the stale sweep)
-  // so frames survive for inspection. On by default whenever the debug pipeline
-  // is active, and independently togglable via MEMORYLANE_RETAIN_SCREENSHOTS.
   const retainScreenshots =
     dev && Boolean(process.env.DEBUG_PIPELINE || process.env.MEMORYLANE_RETAIN_SCREENSHOTS)
   if (retainScreenshots) {
@@ -112,39 +141,34 @@ export async function createMainRuntime(params: {
     )
   }
 
+  const initialModels = resolveModelPush(initialSettings, getRemoteModelConfig(), isManaged())
   const semanticService = new ActivitySemanticService(inferenceProvider, {
     usageTracker,
     summaryModeTracker,
     debugDumper,
-    pipelinePreference: params.semanticPipelinePreference,
-    requestTimeoutMs: params.semanticRequestTimeoutMs,
-    videoModels: params.initialVideoModels ?? [],
-    snapshotModels: params.initialSnapshotModels ?? [],
+    pipelinePreference: initialSettings.semanticPipelineMode,
+    requestTimeoutMs: initialSettings.activityRequestTimeoutMs,
+    videoModels: initialModels.videoModels,
+    snapshotModels: initialModels.snapshotModels,
     healthStatePath: path.join(userDataPath, 'llm-health.json'),
   })
-
   semanticService.setUserContext(() => storage.userContext.get()?.shortSummary ?? null)
 
   const outputDir = path.join(userDataPath, 'screenshots')
   fs.mkdirSync(outputDir, { recursive: true })
-  const activityCount = storage.activities.count()
-
   log.info(
     `[Runtime] Persistence targets: mode=${dev ? 'dev' : 'packaged'} ` +
-      `userData=${userDataPath} db=${dbPath} screenshots=${outputDir} activityCount=${activityCount}`,
+      `userData=${userDataPath} db=${dbPath} screenshots=${outputDir} ` +
+      `activityCount=${storage.activities.count()}`,
   )
 
-  // Hosts the embedding model (live activity pipeline + task-miner
-  // clustering) and the linkage math in a utilityProcess, off the main
-  // thread. Initialized here so a broken model cache still aborts startup.
+  // Initialized here so a broken model cache aborts startup instead of
+  // silently failing activity persistence.
   const mlWorker = new MlWorkerClient()
   try {
     await mlWorker.init()
   } catch (error) {
-    log.error(
-      '[Runtime] Failed to initialize embedding model; aborting runtime startup so activity persistence does not silently fail.',
-      error,
-    )
+    log.error('[Runtime] Failed to initialize embedding model; aborting startup.', error)
     throw error
   }
 
@@ -159,110 +183,168 @@ export async function createMainRuntime(params: {
       summaryModeTracker,
     },
   )
-  const sink = new SqliteActivitySink(storage.activities)
-
   const harness = createPipelineHarness({
     outputDir,
     extractorTransformer: transformer,
-    extractorSink: sink,
+    extractorSink: new SqliteActivitySink(storage.activities),
     retainScreenshots,
     interactions: interactionMonitor,
     idle: host,
     exclusions: {
-      apps: params.excludedApps,
-      urlPatterns: params.excludedUrlPatterns,
-      excludePrivateBrowsing: params.excludePrivateBrowsing,
-      excludeLoginScreens: params.excludeLoginScreens,
+      apps: initialSettings.excludedApps,
+      urlPatterns: initialSettings.excludedUrlPatterns,
+      excludePrivateBrowsing: initialSettings.excludePrivateBrowsing,
+      excludeLoginScreens: initialSettings.excludeLoginScreens,
     },
-    onPrivacyBlockingChanged: params.onPrivacyBlockingChanged,
+    onPrivacyBlockingChanged: (blocked) => privacyBlockingChanged.emit(blocked),
     // Excluded window titles/URLs must never reach the plaintext JSONL.
     onAcceptedEvent: interactionDumper ? (event) => interactionDumper.dump(event) : undefined,
   })
-  const capture: RuntimeCaptureController = createCaptureController({
+  const capture = createCaptureController({
     harness,
     outputDir,
-    onStateChanged: () => onCaptureStateChanged(),
+    onStateChanged: () => stateChanged.emit(),
   })
 
-  const deviceIdentity = params.deviceIdentity ?? new DeviceIdentity()
-  const accessProvider = createAccessProvider(params.edition, deviceIdentity)
+  const userContextBuilder = new UserContextBuilder(storage, inferenceProvider)
+  const taskMiner = new TaskMiner(storage, inferenceProvider, mlWorker, host)
+  taskMiner.setEnabled(initialSettings.patternDetectionEnabled)
 
-  // In-app eval recorder (Developer mode). Inert until start() is called; ships
-  // in every build but does nothing unless the hidden UI invokes it.
+  const applyModels = (): void => {
+    pushModelSelections(
+      { semanticService, userContextBuilder, taskMiner },
+      settings.get(),
+      getRemoteModelConfig(),
+      isManaged(),
+    )
+  }
+  applyModels()
+
+  const unsubscribeSettings = settings.onChange((next, previous) =>
+    applySettingsChange(
+      { capture, semanticService, inferenceProvider, taskMiner, applyModels },
+      next,
+      previous,
+    ),
+  )
+
   const evalFixturesRoot = path.join(userDataPath, 'eval-fixtures')
-  const evalRecorder = new EvalRecorder({
-    harness,
-    capture,
-    fixturesRoot: evalFixturesRoot,
-  })
+  registerEvalMediaProtocol(evalFixturesRoot)
+  const evalRecorder = new EvalRecorder({ harness, capture, fixturesRoot: evalFixturesRoot })
   const evalFixtureStore = new EvalFixtureStore(evalFixturesRoot)
   const taskFixtureStore = new TaskFixtureStore(path.join(userDataPath, 'task-fixtures'))
 
+  let purging = false
   let disposePromise: Promise<void> | null = null
 
-  return {
-    capture,
-    host,
-    storage,
-    mlWorker,
-    usageTracker,
-    vendorCredentials,
-    inferenceProvider,
-    semanticService,
-    accessProvider,
-    evalRecorder,
-    evalFixtureStore,
-    taskFixtureStore,
-    evalFixturesRoot,
-    async purgeAll(): Promise<void> {
-      const wasCapturing = capture.isCapturingNow()
+  const purgeAll = async (): Promise<void> => {
+    const wasCapturing = capture.isCapturingNow()
 
-      // Stop accepting new work synchronously, then drain in-flight work.
-      // If quiescing fails the DB may still be receiving writes, so abort
-      // rather than racing storage.purge() against active writers.
-      capture.stopCapture()
-      try {
-        await capture.forceClose()
-        await capture.waitForIdle()
-      } catch (error) {
-        log.error('[Runtime] Failed to quiesce capture; aborting purge:', error)
-        if (wasCapturing) {
-          try {
-            capture.startCapture()
-          } catch (resumeError) {
-            log.warn('[Runtime] Failed to resume capture after aborted purge:', resumeError)
-          }
-        }
-        throw new Error('Failed to stop capture before purge')
-      }
-
-      storage.purge()
-
-      try {
-        if (fs.existsSync(outputDir)) {
-          for (const entry of fs.readdirSync(outputDir)) {
-            fs.rmSync(path.join(outputDir, entry), { recursive: true, force: true })
-          }
-        }
-        fs.mkdirSync(outputDir, { recursive: true })
-      } catch (error) {
-        log.warn('[Runtime] Failed to clear screenshots directory during purge:', error)
-      }
-
+    // Stop accepting new work, then drain in-flight work. If quiescing fails
+    // the DB may still be receiving writes, so abort instead of racing purge().
+    capture.stopCapture()
+    try {
+      await capture.forceClose()
+      await capture.waitForIdle()
+    } catch (error) {
+      log.error('[Runtime] Failed to quiesce capture; aborting purge:', error)
       if (wasCapturing) {
         try {
           capture.startCapture()
-        } catch (error) {
-          log.warn('[Runtime] Failed to resume capture after purge:', error)
+        } catch (resumeError) {
+          log.warn('[Runtime] Failed to resume capture after aborted purge:', resumeError)
         }
       }
+      throw new Error('Failed to stop capture before purge')
+    }
 
-      log.info('[Runtime] Purge complete')
+    storage.purge()
+
+    try {
+      if (fs.existsSync(outputDir)) {
+        for (const entry of fs.readdirSync(outputDir)) {
+          fs.rmSync(path.join(outputDir, entry), { recursive: true, force: true })
+        }
+      }
+      fs.mkdirSync(outputDir, { recursive: true })
+    } catch (error) {
+      log.warn('[Runtime] Failed to clear screenshots directory during purge:', error)
+    }
+
+    if (wasCapturing) {
+      try {
+        capture.startCapture()
+      } catch (error) {
+        log.warn('[Runtime] Failed to resume capture after purge:', error)
+      }
+    }
+
+    log.info('[Runtime] Purge complete')
+  }
+
+  const step = (name: string, fn: () => void): void => {
+    try {
+      fn()
+    } catch (error) {
+      log.warn(`[Runtime] Failed to ${name}:`, error)
+    }
+  }
+
+  return {
+    edition,
+    settings,
+    vendorCredentials,
+    deviceIdentity,
+    capture,
+    host,
+    storage,
+    usageTracker,
+    inferenceProvider,
+    semanticService,
+    accessProvider,
+    remoteModels,
+    taskMiner,
+    userContextBuilder,
+    evalRecorder,
+    evalFixtureStore,
+    taskFixtureStore,
+    isManaged,
+    isEnterpriseActivated,
+    requiresActivation: () => requiresActivation(accessProvider.getAccessState()),
+    isPurging: () => purging,
+    applyModels,
+    credentialsChanged(): void {
+      applyModels()
+      inferenceProvider.notifyConfigChanged()
+      void semanticService.testConnection()
     },
-    async dispose(): Promise<void> {
+    onStateChanged: stateChanged.add,
+    notifyStateChanged: () => stateChanged.emit(),
+    onPrivacyBlockingChanged: privacyBlockingChanged.add,
+    start(): void {
+      accessProvider.startPeriodicRefresh()
+      remoteModels.start()
+      // After a derived-data wipe migration the DB is still mined, so clusters
+      // rebuild from sightings before the sweep poll starts.
+      void taskMiner.rebuildClustersIfEmpty().then(() => taskMiner.startup())
+      host.onAwake(() => taskMiner.kick())
+    },
+    async purgeAll(): Promise<void> {
+      purging = true
+      try {
+        await purgeAll()
+      } finally {
+        purging = false
+      }
+    },
+    dispose(): Promise<void> {
       if (disposePromise) return disposePromise
-
       disposePromise = (async () => {
+        step('stop access refresh', () => accessProvider.stopPeriodicRefresh())
+        step('stop remote model config', () => remoteModels.stop())
+        step('stop task miner', () => taskMiner.stop())
+        step('stop user context builder', () => userContextBuilder.stop())
+        unsubscribeSettings()
         try {
           await capture.forceClose()
           capture.stopCapture()
@@ -270,32 +352,11 @@ export async function createMainRuntime(params: {
         } catch (error) {
           log.warn('[Runtime] Error while stopping capture during dispose:', error)
         }
-
-        try {
-          harness.dispose()
-        } catch (error) {
-          log.warn('[Runtime] Failed to dispose pipeline harness:', error)
-        }
-
-        try {
-          semanticService.dispose()
-        } catch (error) {
-          log.warn('[Runtime] Failed to dispose semantic service:', error)
-        }
-
-        try {
-          mlWorker.dispose()
-        } catch (error) {
-          log.warn('[Runtime] Failed to dispose ml-worker:', error)
-        }
-
-        try {
-          storage.close()
-        } catch (error) {
-          log.warn('[Runtime] Failed to close storage:', error)
-        }
+        step('dispose pipeline harness', () => harness.dispose())
+        step('dispose semantic service', () => semanticService.dispose())
+        step('dispose ml-worker', () => mlWorker.dispose())
+        step('close storage', () => storage.close())
       })()
-
       return disposePromise
     },
   }

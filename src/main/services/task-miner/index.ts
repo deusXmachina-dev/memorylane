@@ -27,6 +27,7 @@ import type { StorageService } from '../../storage'
 import type { InferenceProvider } from '../../llm'
 import { PATTERN_DETECTION_CONFIG, TASK_BACKFILL } from '../../../shared/constants'
 import log from '@main/utils/logger'
+import type { MiningStatus } from '@types'
 import { formatApiError } from './helpers'
 import {
   HostEnvironment,
@@ -64,6 +65,7 @@ export class TaskMiner {
   private enabled = true
   private lastSkipKey: string | null = null
   private statusListener?: () => void
+  private stopped = false
 
   // The app injects the MlWorkerClient; enode scripts pass an in-process
   // EmbeddingService (no utilityProcess there). Not defaulted — a default
@@ -129,6 +131,56 @@ export class TaskMiner {
     }
   }
 
+  /** Stops the poll and keeps a running sweep from claiming further days. */
+  stop(): void {
+    this.stopped = true
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer)
+      this.pollTimer = null
+    }
+  }
+
+  getStatus(): MiningStatus {
+    const counts = this.storage.miningDays.countByStatus()
+    // Progress is per-run: days settled before this sweep started don't count,
+    // so a daily sweep reads "0 of 1", not "59 of 60".
+    const base = this.sweepBaseline
+    const completedDays = Math.max(0, counts.completed - (base?.completed ?? counts.completed))
+    const failedDays = Math.max(0, counts.failed - (base?.failed ?? counts.failed))
+    const pendingDays = counts.pending + counts.running
+    return {
+      state: this.running ? 'mining' : 'idle',
+      currentDay: this.storage.miningDays.getRunningDay(),
+      pendingDays,
+      completedDays,
+      failedDays,
+      totalDays: pendingDays + completedDays + failedDays,
+    }
+  }
+
+  /** Reopens failed days and polls now, skipping any failure backoff. */
+  retryFailed(): number {
+    const retried = this.storage.miningDays.retryFailed()
+    if (retried > 0) {
+      this.resetBackoff()
+      this.scheduleRun()
+    }
+    return retried
+  }
+
+  /** Wipes mined tasks (and the ledger) and re-mines the full window; no-op while a sweep runs. */
+  async wipeAndRemine(): Promise<BackfillSummary> {
+    // The busy check and the sweep's own claim run with no await between them.
+    if (this.running) {
+      return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'busy' }
+    }
+    if (!this.provider) {
+      return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'no-provider' }
+    }
+    this.storage.wipeTasks()
+    return this.sweepNow(this.provider)
+  }
+
   /** Poll now instead of on the next tick (e.g. on wake); a no-op before startup(). */
   kick(): void {
     if (this.pollTimer) this.scheduleRun()
@@ -139,7 +191,7 @@ export class TaskMiner {
    * every poll tick; safe to call from anywhere.
    */
   scheduleRun(): void {
-    if (!this.enabled) return
+    if (!this.enabled || this.stopped) return
     if (this.running) return
     if (Date.now() < this.nextAttemptAt) return
     // No 'resume' fires for a macOS dark wake, so this holds all night.
@@ -377,7 +429,7 @@ export class TaskMiner {
 
         const worker = async (): Promise<void> => {
           for (;;) {
-            if (aborted || claimedInWave >= TASK_BACKFILL.CLUSTER_EVERY_DAYS) return
+            if (aborted || this.stopped || claimedInWave >= TASK_BACKFILL.CLUSTER_EVERY_DAYS) return
             claimedInWave++
             const claim = this.storage.miningDays.claimOldestPending()
             if (!claim) {
@@ -390,6 +442,7 @@ export class TaskMiner {
         }
         await Promise.all(Array.from({ length: concurrency }, () => worker()))
 
+        if (this.stopped) break
         if (!aborted && minedSinceCluster >= TASK_BACKFILL.CLUSTER_EVERY_DAYS) {
           clustering = await this.cluster(provider, {
             ...DEFAULT_MINER_CONFIG,
@@ -406,7 +459,12 @@ export class TaskMiner {
       // Skipped when nothing settled (e.g. the first day failed) or the sweep
       // aborted on an outage signature: a down provider shouldn't get one
       // more doomed LLM call; the next sweep clusters what was mined.
-      if (!aborted && daysMined + daysSkipped > 0 && (minedSinceCluster > 0 || !clustering)) {
+      if (
+        !aborted &&
+        !this.stopped &&
+        daysMined + daysSkipped > 0 &&
+        (minedSinceCluster > 0 || !clustering)
+      ) {
         clustering = await this.cluster(provider, {
           ...DEFAULT_MINER_CONFIG,
           model: this.model,

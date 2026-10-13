@@ -1,6 +1,5 @@
-// Side-effect import: sets process.env.PATH for onnxruntime DLLs on Windows.
-// Must be the first import — onnxruntime-node is loaded transitively via
-// runtime → embedding → @huggingface/transformers during static import resolution.
+// Sets process.env.PATH for onnxruntime DLLs on Windows. Must be the first
+// import: onnxruntime-node loads transitively during static import resolution.
 import '@main/system/onnxruntime-path-fix'
 
 import { app, globalShortcut } from 'electron'
@@ -13,8 +12,11 @@ import {
   syncAutoStartSetting,
 } from '@main/system/auto-start'
 import { createCaptureCoordinator } from '@main/capture/capture-orchestrator'
-import { requiresActivation } from '@main/access/types'
 import { createCaptureHotkeyManager } from '@main/capture/capture-hotkey-manager'
+import {
+  createObservationController,
+  type ObservationController,
+} from '@main/capture/observation-controller'
 import log from '@main/utils/logger'
 import '@main/utils/logger-electron'
 import { configureHttpTransport } from '@main/system/http-transport'
@@ -22,45 +24,18 @@ import { CaptureStateManager } from '@main/settings/capture-state-manager'
 import { CaptureSettingsManager } from '@main/settings/capture-settings-manager'
 import { DeviceIdentity } from '@main/settings/device-identity'
 import { VendorCredentialsManager } from '@main/settings/vendor-credentials-manager'
-import { TaskMiner } from '@main/services/task-miner'
-import type { MiningStatus } from '@types'
-import { UserContextBuilder } from '@main/services/user-context-builder'
-import { RawDatabaseExportSync } from '@main/services/raw-database-export-sync'
-import { BackendUpload } from '@main/services/backend-upload'
-import { databaseUploadJob } from '@main/services/database-upload-job'
-import { logUploadJob } from '@main/services/log-upload-job'
-import { readLogUploadState, writeLogUploadState } from '@main/services/log-upload-store'
-import { RemoteBlacklistService } from '@main/services/remote-blacklist-service'
-import { readRemoteBlacklist, writeRemoteBlacklist } from '@main/services/remote-blacklist-store'
-import { RemoteModelConfigService } from '@main/services/remote-model-config-service'
-import {
-  readRemoteModelConfig,
-  writeRemoteModelConfig,
-} from '@main/services/remote-model-config-store'
-import type { RemoteModelConfig } from '@/shared/remote-model-config'
-import { pushModelSelections, resolveModelPush } from '@main/ui/apply-models'
-import { DeviceReportSync } from '@main/services/device-report-sync'
-import { readDeviceReportState, writeDeviceReportState } from '@main/services/device-report-store'
 import { createMainRuntime, type MainRuntime } from '@main/runtime'
-import { registerEvalMediaScheme, registerEvalMediaProtocol } from '@main/eval/eval-media-protocol'
-import {
-  createObservationController,
-  type ObservationController,
-} from '@main/capture/observation-controller'
+import { createSync, type AppSync } from '@main/sync'
+import { registerEvalMediaScheme } from '@main/eval/eval-media-protocol'
 import { getAppDirectoryName } from '@main/utils/paths'
 import { loadAppEditionConfig } from '@main/system/edition'
-import { ENTERPRISE_BACKEND_CONFIG, MANAGED_KEY_CONFIG } from '@constants'
 import { initAutoUpdater } from '@main/system/updater'
-import { setupTray, updateTrayMenu, setPrivacyBlockedState } from '@main/ui/tray'
+import { setupTray } from '@main/ui/tray'
 import {
   initMainWindowIPC,
   openMainWindow,
-  sendManagedExclusionsUpdate,
-  sendMiningProgress,
   sendObservationUpdate,
-  sendStatusToRenderer,
   sendUpdateState,
-  stopEvalRecordingFromTray,
 } from '@main/ui/main-window'
 
 // Keep single-instance behavior in packaged app, but allow dev to run
@@ -69,8 +44,7 @@ if (app.isPackaged && !app.requestSingleInstanceLock()) {
   app.quit()
 }
 
-// Privileged scheme for streaming eval review videos — must be registered
-// before the app `ready` event (the handler is wired after the runtime exists).
+// Privileged schemes must be registered before `ready`.
 registerEvalMediaScheme()
 
 try {
@@ -135,14 +109,7 @@ app.on('window-all-closed', () => {
 })
 
 let runtime: MainRuntime | null = null
-let userContextBuilder: UserContextBuilder | null = null
-let taskMiner: TaskMiner | null = null
-let rawDatabaseExportSync: RawDatabaseExportSync | null = null
-let databaseUpload: BackendUpload | null = null
-let logUpload: BackendUpload | null = null
-let remoteBlacklist: RemoteBlacklistService | null = null
-let remoteModelConfig: RemoteModelConfigService | null = null
-let deviceReportSync: DeviceReportSync | null = null
+let sync: AppSync | null = null
 let observation: ObservationController | null = null
 
 // Blocks `app.quit()` until all subscribers to native helpers have released
@@ -168,17 +135,11 @@ app.on('before-quit', (event) => {
   if (shutdownStarted) return
   shutdownStarted = true
 
-  runtime?.accessProvider.stopPeriodicRefresh()
-  remoteBlacklist?.stop()
-  remoteModelConfig?.stop()
-  deviceReportSync?.stop()
   observation?.dispose()
 
   const steps: Array<[name: string, step: Promise<unknown> | undefined]> = [
     ['runtime.dispose', runtime?.dispose()],
-    ['rawDatabaseExportSync.stop', rawDatabaseExportSync?.stop()],
-    ['databaseUpload.stop', databaseUpload?.stop()],
-    ['logUpload.stop', logUpload?.stop()],
+    ['sync.stop', sync?.stop()],
   ]
   const pendingSteps = new Set(steps.filter(([, step]) => step).map(([name]) => name))
 
@@ -211,412 +172,102 @@ app.on('second-instance', (_event, argv) => {
   openMainWindow()
 })
 
+app.on('activate', () => {
+  if (runtime) openMainWindow()
+})
+
 app.on('ready', async () => {
   configureHttpTransport()
-  const startHidden = shouldStartHiddenOnLaunch()
   const editionConfig = loadAppEditionConfig()
+  const { edition } = editionConfig
 
-  // Permissions are no longer blocking at startup. The renderer drives the
-  // permission grant flow as part of onboarding (PermissionsStep).
+  const vendorCredentials = new VendorCredentialsManager()
+  const settings = new CaptureSettingsManager({ edition })
+  const captureState = new CaptureStateManager()
+  settings.applyToConstants()
 
-  const vendorCredentialsManager = new VendorCredentialsManager()
-  const captureSettingsManager = new CaptureSettingsManager({ edition: editionConfig.edition })
-  const captureStateManager = new CaptureStateManager()
-  const deviceIdentity = new DeviceIdentity()
-  captureSettingsManager.applyToConstants()
-  const initialCaptureSettings = captureSettingsManager.get()
-
-  if (shouldSyncAutoStartOnStartup(captureStateManager.getAutoStartSyncedExecPath())) {
-    syncAutoStartSetting(initialCaptureSettings.autoStartEnabled)
-    captureStateManager.setAutoStartSyncedExecPath(process.execPath)
+  if (shouldSyncAutoStartOnStartup(captureState.getAutoStartSyncedExecPath())) {
+    syncAutoStartSetting(settings.get().autoStartEnabled)
+    captureState.setAutoStartSyncedExecPath(process.execPath)
   }
 
-  // Per-edition backend base URL, shared by device reporting and remote config.
-  const backendBaseUrl =
-    editionConfig.edition === 'enterprise'
-      ? ENTERPRISE_BACKEND_CONFIG.BACKEND_URL
-      : MANAGED_KEY_CONFIG.BACKEND_URL
-
-  const isEnterpriseActivated = (): boolean =>
-    runtime?.accessProvider.getAccessState().isEnterpriseActivated ?? false
-
-  // Remote model config: constructed before the runtime so chain
-  // building can already see the disk cache (loaded in the constructor);
-  // onChange is late-bound below once the miners exist, and start() only runs
-  // after that binding. Managed-key installs only — BYOK and custom endpoints
-  // keep full model control.
-  const isManagedInstall = (): boolean =>
-    vendorCredentialsManager.getStatus(captureSettingsManager.get().activeVendor).source ===
-    'managed'
-  let applyRemoteModel: ((config: RemoteModelConfig) => void) | null = null
-  remoteModelConfig = new RemoteModelConfigService({
-    getDeviceId: () => deviceIdentity.getDeviceId(),
-    isActivated: () =>
-      isManagedInstall() && (editionConfig.edition !== 'enterprise' || isEnterpriseActivated()),
-    getBackendUrl: () => backendBaseUrl,
-    onChange: (config) => applyRemoteModel?.(config),
-    readStored: () => readRemoteModelConfig(),
-    writeStored: (config) => writeRemoteModelConfig(config),
-  })
-  const getRemoteModelConfig = (): RemoteModelConfig | null =>
-    isManagedInstall() ? (remoteModelConfig?.getConfig() ?? null) : null
-  const initialModels = resolveModelPush(
-    initialCaptureSettings,
-    getRemoteModelConfig(),
-    isManagedInstall(),
-  )
-  runtime = await createMainRuntime({
-    edition: editionConfig.edition,
-    onCaptureStateChanged: () => {
-      void updateTrayMenu()
-      void sendStatusToRenderer()
-    },
-    onPrivacyBlockingChanged: setPrivacyBlockedState,
-    semanticPipelinePreference: initialCaptureSettings.semanticPipelineMode,
-    semanticRequestTimeoutMs: initialCaptureSettings.activityRequestTimeoutMs,
-    excludedApps: initialCaptureSettings.excludedApps,
-    excludedUrlPatterns: initialCaptureSettings.excludedUrlPatterns,
-    excludePrivateBrowsing: initialCaptureSettings.excludePrivateBrowsing,
-    excludeLoginScreens: initialCaptureSettings.excludeLoginScreens,
-    deviceIdentity,
-    vendorCredentials: vendorCredentialsManager,
-    getActiveVendor: () => captureSettingsManager.get().activeVendor,
-    initialVideoModels: initialModels.videoModels,
-    initialSnapshotModels: initialModels.snapshotModels,
-  })
-
-  // Serve eval review videos from the fixtures dir (Developer mode).
-  registerEvalMediaProtocol(runtime.evalFixturesRoot)
-
-  rawDatabaseExportSync = new RawDatabaseExportSync({
-    storage: runtime.storage,
-    getExportDirectory: () => captureSettingsManager.get().databaseExportDirectory,
-    getInstallationId: () => deviceIdentity.getPublicInstallationId(),
-  })
-  rawDatabaseExportSync.start()
-
-  // Report the running app version in both editions so the fleet's version
-  // distribution is visible server-side.
-  deviceReportSync = new DeviceReportSync({
-    getDeviceId: () => deviceIdentity.getDeviceId(),
-    isActivated: editionConfig.edition === 'enterprise' ? isEnterpriseActivated : () => true,
-    getBackendUrl: () => backendBaseUrl,
-    getVersion: () => app.getVersion(),
-    getKeySource: () => {
-      const { source } = vendorCredentialsManager.getStatus(
-        captureSettingsManager.get().activeVendor,
-      )
-      if (source === 'managed') return 'managed'
-      return source === 'none' ? 'none' : 'byok'
-    },
-    edition: editionConfig.edition,
-    readStored: () => readDeviceReportState(),
-    writeStored: (state) => writeDeviceReportState(state),
-  })
-  deviceReportSync.start()
-
-  if (editionConfig.edition === 'enterprise') {
-    const backend = {
-      getDeviceId: () => deviceIdentity.getDeviceId(),
-      isActivated: isEnterpriseActivated,
-      isSyncEnabled: () => captureSettingsManager.get().uploadDetailLevel !== 'off',
-      getBackendUrl: () => ENTERPRISE_BACKEND_CONFIG.BACKEND_URL,
-      env: runtime.host,
-    }
-    databaseUpload = new BackendUpload({
-      ...backend,
-      job: databaseUploadJob({
-        storage: runtime.storage,
-        getStripOptions: () => {
-          const level = captureSettingsManager.get().uploadDetailLevel
-          return { detailLevel: level === 'detailed' ? 'detailed' : 'summary' }
-        },
-        getLastUploadAt: () => runtime?.storage.uploadRuns.getLastRunTimestamp() ?? null,
-        recordUploadAt: (ts) => runtime?.storage.uploadRuns.record(ts),
-      }),
-    })
-    databaseUpload.start()
-
-    logUpload = new BackendUpload({
-      ...backend,
-      job: logUploadJob({
-        readState: () => readLogUploadState(),
-        writeState: (state) => writeLogUploadState(state),
-      }),
-    })
-    logUpload.start()
-
-    remoteBlacklist = new RemoteBlacklistService({
-      getDeviceId: () => deviceIdentity.getDeviceId(),
-      isActivated: isEnterpriseActivated,
-      getBackendUrl: () => ENTERPRISE_BACKEND_CONFIG.BACKEND_URL,
-      onChange: (blacklist) => {
-        runtime?.capture.setManagedExclusions(blacklist)
-        sendManagedExclusionsUpdate()
-      },
-      readStored: () => readRemoteBlacklist(),
-      writeStored: (blacklist) => writeRemoteBlacklist(blacklist),
-    })
-    remoteBlacklist.start()
-  }
-
-  const settings = captureSettingsManager.get()
-  userContextBuilder = new UserContextBuilder(runtime.storage, runtime.inferenceProvider)
-  // The scheduled analyzer (mining + clustering). Uses the patternDetection*
-  // capture settings for enable state and model.
-  taskMiner = new TaskMiner(
-    runtime.storage,
-    runtime.inferenceProvider,
-    runtime.mlWorker,
-    runtime.host,
-  )
-  taskMiner.setEnabled(settings.patternDetectionEnabled)
-  pushModelSelections(
-    {
-      semanticService: runtime.semanticService,
-      userContextBuilder,
-      taskMiner,
-    },
+  const rt = await createMainRuntime({
+    edition,
     settings,
-    getRemoteModelConfig(),
-    isManagedInstall(),
-  )
-
-  // Miners exist now — bind the apply step and start syncing. The cached-load
-  // notification re-applies idempotently; the first network sync follows.
-  applyRemoteModel = (config) => {
-    if (!runtime || !isManagedInstall()) return
-    pushModelSelections(
-      {
-        semanticService: runtime.semanticService,
-        userContextBuilder: userContextBuilder ?? undefined,
-        taskMiner: taskMiner ?? undefined,
-      },
-      captureSettingsManager.get(),
-      config,
-      true,
-    )
-  }
-  remoteModelConfig.start()
-
-  const host = runtime.host
-  const accessProvider = runtime.accessProvider
-  const deviceRequiresActivation = (): boolean =>
-    requiresActivation(accessProvider.getAccessState())
-  let purging = false
-  const captureCoordinator = createCaptureCoordinator({
-    capture: runtime.capture,
-    captureStateManager,
-    isPaused: () => purging || host.shouldPause() || deviceRequiresActivation(),
-    userContextBuilder,
-    onStateChanged: () => {
-      void updateTrayMenu()
-      void sendStatusToRenderer()
-    },
+    vendorCredentials,
+    deviceIdentity: new DeviceIdentity(),
   })
+  runtime = rt
+  sync = createSync(rt)
 
-  let activationBlocked = deviceRequiresActivation()
-  accessProvider.addUpdateListener((state) => {
-    const blocked = requiresActivation(state)
+  const coordinator = createCaptureCoordinator({
+    capture: rt.capture,
+    captureStateManager: captureState,
+    isPaused: () => rt.isPurging() || rt.host.shouldPause() || rt.requiresActivation(),
+    userContextBuilder: rt.userContextBuilder,
+    onStateChanged: () => rt.notifyStateChanged(),
+  })
+  const capture = coordinator.controls
+
+  let activationBlocked = rt.requiresActivation()
+  rt.accessProvider.addUpdateListener(() => {
+    const blocked = rt.requiresActivation()
     if (blocked === activationBlocked) return
     activationBlocked = blocked
-    if (blocked) {
-      captureCoordinator.suspendCapture('device not activated')
-    } else {
-      captureCoordinator.resumeCaptureIfDesired('reactivated')
-      databaseUpload?.kick('activated')
-      logUpload?.kick('activated')
-      void deviceReportSync?.sync()
-    }
+    if (blocked) coordinator.suspendCapture('device not activated')
+    else coordinator.resumeCaptureIfDesired('reactivated')
   })
 
-  const hotkeyManager = createCaptureHotkeyManager({
+  const hotkey = createCaptureHotkeyManager({
     platform: process.platform,
     onTriggered: (accelerator) => {
-      if (captureCoordinator.controls.isUserPaused()) {
-        captureCoordinator.controls.resumeCapture()
+      if (capture.isUserPaused()) {
+        capture.resumeCapture()
         log.info(`[Main] Capture resumed from pause by hotkey (${accelerator})`)
-      } else if (captureCoordinator.controls.isCapturingNow()) {
-        captureCoordinator.controls.requestStopCapture()
+      } else if (capture.isCapturingNow()) {
+        capture.requestStopCapture()
         log.info(`[Main] Capture stopped by hotkey (${accelerator})`)
       } else {
-        captureCoordinator.controls.requestStartCapture()
+        capture.requestStartCapture()
         log.info(`[Main] Capture started by hotkey (${accelerator})`)
       }
-      // Tray + renderer are refreshed by the coordinator's onStateChanged.
     },
   })
 
-  const reconfigureCaptureHotkey = (accelerator: string): { success: boolean; error?: string } => {
-    const result = hotkeyManager.reconfigure(accelerator)
-    if (!result.success) return result
-
-    log.info(`[Main] Registered capture hotkey: ${hotkeyManager.getAccelerator()}`)
-    void updateTrayMenu()
-    void sendStatusToRenderer()
-    return result
-  }
-
-  setupTray({
-    capture: captureCoordinator.controls,
-    requiresActivation: deviceRequiresActivation,
-    storage: runtime.storage,
-    evalRecording: {
-      isRecording: () => runtime?.evalRecorder.isRecording() ?? false,
-      stop: () => void stopEvalRecordingFromTray(),
-    },
+  observation = createObservationController({
+    captureControl: rt.capture,
+    onUpdate: (state) => sendObservationUpdate(state),
   })
 
-  if (editionConfig.edition === 'customer') {
+  setupTray({ runtime: rt, capture })
+
+  if (edition === 'customer') {
     initAutoUpdater(() => {
-      void updateTrayMenu()
+      rt.notifyStateChanged()
       sendUpdateState()
     })
   } else {
     log.info('[Updater] Skipping auto-updater for enterprise edition')
   }
 
-  observation = createObservationController({
-    captureControl: runtime.capture,
-    onUpdate: (state) => sendObservationUpdate(state),
-  })
+  initMainWindowIPC({ editionConfig, runtime: rt, sync, capture, hotkey, observation })
 
-  const buildMiningStatus = (): MiningStatus => {
-    const storageRef = runtime?.storage
-    if (!storageRef || !taskMiner) {
-      return {
-        state: 'idle',
-        currentDay: null,
-        pendingDays: 0,
-        completedDays: 0,
-        failedDays: 0,
-        totalDays: 0,
-      }
-    }
-    const counts = storageRef.miningDays.countByStatus()
-    // Progress is per-run: days settled before this sweep started don't count,
-    // so a daily sweep reads "0 of 1", not "59 of 60".
-    const base = taskMiner.getSweepBaseline()
-    const completedDays = Math.max(0, counts.completed - (base?.completed ?? counts.completed))
-    const failedDays = Math.max(0, counts.failed - (base?.failed ?? counts.failed))
-    const pendingDays = counts.pending + counts.running
-    return {
-      state: taskMiner.isBusy() ? 'mining' : 'idle',
-      currentDay: storageRef.miningDays.getRunningDay(),
-      pendingDays,
-      completedDays,
-      failedDays,
-      totalDays: pendingDays + completedDays + failedDays,
-    }
-  }
-  taskMiner?.setStatusListener(() => sendMiningProgress(buildMiningStatus()))
+  rt.start()
+  sync.start()
+  coordinator.resumeCaptureIfDesired('startup')
 
-  initMainWindowIPC({
-    editionConfig,
-    capture: captureCoordinator.controls,
-    storage: runtime.storage,
-    usageTracker: runtime.usageTracker,
-    vendorCredentials: runtime.vendorCredentials,
-    inferenceProvider: runtime.inferenceProvider,
-    semanticService: runtime.semanticService,
-    accessProvider: runtime.accessProvider,
-    captureSettingsManager,
-    userContextBuilder: userContextBuilder ?? undefined,
-    taskMiner: taskMiner ?? undefined,
-    getRemoteModelConfig,
-    isManaged: isManagedInstall,
-    syncRemoteModelConfig: () => void remoteModelConfig?.sync(),
-    getCaptureHotkeyLabel: hotkeyManager.getLabel,
-    reconfigureCaptureHotkey,
-    updateExclusions: (exclusions) => runtime?.capture.updateExclusions(exclusions),
-    getManagedExclusions: () => remoteBlacklist?.getBlacklist() ?? { apps: [], urlPatterns: [] },
-    databaseExportSync: rawDatabaseExportSync,
-    databaseUpload: databaseUpload ?? undefined,
-    logUpload: logUpload ?? undefined,
-    purgeAll: async () => {
-      if (!runtime) throw new Error('Runtime not initialized')
-      purging = true
-      try {
-        await runtime.purgeAll()
-      } finally {
-        purging = false
-      }
-    },
-    wipeAndRemineTasks: async () => {
-      if (!runtime) throw new Error('Runtime not initialized')
-      if (!taskMiner) throw new Error('Task miner not initialized')
-      // Don't wipe while a sweep is in flight: it would keep committing days
-      // into the freshly wiped ledger. Bail without touching data; the busy
-      // check and the sweep's own guard-claim run with no await between them.
-      if (taskMiner.isBusy()) {
-        return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'busy' as const }
-      }
-      // wipeTasks() clears the mining_days ledger too, so sweepNow re-enqueues
-      // and re-mines the full window; if it fails midway, the remaining days
-      // stay pending and the next trigger resumes.
-      runtime.storage.wipeTasks()
-      return taskMiner.sweepNow(runtime.inferenceProvider)
-    },
-    getMiningStatus: buildMiningStatus,
-    retryFailedMiningDays: () => {
-      if (!runtime || !taskMiner) return 0
-      const retried = runtime.storage.miningDays.retryFailed()
-      if (retried > 0) {
-        // Manual retry: don't make the user wait out an active failure backoff.
-        taskMiner.resetBackoff()
-        taskMiner.scheduleRun()
-      }
-      return retried
-    },
-    observation,
-    evalRecorder: runtime.evalRecorder,
-    evalFixtureStore: runtime.evalFixtureStore,
-    taskFixtureStore: runtime.taskFixtureStore,
-  })
+  if (!shouldStartHiddenOnLaunch()) openMainWindow()
 
-  runtime.accessProvider.startPeriodicRefresh()
+  const hotkeyResult = hotkey.reconfigure(settings.get().captureHotkeyAccelerator)
+  if (hotkeyResult.success) rt.notifyStateChanged()
+  else log.warn(hotkeyResult.error)
 
-  // Recover interrupted mining days and start the sweep poll. A fresh DB
-  // enqueues its 60-day seed on the first tick; a mined DB picks up gap days.
-  if (taskMiner) {
-    const miner = taskMiner
-    // After a derived-data wipe migration the DB is still mined, so clusters
-    // rebuild from sightings before the sweep starts.
-    void miner.rebuildClustersIfEmpty().then(() => miner.startup())
-  }
-
-  captureCoordinator.resumeCaptureIfDesired('startup')
-
-  if (!startHidden) {
-    openMainWindow()
-  }
-
-  app.on('activate', () => {
-    openMainWindow()
-  })
-
-  const hotkeyResult = reconfigureCaptureHotkey(
-    captureSettingsManager.get().captureHotkeyAccelerator,
-  )
-  if (!hotkeyResult.success) {
-    log.warn(hotkeyResult.error)
-  }
-
-  host.start((pause) => {
-    if (pause) {
-      captureCoordinator.suspendCapture('power state: locked/suspended')
-    } else {
-      captureCoordinator.resumeCaptureIfDesired('resume')
-    }
-  })
-  host.onAwake(() => {
-    databaseUpload?.kick('resume')
-    logUpload?.kick('resume')
-    taskMiner?.kick()
+  rt.host.start((pause) => {
+    if (pause) coordinator.suspendCapture('power state: locked/suspended')
+    else coordinator.resumeCaptureIfDesired('resume')
   })
 
   log.info(
-    `[Startup] MemoryLane v${app.getVersion()} (${editionConfig.edition} edition, ${app.isPackaged ? 'packaged' : 'dev'})`,
+    `[Startup] MemoryLane v${app.getVersion()} (${edition} edition, ${app.isPackaged ? 'packaged' : 'dev'})`,
   )
-  log.info('MemoryLane started. Frame output dir:', runtime.capture.getScreenshotsDir())
 })

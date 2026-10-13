@@ -12,7 +12,6 @@ import { syncAutoStartSetting } from '@main/system/auto-start'
 import { DEFAULT_EDITION, type AppEditionConfig } from '../../shared/edition'
 import { PURGE_CONFIRMATION_PHRASE } from '../../shared/constants'
 import log from '@main/utils/logger'
-import { updateTrayMenu } from './tray'
 import { getUpdateInfo, quitAndInstall } from '@main/system/updater'
 import { exportDatabaseZip } from './database-export'
 import { exportLogsZip } from './logs-export'
@@ -25,16 +24,9 @@ import {
 } from './permissions'
 import { integrations } from '../integrations'
 import { listInstalledApps } from '../apps/installed-apps'
-import type { VendorCredentialsManager } from '../settings/vendor-credentials-manager'
 import { VENDORS } from '../../shared/types'
 import { computeClustersView } from './cluster-view'
-import type { RemoteModelConfig } from '../../shared/remote-model-config'
-import { applyVendorSwitch } from './vendor-switch'
-import { applyModelSettings } from './model-settings'
-import type { EvalRecorder } from '../eval/eval-recorder'
 import { importRecordingScripts, listRecordingScripts } from '@main/eval/recording-scripts'
-import type { EvalFixtureStore } from '../eval/eval-fixture-store'
-import type { TaskFixtureStore } from '../eval/task-fixture-store'
 import {
   buildWindowedActivities,
   dayString,
@@ -48,116 +40,36 @@ import {
   resizeRecordingGuide,
   showRecordingGuide,
 } from '@main/ui/recording-guide-window'
-import type { AccessProvider } from '../access'
 import type {
   AccessState,
   ClusterSightingInfo,
   ClusterDetailInfo,
   ClustersView,
   ConsentOutcome,
-  LlmHealthStatus,
   MainWindowStatus,
   MainWindowStats,
   MiningStatus,
   CaptureSettings,
   McpRegistrationStatus,
   ObservationState,
-  SemanticPipelineMode,
   SubscriptionPlan,
   Vendor,
   VendorCredentials,
   VendorStatus,
 } from '../../shared/types'
-import type { CaptureSettingsManager } from '../settings/capture-settings-manager'
-import type { StorageService } from '../storage'
-import type { BackfillSummary } from '../services/task-miner/types'
-import type { UsageTracker } from '../services/usage-tracker'
+import type { MainRuntime } from '@main/runtime'
+import type { AppSync } from '@main/sync'
+import type { CaptureCoordinatorControls } from '@main/capture/capture-orchestrator'
+import type { CaptureHotkeyManager } from '@main/capture/capture-hotkey-manager'
+import type { ObservationController } from '@main/capture/observation-controller'
 
-interface SemanticService {
-  updatePipelinePreference(preference: SemanticPipelineMode): void
-  updateRequestTimeoutMs(timeoutMs: number): void
-  updateModels(videoModels: string[], snapshotModels: string[]): void
-  getLlmHealthStatus(): LlmHealthStatus
-  testConnection(): Promise<void>
-}
-
-interface InferenceProviderLike {
-  notifyConfigChanged(): void
-}
-
-interface TaskMinerService {
-  updateModel(model: string): void
-  updateClusterModel(model: string | null): void
-  setEnabled(enabled: boolean): void
-}
-
-interface UserContextBuilderService {
-  updateModel(model: string): void
-}
-
-interface MainWindowDependencies {
+export interface MainWindowDependencies {
   editionConfig: AppEditionConfig
-  capture: {
-    isCapturingNow: () => boolean
-    requestStartCapture: () => void
-    requestStopCapture: () => void
-    pauseCapture: (durationMs: number) => void
-    resumeCapture: () => void
-    getPauseState: () => { pausedUntilMs: number | null }
-    forceClose: () => Promise<void>
-    updateActivityWindowConfig: (input: {
-      minActivityDurationMs: number
-      maxActivityDurationMs: number
-    }) => void
-  }
-  storage: StorageService
-  usageTracker: UsageTracker
-  vendorCredentials: VendorCredentialsManager
-  inferenceProvider: InferenceProviderLike
-  semanticService: SemanticService
-  accessProvider: AccessProvider
-  captureSettingsManager: CaptureSettingsManager
-  userContextBuilder?: UserContextBuilderService
-  taskMiner?: TaskMinerService
-  getRemoteModelConfig?: () => RemoteModelConfig | null
-  isManaged?: () => boolean
-  syncRemoteModelConfig?: () => void
-  getCaptureHotkeyLabel: () => string
-  reconfigureCaptureHotkey: (accelerator: string) => { success: boolean; error?: string }
-  updateExclusions: (exclusions: {
-    apps: string[]
-    urlPatterns: string[]
-    excludePrivateBrowsing: boolean
-    excludeLoginScreens: boolean
-  }) => void
-  // Org-provided (centrally-synced) exclusions, surfaced read-only in the UI.
-  getManagedExclusions: () => { apps: string[]; urlPatterns: string[] }
-  databaseExportSync: {
-    onSettingsChanged: () => Promise<void>
-  }
-  databaseUpload?: {
-    triggerUpload: () => Promise<{ success: boolean; error?: string }>
-    kick: (reason: string) => void
-  }
-  logUpload?: {
-    triggerUpload: () => Promise<{ success: boolean; error?: string }>
-    kick: (reason: string) => void
-  }
-  purgeAll: () => Promise<void>
-  /** Dev-only: wipe all mined sightings/clusters and re-mine from scratch. */
-  wipeAndRemineTasks?: () => Promise<BackfillSummary>
-  /** Task-mining ledger progress; absent when the new miner is disabled. */
-  getMiningStatus?: () => MiningStatus
-  /** Dev-only: reopen failed mining days and kick a sweep. Returns days reopened. */
-  retryFailedMiningDays?: () => number
-  observation: {
-    start: (durationMs: number) => ObservationState
-    stop: (reason: 'user' | 'timer') => ObservationState
-    getState: () => ObservationState
-  }
-  evalRecorder: EvalRecorder
-  evalFixtureStore: EvalFixtureStore
-  taskFixtureStore: TaskFixtureStore
+  runtime: MainRuntime
+  sync: AppSync
+  capture: CaptureCoordinatorControls
+  hotkey: CaptureHotkeyManager
+  observation: ObservationController
 }
 
 let mainWindow: BrowserWindow | null = null
@@ -171,7 +83,7 @@ app.on('before-quit', () => {
 function buildStatus(): MainWindowStatus {
   return {
     capturing: deps?.capture.isCapturingNow() ?? false,
-    captureHotkeyLabel: deps?.getCaptureHotkeyLabel() ?? '',
+    captureHotkeyLabel: deps?.hotkey.getLabel() ?? '',
     pausedUntilMs: deps?.capture.getPauseState().pausedUntilMs ?? null,
   }
 }
@@ -179,7 +91,7 @@ function buildStatus(): MainWindowStatus {
 /**
  * Send current status to the renderer process
  */
-export function sendStatusToRenderer(): void {
+function sendStatusToRenderer(): void {
   if (!mainWindow || mainWindow.isDestroyed()) return
 
   const status = buildStatus()
@@ -190,7 +102,7 @@ export function sendStatusToRenderer(): void {
  * Broadcast task-mining ledger progress so the Patterns view can show the
  * sweep (especially the first 60-day backfill) as it happens.
  */
-export function sendMiningProgress(status: MiningStatus): void {
+function sendMiningProgress(status: MiningStatus): void {
   if (!mainWindow || mainWindow.isDestroyed()) return
   mainWindow.webContents.send('main-window:miningProgressChanged', status)
 }
@@ -207,9 +119,12 @@ export function sendObservationUpdate(state: ObservationState): void {
  * Broadcast the current org-provided (centrally-synced) exclusions to the
  * renderer so an open settings window reflects an IT edit without a reopen.
  */
-export function sendManagedExclusionsUpdate(): void {
+function sendManagedExclusionsUpdate(): void {
   if (!mainWindow || mainWindow.isDestroyed() || !deps) return
-  mainWindow.webContents.send('main-window:managedExclusionsUpdate', deps.getManagedExclusions())
+  mainWindow.webContents.send(
+    'main-window:managedExclusionsUpdate',
+    deps.sync.getManagedExclusions(),
+  )
 }
 
 /**
@@ -346,7 +261,7 @@ let startingEvalRecording = false
 
 async function startEvalRecording(scriptId: string | undefined): Promise<EvalRecordingStatus> {
   if (!deps) throw new Error('Dependencies not initialized')
-  if (startingEvalRecording || deps.evalRecorder.isRecording()) {
+  if (startingEvalRecording || deps.runtime.evalRecorder.isRecording()) {
     throw new Error('A recording is already in progress')
   }
   startingEvalRecording = true
@@ -354,8 +269,8 @@ async function startEvalRecording(scriptId: string | undefined): Promise<EvalRec
     await hideForRecording()
     await showRecordingGuide()
     try {
-      const status = deps.evalRecorder.start(recordingName(scriptId), scriptId)
-      void updateTrayMenu()
+      const status = deps.runtime.evalRecorder.start(recordingName(scriptId), scriptId)
+      deps?.runtime.notifyStateChanged()
       return status
     } catch (error) {
       closeRecordingGuide()
@@ -371,10 +286,10 @@ async function startEvalRecording(scriptId: string | undefined): Promise<EvalRec
 async function finishEvalRecording(): Promise<PromoteCaptureResult> {
   if (!deps) throw new Error('Dependencies not initialized')
   try {
-    return await deps.evalRecorder.stop()
+    return await deps.runtime.evalRecorder.stop()
   } finally {
     closeRecordingGuide()
-    void updateTrayMenu()
+    deps?.runtime.notifyStateChanged()
     openMainWindow()
   }
 }
@@ -407,16 +322,16 @@ async function buildStats(): Promise<MainWindowStats> {
   const dateRange: { oldest: number | null; newest: number | null } = { oldest: null, newest: null }
 
   try {
-    activityCount = deps.storage.activities.count()
-    dbSize = deps.storage.getDbSize()
-    const range = deps.storage.activities.getDateRange()
+    activityCount = deps.runtime.storage.activities.count()
+    dbSize = deps.runtime.storage.getDbSize()
+    const range = deps.runtime.storage.activities.getDateRange()
     dateRange.oldest = range.oldest
     dateRange.newest = range.newest
   } catch (error) {
     log.error('[MainWindow] Error fetching storage stats:', error)
   }
 
-  const stats = deps.usageTracker.getStats()
+  const stats = deps.runtime.usageTracker.getStats()
   const apiUsage: { requestCount: number; totalCost: number } | null = {
     requestCount: stats.requestCount,
     totalCost: stats.totalCost,
@@ -473,6 +388,11 @@ function logCaptureSettingsChanges(previous: CaptureSettings, updated: CaptureSe
  */
 export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   deps = dependencies
+  dependencies.runtime.onStateChanged(sendStatusToRenderer)
+  dependencies.sync.onManagedExclusionsChanged(sendManagedExclusionsUpdate)
+  dependencies.runtime.taskMiner.setStatusListener(() =>
+    sendMiningProgress(dependencies.runtime.taskMiner.getStatus()),
+  )
 
   log.info('[MainWindow] Initializing IPC handlers...')
 
@@ -509,7 +429,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         error: null,
       } satisfies AccessState
     }
-    return deps.accessProvider.getAccessState()
+    return deps.runtime.accessProvider.getAccessState()
   })
   handle('main-window:refreshAccessState', async () => {
     if (!deps) {
@@ -522,8 +442,8 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       } satisfies AccessState
     }
 
-    await deps.accessProvider.refreshAccessState()
-    return deps.accessProvider.getAccessState()
+    await deps.runtime.accessProvider.refreshAccessState()
+    return deps.runtime.accessProvider.getAccessState()
   })
   ipcMain.handle(
     'main-window:activateEnterpriseLicense',
@@ -533,7 +453,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       }
 
       try {
-        await deps.accessProvider.activateEnterpriseLicense(activationCode)
+        await deps.runtime.accessProvider.activateEnterpriseLicense(activationCode)
         return { success: true }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Activation failed'
@@ -546,7 +466,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   ipcMain.handle('main-window:getPendingConsent', async () => {
     if (!deps) return null
     try {
-      return await deps.accessProvider.getPendingConsent()
+      return await deps.runtime.accessProvider.getPendingConsent()
     } catch (error) {
       log.warn('[MainWindow] Failed to fetch pending consent document:', error)
       return null
@@ -558,7 +478,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: false, error: 'Dependencies not initialized' }
     }
     try {
-      await deps.accessProvider.submitConsentDecision(outcome)
+      await deps.runtime.accessProvider.submitConsentDecision(outcome)
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Consent request failed'
@@ -629,7 +549,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
 
   ipcMain.handle('main-window:getCredentialStatuses', () => {
     if (!deps) return emptyStatuses()
-    return deps.vendorCredentials.getAllStatuses()
+    return deps.runtime.vendorCredentials.getAllStatuses()
   })
 
   ipcMain.handle(
@@ -642,10 +562,10 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         return { success: false, error: `Unknown vendor: ${vendor}` }
       }
       try {
-        deps.vendorCredentials.saveCredentials(vendor, creds)
-        deps.inferenceProvider.notifyConfigChanged()
-        if (vendor === deps.captureSettingsManager.get().activeVendor) {
-          void deps.semanticService.testConnection()
+        deps.runtime.vendorCredentials.saveCredentials(vendor, creds)
+        deps.runtime.inferenceProvider.notifyConfigChanged()
+        if (vendor === deps.runtime.settings.get().activeVendor) {
+          void deps.runtime.semanticService.testConnection()
         }
         return { success: true }
       } catch (error) {
@@ -663,8 +583,8 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: false, error: `Unknown vendor: ${vendor}` }
     }
     try {
-      deps.vendorCredentials.deleteCredentials(vendor)
-      deps.inferenceProvider.notifyConfigChanged()
+      deps.runtime.vendorCredentials.deleteCredentials(vendor)
+      deps.runtime.inferenceProvider.notifyConfigChanged()
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -681,9 +601,8 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: false, error: `Unknown vendor: ${vendor}` }
     }
     try {
-      const previousVendor = deps.captureSettingsManager.get().activeVendor
-      deps.captureSettingsManager.setActiveVendor(vendor)
-      applyVendorSwitch(deps, deps.captureSettingsManager.get())
+      const previousVendor = deps.runtime.settings.get().activeVendor
+      deps.runtime.settings.setActiveVendor(vendor)
       if (previousVendor !== vendor) {
         log.info(`[Settings] user changed active vendor: ${previousVendor} → ${vendor}`)
       }
@@ -718,47 +637,48 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         lastAttemptAt: null,
       }
     }
-    return deps.semanticService.getLlmHealthStatus()
+    return deps.runtime.semanticService.getLlmHealthStatus()
   })
 
   handle('main-window:testLlmConnection', async () => {
     if (!deps) return
-    await deps.semanticService.testConnection()
+    await deps.runtime.semanticService.testConnection()
   })
 
   // Subscription / managed key — provider chosen by backend (openrouter | vertex).
-  deps.accessProvider.addUpdateListener((state, payload) => {
+  deps.runtime.accessProvider.addUpdateListener((state, payload) => {
     if (payload?.config && deps) {
       const cfg = payload.config
       const vendor: Vendor = cfg.provider === 'vertex' ? 'google' : 'openrouter'
       // Managed config is re-applied on every focus/poll; only react when it
       // actually changed, otherwise we'd clear caches and re-probe the LLM on
       // every window focus (DEU-176).
-      const changed = deps.vendorCredentials.saveManagedCredentials(vendor, {
+      const changed = deps.runtime.vendorCredentials.saveManagedCredentials(vendor, {
         apiKey: cfg.apiKey,
         ...(cfg.project !== undefined ? { project: cfg.project } : {}),
         ...(cfg.location !== undefined ? { location: cfg.location } : {}),
       })
       // Auto-switch active vendor — managed config is authoritative.
-      const settings = deps.captureSettingsManager.get()
+      const settings = deps.runtime.settings.get()
       const switching = settings.activeVendor !== vendor
       if (switching) {
         log.info(`[MainWindow] Switching active vendor to ${vendor} (managed)`)
-        deps.captureSettingsManager.setActiveVendor(vendor)
+        deps.runtime.settings.setActiveVendor(vendor)
+      } else if (changed) {
+        deps.runtime.credentialsChanged()
       }
       if (switching || changed) {
-        applyVendorSwitch(deps, deps.captureSettingsManager.get())
-        deps.syncRemoteModelConfig?.()
+        void deps.runtime.remoteModels.sync()
       }
     }
     if (payload?.invalidate && deps) {
       for (const v of ['openrouter', 'google'] as const) {
-        if (deps.vendorCredentials.getStatus(v).source === 'managed') {
+        if (deps.runtime.vendorCredentials.getStatus(v).source === 'managed') {
           log.info(`[MainWindow] Invalidating stale managed key for ${v}`)
-          deps.vendorCredentials.deleteCredentials(v)
+          deps.runtime.vendorCredentials.deleteCredentials(v)
         }
       }
-      deps.inferenceProvider.notifyConfigChanged()
+      deps.runtime.inferenceProvider.notifyConfigChanged()
     }
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('main-window:accessStateChanged', state)
@@ -771,29 +691,29 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
 
   handle('main-window:startCheckout', async (_event, plan: SubscriptionPlan) => {
     if (!deps) return
-    await deps.accessProvider.startCheckout(plan)
+    await deps.runtime.accessProvider.startCheckout(plan)
   })
 
   handle('main-window:openSubscriptionPortal', async () => {
     if (!deps) return
-    await deps.accessProvider.openSubscriptionPortal()
+    await deps.runtime.accessProvider.openSubscriptionPortal()
   })
 
   handle('main-window:getSubscriptionStatus', () => {
     if (!deps) return 'idle'
-    return deps.accessProvider.getAccessState().customerSubscriptionStatus ?? 'idle'
+    return deps.runtime.accessProvider.getAccessState().customerSubscriptionStatus ?? 'idle'
   })
 
   // Patterns (task clusters)
   handle('main-window:getClusters', (): ClustersView => {
     if (!deps) return { clusters: [], hiddenCount: 0 }
-    const { clusters, hiddenCount } = computeClustersView(deps.storage, Date.now())
+    const { clusters, hiddenCount } = computeClustersView(deps.runtime.storage, Date.now())
     return { clusters, hiddenCount }
   })
 
   handle('main-window:getMiningStatus', (): MiningStatus => {
     return (
-      deps?.getMiningStatus?.() ?? {
+      deps?.runtime.taskMiner.getStatus() ?? {
         state: 'idle',
         currentDay: null,
         pendingDays: 0,
@@ -805,16 +725,16 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   })
 
   handle('main-window:retryFailedMiningDays', (): { retried: number } => {
-    return { retried: deps?.retryFailedMiningDays?.() ?? 0 }
+    return { retried: deps?.runtime.taskMiner.retryFailed() ?? 0 }
   })
 
   handle(
     'main-window:getClusterDetail',
     (_event: IpcMainInvokeEvent, id: string): ClusterDetailInfo | null => {
       if (!deps) return null
-      if (!deps.storage.clusters.getById(id)) return null
+      if (!deps.runtime.storage.clusters.getById(id)) return null
 
-      const members = deps.storage.clusters.getMembers(id) // Sighting[], started_at ASC
+      const members = deps.runtime.storage.clusters.getMembers(id) // Sighting[], started_at ASC
       const sightings: ClusterSightingInfo[] = members
         .slice()
         .reverse() // newest-first for the instances list
@@ -837,7 +757,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     'main-window:listRecentActivities',
     (_event: IpcMainInvokeEvent, limit: number, offset?: number) => {
       if (!deps) return []
-      return deps.storage.activities.listRecent(limit, offset ?? 0)
+      return deps.runtime.storage.activities.listRecent(limit, offset ?? 0)
     },
   )
 
@@ -850,9 +770,9 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       }
     }
     return {
-      totalCount: deps.storage.activities.count(),
-      dateRange: deps.storage.activities.getDateRange(),
-      topApps: deps.storage.activities.getTopApps(8),
+      totalCount: deps.runtime.storage.activities.count(),
+      dateRange: deps.runtime.storage.activities.getDateRange(),
+      topApps: deps.runtime.storage.activities.getTopApps(8),
     }
   })
 
@@ -895,14 +815,17 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     if (!deps) {
       return { success: false, error: 'Dependencies not initialized' }
     }
-    return exportDatabaseZip({ storage: deps.storage, parentWindow: getMainWindow() })
+    return exportDatabaseZip({ storage: deps.runtime.storage, parentWindow: getMainWindow() })
   })
 
   ipcMain.handle('main-window:importDatabase', async () => {
     if (!deps) {
       return { success: false, error: 'Dependencies not initialized' }
     }
-    return importDatabase({ dbPath: deps.storage.getDbPath(), parentWindow: getMainWindow() })
+    return importDatabase({
+      dbPath: deps.runtime.storage.getDbPath(),
+      parentWindow: getMainWindow(),
+    })
   })
 
   ipcMain.handle('main-window:exportLogsZip', async () => {
@@ -910,17 +833,17 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   })
 
   ipcMain.handle('main-window:syncDatabaseToRemote', async () => {
-    if (!deps?.databaseUpload) {
+    if (!deps?.sync.databaseUpload) {
       return { success: false, error: 'Not available' }
     }
-    return deps.databaseUpload.triggerUpload()
+    return deps.sync.databaseUpload.triggerUpload()
   })
 
   ipcMain.handle('main-window:syncLogsToRemote', async () => {
-    if (!deps?.logUpload) {
+    if (!deps?.sync.logUpload) {
       return { success: false, error: 'Not available' }
     }
-    return deps.logUpload.triggerUpload()
+    return deps.sync.logUpload.triggerUpload()
   })
 
   ipcMain.handle(
@@ -933,7 +856,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         return { success: false, error: 'Confirmation phrase did not match' }
       }
       try {
-        await deps.purgeAll()
+        await deps.runtime.purgeAll()
         return { success: true }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to purge database'
@@ -947,11 +870,8 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     if (!deps) {
       return { success: false as const, error: 'Dependencies not initialized' }
     }
-    if (!deps.wipeAndRemineTasks) {
-      return { success: false as const, error: 'Not available' }
-    }
     try {
-      const summary = await deps.wipeAndRemineTasks()
+      const summary = await deps.runtime.taskMiner.wipeAndRemine()
       return { success: true as const, summary }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to wipe and re-mine tasks'
@@ -978,7 +898,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
 
   ipcMain.handle('main-window:getManagedExclusions', () => {
     if (!deps) return { apps: [], urlPatterns: [] }
-    return deps.getManagedExclusions()
+    return deps.sync.getManagedExclusions()
   })
 
   // Installed apps + seen domains (for privacy UI)
@@ -986,20 +906,20 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
 
   ipcMain.handle('main-window:listSeenDomains', () => {
     if (!deps) return []
-    return deps.storage.activities.getDistinctTlds()
+    return deps.runtime.storage.activities.getDistinctTlds()
   })
 
   // Capture settings
   ipcMain.handle('main-window:getCaptureSettings', () => {
     if (!deps) return null
-    return deps.captureSettingsManager.get()
+    return deps.runtime.settings.get()
   })
 
   ipcMain.handle(
     'main-window:saveCaptureSettings',
     (_event: IpcMainInvokeEvent, partial: Partial<CaptureSettings>) => {
       if (!deps) return { success: false, error: 'Dependencies not initialized' }
-      const previous = deps.captureSettingsManager.get()
+      const previous = deps.runtime.settings.get()
       // databaseExportDirectory is renderer-untrusted (path-traversal sink).
       // The only legitimate write path is `main-window:setDatabaseExportDirectory`,
       // which runs realpath + safe-root containment. Drop it here regardless of
@@ -1013,7 +933,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
           sanitized.captureHotkeyAccelerator !== undefined &&
           sanitized.captureHotkeyAccelerator !== previous.captureHotkeyAccelerator
         ) {
-          const hotkeyResult = deps.reconfigureCaptureHotkey(sanitized.captureHotkeyAccelerator)
+          const hotkeyResult = deps.hotkey.reconfigure(sanitized.captureHotkeyAccelerator)
           if (!hotkeyResult.success) {
             return {
               success: false,
@@ -1022,38 +942,24 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
           }
         }
 
-        deps.captureSettingsManager.save(sanitized)
-        deps.captureSettingsManager.applyToConstants()
-        const updated = deps.captureSettingsManager.get()
+        deps.runtime.settings.save(sanitized)
+        deps.runtime.settings.applyToConstants()
+        const updated = deps.runtime.settings.get()
         logCaptureSettingsChanges(previous, updated)
         if (previous.uploadDetailLevel === 'off' && updated.uploadDetailLevel !== 'off') {
-          deps.databaseUpload?.kick('sharing enabled')
-          deps.logUpload?.kick('sharing enabled')
+          deps.sync.databaseUpload?.kick('sharing enabled')
+          deps.sync.logUpload?.kick('sharing enabled')
         }
         syncAutoStartSetting(updated.autoStartEnabled)
-        deps.capture.updateActivityWindowConfig({
-          minActivityDurationMs: updated.minActivityDurationMs,
-          maxActivityDurationMs: updated.maxActivityDurationMs,
-        })
-        deps.updateExclusions({
-          apps: updated.excludedApps,
-          urlPatterns: updated.excludedUrlPatterns,
-          excludePrivateBrowsing: updated.excludePrivateBrowsing,
-          excludeLoginScreens: updated.excludeLoginScreens,
-        })
-        deps.semanticService.updatePipelinePreference(updated.semanticPipelineMode)
-        deps.semanticService.updateRequestTimeoutMs(updated.activityRequestTimeoutMs)
-        applyModelSettings(deps, updated, previous)
-        void updateTrayMenu()
-        sendStatusToRenderer()
-        void deps.databaseExportSync.onSettingsChanged()
+        deps.runtime.notifyStateChanged()
+        void deps.sync.databaseExport.onSettingsChanged()
         return { success: true }
       } catch (error) {
         if (
           sanitized.captureHotkeyAccelerator !== undefined &&
           sanitized.captureHotkeyAccelerator !== previous.captureHotkeyAccelerator
         ) {
-          deps.reconfigureCaptureHotkey(previous.captureHotkeyAccelerator)
+          deps.hotkey.reconfigure(previous.captureHotkeyAccelerator)
         }
         const message = error instanceof Error ? error.message : 'Unknown error'
         return { success: false, error: message }
@@ -1066,8 +972,8 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     (_event: IpcMainInvokeEvent, requestedPath: unknown) => {
       if (!deps) return { success: false, error: 'Dependencies not initialized' }
       try {
-        deps.captureSettingsManager.setDatabaseExportDirectory(requestedPath)
-        void deps.databaseExportSync.onSettingsChanged()
+        deps.runtime.settings.setDatabaseExportDirectory(requestedPath)
+        void deps.sync.databaseExport.onSettingsChanged()
         return { success: true }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error'
@@ -1078,40 +984,26 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
 
   ipcMain.handle('main-window:resetCaptureSettings', () => {
     if (!deps) return { success: false, error: 'Dependencies not initialized' }
-    const previous = deps.captureSettingsManager.get()
+    const previous = deps.runtime.settings.get()
     try {
-      deps.captureSettingsManager.reset()
-      deps.captureSettingsManager.applyToConstants()
-      const updated = deps.captureSettingsManager.get()
-      const hotkeyResult = deps.reconfigureCaptureHotkey(updated.captureHotkeyAccelerator)
+      deps.runtime.settings.reset()
+      deps.runtime.settings.applyToConstants()
+      const updated = deps.runtime.settings.get()
+      const hotkeyResult = deps.hotkey.reconfigure(updated.captureHotkeyAccelerator)
       if (!hotkeyResult.success) {
-        deps.captureSettingsManager.save(previous)
-        deps.captureSettingsManager.applyToConstants()
+        deps.runtime.settings.save(previous)
+        deps.runtime.settings.applyToConstants()
         return {
           success: false,
           error: hotkeyResult.error ?? 'Failed to reset start/stop shortcut',
         }
       }
       syncAutoStartSetting(updated.autoStartEnabled)
-      deps.capture.updateActivityWindowConfig({
-        minActivityDurationMs: updated.minActivityDurationMs,
-        maxActivityDurationMs: updated.maxActivityDurationMs,
-      })
-      deps.updateExclusions({
-        apps: updated.excludedApps,
-        urlPatterns: updated.excludedUrlPatterns,
-        excludePrivateBrowsing: updated.excludePrivateBrowsing,
-        excludeLoginScreens: updated.excludeLoginScreens,
-      })
-      deps.semanticService.updatePipelinePreference(updated.semanticPipelineMode)
-      deps.semanticService.updateRequestTimeoutMs(updated.activityRequestTimeoutMs)
-      applyModelSettings(deps, updated, previous)
-      void updateTrayMenu()
-      sendStatusToRenderer()
-      void deps.databaseExportSync.onSettingsChanged()
+      deps.runtime.notifyStateChanged()
+      void deps.sync.databaseExport.onSettingsChanged()
       return { success: true }
     } catch (error) {
-      deps.reconfigureCaptureHotkey(previous.captureHotkeyAccelerator)
+      deps.hotkey.reconfigure(previous.captureHotkeyAccelerator)
       const message = error instanceof Error ? error.message : 'Unknown error'
       return { success: false, error: message }
     }
@@ -1174,7 +1066,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   ipcMain.handle('main-window:evalListScripts', () => {
     if (!deps) return []
     try {
-      return listRecordingScripts(deps.evalRecorder.fixturesRoot)
+      return listRecordingScripts(deps.runtime.evalRecorder.fixturesRoot)
     } catch (error) {
       log.warn('[Eval] Failed to read scenarios', error)
       return []
@@ -1192,7 +1084,10 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: false as const, error: 'Canceled' }
     }
     try {
-      const count = importRecordingScripts(deps.evalRecorder.fixturesRoot, result.filePaths[0])
+      const count = importRecordingScripts(
+        deps.runtime.evalRecorder.fixturesRoot,
+        result.filePaths[0],
+      )
       return { success: true as const, count }
     } catch (error) {
       return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
@@ -1219,13 +1114,13 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   ipcMain.handle('main-window:evalCancelRecording', async () => {
     if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
     try {
-      await deps.evalRecorder.cancel()
+      await deps.runtime.evalRecorder.cancel()
       return { success: true as const }
     } catch (error) {
       return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
     } finally {
       closeRecordingGuide()
-      void updateTrayMenu()
+      deps?.runtime.notifyStateChanged()
       openMainWindow()
     }
   })
@@ -1233,16 +1128,16 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   ipcMain.handle('main-window:evalRestartRecording', async () => {
     if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
     try {
-      const { scriptId } = deps.evalRecorder.getStatus()
-      await deps.evalRecorder.cancel()
-      const status = deps.evalRecorder.start(
+      const { scriptId } = deps.runtime.evalRecorder.getStatus()
+      await deps.runtime.evalRecorder.cancel()
+      const status = deps.runtime.evalRecorder.start(
         recordingName(scriptId ?? undefined),
         scriptId ?? undefined,
       )
       return { success: true as const, status }
     } catch (error) {
       closeRecordingGuide()
-      void updateTrayMenu()
+      deps?.runtime.notifyStateChanged()
       openMainWindow()
       return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
     }
@@ -1257,7 +1152,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     async (_event: IpcMainInvokeEvent, url: unknown) => {
       const known =
         deps !== null &&
-        listRecordingScripts(deps.evalRecorder.fixturesRoot).some((s) =>
+        listRecordingScripts(deps.runtime.evalRecorder.fixturesRoot).some((s) =>
           s.setup.some((item) => item.url === url),
         )
       if (typeof url !== 'string' || !known)
@@ -1269,7 +1164,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
 
   ipcMain.handle('main-window:evalRecordingStatus', () => {
     return (
-      deps?.evalRecorder.getStatus() ?? {
+      deps?.runtime.evalRecorder.getStatus() ?? {
         recording: false,
         name: null,
         startedAt: null,
@@ -1279,12 +1174,12 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   })
 
   ipcMain.handle('main-window:evalListFixtures', () => {
-    return deps?.evalFixtureStore.list() ?? []
+    return deps?.runtime.evalFixtureStore.list() ?? []
   })
 
   ipcMain.handle('main-window:evalLoadFixture', (_event: IpcMainInvokeEvent, name: unknown) => {
     if (!deps || typeof name !== 'string') return null
-    return deps.evalFixtureStore.load(name)
+    return deps.runtime.evalFixtureStore.load(name)
   })
 
   ipcMain.handle(
@@ -1295,7 +1190,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         return { success: false as const, error: 'Invalid arguments' }
       }
       try {
-        deps.evalFixtureStore.saveGolden(name, markdown)
+        deps.runtime.evalFixtureStore.saveGolden(name, markdown)
         return { success: true as const }
       } catch (error) {
         return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
@@ -1311,7 +1206,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         return { success: false as const, error: 'Invalid arguments' }
       }
       try {
-        deps.evalFixtureStore.saveGoldenBlocks(name, blocks as GoldenBlock[])
+        deps.runtime.evalFixtureStore.saveGoldenBlocks(name, blocks as GoldenBlock[])
         return { success: true as const }
       } catch (error) {
         return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
@@ -1323,7 +1218,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
     if (typeof name !== 'string') return { success: false as const, error: 'Invalid arguments' }
     try {
-      deps.evalFixtureStore.delete(name)
+      deps.runtime.evalFixtureStore.delete(name)
       return { success: true as const }
     } catch (error) {
       return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
@@ -1343,7 +1238,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       })
       if (result.canceled || !result.filePath) return { success: false as const, error: 'Canceled' }
       try {
-        await deps.evalFixtureStore.exportZip(name, result.filePath)
+        await deps.runtime.evalFixtureStore.exportZip(name, result.filePath)
         return { success: true as const, path: result.filePath }
       } catch (error) {
         return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
@@ -1362,7 +1257,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     })
     if (result.canceled || !result.filePath) return { success: false as const, error: 'Canceled' }
     try {
-      const count = await deps.evalFixtureStore.exportAllZip(result.filePath)
+      const count = await deps.runtime.evalFixtureStore.exportAllZip(result.filePath)
       return { success: true as const, count }
     } catch (error) {
       return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
@@ -1373,7 +1268,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   // output: {userData}/task-fixtures via taskFixtureStore.
   ipcMain.handle('main-window:evalListTaskSightings', () => {
     if (!deps) return []
-    return deps.storage.sightings.getAll(200).map(
+    return deps.runtime.storage.sightings.getAll(200).map(
       (s): TaskSightingSummary => ({
         id: s.id,
         title: s.title,
@@ -1394,11 +1289,11 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       if (!deps || typeof sightingId !== 'string') return null
       const before = typeof beforeMin === 'number' ? beforeMin : 60
       const after = typeof afterMin === 'number' ? afterMin : 60
-      const sighting = deps.storage.sightings.getById(sightingId)
+      const sighting = deps.runtime.storage.sightings.getById(sightingId)
       if (!sighting) return null
       try {
         const { activities, dayStart, windowFrom, windowTo } = buildWindowedActivities(
-          deps.storage,
+          deps.runtime.storage,
           sighting.activityIds,
           before,
           after,
@@ -1439,16 +1334,16 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       if (typeof goldenMd !== 'string' || typeof name !== 'string') {
         return { success: false as const, error: 'Invalid arguments' }
       }
-      const sighting = deps.storage.sightings.getById(sightingId)
+      const sighting = deps.runtime.storage.sightings.getById(sightingId)
       if (!sighting) return { success: false as const, error: 'Sighting not found' }
       try {
         const { activities, dayStart } = buildWindowedActivities(
-          deps.storage,
+          deps.runtime.storage,
           sighting.activityIds,
           before,
           after,
         )
-        const fixture = deps.taskFixtureStore.write(name, activities, goldenMd, {
+        const fixture = deps.runtime.taskFixtureStore.write(name, activities, goldenMd, {
           name,
           label: name,
           description: `Built from sighting "${sighting.title}"; ${activities.length} activities (±${before}/${after} min).`,
@@ -1464,12 +1359,12 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   )
 
   ipcMain.handle('main-window:evalListTaskFixtures', () => {
-    return deps?.taskFixtureStore.list() ?? []
+    return deps?.runtime.taskFixtureStore.list() ?? []
   })
 
   ipcMain.handle('main-window:evalLoadTaskFixture', (_event: IpcMainInvokeEvent, name: unknown) => {
     if (!deps || typeof name !== 'string') return null
-    return deps.taskFixtureStore.load(name)
+    return deps.runtime.taskFixtureStore.load(name)
   })
 
   ipcMain.handle(
@@ -1480,7 +1375,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         return { success: false as const, error: 'Invalid arguments' }
       }
       try {
-        deps.taskFixtureStore.saveGolden(name, markdown)
+        deps.runtime.taskFixtureStore.saveGolden(name, markdown)
         return { success: true as const }
       } catch (error) {
         return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
@@ -1494,7 +1389,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       if (!deps) return { success: false as const, error: 'Dependencies not initialized' }
       if (typeof name !== 'string') return { success: false as const, error: 'Invalid arguments' }
       try {
-        deps.taskFixtureStore.delete(name)
+        deps.runtime.taskFixtureStore.delete(name)
         return { success: true as const }
       } catch (error) {
         return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
@@ -1515,7 +1410,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       })
       if (result.canceled || !result.filePath) return { success: false as const, error: 'Canceled' }
       try {
-        await deps.taskFixtureStore.exportZip(name, result.filePath)
+        await deps.runtime.taskFixtureStore.exportZip(name, result.filePath)
         return { success: true as const, path: result.filePath }
       } catch (error) {
         return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }

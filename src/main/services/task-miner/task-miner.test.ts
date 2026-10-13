@@ -826,3 +826,46 @@ describe('TaskMiner sweep', () => {
     expect(resumed.daysMined).toBe(2)
   })
 })
+
+describe('TaskMiner lifecycle', () => {
+  const TEST_DB_PATH = path.join(os.tmpdir(), 'temp_task_miner_lifecycle_test.db')
+  let storage: StorageService
+
+  beforeEach(() => {
+    deleteDbFiles(TEST_DB_PATH)
+    storage = new StorageService(TEST_DB_PATH)
+    applyMigrations(storage.getDatabase())
+  })
+
+  afterEach(() => {
+    storage.close()
+    deleteDbFiles(TEST_DB_PATH)
+  })
+
+  it('getStatus counts only days settled since the sweep started', () => {
+    const miner = new TaskMiner(storage, configuredProvider, embedder)
+    storage.miningDays.enqueueMissing(['2026-07-01', '2026-07-02'])
+    storage.miningDays.claimOldestPending()
+    storage.miningDays.markCompleted('2026-07-01', {})
+
+    expect(miner.getStatus()).toEqual({
+      state: 'idle',
+      currentDay: null,
+      pendingDays: 1,
+      completedDays: 0,
+      failedDays: 0,
+      totalDays: 1,
+    })
+  })
+
+  it('does not sweep after stop()', () => {
+    seedActivities(storage, PATTERN_DETECTION_CONFIG.MIN_ACTIVITIES)
+    const miner = new TaskMiner(storage, configuredProvider, embedder)
+    miner.updateModel('test/model')
+
+    miner.stop()
+    miner.scheduleRun()
+
+    expect(miner.isBusy()).toBe(false)
+  })
+})

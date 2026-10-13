@@ -1,4 +1,5 @@
 import { globalShortcut } from 'electron'
+import log from '@main/utils/logger'
 import {
   DEFAULT_CAPTURE_HOTKEY_ACCELERATOR,
   formatCaptureHotkeyLabel,
@@ -59,6 +60,7 @@ export function createCaptureHotkeyManager({
     }
 
     accelerator = normalizedAccelerator
+    log.info(`[Hotkey] Registered capture hotkey: ${accelerator}`)
     return { success: true }
   }
 

@@ -514,6 +514,26 @@ describe('CaptureSettingsManager', () => {
     })
   })
 
+  describe('onChange', () => {
+    it('notifies listeners with the next and previous settings on save and reset', () => {
+      const manager = new CaptureSettingsManager(configPath)
+      const calls: Array<[boolean, boolean]> = []
+      const unsubscribe = manager.onChange((next, previous) =>
+        calls.push([next.autoStartEnabled, previous.autoStartEnabled]),
+      )
+
+      manager.save({ autoStartEnabled: false })
+      manager.reset()
+      unsubscribe()
+      manager.save({ autoStartEnabled: false })
+
+      expect(calls).toEqual([
+        [false, true],
+        [true, false],
+      ])
+    })
+  })
+
   describe('reset', () => {
     it('restores defaults in memory', () => {
       const manager = new CaptureSettingsManager(configPath)

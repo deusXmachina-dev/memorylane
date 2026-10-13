@@ -233,11 +233,14 @@ export interface CaptureSettingsManagerOptions {
   edition?: AppEdition
 }
 
+export type CaptureSettingsListener = (next: CaptureSettings, previous: CaptureSettings) => void
+
 export class CaptureSettingsManager {
   private configPath: string
   private settings: CaptureSettings
   private defaults: CaptureSettings
   private modelDefaultsUpgraded = false
+  private readonly listeners = new Set<CaptureSettingsListener>()
 
   constructor(options: CaptureSettingsManagerOptions | string = {}) {
     const opts: CaptureSettingsManagerOptions =
@@ -380,6 +383,17 @@ export class CaptureSettingsManager {
     return { ...this.settings }
   }
 
+  public onChange(listener: CaptureSettingsListener): () => void {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
+  }
+
+  private notify(previous: CaptureSettings): void {
+    for (const listener of this.listeners) listener(this.get(), previous)
+  }
+
   public save(partial: Partial<CaptureSettings>): void {
     const merged: CaptureSettings = {
       ...this.settings,
@@ -415,6 +429,7 @@ export class CaptureSettingsManager {
         [merged.activeVendor]: pickVendorSelection(merged),
       }
     }
+    const previous = this.settings
     this.settings = merged
     try {
       fs.writeFileSync(this.configPath, JSON.stringify(this.settings, null, 2))
@@ -423,6 +438,7 @@ export class CaptureSettingsManager {
       log.error('[CaptureSettings] Failed to save settings:', error)
       throw error
     }
+    this.notify(previous)
   }
 
   /**
@@ -473,6 +489,7 @@ export class CaptureSettingsManager {
   }
 
   public reset(): void {
+    const previous = this.settings
     this.settings = { ...this.defaults }
     try {
       if (fs.existsSync(this.configPath)) {
@@ -483,6 +500,7 @@ export class CaptureSettingsManager {
       log.error('[CaptureSettings] Failed to reset settings:', error)
       throw error
     }
+    this.notify(previous)
   }
 
   public getDefaults(): CaptureSettings {
