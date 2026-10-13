@@ -6,7 +6,7 @@ import {
   ManualHostEnvironment,
   remoteHost,
 } from './host-environment'
-import { HOST_RESOLVE_TIMEOUT_MS } from '@/shared/constants'
+import { EVENT_CAPTURER_CONFIG, HOST_RESOLVE_TIMEOUT_MS } from '@/shared/constants'
 
 vi.mock('electron', async () => {
   const { EventEmitter } = await import('node:events')
@@ -94,6 +94,40 @@ describe('power events', () => {
     emitter.emit('resume')
     expect(onSuspend).toHaveBeenCalledTimes(1)
     expect(onResume).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('presence', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('reports the last input time from OS idle', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(100_000)
+    const host = new ManualHostEnvironment()
+    vi.spyOn(host, 'idleSeconds').mockReturnValue(30)
+    expect(host.lastInputAt()).toBe(70_000)
+    expect(host.isPresent()).toBe(true)
+  })
+
+  it('is away once idle reaches the threshold', () => {
+    const host = new ManualHostEnvironment()
+    vi.spyOn(host, 'idleSeconds').mockReturnValue(EVENT_CAPTURER_CONFIG.AWAY_IDLE_SECONDS)
+    expect(host.isPresent()).toBe(false)
+  })
+
+  it('is away while the screen is locked or the system suspended', async () => {
+    const emitter = (await import('electron')).powerMonitor as unknown as EventEmitter
+    emitter.removeAllListeners()
+    const host = new HostEnvironment()
+    host.start(vi.fn())
+    emitter.emit('lock-screen')
+    expect(host.isPresent()).toBe(false)
+    emitter.emit('unlock-screen')
+    expect(host.isPresent()).toBe(true)
+    emitter.emit('suspend')
+    expect(host.isPresent()).toBe(false)
   })
 })
 

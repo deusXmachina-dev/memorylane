@@ -300,7 +300,8 @@ describe('EventCapturer', () => {
 })
 
 describe('EventCapturer with presence', () => {
-  let activeAt: number | null
+  let present: boolean
+  let lastInput: number
   let capturer: EventCapturer
   let stream: InMemoryStream<EventWindow>
   let windows: EventWindow[]
@@ -309,10 +310,14 @@ describe('EventCapturer with presence', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(1000)
-    activeAt = null
+    present = false
+    lastInput = 0
     stream = new InMemoryStream<EventWindow>()
     windows = []
-    capturer = new EventCapturer(stream, { lastActiveAt: () => activeAt })
+    capturer = new EventCapturer(stream, {
+      isPresent: () => present,
+      lastInputAt: () => lastInput,
+    })
     windowsSubscription = stream.subscribe({
       startAt: { type: 'now' },
       onRecord: (record) => windows.push(record.payload),
@@ -326,15 +331,15 @@ describe('EventCapturer with presence', () => {
   })
 
   it('keeps a no-input window open while present and ends it at the last input', async () => {
-    activeAt = 1000
+    present = true
     capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 1000 }))
-    activeAt = 1200
+    lastInput = 1200
 
     vi.advanceTimersByTime(300)
     await flushAsyncAppends()
     expect(windows).toHaveLength(0)
 
-    activeAt = null
+    present = false
     vi.advanceTimersByTime(100)
     await flushAsyncAppends()
 
@@ -356,19 +361,20 @@ describe('EventCapturer with presence', () => {
     expect(windows[0].endTimestamp).toBe(1000)
   })
 
-  it('rolls a present read into a contiguous window at max_duration', async () => {
-    activeAt = 1050
+  it('rolls a present read over at max_duration, ending each window at the last input', async () => {
+    present = true
+    lastInput = 1050
     capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 1000 }))
 
     vi.advanceTimersByTime(500)
     await flushAsyncAppends()
     expect(windows).toHaveLength(1)
     expect(windows[0].closedBy).toBe('max_duration')
-    expect(windows[0].endTimestamp).toBe(1500)
+    expect(windows[0].endTimestamp).toBe(1050)
 
-    activeAt = 1650
+    lastInput = 1650
     vi.advanceTimersByTime(200)
-    activeAt = null
+    present = false
     vi.advanceTimersByTime(100)
     await flushAsyncAppends()
 
@@ -379,41 +385,17 @@ describe('EventCapturer with presence', () => {
     expect(windows[1].events).toHaveLength(0)
   })
 
-  it('drops a rolled-over window that ends before any presence or input', async () => {
-    activeAt = 1050
+  it('drops a rolled-over window with no input after it opened', async () => {
+    present = true
+    lastInput = 1050
     capturer.handleEvent(makeEvent({ type: 'app_change', timestamp: 1000 }))
 
     vi.advanceTimersByTime(500)
-    activeAt = null
+    present = false
     vi.advanceTimersByTime(200)
     await flushAsyncAppends()
 
     expect(windows).toHaveLength(1)
     expect(windows[0].closedBy).toBe('max_duration')
-  })
-
-  it('opens a window for a no-input read when no window is open', async () => {
-    capturer.start()
-
-    vi.advanceTimersByTime(100)
-    await flushAsyncAppends()
-    expect(windows).toHaveLength(0)
-
-    activeAt = 1150
-    vi.advanceTimersByTime(100)
-    activeAt = 1250
-    vi.advanceTimersByTime(100)
-    activeAt = null
-    vi.advanceTimersByTime(100)
-    await flushAsyncAppends()
-
-    expect(windows).toHaveLength(1)
-    expect(windows[0].closedBy).toBe('gap')
-    expect(windows[0].startTimestamp).toBe(1150)
-    expect(windows[0].endTimestamp).toBe(1250)
-
-    vi.advanceTimersByTime(300)
-    await flushAsyncAppends()
-    expect(windows).toHaveLength(1)
   })
 })

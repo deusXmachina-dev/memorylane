@@ -31,7 +31,6 @@ import {
   type RuntimeCaptureController,
 } from '@main/capture/capture-controller'
 import { HostEnvironment } from '@main/monitoring/host-environment'
-import { EVENT_CAPTURER_CONFIG } from '../shared/constants'
 import { EvalRecorder } from './eval/eval-recorder'
 import { EvalFixtureStore } from './eval/eval-fixture-store'
 import { TaskFixtureStore } from './eval/task-fixture-store'
@@ -177,17 +176,7 @@ export async function createMainRuntime(params: {
     extractorTransformer: transformer,
     extractorSink: sink,
     retainScreenshots,
-    presence: EVENT_CAPTURER_CONFIG.PRESENCE_ENABLED
-      ? {
-          lastActiveAt: () => {
-            const idleSeconds = host.idleSeconds()
-            if (host.shouldPause() || idleSeconds >= EVENT_CAPTURER_CONFIG.AWAY_IDLE_SECONDS) {
-              return null
-            }
-            return Date.now() - idleSeconds * 1000
-          },
-        }
-      : undefined,
+    presence: host,
   })
 
   const capture: RuntimeCaptureController = createCaptureController({

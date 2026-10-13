@@ -4,7 +4,7 @@ import { isIP } from 'node:net'
 import log from '@main/utils/logger'
 import { describeNetworkError } from '@main/utils/network-error'
 import { isLoopbackUrl } from '@/shared/url-utils'
-import { HOST_RESOLVE_TIMEOUT_MS } from '@/shared/constants'
+import { EVENT_CAPTURER_CONFIG, HOST_RESOLVE_TIMEOUT_MS } from '@/shared/constants'
 
 export type StandDownReason = 'suspended' | 'offline' | 'unresolved'
 
@@ -84,6 +84,14 @@ export class HostEnvironment {
   /** Seconds since the last system-wide user input (mouse move counts), per the OS. */
   idleSeconds(): number {
     return powerMonitor.getSystemIdleTime()
+  }
+
+  isPresent(): boolean {
+    return !this.shouldPause() && this.idleSeconds() < EVENT_CAPTURER_CONFIG.AWAY_IDLE_SECONDS
+  }
+
+  lastInputAt(): number {
+    return Date.now() - this.idleSeconds() * 1000
   }
 
   resolves(host: string): Promise<boolean> {

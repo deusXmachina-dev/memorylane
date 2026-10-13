@@ -122,7 +122,6 @@ export function createPipelineHarness(params: {
       running = true
       try {
         await activityProducer.start()
-        eventCapturer.start()
         if (activityExtractor) {
           await activityExtractor.start()
         }

@@ -100,7 +100,6 @@ export const EVENT_CAPTURER_CONFIG = {
   GAP_TIMEOUT_MS: 5_000,
   MAX_WINDOW_DURATION_MS: 5 * 60 * 1000, // Safety cap only — most windows close via gap timer
   LATE_EVENT_GRACE_MS: 3_500, // Hold closed windows briefly to absorb debounced late arrivals
-  PRESENCE_ENABLED: true,
   // While OS idle (mouse movement counts) is below this and the screen is unlocked,
   // the gap timer keeps a no-input window (reading) open instead of closing it.
   AWAY_IDLE_SECONDS: 90,

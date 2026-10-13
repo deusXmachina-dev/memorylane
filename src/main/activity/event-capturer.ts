@@ -12,7 +12,7 @@ interface PendingWindow {
   boundaryTimestamp: number
   includeBoundaryTimestamp: boolean
   endTimestampOverride?: number
-  lastPresentAt?: number
+  lastInputAt?: number
   finalizeTimer: NodeJS.Timeout | null
 }
 
@@ -20,12 +20,11 @@ interface CloseWindowOptions {
   boundaryTimestamp?: number
   includeBoundaryTimestamp?: boolean
   waitForLateEvents?: boolean
-  endAtBoundary?: boolean
 }
 
 export interface PresenceProbe {
-  /** Timestamp of the user's last input while present, or null when away. */
-  lastActiveAt(): number | null
+  isPresent(): boolean
+  lastInputAt(): number
 }
 
 export class EventCapturer {
@@ -43,7 +42,6 @@ export class EventCapturer {
     id: string
     startTimestamp: number
     events: InteractionContext[]
-    lastPresentAt?: number
   } | null = null
 
   /**
@@ -56,9 +54,8 @@ export class EventCapturer {
 
   /**
    * Gap timer handle. Restarted on every handleEvent() call. When it fires
-   * (no new event within GAP_TIMEOUT_MS) and the user is no longer present, the
-   * current window closes with closedBy: 'gap'. While present (reading without
-   * input) it re-arms and extends the window to the last input.
+   * (no new event within GAP_TIMEOUT_MS), the current window closes with
+   * closedBy: 'gap'.
    */
   private gapTimer: NodeJS.Timeout | null = null
 
@@ -68,12 +65,6 @@ export class EventCapturer {
    * force-closes with closedBy: 'max_duration'. Safety valve only.
    */
   private maxDurationTimer: NodeJS.Timeout | null = null
-
-  /**
-   * Opens a window when the user is present but no window is open (reading
-   * after a gap, unlock or capture start). Runs between start() and destroy().
-   */
-  private presencePollTimer: NodeJS.Timeout | null = null
 
   constructor(
     eventStream: DurableStream<EventWindow>,
@@ -109,25 +100,12 @@ export class EventCapturer {
 
     // Lazy open: create a new window on the first event
     if (this.currentWindow === null) {
-      this.currentWindow = this.newWindow(this.nextWindowStartTimestamp ?? event.timestamp)
+      this.currentWindow = this.openWindow(this.nextWindowStartTimestamp ?? event.timestamp)
       this.nextWindowStartTimestamp = null
-      this.startMaxDurationTimer()
     }
 
     this.currentWindow.events.push(event)
     this.resetGapTimer()
-  }
-
-  start(): void {
-    if (this.presence === undefined || this.presencePollTimer !== null) return
-    this.presencePollTimer = setInterval(() => {
-      if (this.currentWindow !== null) return
-      const activeAt = this.lastActiveAt()
-      if (activeAt === null) return
-      this.currentWindow = this.newWindow(activeAt)
-      this.startMaxDurationTimer()
-      this.resetGapTimer()
-    }, EVENT_CAPTURER_CONFIG.GAP_TIMEOUT_MS)
   }
 
   /**
@@ -166,10 +144,6 @@ export class EventCapturer {
    * emitting. Used on app quit where we don't need the partial data.
    */
   destroy(): void {
-    if (this.presencePollTimer !== null) {
-      clearInterval(this.presencePollTimer)
-      this.presencePollTimer = null
-    }
     if (this.gapTimer !== null) {
       clearTimeout(this.gapTimer)
       this.gapTimer = null
@@ -201,15 +175,14 @@ export class EventCapturer {
     }
 
     const boundaryTimestamp = options?.boundaryTimestamp ?? Date.now()
-    const { startTimestamp, events, lastPresentAt } = this.currentWindow
-    if (events.length === 0 && (lastPresentAt ?? startTimestamp) <= startTimestamp) {
+    const { startTimestamp, events } = this.currentWindow
+    const lastInputAt = this.presence && Math.min(this.presence.lastInputAt(), boundaryTimestamp)
+    if (events.length === 0 && (lastInputAt ?? startTimestamp) <= startTimestamp) {
       this.currentWindow = null
       this.nextWindowStartTimestamp = null
       return
     }
 
-    const endAtBoundary =
-      (options?.endAtBoundary ?? reason === 'app_change') && Number.isFinite(boundaryTimestamp)
     const pendingWindow: PendingWindow = {
       id: this.currentWindow.id,
       startTimestamp: this.currentWindow.startTimestamp,
@@ -217,8 +190,11 @@ export class EventCapturer {
       closedBy: reason,
       boundaryTimestamp,
       includeBoundaryTimestamp: options?.includeBoundaryTimestamp ?? true,
-      endTimestampOverride: endAtBoundary ? boundaryTimestamp : undefined,
-      lastPresentAt: this.currentWindow.lastPresentAt,
+      endTimestampOverride:
+        reason === 'app_change' && Number.isFinite(boundaryTimestamp)
+          ? boundaryTimestamp
+          : undefined,
+      lastInputAt,
       finalizeTimer: null,
     }
 
@@ -231,12 +207,9 @@ export class EventCapturer {
     this.schedulePendingWindowFinalize(pendingWindow, finalizeDelayMs)
   }
 
-  private newWindow(startTimestamp: number): NonNullable<EventCapturer['currentWindow']> {
+  private openWindow(startTimestamp: number): NonNullable<EventCapturer['currentWindow']> {
+    this.startMaxDurationTimer()
     return { id: uuidv4(), startTimestamp, events: [] }
-  }
-
-  private lastActiveAt(): number | null {
-    return this.presence?.lastActiveAt() ?? null
   }
 
   private resetGapTimer(): void {
@@ -245,12 +218,7 @@ export class EventCapturer {
     }
     this.gapTimer = setTimeout(() => {
       this.gapTimer = null
-      const activeAt = this.lastActiveAt()
-      if (this.currentWindow !== null && activeAt !== null) {
-        this.currentWindow.lastPresentAt = Math.max(
-          this.currentWindow.lastPresentAt ?? activeAt,
-          activeAt,
-        )
+      if (this.presence?.isPresent()) {
         this.resetGapTimer()
         return
       }
@@ -262,11 +230,10 @@ export class EventCapturer {
     this.maxDurationTimer = setTimeout(() => {
       this.maxDurationTimer = null
       const boundaryTimestamp = Date.now()
-      const present = this.lastActiveAt() !== null
-      this.closeWindow('max_duration', { boundaryTimestamp, endAtBoundary: present })
+      const present = this.presence?.isPresent() ?? false
+      this.closeWindow('max_duration', { boundaryTimestamp })
       if (present) {
-        this.currentWindow = this.newWindow(boundaryTimestamp)
-        this.startMaxDurationTimer()
+        this.currentWindow = this.openWindow(boundaryTimestamp)
         this.resetGapTimer()
       }
     }, EVENT_CAPTURER_CONFIG.MAX_WINDOW_DURATION_MS)
@@ -352,7 +319,7 @@ export class EventCapturer {
     startTimestamp: number
     events: InteractionContext[]
     endTimestampOverride?: number
-    lastPresentAt?: number
+    lastInputAt?: number
   }): {
     startTimestamp: number
     endTimestamp: number
@@ -367,7 +334,7 @@ export class EventCapturer {
     const timestamps = window.events
       .map((event) => event.timestamp)
       .filter((timestamp) => Number.isFinite(timestamp))
-    if (window.lastPresentAt !== undefined) timestamps.push(window.lastPresentAt)
+    if (window.lastInputAt !== undefined) timestamps.push(window.lastInputAt)
     if (timestamps.length === 0) {
       return {
         startTimestamp: window.startTimestamp,
