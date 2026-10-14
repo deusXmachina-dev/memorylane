@@ -7,6 +7,7 @@ import path from 'node:path'
 import log from '@main/utils/logger'
 import { formatBytes, formatNumber } from '@main/utils/formatters'
 import type { MainRuntime } from '@main/runtime'
+import type { AppSync } from '@main/sync'
 import type { CaptureCoordinatorControls } from '@main/capture/capture-orchestrator'
 import { openMainWindow, stopEvalRecordingFromTray } from '@main/ui/main-window'
 import { getUpdateState, quitAndInstall } from '@main/system/updater'
@@ -15,6 +16,7 @@ import { CAPTURE_PAUSE_CONFIG, formatPauseDuration } from '@constants'
 
 interface TrayDependencies {
   runtime: MainRuntime
+  sync: AppSync
   capture: CaptureCoordinatorControls
 }
 
@@ -154,7 +156,7 @@ const updateTrayMenu = async (): Promise<void> => {
   const isCapturing = deps.capture.isCapturingNow()
   const { pausedUntilMs } = deps.capture.getPauseState()
   const isUserPaused = pausedUntilMs !== null
-  const requiresActivation = !isCapturing && deps.runtime.requiresActivation()
+  const requiresActivation = !isCapturing && deps.sync.requiresActivation()
   const { isPrivacyBlocked, blockedRecently } = trayPrivacyState.getStatus(isCapturing)
 
   // Keep the countdown label fresh while paused; stop refreshing otherwise.
