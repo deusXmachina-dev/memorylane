@@ -420,10 +420,13 @@ func shutdown() {
     }
 }
 
-signal(SIGTERM, SIG_IGN)
-let sigtermSource = DispatchSource.makeSignalSource(signal: SIGTERM, queue: shutdownQueue)
-sigtermSource.setEventHandler { shutdown() }
-sigtermSource.resume()
+let signalSources = [SIGTERM, SIGINT, SIGHUP].map { sig in
+    signal(sig, SIG_IGN)
+    let source = DispatchSource.makeSignalSource(signal: sig, queue: shutdownQueue)
+    source.setEventHandler { shutdown() }
+    source.resume()
+    return source
+}
 
 let semaphore = DispatchSemaphore(value: 0)
 Task {
