@@ -58,6 +58,8 @@ import type {
   VendorStatus,
 } from '../../shared/types'
 import type { MainRuntime } from '@main/runtime'
+import type { AppSettingsManager } from '@main/settings/app-settings-manager'
+import type { VendorCredentialsManager } from '@main/settings/vendor-credentials-manager'
 import type { AppSync } from '@main/sync'
 import type { CaptureCoordinatorControls } from '@main/capture/capture-orchestrator'
 import type { CaptureHotkeyManager } from '@main/capture/capture-hotkey-manager'
@@ -65,6 +67,8 @@ import type { ObservationController } from '@main/capture/observation-controller
 
 export interface MainWindowDependencies {
   editionConfig: AppEditionConfig
+  settings: AppSettingsManager
+  vendorCredentials: VendorCredentialsManager
   runtime: MainRuntime
   sync: AppSync
   capture: CaptureCoordinatorControls
@@ -549,7 +553,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
 
   ipcMain.handle('main-window:getCredentialStatuses', () => {
     if (!deps) return emptyStatuses()
-    return deps.runtime.vendorCredentials.getAllStatuses()
+    return deps.vendorCredentials.getAllStatuses()
   })
 
   ipcMain.handle(
@@ -562,9 +566,9 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         return { success: false, error: `Unknown vendor: ${vendor}` }
       }
       try {
-        deps.runtime.vendorCredentials.saveCredentials(vendor, creds)
+        deps.vendorCredentials.saveCredentials(vendor, creds)
         deps.runtime.credentialsChanged()
-        if (vendor === deps.runtime.settings.get().activeVendor) {
+        if (vendor === deps.settings.get().activeVendor) {
           void deps.runtime.semanticService.testConnection()
         }
         return { success: true }
@@ -583,7 +587,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: false, error: `Unknown vendor: ${vendor}` }
     }
     try {
-      deps.runtime.vendorCredentials.deleteCredentials(vendor)
+      deps.vendorCredentials.deleteCredentials(vendor)
       deps.runtime.credentialsChanged()
       return { success: true }
     } catch (error) {
@@ -601,8 +605,8 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: false, error: `Unknown vendor: ${vendor}` }
     }
     try {
-      const previousVendor = deps.runtime.settings.get().activeVendor
-      deps.runtime.settings.setActiveVendor(vendor)
+      const previousVendor = deps.settings.get().activeVendor
+      deps.settings.setActiveVendor(vendor)
       if (previousVendor !== vendor) {
         log.info(`[Settings] user changed active vendor: ${previousVendor} → ${vendor}`)
       }
@@ -653,17 +657,17 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       // Managed config is re-applied on every focus/poll; only react when it
       // actually changed, otherwise we'd clear caches and re-probe the LLM on
       // every window focus (DEU-176).
-      const changed = deps.runtime.vendorCredentials.saveManagedCredentials(vendor, {
+      const changed = deps.vendorCredentials.saveManagedCredentials(vendor, {
         apiKey: cfg.apiKey,
         ...(cfg.project !== undefined ? { project: cfg.project } : {}),
         ...(cfg.location !== undefined ? { location: cfg.location } : {}),
       })
       // Auto-switch active vendor — managed config is authoritative.
-      const settings = deps.runtime.settings.get()
+      const settings = deps.settings.get()
       const switching = settings.activeVendor !== vendor
       if (switching) {
         log.info(`[MainWindow] Switching active vendor to ${vendor} (managed)`)
-        deps.runtime.settings.setActiveVendor(vendor)
+        deps.settings.setActiveVendor(vendor)
       } else if (changed) {
         deps.runtime.credentialsChanged()
         void deps.runtime.semanticService.testConnection()
@@ -674,9 +678,9 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
     if (payload?.invalidate && deps) {
       for (const v of ['openrouter', 'google'] as const) {
-        if (deps.runtime.vendorCredentials.getStatus(v).source === 'managed') {
+        if (deps.vendorCredentials.getStatus(v).source === 'managed') {
           log.info(`[MainWindow] Invalidating stale managed key for ${v}`)
-          deps.runtime.vendorCredentials.deleteCredentials(v)
+          deps.vendorCredentials.deleteCredentials(v)
         }
       }
       deps.runtime.credentialsChanged()
@@ -888,14 +892,14 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   // Capture settings
   ipcMain.handle('main-window:getAppSettings', () => {
     if (!deps) return null
-    return deps.runtime.settings.get()
+    return deps.settings.get()
   })
 
   ipcMain.handle(
     'main-window:saveAppSettings',
     (_event: IpcMainInvokeEvent, partial: Partial<AppSettings>) => {
       if (!deps) return { success: false, error: 'Dependencies not initialized' }
-      const previous = deps.runtime.settings.get()
+      const previous = deps.settings.get()
       const sanitized: Partial<AppSettings> = { ...partial }
       try {
         if (
@@ -911,9 +915,9 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
           }
         }
 
-        deps.runtime.settings.save(sanitized)
-        deps.runtime.settings.applyToConstants()
-        const updated = deps.runtime.settings.get()
+        deps.settings.save(sanitized)
+        deps.settings.applyToConstants()
+        const updated = deps.settings.get()
         logAppSettingsChanges(previous, updated)
         syncAutoStartSetting(updated.autoStartEnabled)
         deps.runtime.notifyStateChanged()
@@ -933,15 +937,15 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
 
   ipcMain.handle('main-window:resetAppSettings', () => {
     if (!deps) return { success: false, error: 'Dependencies not initialized' }
-    const previous = deps.runtime.settings.get()
+    const previous = deps.settings.get()
     try {
-      deps.runtime.settings.reset()
-      deps.runtime.settings.applyToConstants()
-      const updated = deps.runtime.settings.get()
+      deps.settings.reset()
+      deps.settings.applyToConstants()
+      const updated = deps.settings.get()
       const hotkeyResult = deps.hotkey.reconfigure(updated.captureHotkeyAccelerator)
       if (!hotkeyResult.success) {
-        deps.runtime.settings.save(previous)
-        deps.runtime.settings.applyToConstants()
+        deps.settings.save(previous)
+        deps.settings.applyToConstants()
         return {
           success: false,
           error: hotkeyResult.error ?? 'Failed to reset start/stop shortcut',

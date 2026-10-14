@@ -191,7 +191,7 @@ app.on('ready', async () => {
     captureState.setAutoStartSyncedExecPath(process.execPath)
   }
 
-  const rt = await createMainRuntime({ edition, settings, vendorCredentials })
+  const rt = await createMainRuntime({ settings, vendorCredentials })
   runtime = rt
   const appSync = createSync({
     edition,
@@ -256,7 +256,16 @@ app.on('ready', async () => {
     log.info('[Updater] Skipping auto-updater for enterprise edition')
   }
 
-  initMainWindowIPC({ editionConfig, runtime: rt, sync: appSync, capture, hotkey, observation })
+  initMainWindowIPC({
+    editionConfig,
+    settings,
+    vendorCredentials,
+    runtime: rt,
+    sync: appSync,
+    capture,
+    hotkey,
+    observation,
+  })
 
   rt.start()
   appSync.start()

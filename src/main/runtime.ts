@@ -6,7 +6,6 @@ import * as interactionMonitor from '@main/recorder/interaction-monitor'
 import type { VendorCredentialsManager } from '@main/settings/vendor-credentials-manager'
 import type { AppSettingsManager } from '@main/settings/app-settings-manager'
 import { applySettingsChange } from '@main/settings/apply-settings'
-import type { AppEdition } from '@/shared/edition'
 import { StorageService } from '@main/storage'
 import { applyMigrations } from '@main/storage/migrator'
 import { applyPendingDatabaseImport } from '@main/ui/database-import'
@@ -39,9 +38,6 @@ import { listenerSet } from '@main/utils/listeners'
 const SHUTDOWN_DRAIN_MS = 3_000
 
 export interface MainRuntime {
-  edition: AppEdition
-  settings: AppSettingsManager
-  vendorCredentials: VendorCredentialsManager
   harness: PipelineHarness
   host: HostEnvironment
   storage: StorageService
@@ -66,11 +62,10 @@ export interface MainRuntime {
 }
 
 export async function createMainRuntime(params: {
-  edition: AppEdition
   settings: AppSettingsManager
   vendorCredentials: VendorCredentialsManager
 }): Promise<MainRuntime> {
-  const { edition, settings, vendorCredentials } = params
+  const { settings, vendorCredentials } = params
   const stateChanged = listenerSet<[]>()
   const privacyBlockingChanged = listenerSet<[boolean]>()
   const initialSettings = settings.get()
@@ -252,9 +247,6 @@ export async function createMainRuntime(params: {
   }
 
   return {
-    edition,
-    settings,
-    vendorCredentials,
     harness,
     host,
     storage,
