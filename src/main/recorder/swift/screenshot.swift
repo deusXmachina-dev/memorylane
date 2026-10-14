@@ -249,6 +249,10 @@ class AutonomousCapture: NSObject, SCStreamOutput {
         self.currentDisplayId = nil
     }
 
+    func drainWrites() {
+        writeQueue.sync {}
+    }
+
     func updateIntervalMs(_ ms: Int) async {
         config.intervalMs = ms
         // Must recreate stream to change minimumFrameInterval
@@ -408,13 +412,16 @@ try FileManager.default.createDirectory(
 let capture = AutonomousCapture(config: config)
 
 let shutdownQueue = DispatchQueue(label: "com.memorylane.screenshot.shutdown")
+let shutdownTimeout: TimeInterval = 0.5
 var shuttingDown = false
 func shutdown() {
     shutdownQueue.async {
-        if shuttingDown { return }
+        if shuttingDown { exit(0) }
         shuttingDown = true
+        shutdownQueue.asyncAfter(deadline: .now() + shutdownTimeout) { exit(0) }
         Task {
             await capture.stopStream()
+            capture.drainWrites()
             exit(0)
         }
     }

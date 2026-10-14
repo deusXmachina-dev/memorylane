@@ -92,8 +92,10 @@ export class ScreenshotDaemon implements ScreenCaptureBackend {
   private started = false
   private restartTimer: ReturnType<typeof setTimeout> | null = null
   private config: CaptureBackendConfig | null = null
+  private stopping: Promise<void> | null = null
 
   async start(config: CaptureBackendConfig): Promise<void> {
+    await this.stopping
     if (this.started) return
     this.config = config
     fs.mkdirSync(config.outputDir, { recursive: true })
@@ -103,11 +105,15 @@ export class ScreenshotDaemon implements ScreenCaptureBackend {
   }
 
   async stop(): Promise<void> {
+    if (this.stopping) return this.stopping
     if (!this.started) return
     this.started = false
     this.config = null
     this.cancelScheduledRestart()
-    await this.killProcess()
+    this.stopping = this.killProcess().finally(() => {
+      this.stopping = null
+    })
+    return this.stopping
   }
 
   send(command: CaptureBackendCommand): void {
@@ -236,36 +242,42 @@ export class ScreenshotDaemon implements ScreenCaptureBackend {
 
   private async killProcess(): Promise<void> {
     const proc = this.process
+    const rl = this.rl
     this.process = null
-    this.rl?.close()
     this.rl = null
-    if (!proc) return
+    if (!proc) {
+      rl?.close()
+      return
+    }
 
-    const closed = new Promise<void>((resolve) => proc.once('close', () => resolve()))
-    const closedWithin = (ms: number): Promise<boolean> => {
+    const exited = new Promise<void>((resolve) => {
+      if (proc.exitCode !== null || proc.signalCode !== null) resolve()
+      else proc.once('exit', () => resolve())
+    })
+    const exitedWithin = (ms: number): Promise<boolean> => {
       let timer: ReturnType<typeof setTimeout>
       const timeout = new Promise<boolean>((resolve) => {
         timer = setTimeout(() => resolve(false), ms)
       })
-      return Promise.race([closed.then(() => true), timeout]).finally(() => clearTimeout(timer))
+      return Promise.race([exited.then(() => true), timeout]).finally(() => clearTimeout(timer))
     }
 
     try {
       proc.stdin?.end()
-    } catch {
-      // best-effort
-    }
-    if (await closedWithin(DAEMON_EXIT_GRACE_MS)) return
-    try {
-      proc.kill('SIGTERM')
-    } catch {
-      // best-effort
-    }
-    if (await closedWithin(DAEMON_EXIT_GRACE_MS)) return
-    try {
-      proc.kill('SIGKILL')
-    } catch {
-      // best-effort
+      if (await exitedWithin(DAEMON_EXIT_GRACE_MS)) return
+      try {
+        proc.kill('SIGTERM')
+      } catch {
+        // best-effort
+      }
+      if (await exitedWithin(DAEMON_EXIT_GRACE_MS)) return
+      try {
+        proc.kill('SIGKILL')
+      } catch {
+        // best-effort
+      }
+    } finally {
+      rl?.close()
     }
   }
 

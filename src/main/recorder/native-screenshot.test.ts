@@ -36,6 +36,7 @@ function createMockChildProcess(pid: number): MockChildProcess {
   child.stdout = new PassThrough()
   child.stderr = new PassThrough()
   child.pid = pid
+  Object.assign(child, { exitCode: null, signalCode: null })
   child.kill = vi.fn().mockReturnValue(true)
   return child
 }
@@ -106,7 +107,10 @@ describe('ScreenshotDaemon', () => {
 
     const child = createMockChildProcess(404)
     vi.mocked(childProcess.spawn).mockReturnValue(child)
-    child.stdin.on('finish', () => child.emit('close', 0))
+    child.stdin.on('finish', () => {
+      child.emit('exit', 0)
+      child.emit('close', 0)
+    })
 
     const daemon = new ScreenshotDaemon({
       getExecutable: () => ({ command: '/tmp/screenshot', args: [] }),
@@ -158,7 +162,7 @@ describe('ScreenshotDaemon', () => {
     const child = createMockChildProcess(606)
     vi.mocked(childProcess.spawn).mockReturnValue(child)
     vi.mocked(child.kill).mockImplementation(() => {
-      child.emit('close', null)
+      child.emit('exit', null)
       return true
     })
 
@@ -175,6 +179,42 @@ describe('ScreenshotDaemon', () => {
 
     expect(child.kill).toHaveBeenCalledTimes(1)
     expect(child.kill).toHaveBeenCalledWith('SIGTERM')
+  })
+
+  it('concurrent stops share one shutdown and start waits for it', async () => {
+    vi.useFakeTimers()
+    const childProcess = await import('child_process')
+    const { ScreenshotDaemon } = await import('./native-screenshot')
+
+    const firstChild = createMockChildProcess(707)
+    const secondChild = createMockChildProcess(808)
+    vi.mocked(childProcess.spawn).mockReturnValueOnce(firstChild).mockReturnValueOnce(secondChild)
+
+    const daemon = new ScreenshotDaemon({
+      getExecutable: () => ({ command: '/tmp/screenshot', args: [] }),
+      buildSpawnArgs: () => [],
+      buildCommandPayload: (command) => command,
+    })
+    await daemon.start({ outputDir: '/tmp/memorylane-test', onFrame: vi.fn() })
+
+    let secondStopDone = false
+    const firstStop = daemon.stop()
+    const secondStop = daemon.stop().then(() => {
+      secondStopDone = true
+    })
+    const restarted = daemon.start({ outputDir: '/tmp/memorylane-test', onFrame: vi.fn() })
+
+    await vi.advanceTimersByTimeAsync(500)
+    expect(secondStopDone).toBe(false)
+    expect(childProcess.spawn).toHaveBeenCalledTimes(1)
+
+    firstChild.emit('exit', 0)
+    await Promise.all([firstStop, secondStop, restarted])
+    expect(childProcess.spawn).toHaveBeenCalledTimes(2)
+
+    const stopped = daemon.stop()
+    await vi.advanceTimersByTimeAsync(2_000)
+    await stopped
   })
 
   it('survives a stdin write that fails after the daemon dies', async () => {

@@ -189,13 +189,16 @@ export function createPipelineHarness(params: {
       cleanupTimer = null
     }
     const captureStopped = screenCapturer.stop()
-    await eventCapturer.flushAndWait()
-    await activityProducer.stop()
-    if (activityExtractor) {
-      await activityExtractor.stop()
+    try {
+      await eventCapturer.flushAndWait()
+      await activityProducer.stop()
+      if (activityExtractor) {
+        await activityExtractor.stop()
+      }
+      eventCapturer.destroy()
+    } finally {
+      await captureStopped
     }
-    eventCapturer.destroy()
-    await captureStopped
   }
 
   const blacklist = createCaptureBlacklistCoordinator({
