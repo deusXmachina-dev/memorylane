@@ -66,6 +66,7 @@ export class TaskMiner {
   private lastSkipKey: string | null = null
   private statusListener?: () => void
   private stopped = false
+  private inFlight: Promise<void> = Promise.resolve()
 
   // The app injects the MlWorkerClient; enode scripts pass an in-process
   // EmbeddingService (no utilityProcess there). Not defaulted — a default
@@ -118,27 +119,33 @@ export class TaskMiner {
   }
 
   /**
-   * Startup entry point: recover days left `running` by a crash, then start
-   * the poll that drives every sweep. The first tick — not launch itself —
-   * starts the first sweep, so the launch path stays calm and a fresh DB
-   * begins its 60-day seed a few minutes in without any external trigger.
+   * Startup entry point: recover days left `running` by a crash, rebuild
+   * clusters wiped by a migration, then start the poll that drives every
+   * sweep. The first tick — not launch itself — starts the first sweep, so
+   * the launch path stays calm and a fresh DB begins its 60-day seed a few
+   * minutes in without any external trigger.
    */
   startup(): void {
     if (this.stopped) return
     const recovered = this.storage.miningDays.resetStaleRunning(TASK_BACKFILL.MAX_DAY_ATTEMPTS)
     if (recovered) log.info(`[TaskMiner] Recovered ${recovered} interrupted mining day(s)`)
+    this.inFlight = this.rebuildClustersIfEmpty()
     if (!this.pollTimer) {
       this.pollTimer = setInterval(() => this.scheduleRun(), TASK_BACKFILL.POLL_INTERVAL_MS)
     }
   }
 
-  /** Stops the poll and keeps a running sweep from claiming further days. */
-  stop(): void {
+  /**
+   * Stops the poll, keeps a running sweep from claiming further days, and
+   * resolves once in-flight work has settled.
+   */
+  stop(): Promise<void> {
     this.stopped = true
     if (this.pollTimer) {
       clearInterval(this.pollTimer)
       this.pollTimer = null
     }
+    return this.inFlight
   }
 
   getStatus(): MiningStatus {
@@ -239,7 +246,7 @@ export class TaskMiner {
       return
     }
 
-    void this.sweepIfResolvable(this.provider)
+    this.inFlight = this.sweepIfResolvable(this.provider)
   }
 
   private async sweepIfResolvable(provider: InferenceProvider): Promise<void> {

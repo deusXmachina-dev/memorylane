@@ -407,6 +407,21 @@ describe('TaskMiner sweep', () => {
     expect(storage.miningDays.getAll().every((d) => d.status === 'completed')).toBe(true)
   })
 
+  it('stop() resolves only after the in-flight sweep settles', async () => {
+    useFakeClockAtNoon()
+    seedDays(2)
+    seedFiller()
+
+    miner.startup()
+    vi.advanceTimersByTime(TASK_BACKFILL.POLL_INTERVAL_MS)
+    expect(miner.isBusy()).toBe(true)
+
+    await miner.stop()
+
+    expect(miner.isBusy()).toBe(false)
+    expect(storage.miningDays.getRunningDay()).toBeNull()
+  })
+
   it('a single day failure gates only that day, not the next sweep', async () => {
     useFakeClockAtNoon()
     seedDays(2)

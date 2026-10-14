@@ -418,7 +418,7 @@ describe('BackendUpload', () => {
 
     host.suspend()
     upload.kick('interval')
-    await upload.stop()
+    await new Promise((resolve) => setImmediate(resolve))
     expect(fetchMock).not.toHaveBeenCalled()
 
     host.resume()

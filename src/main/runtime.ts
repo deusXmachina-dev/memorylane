@@ -272,9 +272,7 @@ export async function createMainRuntime(params: {
     notifyStateChanged: () => stateChanged.emit(),
     onPrivacyBlockingChanged: privacyBlockingChanged.add,
     start(): void {
-      // After a derived-data wipe migration the DB is still mined, so clusters
-      // rebuild from sightings before the sweep poll starts.
-      void taskMiner.rebuildClustersIfEmpty().then(() => taskMiner.startup())
+      taskMiner.startup()
       host.onAwake(() => taskMiner.kick())
     },
     async purgeAll(): Promise<void> {
@@ -288,29 +286,26 @@ export async function createMainRuntime(params: {
     dispose(): Promise<void> {
       if (disposePromise) return disposePromise
       disposePromise = (async () => {
-        step('stop task miner', () => taskMiner.stop())
         step('stop user context builder', () => userContextBuilder.stop())
         unsubscribeSettings()
-        const stopped = (async () => {
-          await harness.flushEvents()
-          await harness.stop()
-        })().then(
-          () => true,
-          (error) => {
-            log.warn('[Runtime] Error while stopping capture during dispose:', error)
-            return true
-          },
-        )
-        // Draining summarizes the last activity (stitching + an LLM call),
-        // which can outlast the quit deadline; give up on it rather than hang.
-        const drained = await Promise.race([
-          stopped,
-          new Promise<false>((resolve) => setTimeout(() => resolve(false), SHUTDOWN_DRAIN_MS)),
+        // Draining summarizes the last activity (stitching + an LLM call) and
+        // finishes the mining day in flight, either of which can outlast the
+        // quit deadline; give up on them rather than hang.
+        let drained = false
+        const drain = Promise.all([
+          taskMiner.stop(),
+          harness.flushEvents().then(() => harness.stop()),
+        ])
+          .catch((error) => log.warn('[Runtime] Error while draining during dispose:', error))
+          .then(() => {
+            drained = true
+          })
+        await Promise.race([
+          drain,
+          new Promise((resolve) => setTimeout(resolve, SHUTDOWN_DRAIN_MS)),
         ])
         if (!drained) {
-          log.warn(
-            `[Runtime] Activity extraction still running after ${SHUTDOWN_DRAIN_MS}ms; dropping it`,
-          )
+          log.warn(`[Runtime] Still draining after ${SHUTDOWN_DRAIN_MS}ms; dropping it`)
         }
         step('dispose pipeline harness', () => harness.dispose())
         step('dispose semantic service', () => semanticService.dispose())

@@ -17,6 +17,7 @@ export class PeriodicJob {
   private rerunRequested = false
   private rerunForce = false
   private inFlight: Promise<void> = Promise.resolve()
+  private stopped = false
 
   constructor(private readonly params: PeriodicJobParams) {}
 
@@ -28,6 +29,7 @@ export class PeriodicJob {
   }
 
   async stop(): Promise<void> {
+    this.stopped = true
     if (this.timer !== null) {
       clearInterval(this.timer)
       this.timer = null
@@ -40,6 +42,7 @@ export class PeriodicJob {
   }
 
   run(reason: string, force = false): Promise<void> {
+    if (this.stopped) return this.inFlight
     if (this.running) {
       this.rerunRequested = true
       this.rerunForce ||= force
