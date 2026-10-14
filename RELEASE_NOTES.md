@@ -1,14 +1,11 @@
-# MemoryLane v1.5.11-alpha.4
+# MemoryLane v1.5.11-alpha.5
 
-Main-process cleanup, faster quit, better reading-time windows.
+Cleaner screen-capture shutdown on macOS.
 
 ## What's Changed
 
-- **Reading time ends at your last input**: the presence heartbeat is replaced by an idle-aware window close, so windows no longer stretch past when you stopped reading (#303).
-- **Faster quit**: the last activity's summary is given 3s at shutdown instead of blocking exit.
-- **Periodic export folder removed**: the manual ZIP export stays; a stale folder setting is ignored.
-- **Main-process wiring cleanup**: settings apply in one place, background sync has its own module, and the task miner stops cleanly at quit (#304).
-- **Removed legacy migrations** for pre-v2 vendor credentials and pre-bundle-id excluded apps.
+- **Clean capture stop on macOS**: the screenshot stream stops before the capture helper exits, quit no longer waits on it, and a stuck helper is force-closed after 0.5s (#305).
+- **Sync cleanup**: background sync owns its backend connection and access refresh (#306).
 
 ## Known Issues & Limitations
 
@@ -26,4 +23,4 @@ Main-process cleanup, faster quit, better reading-time windows.
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.11-alpha.3...v1.5.11-alpha.4
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.11-alpha.4...v1.5.11-alpha.5

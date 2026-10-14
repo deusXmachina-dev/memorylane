@@ -81,6 +81,7 @@ export function createScreenCaptureBackend(): ScreenCaptureBackend {
 
 const DAEMON_MAX_RESTARTS = 5
 const DAEMON_RESTART_BACKOFF_MS = 1_000
+const DAEMON_EXIT_GRACE_MS = 1_000
 
 export class ScreenshotDaemon implements ScreenCaptureBackend {
   constructor(private readonly adapter?: ScreenshotPlatformAdapter) {}
@@ -91,8 +92,10 @@ export class ScreenshotDaemon implements ScreenCaptureBackend {
   private started = false
   private restartTimer: ReturnType<typeof setTimeout> | null = null
   private config: CaptureBackendConfig | null = null
+  private stopping: Promise<void> | null = null
 
   async start(config: CaptureBackendConfig): Promise<void> {
+    await this.stopping
     if (this.started) return
     this.config = config
     fs.mkdirSync(config.outputDir, { recursive: true })
@@ -102,11 +105,15 @@ export class ScreenshotDaemon implements ScreenCaptureBackend {
   }
 
   async stop(): Promise<void> {
+    if (this.stopping) return this.stopping
     if (!this.started) return
     this.started = false
     this.config = null
     this.cancelScheduledRestart()
-    this.killProcess()
+    this.stopping = this.killProcess().finally(() => {
+      this.stopping = null
+    })
+    return this.stopping
   }
 
   send(command: CaptureBackendCommand): void {
@@ -167,7 +174,9 @@ export class ScreenshotDaemon implements ScreenCaptureBackend {
     })
 
     proc.on('close', (code) => {
-      log.warn(`[ScreenshotDaemon] Process exited with code ${code}`)
+      const line = `[ScreenshotDaemon] Process exited with code ${code}`
+      if (code === 0) log.info(line)
+      else log.warn(line)
       this.handleProcessExit(proc)
     })
   }
@@ -231,18 +240,45 @@ export class ScreenshotDaemon implements ScreenCaptureBackend {
     }
   }
 
-  private killProcess(): void {
-    if (this.process) {
+  private async killProcess(): Promise<void> {
+    const proc = this.process
+    const rl = this.rl
+    this.process = null
+    this.rl = null
+    if (!proc) {
+      rl?.close()
+      return
+    }
+
+    const exited = new Promise<void>((resolve) => {
+      if (proc.exitCode !== null || proc.signalCode !== null) resolve()
+      else proc.once('exit', () => resolve())
+    })
+    const exitedWithin = (ms: number): Promise<boolean> => {
+      let timer: ReturnType<typeof setTimeout>
+      const timeout = new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), ms)
+      })
+      return Promise.race([exited.then(() => true), timeout]).finally(() => clearTimeout(timer))
+    }
+
+    try {
+      proc.stdin?.end()
+      if (await exitedWithin(DAEMON_EXIT_GRACE_MS)) return
       try {
-        this.process.stdin?.end()
-        this.process.kill('SIGTERM')
+        proc.kill('SIGTERM')
       } catch {
         // best-effort
       }
-      this.process = null
+      if (await exitedWithin(DAEMON_EXIT_GRACE_MS)) return
+      try {
+        proc.kill('SIGKILL')
+      } catch {
+        // best-effort
+      }
+    } finally {
+      rl?.close()
     }
-    this.rl?.close()
-    this.rl = null
   }
 
   private getAdapter(): ScreenshotPlatformAdapter {
