@@ -138,8 +138,8 @@ app.on('before-quit', (event) => {
   observation?.dispose()
 
   const steps: Array<[name: string, step: Promise<unknown> | undefined]> = [
-    ['runtime.dispose', runtime?.dispose()],
     ...(sync?.stop() ?? []),
+    ['runtime.dispose', runtime?.dispose()],
   ]
   const pendingSteps = new Set(steps.filter(([, step]) => step).map(([name]) => name))
 
