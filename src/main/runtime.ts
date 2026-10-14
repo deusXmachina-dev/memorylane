@@ -5,10 +5,7 @@ import log from '@main/utils/logger'
 import * as interactionMonitor from '@main/recorder/interaction-monitor'
 import type { VendorCredentialsManager } from '@main/settings/vendor-credentials-manager'
 import type { AppSettingsManager } from '@main/settings/app-settings-manager'
-import type { DeviceIdentity } from '@main/settings/device-identity'
 import { applySettingsChange } from '@main/settings/apply-settings'
-import { createAccessProvider, type AccessProvider } from '@main/access'
-import { requiresActivation } from '@main/access/types'
 import type { AppEdition } from '@/shared/edition'
 import { StorageService } from '@main/storage'
 import { applyMigrations } from '@main/storage/migrator'
@@ -18,7 +15,6 @@ import { UsageTracker } from '@main/services/usage-tracker'
 import { SummaryModeTracker } from '@main/services/summary-mode-tracker'
 import { TaskMiner } from '@main/services/task-miner'
 import { UserContextBuilder } from '@main/services/user-context-builder'
-import { BackendClient } from '@main/services/backend-client'
 import { readRemoteModelConfig } from '@main/services/remote-model-config-store'
 import type { RemoteModelConfig } from '@/shared/remote-model-config'
 import { pushModelSelections, resolveModelPush } from '@main/ui/apply-models'
@@ -38,7 +34,6 @@ import { EvalFixtureStore } from '@main/eval/eval-fixture-store'
 import { TaskFixtureStore } from '@main/eval/task-fixture-store'
 import { registerEvalMediaProtocol } from '@main/eval/eval-media-protocol'
 import { MlWorkerClient } from '@main/services/ml-worker-client'
-import { backendUrlFor } from '@main/system/edition'
 import { listenerSet } from '@main/utils/listeners'
 
 const SHUTDOWN_DRAIN_MS = 3_000
@@ -47,23 +42,18 @@ export interface MainRuntime {
   edition: AppEdition
   settings: AppSettingsManager
   vendorCredentials: VendorCredentialsManager
-  deviceIdentity: DeviceIdentity
   harness: PipelineHarness
   host: HostEnvironment
   storage: StorageService
   usageTracker: UsageTracker
   inferenceProvider: InferenceProvider
   semanticService: ActivitySemanticService
-  accessProvider: AccessProvider
-  backend: BackendClient
   taskMiner: TaskMiner
   userContextBuilder: UserContextBuilder
   evalRecorder: EvalRecorder
   evalFixtureStore: EvalFixtureStore
   taskFixtureStore: TaskFixtureStore
   isManaged(): boolean
-  isEnterpriseActivated(): boolean
-  requiresActivation(): boolean
   isPurging(): boolean
   setRemoteModelConfig(config: RemoteModelConfig): void
   credentialsChanged(): void
@@ -79,9 +69,8 @@ export async function createMainRuntime(params: {
   edition: AppEdition
   settings: AppSettingsManager
   vendorCredentials: VendorCredentialsManager
-  deviceIdentity: DeviceIdentity
 }): Promise<MainRuntime> {
-  const { edition, settings, vendorCredentials, deviceIdentity } = params
+  const { edition, settings, vendorCredentials } = params
   const stateChanged = listenerSet<[]>()
   const privacyBlockingChanged = listenerSet<[boolean]>()
   const initialSettings = settings.get()
@@ -91,16 +80,8 @@ export async function createMainRuntime(params: {
     credentials: vendorCredentials,
     getActiveVendor: () => settings.get().activeVendor,
   })
-  const accessProvider = createAccessProvider(edition, deviceIdentity)
   const isManaged = (): boolean =>
     vendorCredentials.getStatus(settings.get().activeVendor).source === 'managed'
-  const isEnterpriseActivated = (): boolean => accessProvider.getAccessState().isEnterpriseActivated
-
-  const backend = new BackendClient({
-    getDeviceId: () => deviceIdentity.getDeviceId(),
-    getBackendUrl: () => backendUrlFor(edition),
-    env: host,
-  })
   let remoteModelConfig = readRemoteModelConfig()
   const getRemoteModelConfig = () => (isManaged() ? remoteModelConfig : null)
 
@@ -274,23 +255,18 @@ export async function createMainRuntime(params: {
     edition,
     settings,
     vendorCredentials,
-    deviceIdentity,
     harness,
     host,
     storage,
     usageTracker,
     inferenceProvider,
     semanticService,
-    accessProvider,
-    backend,
     taskMiner,
     userContextBuilder,
     evalRecorder,
     evalFixtureStore,
     taskFixtureStore,
     isManaged,
-    isEnterpriseActivated,
-    requiresActivation: () => requiresActivation(accessProvider.getAccessState()),
     isPurging: () => purging,
     setRemoteModelConfig(config): void {
       remoteModelConfig = config
@@ -299,13 +275,11 @@ export async function createMainRuntime(params: {
     credentialsChanged(): void {
       applyModels()
       inferenceProvider.notifyConfigChanged()
-      void semanticService.testConnection()
     },
     onStateChanged: stateChanged.add,
     notifyStateChanged: () => stateChanged.emit(),
     onPrivacyBlockingChanged: privacyBlockingChanged.add,
     start(): void {
-      accessProvider.startPeriodicRefresh()
       // After a derived-data wipe migration the DB is still mined, so clusters
       // rebuild from sightings before the sweep poll starts.
       void taskMiner.rebuildClustersIfEmpty().then(() => taskMiner.startup())
@@ -322,7 +296,6 @@ export async function createMainRuntime(params: {
     dispose(): Promise<void> {
       if (disposePromise) return disposePromise
       disposePromise = (async () => {
-        step('stop access refresh', () => accessProvider.stopPeriodicRefresh())
         step('stop task miner', () => taskMiner.stop())
         step('stop user context builder', () => userContextBuilder.stop())
         unsubscribeSettings()

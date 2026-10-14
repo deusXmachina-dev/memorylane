@@ -138,8 +138,8 @@ app.on('before-quit', (event) => {
   observation?.dispose()
 
   const steps: Array<[name: string, step: Promise<unknown> | undefined]> = [
-    ['runtime.dispose', runtime?.dispose()],
     ...(sync?.stop() ?? []),
+    ['runtime.dispose', runtime?.dispose()],
   ]
   const pendingSteps = new Set(steps.filter(([, step]) => step).map(([name]) => name))
 
@@ -191,27 +191,33 @@ app.on('ready', async () => {
     captureState.setAutoStartSyncedExecPath(process.execPath)
   }
 
-  const rt = await createMainRuntime({
+  const rt = await createMainRuntime({ edition, settings, vendorCredentials })
+  runtime = rt
+  const appSync = createSync({
     edition,
     settings,
-    vendorCredentials,
     deviceIdentity: new DeviceIdentity(),
+    vendorCredentials,
+    storage: rt.storage,
+    host: rt.host,
+    isManaged: rt.isManaged,
+    onRemoteModelConfig: (config) => rt.setRemoteModelConfig(config),
+    onManagedExclusions: (exclusions) => rt.harness.setManagedExclusions(exclusions),
   })
-  runtime = rt
-  sync = createSync(rt)
+  sync = appSync
 
   const coordinator = createCaptureCoordinator({
     harness: rt.harness,
     captureStateManager: captureState,
-    isPaused: () => rt.isPurging() || rt.host.shouldPause() || rt.requiresActivation(),
+    isPaused: () => rt.isPurging() || rt.host.shouldPause() || appSync.requiresActivation(),
     userContextBuilder: rt.userContextBuilder,
     onStateChanged: () => rt.notifyStateChanged(),
   })
   const capture = coordinator.controls
 
-  let activationBlocked = rt.requiresActivation()
-  rt.accessProvider.addUpdateListener(() => {
-    const blocked = rt.requiresActivation()
+  let activationBlocked = appSync.requiresActivation()
+  appSync.access.addUpdateListener(() => {
+    const blocked = appSync.requiresActivation()
     if (blocked === activationBlocked) return
     activationBlocked = blocked
     if (blocked) coordinator.suspendCapture('device not activated')
@@ -239,7 +245,7 @@ app.on('ready', async () => {
     onUpdate: (state) => sendObservationUpdate(state),
   })
 
-  setupTray({ runtime: rt, capture })
+  setupTray({ runtime: rt, sync: appSync, capture })
 
   if (edition === 'customer') {
     initAutoUpdater(() => {
@@ -250,10 +256,10 @@ app.on('ready', async () => {
     log.info('[Updater] Skipping auto-updater for enterprise edition')
   }
 
-  initMainWindowIPC({ editionConfig, runtime: rt, sync, capture, hotkey, observation })
+  initMainWindowIPC({ editionConfig, runtime: rt, sync: appSync, capture, hotkey, observation })
 
   rt.start()
-  sync.start()
+  appSync.start()
   coordinator.resumeCaptureIfDesired('startup')
 
   if (!shouldStartHiddenOnLaunch()) openMainWindow()

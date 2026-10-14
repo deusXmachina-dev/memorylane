@@ -429,7 +429,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         error: null,
       } satisfies AccessState
     }
-    return deps.runtime.accessProvider.getAccessState()
+    return deps.sync.access.getAccessState()
   })
   handle('main-window:refreshAccessState', async () => {
     if (!deps) {
@@ -442,8 +442,8 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       } satisfies AccessState
     }
 
-    await deps.runtime.accessProvider.refreshAccessState()
-    return deps.runtime.accessProvider.getAccessState()
+    await deps.sync.access.refreshAccessState()
+    return deps.sync.access.getAccessState()
   })
   ipcMain.handle(
     'main-window:activateEnterpriseLicense',
@@ -453,7 +453,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       }
 
       try {
-        await deps.runtime.accessProvider.activateEnterpriseLicense(activationCode)
+        await deps.sync.access.activateEnterpriseLicense(activationCode)
         return { success: true }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Activation failed'
@@ -466,7 +466,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   ipcMain.handle('main-window:getPendingConsent', async () => {
     if (!deps) return null
     try {
-      return await deps.runtime.accessProvider.getPendingConsent()
+      return await deps.sync.access.getPendingConsent()
     } catch (error) {
       log.warn('[MainWindow] Failed to fetch pending consent document:', error)
       return null
@@ -478,7 +478,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: false, error: 'Dependencies not initialized' }
     }
     try {
-      await deps.runtime.accessProvider.submitConsentDecision(outcome)
+      await deps.sync.access.submitConsentDecision(outcome)
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Consent request failed'
@@ -563,7 +563,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       }
       try {
         deps.runtime.vendorCredentials.saveCredentials(vendor, creds)
-        deps.runtime.inferenceProvider.notifyConfigChanged()
+        deps.runtime.credentialsChanged()
         if (vendor === deps.runtime.settings.get().activeVendor) {
           void deps.runtime.semanticService.testConnection()
         }
@@ -584,7 +584,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
     try {
       deps.runtime.vendorCredentials.deleteCredentials(vendor)
-      deps.runtime.inferenceProvider.notifyConfigChanged()
+      deps.runtime.credentialsChanged()
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -646,7 +646,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   })
 
   // Subscription / managed key — provider chosen by backend (openrouter | vertex).
-  deps.runtime.accessProvider.addUpdateListener((state, payload) => {
+  deps.sync.access.addUpdateListener((state, payload) => {
     if (payload?.config && deps) {
       const cfg = payload.config
       const vendor: Vendor = cfg.provider === 'vertex' ? 'google' : 'openrouter'
@@ -666,6 +666,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         deps.runtime.settings.setActiveVendor(vendor)
       } else if (changed) {
         deps.runtime.credentialsChanged()
+        void deps.runtime.semanticService.testConnection()
       }
       if (switching || changed) {
         void deps.sync.remoteModels.sync()
@@ -678,7 +679,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
           deps.runtime.vendorCredentials.deleteCredentials(v)
         }
       }
-      deps.runtime.inferenceProvider.notifyConfigChanged()
+      deps.runtime.credentialsChanged()
     }
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('main-window:accessStateChanged', state)
@@ -691,17 +692,17 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
 
   handle('main-window:startCheckout', async (_event, plan: SubscriptionPlan) => {
     if (!deps) return
-    await deps.runtime.accessProvider.startCheckout(plan)
+    await deps.sync.access.startCheckout(plan)
   })
 
   handle('main-window:openSubscriptionPortal', async () => {
     if (!deps) return
-    await deps.runtime.accessProvider.openSubscriptionPortal()
+    await deps.sync.access.openSubscriptionPortal()
   })
 
   handle('main-window:getSubscriptionStatus', () => {
     if (!deps) return 'idle'
-    return deps.runtime.accessProvider.getAccessState().customerSubscriptionStatus ?? 'idle'
+    return deps.sync.access.getAccessState().customerSubscriptionStatus ?? 'idle'
   })
 
   // Patterns (task clusters)

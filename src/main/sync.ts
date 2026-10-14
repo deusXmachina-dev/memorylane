@@ -1,5 +1,15 @@
 import { app } from 'electron'
-import type { MainRuntime } from '@main/runtime'
+import { createAccessProvider, type AccessProvider } from '@main/access'
+import { requiresActivation } from '@main/access/types'
+import type { AppEdition } from '@/shared/edition'
+import type { RemoteModelConfig } from '@/shared/remote-model-config'
+import type { AppSettingsManager } from '@main/settings/app-settings-manager'
+import type { DeviceIdentity } from '@main/settings/device-identity'
+import type { VendorCredentialsManager } from '@main/settings/vendor-credentials-manager'
+import type { StorageService } from '@main/storage'
+import type { HostEnvironment } from '@main/monitoring/host-environment'
+import { BackendClient } from '@main/services/backend-client'
+import { backendUrlFor } from '@main/system/edition'
 import { BackendUpload } from '@main/services/backend-upload'
 import { databaseUploadJob } from '@main/services/database-upload-job'
 import { logUploadJob } from '@main/services/log-upload-job'
@@ -20,7 +30,22 @@ export interface ManagedExclusions {
   urlPatterns: string[]
 }
 
+export interface SyncDeps {
+  edition: AppEdition
+  settings: AppSettingsManager
+  deviceIdentity: DeviceIdentity
+  vendorCredentials: VendorCredentialsManager
+  storage: StorageService
+  host: HostEnvironment
+  isManaged(): boolean
+  onRemoteModelConfig(config: RemoteModelConfig): void
+  onManagedExclusions(exclusions: ManagedExclusions): void
+}
+
 export interface AppSync {
+  access: AccessProvider
+  isEnterpriseActivated(): boolean
+  requiresActivation(): boolean
   remoteModels: RemoteModelConfigService
   databaseUpload: BackendUpload | null
   logUpload: BackendUpload | null
@@ -31,15 +56,22 @@ export interface AppSync {
   stop(): Array<[name: string, step: Promise<void>]>
 }
 
-export function createSync(runtime: MainRuntime): AppSync {
-  const { edition, settings, storage, backend } = runtime
+export function createSync(deps: SyncDeps): AppSync {
+  const { edition, settings, deviceIdentity, vendorCredentials, storage, host } = deps
   const enterprise = edition === 'enterprise'
+  const access = createAccessProvider(edition, deviceIdentity)
+  const isEnterpriseActivated = (): boolean => access.getAccessState().isEnterpriseActivated
+  const backend = new BackendClient({
+    getDeviceId: () => deviceIdentity.getDeviceId(),
+    getBackendUrl: () => backendUrlFor(edition),
+    env: host,
+  })
   const managedExclusionsChanged = listenerSet()
 
   const remoteModels = new RemoteModelConfigService({
     backend,
-    isActivated: () => runtime.isManaged() && (!enterprise || runtime.isEnterpriseActivated()),
-    onChange: (config) => runtime.setRemoteModelConfig(config),
+    isActivated: () => deps.isManaged() && (!enterprise || isEnterpriseActivated()),
+    onChange: (config) => deps.onRemoteModelConfig(config),
     readStored: () => readRemoteModelConfig(),
     writeStored: (config) => writeRemoteModelConfig(config),
   })
@@ -47,11 +79,11 @@ export function createSync(runtime: MainRuntime): AppSync {
   // Both editions report, so the fleet's version distribution is visible server-side.
   const deviceReport = new BackendUpload({
     backend,
-    isActivated: enterprise ? runtime.isEnterpriseActivated : () => true,
+    isActivated: enterprise ? isEnterpriseActivated : () => true,
     job: deviceReportJob({
       getVersion: () => app.getVersion(),
       getKeySource: () => {
-        const { source } = runtime.vendorCredentials.getStatus(settings.get().activeVendor)
+        const { source } = vendorCredentials.getStatus(settings.get().activeVendor)
         if (source === 'none') return 'none'
         return source === 'managed' ? 'managed' : 'byok'
       },
@@ -63,7 +95,7 @@ export function createSync(runtime: MainRuntime): AppSync {
 
   const uploads = {
     backend,
-    isActivated: runtime.isEnterpriseActivated,
+    isActivated: isEnterpriseActivated,
     isSyncEnabled: () => settings.get().uploadDetailLevel !== 'off',
   }
   const databaseUpload = enterprise
@@ -91,9 +123,9 @@ export function createSync(runtime: MainRuntime): AppSync {
   const remoteBlacklist = enterprise
     ? new RemoteBlacklistService({
         backend,
-        isActivated: runtime.isEnterpriseActivated,
+        isActivated: isEnterpriseActivated,
         onChange: (blacklist) => {
-          runtime.harness.setManagedExclusions(blacklist)
+          deps.onManagedExclusions(blacklist)
           managedExclusionsChanged.emit()
         },
         readStored: () => readRemoteBlacklist(),
@@ -108,6 +140,9 @@ export function createSync(runtime: MainRuntime): AppSync {
   }
 
   return {
+    access,
+    isEnterpriseActivated,
+    requiresActivation: () => requiresActivation(access.getAccessState()),
     remoteModels,
     databaseUpload,
     logUpload,
@@ -121,23 +156,25 @@ export function createSync(runtime: MainRuntime): AppSync {
       logUpload?.start()
       remoteBlacklist?.start()
 
-      let activated = runtime.isEnterpriseActivated()
-      runtime.accessProvider.addUpdateListener((state) => {
+      let activated = isEnterpriseActivated()
+      access.addUpdateListener((state) => {
         if (state.isEnterpriseActivated === activated) return
         activated = state.isEnterpriseActivated
         if (!activated) return
         kick('activated')
         deviceReport.kick('activated')
       })
-      runtime.host.onAwake(() => kick('resume'))
+      host.onAwake(() => kick('resume'))
       unsubscribeSettings = settings.onChange((next, previous) => {
         if (previous.uploadDetailLevel === 'off' && next.uploadDetailLevel !== 'off') {
           kick('sharing enabled')
         }
       })
+      access.startPeriodicRefresh()
     },
     stop(): Array<[name: string, step: Promise<void>]> {
       unsubscribeSettings()
+      access.stopPeriodicRefresh()
       const jobs = { remoteModels, deviceReport, databaseUpload, logUpload, remoteBlacklist }
       return Object.entries(jobs).flatMap(([name, job]) =>
         job ? [[`${name}.stop`, job.stop()] as [string, Promise<void>]] : [],
