@@ -363,7 +363,7 @@ class AutonomousCapture: NSObject, SCStreamOutput {
 
 // MARK: - Stdin command listener
 
-func listenForCommands(capture: AutonomousCapture) {
+func listenForCommands(capture: AutonomousCapture, onStdinClosed: @escaping () -> Void) {
     DispatchQueue.global(qos: .utility).async {
         while let line = readLine(strippingNewline: true) {
             guard let data = line.data(using: .utf8),
@@ -391,11 +391,7 @@ func listenForCommands(capture: AutonomousCapture) {
             }
         }
 
-        // stdin closed — clean shutdown
-        Task {
-            await capture.stopStream()
-            exit(0)
-        }
+        onStdinClosed()
     }
 }
 
@@ -411,6 +407,24 @@ try FileManager.default.createDirectory(
 
 let capture = AutonomousCapture(config: config)
 
+let shutdownQueue = DispatchQueue(label: "com.memorylane.screenshot.shutdown")
+var shuttingDown = false
+func shutdown() {
+    shutdownQueue.async {
+        if shuttingDown { return }
+        shuttingDown = true
+        Task {
+            await capture.stopStream()
+            exit(0)
+        }
+    }
+}
+
+signal(SIGTERM, SIG_IGN)
+let sigtermSource = DispatchSource.makeSignalSource(signal: SIGTERM, queue: shutdownQueue)
+sigtermSource.setEventHandler { shutdown() }
+sigtermSource.resume()
+
 let semaphore = DispatchSemaphore(value: 0)
 Task {
     do {
@@ -419,7 +433,6 @@ Task {
         fail("Failed to start capture stream: \(error)")
     }
 
-    // Start listening for stdin commands
-    listenForCommands(capture: capture)
+    listenForCommands(capture: capture, onStdinClosed: shutdown)
 }
 semaphore.wait()

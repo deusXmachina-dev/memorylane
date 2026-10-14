@@ -81,6 +81,7 @@ export function createScreenCaptureBackend(): ScreenCaptureBackend {
 
 const DAEMON_MAX_RESTARTS = 5
 const DAEMON_RESTART_BACKOFF_MS = 1_000
+const DAEMON_EXIT_GRACE_MS = 1_000
 
 export class ScreenshotDaemon implements ScreenCaptureBackend {
   constructor(private readonly adapter?: ScreenshotPlatformAdapter) {}
@@ -106,7 +107,7 @@ export class ScreenshotDaemon implements ScreenCaptureBackend {
     this.started = false
     this.config = null
     this.cancelScheduledRestart()
-    this.killProcess()
+    await this.killProcess()
   }
 
   send(command: CaptureBackendCommand): void {
@@ -167,7 +168,9 @@ export class ScreenshotDaemon implements ScreenCaptureBackend {
     })
 
     proc.on('close', (code) => {
-      log.warn(`[ScreenshotDaemon] Process exited with code ${code}`)
+      const line = `[ScreenshotDaemon] Process exited with code ${code}`
+      if (code === 0) log.info(line)
+      else log.warn(line)
       this.handleProcessExit(proc)
     })
   }
@@ -231,18 +234,39 @@ export class ScreenshotDaemon implements ScreenCaptureBackend {
     }
   }
 
-  private killProcess(): void {
-    if (this.process) {
-      try {
-        this.process.stdin?.end()
-        this.process.kill('SIGTERM')
-      } catch {
-        // best-effort
-      }
-      this.process = null
-    }
+  private async killProcess(): Promise<void> {
+    const proc = this.process
+    this.process = null
     this.rl?.close()
     this.rl = null
+    if (!proc) return
+
+    const closed = new Promise<void>((resolve) => proc.once('close', () => resolve()))
+    const closedWithin = (ms: number): Promise<boolean> => {
+      let timer: ReturnType<typeof setTimeout>
+      const timeout = new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), ms)
+      })
+      return Promise.race([closed.then(() => true), timeout]).finally(() => clearTimeout(timer))
+    }
+
+    try {
+      proc.stdin?.end()
+    } catch {
+      // best-effort
+    }
+    if (await closedWithin(DAEMON_EXIT_GRACE_MS)) return
+    try {
+      proc.kill('SIGTERM')
+    } catch {
+      // best-effort
+    }
+    if (await closedWithin(DAEMON_EXIT_GRACE_MS)) return
+    try {
+      proc.kill('SIGKILL')
+    } catch {
+      // best-effort
+    }
   }
 
   private getAdapter(): ScreenshotPlatformAdapter {
