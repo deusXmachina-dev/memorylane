@@ -135,9 +135,11 @@ export function createSync(runtime: MainRuntime): AppSync {
           kick('sharing enabled')
         }
       })
+      runtime.accessProvider.startPeriodicRefresh()
     },
     stop(): Array<[name: string, step: Promise<void>]> {
       unsubscribeSettings()
+      runtime.accessProvider.stopPeriodicRefresh()
       const jobs = { remoteModels, deviceReport, databaseUpload, logUpload, remoteBlacklist }
       return Object.entries(jobs).flatMap(([name, job]) =>
         job ? [[`${name}.stop`, job.stop()] as [string, Promise<void>]] : [],

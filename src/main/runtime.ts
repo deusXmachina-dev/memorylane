@@ -299,13 +299,11 @@ export async function createMainRuntime(params: {
     credentialsChanged(): void {
       applyModels()
       inferenceProvider.notifyConfigChanged()
-      void semanticService.testConnection()
     },
     onStateChanged: stateChanged.add,
     notifyStateChanged: () => stateChanged.emit(),
     onPrivacyBlockingChanged: privacyBlockingChanged.add,
     start(): void {
-      accessProvider.startPeriodicRefresh()
       // After a derived-data wipe migration the DB is still mined, so clusters
       // rebuild from sightings before the sweep poll starts.
       void taskMiner.rebuildClustersIfEmpty().then(() => taskMiner.startup())
@@ -322,7 +320,6 @@ export async function createMainRuntime(params: {
     dispose(): Promise<void> {
       if (disposePromise) return disposePromise
       disposePromise = (async () => {
-        step('stop access refresh', () => accessProvider.stopPeriodicRefresh())
         step('stop task miner', () => taskMiner.stop())
         step('stop user context builder', () => userContextBuilder.stop())
         unsubscribeSettings()

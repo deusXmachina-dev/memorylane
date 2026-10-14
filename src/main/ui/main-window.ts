@@ -563,7 +563,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       }
       try {
         deps.runtime.vendorCredentials.saveCredentials(vendor, creds)
-        deps.runtime.inferenceProvider.notifyConfigChanged()
+        deps.runtime.credentialsChanged()
         if (vendor === deps.runtime.settings.get().activeVendor) {
           void deps.runtime.semanticService.testConnection()
         }
@@ -584,7 +584,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     }
     try {
       deps.runtime.vendorCredentials.deleteCredentials(vendor)
-      deps.runtime.inferenceProvider.notifyConfigChanged()
+      deps.runtime.credentialsChanged()
       return { success: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -666,6 +666,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         deps.runtime.settings.setActiveVendor(vendor)
       } else if (changed) {
         deps.runtime.credentialsChanged()
+        void deps.runtime.semanticService.testConnection()
       }
       if (switching || changed) {
         void deps.sync.remoteModels.sync()
@@ -678,7 +679,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
           deps.runtime.vendorCredentials.deleteCredentials(v)
         }
       }
-      deps.runtime.inferenceProvider.notifyConfigChanged()
+      deps.runtime.credentialsChanged()
     }
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('main-window:accessStateChanged', state)
