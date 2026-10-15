@@ -1,31 +1,29 @@
-import type { RecordingScriptStep } from '@/shared/eval-review'
+import { isHandsOffStep, type RecordingScriptStep } from '@/shared/eval-review'
 
-export interface StepProgress {
-  /** Step the operator should be on; `steps.length` once every step's time is up. */
+export interface StepState {
   index: number
-  /** How far through the current step's time, 0..1. */
-  fraction: number
-  secondsLeft: number
+  /** Seconds left on an entered hands-off step, else null. */
+  secondsLeft: number | null
   finished: boolean
 }
 
-/** Paces a script by each step's rough duration. */
-export function stepProgress(steps: RecordingScriptStep[], elapsedMs: number): StepProgress {
-  const elapsed = elapsedMs / 1000
-  let start = 0
-  for (let i = 0; i < steps.length; i++) {
-    const end = start + steps[i].seconds
-    if (elapsed < end) {
-      return {
-        index: i,
-        fraction: (elapsed - start) / steps[i].seconds,
-        secondsLeft: Math.ceil(end - elapsed),
-        finished: false,
-      }
-    }
-    start = end
+export function stepState(
+  steps: RecordingScriptStep[],
+  enteredAt: number[],
+  now: number,
+): StepState {
+  const index = Math.max(0, enteredAt.length - 1)
+  const step = steps[index]
+  const entered = enteredAt[index]
+  if (!step || entered === undefined || !isHandsOffStep(step)) {
+    return { index, secondsLeft: null, finished: false }
   }
-  return { index: steps.length, fraction: 1, secondsLeft: 0, finished: true }
+  const secondsLeft = Math.max(0, Math.ceil((entered + step.seconds * 1000 - now) / 1000))
+  return { index, secondsLeft, finished: index === steps.length - 1 && secondsLeft === 0 }
+}
+
+export function stepTarget(step: RecordingScriptStep): string {
+  return step.expect.tld ?? step.expect.app.join(' / ')
 }
 
 /** m:ss */

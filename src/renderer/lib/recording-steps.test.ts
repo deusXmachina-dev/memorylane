@@ -1,31 +1,53 @@
 import { describe, expect, it } from 'vitest'
 import type { RecordingScriptStep } from '@/shared/eval-review'
-import { formatClock, stepProgress } from './recording-steps'
+import { formatClock, stepState, stepTarget } from './recording-steps'
 
-const steps = [10, 20].map(
-  (seconds): RecordingScriptStep => ({ instruction: '', seconds, expect: { app: [] } }),
-)
+const typed: RecordingScriptStep = {
+  instruction: '',
+  seconds: 10,
+  expect: { app: ['TextEdit'], summary: 'Typed.' },
+}
+const handsOff: RecordingScriptStep = {
+  instruction: '',
+  seconds: 20,
+  expect: { app: ['browser'], tld: 'en.wikipedia.org' },
+}
 
-describe('stepProgress', () => {
-  it('walks the steps by their durations', () => {
-    expect(stepProgress(steps, 0)).toEqual({
+describe('stepState', () => {
+  it('follows the entered steps and only counts down on hands-off steps', () => {
+    expect(stepState([typed, handsOff], [], 0)).toEqual({
       index: 0,
-      fraction: 0,
-      secondsLeft: 10,
+      secondsLeft: null,
       finished: false,
     })
-    expect(stepProgress(steps, 15_000)).toEqual({
+    expect(stepState([typed, handsOff], [1000], 50_000)).toEqual({
+      index: 0,
+      secondsLeft: null,
+      finished: false,
+    })
+    expect(stepState([typed, handsOff], [1000, 5000], 10_000)).toEqual({
       index: 1,
-      fraction: 0.25,
       secondsLeft: 15,
       finished: false,
     })
-    expect(stepProgress(steps, 30_000)).toEqual({
-      index: 2,
-      fraction: 1,
+    expect(stepState([typed, handsOff], [1000, 5000], 30_000)).toEqual({
+      index: 1,
       secondsLeft: 0,
       finished: true,
     })
+  })
+
+  it('never finishes on a step that needs Done', () => {
+    expect(stepState([handsOff, typed], [0, 1000], 99_000).finished).toBe(false)
+  })
+})
+
+describe('stepTarget', () => {
+  it('names the host for web steps and the apps otherwise', () => {
+    expect(stepTarget(handsOff)).toBe('en.wikipedia.org')
+    expect(stepTarget({ ...typed, expect: { app: ['TextEdit', 'Notepad'] } })).toBe(
+      'TextEdit / Notepad',
+    )
   })
 })
 

@@ -4,8 +4,8 @@
  * `event-windows.jsonl` + `frames.jsonl` + `activities.jsonl` and gets back a
  * self-contained fixture.
  *
- * The fixture is: event windows copied verbatim (the replay-critical input),
- * referenced PNGs copied in with paths rewritten to relative, a `manifest.json`,
+ * The fixture is: event windows (the replay-critical input), referenced PNGs
+ * copied in with paths rewritten to relative, a `manifest.json`,
  * an optional `session.mp4` for review, and an optional editable `golden.md`
  * scaffold. Kept-block summaries come straight from the live pipeline's
  * `activities.jsonl` (real capture-time output); a deterministic no-LLM replay
@@ -49,6 +49,10 @@ export interface PromoteCaptureOptions {
   expectedActivities?: number
   /** The script this session followed: its text seeds the golden when the recording matches. */
   script?: RecordingScript
+  /** When the operator reached each step; the fixture is clipped to start at the first. */
+  stepEnteredAt?: number[]
+  /** When the operator returned to MemoryLane after the last step; the fixture ends there. */
+  leftAt?: number
 }
 
 export interface PromoteCaptureResult {
@@ -179,15 +183,22 @@ export async function promoteCapture(opts: PromoteCaptureOptions): Promise<Promo
     if (!fs.existsSync(f)) throw new Error(`Not found: ${f}`)
   }
 
-  const windows = readJsonl<EventWindow>(windowsSrc)
-  const frames = readJsonl<DumpedFrame>(framesSrc)
+  const clipStart = opts.stepEnteredAt?.[0]
+  const clipEnd = opts.leftAt
+  const inClip = (ts: number): boolean =>
+    (clipStart === undefined || ts >= clipStart) && (clipEnd === undefined || ts < clipEnd)
+  const windows = readJsonl<EventWindow>(windowsSrc).filter((w) => inClip(w.startTimestamp))
+  const frames = readJsonl<DumpedFrame>(framesSrc).filter((f) => inClip(f.timestamp))
 
   const fixtureDir = path.join(opts.fixturesRoot, opts.name)
   const framesDir = path.join(fixtureDir, 'frames')
   fs.mkdirSync(framesDir, { recursive: true })
 
-  // Copy event windows verbatim (replay-critical input).
-  fs.copyFileSync(windowsSrc, path.join(fixtureDir, 'event-windows.jsonl'))
+  fs.writeFileSync(
+    path.join(fixtureDir, 'event-windows.jsonl'),
+    windows.map((w) => JSON.stringify(w)).join('\n') + '\n',
+    'utf8',
+  )
 
   // Copy referenced PNGs, rewrite paths to relative, drop missing ones.
   const downsample = opts.downsample ?? false
@@ -220,6 +231,8 @@ export async function promoteCapture(opts: PromoteCaptureOptions): Promise<Promo
       opts.expectedActivities ?? opts.script?.steps.filter((s) => !s.expect.dropped).length,
     downsampled: downsample || undefined,
     script: opts.script?.id,
+    stepEnteredAt: opts.stepEnteredAt,
+    leftAt: opts.leftAt,
     schemaVersion: FIXTURE_SCHEMA_VERSION,
   }
   fs.writeFileSync(
@@ -249,7 +262,9 @@ export async function promoteCapture(opts: PromoteCaptureOptions): Promise<Promo
     fixtureDir,
     transformer: new ScaffoldTransformer(),
   })
-  const keptActivities = readLiveActivities(opts.sourceDir).map(liveToReplayActivity)
+  const keptActivities = readLiveActivities(opts.sourceDir)
+    .filter((a) => inClip(a.startTimestamp))
+    .map(liveToReplayActivity)
   const transcript = [...keptActivities, ...droppedActivities]
   const lastBlockEnd = transcript.reduce((max, t) => Math.max(max, t.endTimestamp), 0) || undefined
 
@@ -266,7 +281,12 @@ export async function promoteCapture(opts: PromoteCaptureOptions): Promise<Promo
       const checkPath = path.join(fixtureDir, 'script-check.json')
       fs.rmSync(checkPath, { force: true })
       if (opts.script) {
-        const { check, golden } = goldenFromScript(opts.script, transcript)
+        const { check, golden } = goldenFromScript(
+          opts.script,
+          transcript,
+          opts.stepEnteredAt,
+          opts.leftAt,
+        )
         fs.writeFileSync(checkPath, JSON.stringify(check, null, 2), 'utf8')
         result.scriptFollowed = check.followed
         if (golden) goldenBlocks = golden

@@ -2,11 +2,23 @@ import { describe, expect, it } from 'vitest'
 import {
   getExcludedAppMatch,
   getExcludedUrlMatch,
+  isSelfApp,
   normalizeExcludedApps,
   normalizeToken,
   normalizeWildcardPatterns,
   tokenFromBundleId,
 } from './capture-exclusions'
+
+describe('isSelfApp', () => {
+  it('recognizes MemoryLane by bundle id or name', () => {
+    expect(isSelfApp({ app: 'MemoryLane', bundleId: 'com.memorylane.app' })).toBe(true)
+    expect(isSelfApp({ app: 'Electron', bundleId: 'DEV.DEUSXMACHINA.MEMORYLANE' })).toBe(true)
+    expect(isSelfApp({ app: 'MemoryLane Enterprise' })).toBe(true)
+    expect(isSelfApp({ app: 'Electron', bundleId: 'com.github.Electron' })).toBe(true)
+    expect(isSelfApp({ app: 'Google Chrome', bundleId: 'com.google.Chrome' })).toBe(false)
+    expect(isSelfApp({})).toBe(false)
+  })
+})
 
 describe('capture exclusions', () => {
   it('normalizes and deduplicates excluded apps', () => {

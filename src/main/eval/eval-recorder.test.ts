@@ -8,6 +8,24 @@ import { InMemoryStream } from '@main/streams/in-memory-stream'
 import type { Frame } from '@main/recorder/screen-capturer'
 import type { EventWindow } from '@/shared/types'
 import type { PipelineHarness } from '@main/activity/pipeline-harness'
+import type { AppWatcherEvent } from '@main/recorder/app-watcher'
+
+const watcherListeners = new Set<(event: AppWatcherEvent) => void>()
+
+vi.mock('@main/recorder/app-watcher', () => ({
+  addAppWatcherListener: (listener: (event: AppWatcherEvent) => void) => {
+    watcherListeners.add(listener)
+    return () => {
+      watcherListeners.delete(listener)
+    }
+  },
+}))
+
+function focus(app: string, timestamp: number, extra: Partial<AppWatcherEvent> = {}): void {
+  for (const listener of [...watcherListeners]) {
+    listener({ type: 'app_change', timestamp, app, ...extra })
+  }
+}
 
 vi.mock('@main/utils/logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -70,7 +88,27 @@ beforeEach(() => {
 
 afterEach(() => {
   fs.rmSync(tmp, { recursive: true, force: true })
+  watcherListeners.clear()
 })
+
+function writeScript(): void {
+  fs.mkdirSync(fixturesRoot, { recursive: true })
+  fs.writeFileSync(
+    path.join(fixturesRoot, 'scenarios.json'),
+    JSON.stringify([
+      {
+        id: 'edit-then-browse',
+        title: 'Edit then browse',
+        targets: [],
+        setup: [],
+        steps: [
+          { instruction: '', seconds: 10, expect: { app: ['Code'], summary: 'Edited auth.ts.' } },
+          { instruction: '', seconds: 10, expect: { app: ['browser'], tld: 'github.com' } },
+        ],
+      },
+    ]),
+  )
+}
 
 async function appendFrameAndWindow(): Promise<void> {
   const pngPath = path.join(tmp, 'live-frame.png')
@@ -159,6 +197,52 @@ describe('EvalRecorder', () => {
     expect(setRetain).toHaveBeenLastCalledWith(false)
     expect(fs.existsSync(path.join(fixturesRoot, 'rec5'))).toBe(false)
     expect(fs.existsSync(path.join(fixturesRoot, '.staging', 'rec5'))).toBe(false)
+  })
+
+  it('tracks step entries from the foreground app and clips the fixture to them', async () => {
+    writeScript()
+    const recorder = new EvalRecorder({ harness, fixturesRoot })
+    recorder.start('scripted', 'edit-then-browse')
+    expect(watcherListeners.size).toBe(1)
+
+    focus('MemoryLane', T0 - 5000, { bundleId: 'com.memorylane.app' })
+    focus('Slack', T0 - 4000)
+    expect(recorder.getStatus().stepEnteredAt).toEqual([])
+    focus('Code', T0)
+    focus('Code', T0 + 200, { type: 'window_change' })
+    focus('Google Chrome', T0 + 400, { bundleId: 'com.google.Chrome', url: 'chrome://newtab/' })
+    expect(recorder.getStatus().stepEnteredAt).toEqual([T0])
+    focus('Google Chrome', T0 + 500, {
+      type: 'window_change',
+      bundleId: 'com.google.Chrome',
+      url: 'https://github.com/x',
+    })
+    focus('MemoryLane', T0 + 900, { bundleId: 'com.memorylane.app' })
+    expect(recorder.getStatus().stepEnteredAt).toEqual([T0, T0 + 500])
+
+    await appendFrameAndWindow()
+    const stopping = recorder.stop()
+    expect(recorder.getStatus().saving).toBe(true)
+    await stopping
+    expect(watcherListeners.size).toBe(0)
+    expect(recorder.getStatus()).toMatchObject({
+      recording: false,
+      saving: false,
+      stepEnteredAt: [],
+    })
+
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(fixturesRoot, 'scripted', 'manifest.json'), 'utf8'),
+    )
+    expect(manifest).toMatchObject({ stepEnteredAt: [T0, T0 + 500], leftAt: T0 + 900 })
+  })
+
+  it('drops the watcher subscription on cancel', async () => {
+    writeScript()
+    const recorder = new EvalRecorder({ harness, fixturesRoot })
+    recorder.start('scripted2', 'edit-then-browse')
+    await recorder.cancel()
+    expect(watcherListeners.size).toBe(0)
   })
 
   it('rejects a second concurrent recording', () => {

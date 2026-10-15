@@ -9,11 +9,12 @@ import {
 import type { GoldenSource } from './golden-md'
 import type { ReplayActivity } from './types'
 
-function appMatches(expected: string[], appName: string): boolean {
-  return expected.some((app) =>
-    app === 'browser'
-      ? isBrowserApp({ processName: appName })
-      : app.toLowerCase() === appName.toLowerCase(),
+export function appMatches(
+  expected: string[],
+  app: { processName: string; bundleId?: string },
+): boolean {
+  return expected.some((name) =>
+    name === 'browser' ? isBrowserApp(app) : name.toLowerCase() === app.processName.toLowerCase(),
   )
 }
 
@@ -24,7 +25,7 @@ function describeBlock(block: ReplayActivity): string {
 function stepIssue(step: RecordingScriptStep, block: ReplayActivity): string | null {
   const { expect } = step
   const where = describeBlock(block)
-  if (!appMatches(expect.app, block.appName))
+  if (!appMatches(expect.app, { processName: block.appName }))
     return `expected ${expect.app.join('/')}, got ${where}`
   if (expect.tld && expect.tld !== block.tld) return `expected ${expect.tld}, got ${where}`
   if (expect.dropped && !block.dropped) return `expected a drop, got a kept ${where}`
@@ -35,17 +36,103 @@ function stepIssue(step: RecordingScriptStep, block: ReplayActivity): string | n
   return null
 }
 
+function stepGolden(step: RecordingScriptStep, fitting: ReplayActivity[]): GoldenSource {
+  const first = fitting[0]
+  const endTimestamp = Math.max(...fitting.map((b) => b.endTimestamp))
+  if (first.dropped || !step.expect.summary) return { ...first, endTimestamp }
+  return {
+    ...first,
+    endTimestamp,
+    summary: step.expect.summary,
+    mustMention: step.expect.mustMention,
+  }
+}
+
+function overlap(block: ReplayActivity, start: number, end: number): number {
+  return Math.min(block.endTimestamp, end) - Math.max(block.startTimestamp, start)
+}
+
 /**
- * Aligns a script's steps to the recorded blocks (kept + dropped) in time
- * order. When every step matches, the golden takes times from the recording
- * and text from the script; otherwise there is no golden and the check lists
- * what diverged.
+ * Aligns a script's steps to the recorded blocks. With `stepEnteredAt` (the
+ * recorder's per-step entry times) each step owns the span until the next
+ * entry and claims the blocks in it that fit; unclaimed blocks are strays and
+ * become DROPPED golden blocks. Without it, blocks pair with steps by position.
  */
 export function goldenFromScript(
   script: RecordingScript,
   blocks: ReplayActivity[],
+  stepEnteredAt?: number[],
+  leftAt?: number,
 ): { check: ScriptCheck; golden: GoldenSource[] | null } {
   const sorted = [...blocks].sort((a, b) => a.startTimestamp - b.startTimestamp)
+  return stepEnteredAt
+    ? alignBySpans(script, sorted, stepEnteredAt, leftAt)
+    : alignByPosition(script, sorted)
+}
+
+function alignBySpans(
+  script: RecordingScript,
+  sorted: ReplayActivity[],
+  enteredAt: number[],
+  leftAt: number | undefined,
+): { check: ScriptCheck; golden: GoldenSource[] | null } {
+  const claimed = new Map<ReplayActivity, number>()
+  const golden: GoldenSource[] = []
+  const steps: ScriptStepCheck[] = script.steps.map((step, i) => {
+    const start = enteredAt[i]
+    if (start === undefined) return { ok: false, got: null, issue: 'not reached' }
+    const end = enteredAt[i + 1] ?? leftAt ?? Infinity
+    const inSpan = sorted.filter((b) => b.endTimestamp > start && b.startTimestamp < end)
+    const fitting = inSpan.filter((b) => !claimed.has(b) && stepIssue(step, b) === null)
+    if (fitting.length > 0) {
+      for (const b of fitting) claimed.set(b, i)
+      golden.push(stepGolden(step, fitting))
+      return { ok: true, got: describeBlock(fitting[0]), issue: null }
+    }
+    for (const b of inSpan) {
+      const owner = claimed.get(b)
+      if (owner !== undefined) {
+        return {
+          ok: false,
+          got: describeBlock(b),
+          issue: `merged into step ${owner + 1} (${describeBlock(b)})`,
+        }
+      }
+    }
+    const sameContext = inSpan.filter(
+      (b) =>
+        appMatches(step.expect.app, { processName: b.appName }) &&
+        (!step.expect.tld || step.expect.tld === b.tld),
+    )
+    const best = (sameContext.length > 0 ? sameContext : inSpan).reduce<ReplayActivity | null>(
+      (acc, b) => (acc && overlap(acc, start, end) >= overlap(b, start, end) ? acc : b),
+      null,
+    )
+    if (best) return { ok: false, got: describeBlock(best), issue: stepIssue(step, best) }
+    return { ok: false, got: null, issue: 'nothing recorded for this step' }
+  })
+
+  const strays = sorted.filter((b) => !claimed.has(b))
+  const issues = steps.flatMap((s, i) => (s.issue ? [`step ${i + 1}: ${s.issue}`] : []))
+  const check: ScriptCheck = {
+    scriptId: script.id,
+    followed: issues.length === 0,
+    expected: script.steps.length,
+    produced: sorted.length,
+    issues,
+    steps,
+    strays: strays.map(describeBlock),
+  }
+  if (!check.followed) return { check, golden: null }
+  for (const b of strays)
+    golden.push({ ...b, dropped: { reason: 'stray', detail: describeBlock(b) } })
+  return { check, golden }
+}
+
+function alignByPosition(
+  script: RecordingScript,
+  sorted: ReplayActivity[],
+): { check: ScriptCheck; golden: GoldenSource[] | null } {
   const issues: string[] = []
   if (sorted.length !== script.steps.length) {
     issues.push(`expected ${script.steps.length} activities, got ${sorted.length}`)

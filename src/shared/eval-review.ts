@@ -12,6 +12,9 @@ export interface EvalRecordingStatus {
   /** Epoch ms the current recording started, or null. */
   startedAt: number | null
   scriptId: string | null
+  /** Epoch ms the foreground first matched each script step, in step order. */
+  stepEnteredAt: number[]
+  saving: boolean
 }
 
 /** One promoted fixture, for the Developer tab's list. */
@@ -96,6 +99,8 @@ export interface ScriptCheck {
   issues: string[]
   /** One entry per script step; absent on checks written before it existed. */
   steps?: ScriptStepCheck[]
+  /** Blocks no step claimed (`App · tld`), written to the golden as DROPPED. */
+  strays?: string[]
 }
 
 export interface ScriptStepCheck {

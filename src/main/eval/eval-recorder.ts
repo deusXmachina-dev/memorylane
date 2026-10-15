@@ -21,9 +21,12 @@ import type { StreamSubscription } from '@main/streams/stream'
 import type { PipelineHarness } from '@main/activity/pipeline-harness'
 import { FrameDebugDumper } from '@main/debug/frame-debug-dump'
 import { EventWindowDebugDumper } from '@main/debug/event-window-debug-dump'
+import { isSelfApp } from '@main/capture/capture-exclusions'
+import { addAppWatcherListener, type AppWatcherEvent } from '@main/recorder/app-watcher'
 import { ActivityDebugDumper } from './activity-debug-dump'
 import { promoteCapture, type PromoteCaptureResult } from './promote-fixture'
 import { getRecordingScript } from './recording-scripts'
+import { enteredStep } from './script-tracker'
 import type { EvalRecordingStatus, RecordingScript } from '@/shared/eval-review'
 
 /** Filesystem-safe fixture name (the dir under the fixtures root). */
@@ -48,6 +51,9 @@ export class EvalRecorder {
   private startedCapture = false
   private script: RecordingScript | null = null
   private stopping = false
+  private stepEnteredAt: number[] = []
+  private leftAt: number | null = null
+  private trackerUnsub: (() => void) | null = null
 
   constructor(deps: { harness: PipelineHarness; fixturesRoot: string }) {
     this.harness = deps.harness
@@ -64,6 +70,25 @@ export class EvalRecorder {
       name: this.activeName,
       startedAt: this.startedAt,
       scriptId: this.script?.id ?? null,
+      stepEnteredAt: [...this.stepEnteredAt],
+      saving: this.stopping,
+    }
+  }
+
+  private track(script: RecordingScript, event: AppWatcherEvent): void {
+    if (event.type !== 'app_change' && event.type !== 'window_change') return
+    const next = script.steps[this.stepEnteredAt.length]
+    if (next) {
+      if (!enteredStep(next, event)) return
+      this.stepEnteredAt.push(event.timestamp)
+      log.info(
+        `[EvalRecorder] Step ${this.stepEnteredAt.length} entered: ${event.app}${event.url ? ` ${event.url}` : ''}`,
+      )
+      return
+    }
+    if (this.leftAt === null && isSelfApp(event)) {
+      this.leftAt = event.timestamp
+      log.info('[EvalRecorder] Returned to MemoryLane after the last step')
     }
   }
 
@@ -109,6 +134,7 @@ export class EvalRecorder {
           summaryModel: extracted.summaryModel,
         })
       }) ?? null
+    if (script) this.trackerUnsub = addAppWatcherListener((event) => this.track(script, event))
 
     // Frames only flow while capture is running; start it for the operator if it
     // is off, and remember so we can restore the prior state on stop.
@@ -160,6 +186,8 @@ export class EvalRecorder {
         // this capture, not silently keep a stale scaffold.
         reseed: true,
         script: this.script ?? undefined,
+        stepEnteredAt: this.script ? this.stepEnteredAt : undefined,
+        leftAt: this.leftAt ?? undefined,
       })
       log.info(`[EvalRecorder] Promoted "${name}" -> ${result.fixtureDir}`)
       return result
@@ -193,9 +221,11 @@ export class EvalRecorder {
       this.frameSub?.unsubscribe()
       this.eventSub?.unsubscribe()
       this.activityUnsub?.()
+      this.trackerUnsub?.()
       this.frameSub = null
       this.eventSub = null
       this.activityUnsub = null
+      this.trackerUnsub = null
     }
   }
 
@@ -210,5 +240,7 @@ export class EvalRecorder {
     this.startedCapture = false
     this.script = null
     this.stopping = false
+    this.stepEnteredAt = []
+    this.leftAt = null
   }
 }

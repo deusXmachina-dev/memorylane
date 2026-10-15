@@ -26,6 +26,13 @@ export function importRecordingScripts(fixturesRoot: string, sourceFile: string)
   return incoming.length
 }
 
+function contextKey(apps: string[]): string {
+  return apps
+    .map((a) => a.toLowerCase())
+    .sort()
+    .join('|')
+}
+
 export function parseRecordingScripts(json: string): RecordingScript[] {
   const data: unknown = JSON.parse(json)
   if (!Array.isArray(data)) throw new Error('Scenarios file must be a JSON array')
@@ -47,6 +54,15 @@ export function parseRecordingScripts(json: string): RecordingScript[] {
           Array.isArray(step.expect?.app),
       )
     if (!valid) throw new Error(`Invalid scenario ${label}`)
+    for (let i = 1; i < script.steps.length; i++) {
+      const prev = script.steps[i - 1].expect
+      const cur = script.steps[i].expect
+      if (prev.tld === cur.tld && contextKey(prev.app) === contextKey(cur.app)) {
+        throw new Error(
+          `Scenario ${script.id}: steps ${i} and ${i + 1} are both ${cur.tld ?? cur.app.join('/')} — merge them into one step`,
+        )
+      }
+    }
     if (ids.has(script.id)) throw new Error(`Duplicate scenario id ${script.id}`)
     ids.add(script.id)
     return script
