@@ -13,23 +13,19 @@ import type {
 } from './eval-review'
 
 export type KeyClass =
-  | 'char'
-  | 'delete'
+  | 'type'
   | 'enter'
-  | 'shift+enter'
-  | 'tab'
+  | 'delete'
   | 'escape'
+  | 'tab'
+  | 'copy'
+  | 'cut'
+  | 'paste'
+  | 'undo'
+  | 'save'
   | 'mod+enter'
-  | 'mod+s'
-  | 'mod+c'
-  | 'mod+v'
-  | 'mod+x'
-  | 'mod+z'
-  | 'mod+a'
-  | 'mod+f'
-  | 'shortcut'
 
-export type ClickClass = 'left' | 'right' | 'middle' | 'double' | 'mod' | 'drag'
+export type ClickClass = 'left' | 'double' | 'right'
 
 export interface InputRun<T extends string> {
   kind: T

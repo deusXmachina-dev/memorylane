@@ -55,7 +55,14 @@ function wheel(rotation = 1): void {
 }
 
 function key(keycode = 16, mods: { metaKey?: boolean } = {}): void {
-  handlers['keydown']?.({ keycode, metaKey: false, ctrlKey: false, shiftKey: false, ...mods })
+  handlers['keydown']?.({
+    keycode,
+    metaKey: false,
+    ctrlKey: false,
+    altKey: false,
+    shiftKey: false,
+    ...mods,
+  })
 }
 
 function appChange(app: string, title: string, timestamp: number): void {
@@ -128,22 +135,20 @@ describe('interaction-monitor session emission', () => {
       type: 'keyboard',
       keyCount: 5,
       keySequence: [
-        { kind: 'char', count: 2 },
+        { kind: 'type', count: 2 },
         { kind: 'enter', count: 1 },
-        { kind: 'char', count: 1 },
-        { kind: 'mod+s', count: 1 },
+        { kind: 'type', count: 1 },
+        { kind: 'save', count: 1 },
       ],
     })
   })
 
-  it('emits the ordered click sequence including drags', () => {
+  it('emits the ordered click sequence', () => {
     const mouse = { metaKey: false, ctrlKey: false, x: 1, y: 1 }
     handlers['click']?.({ ...mouse, button: 1, clicks: 1 })
+    handlers['click']?.({ ...mouse, button: 1, clicks: 1 })
+    handlers['click']?.({ ...mouse, button: 1, clicks: 2 })
     handlers['click']?.({ ...mouse, button: 2, clicks: 1 })
-    handlers['mousedown']?.({ ...mouse, button: 1 })
-    handlers['mouseup']?.({ ...mouse, button: 1, x: 200, y: 1 })
-    handlers['mousedown']?.({ ...mouse, button: 1 })
-    handlers['mouseup']?.({ ...mouse, button: 1 })
     vi.advanceTimersByTime(INTERACTION_MONITOR_CONFIG.CLICK_DEBOUNCE_MS)
 
     expect(emitted).toHaveLength(1)
@@ -151,8 +156,8 @@ describe('interaction-monitor session emission', () => {
       type: 'click',
       clickSequence: [
         { kind: 'left', count: 1 },
+        { kind: 'double', count: 1 },
         { kind: 'right', count: 1 },
-        { kind: 'drag', count: 1 },
       ],
     })
   })

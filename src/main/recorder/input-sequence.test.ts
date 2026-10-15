@@ -1,57 +1,78 @@
 import { describe, expect, it } from 'vitest'
 import { UiohookKey } from 'uiohook-napi'
-import type { ClickClass, InputRun, KeyClass } from '../../shared/types'
-import { appendClick, appendRun, classifyClick, classifyKey, isDrag } from './input-sequence'
+import type { ClickClass, InputRun, KeyClass } from '@types'
+import { appendClick, appendRun, classifyClick, classifyKey } from '@main/recorder/input-sequence'
 
-function press(keycode: number, mods: { meta?: boolean; ctrl?: boolean; shift?: boolean } = {}) {
-  return classifyKey({
-    keycode,
-    metaKey: mods.meta ?? false,
-    ctrlKey: mods.ctrl ?? false,
-    shiftKey: mods.shift ?? false,
-  })
+type Mods = { meta?: boolean; ctrl?: boolean; alt?: boolean; shift?: boolean }
+
+function press(keycode: number, mods: Mods = {}, platform: NodeJS.Platform = 'darwin') {
+  return classifyKey(
+    {
+      keycode,
+      metaKey: mods.meta ?? false,
+      ctrlKey: mods.ctrl ?? false,
+      altKey: mods.alt ?? false,
+      shiftKey: mods.shift ?? false,
+    },
+    platform,
+  )
 }
 
 describe('classifyKey', () => {
-  it('reduces printable keys to an anonymous char class', () => {
-    expect(press(UiohookKey.Q)).toBe('char')
-    expect(press(UiohookKey.Space)).toBe('char')
-    expect(press(UiohookKey.Q, { shift: true })).toBe('char')
+  it('reduces printable keys to an anonymous type class', () => {
+    expect(press(UiohookKey.Q)).toBe('type')
+    expect(press(UiohookKey.Space)).toBe('type')
+    expect(press(UiohookKey.Q, { shift: true })).toBe('type')
+    expect(press(UiohookKey.Q, { alt: true })).toBe('type')
+    expect(press(UiohookKey.Enter, { shift: true })).toBe('type')
   })
 
-  it('names submit, edit and navigation-in-form keys', () => {
+  it('names submit, cancel, delete and field keys', () => {
     expect(press(UiohookKey.Enter)).toBe('enter')
     expect(press(UiohookKey.NumpadEnter)).toBe('enter')
-    expect(press(UiohookKey.Enter, { shift: true })).toBe('shift+enter')
     expect(press(UiohookKey.Backspace)).toBe('delete')
     expect(press(UiohookKey.Tab)).toBe('tab')
     expect(press(UiohookKey.Escape)).toBe('escape')
   })
 
-  it('maps Cmd and Ctrl shortcuts alike and buckets unknown ones', () => {
-    expect(press(UiohookKey.S, { meta: true })).toBe('mod+s')
-    expect(press(UiohookKey.S, { ctrl: true })).toBe('mod+s')
+  it('names clipboard, undo, save and send shortcuts', () => {
+    expect(press(UiohookKey.C, { meta: true })).toBe('copy')
+    expect(press(UiohookKey.X, { meta: true })).toBe('cut')
+    expect(press(UiohookKey.V, { ctrl: true }, 'win32')).toBe('paste')
+    expect(press(UiohookKey.Z, { meta: true })).toBe('undo')
+    expect(press(UiohookKey.S, { ctrl: true }, 'win32')).toBe('save')
     expect(press(UiohookKey.Enter, { meta: true })).toBe('mod+enter')
-    expect(press(UiohookKey.K, { meta: true })).toBe('shortcut')
   })
 
-  it('ignores lone modifiers and cursor movement', () => {
+  it('ignores other shortcuts and shifted variants', () => {
+    expect(press(UiohookKey.K, { meta: true })).toBeNull()
+    expect(press(UiohookKey.Z, { meta: true, shift: true })).toBeNull()
+    expect(press(UiohookKey.C, { ctrl: true }, 'darwin')).toBeNull()
+  })
+
+  it('treats AltGr on Windows as typing', () => {
+    expect(press(UiohookKey.V, { ctrl: true, alt: true }, 'win32')).toBe('type')
+  })
+
+  it('ignores modifiers, navigation and function keys', () => {
     expect(press(UiohookKey.Meta, { meta: true })).toBeNull()
     expect(press(UiohookKey.Shift, { shift: true })).toBeNull()
     expect(press(UiohookKey.ArrowDown)).toBeNull()
+    expect(press(UiohookKey.F5)).toBeNull()
+    expect(press(UiohookKey.PrintScreen)).toBeNull()
   })
 })
 
 describe('appendRun', () => {
   it('run-length encodes while keeping order', () => {
     const sequence: InputRun<KeyClass>[] = []
-    for (const key of ['char', 'char', 'enter', 'char', 'char', 'char'] as const) {
+    for (const key of ['type', 'type', 'enter', 'type', 'type', 'type'] as const) {
       appendRun(sequence, key)
     }
     expect(sequence).toEqual([
-      { kind: 'char', count: 2 },
+      { kind: 'type', count: 2 },
       { kind: 'enter', count: 1 },
-      { kind: 'char', count: 3 },
+      { kind: 'type', count: 3 },
     ])
   })
 })
@@ -59,28 +80,24 @@ describe('appendRun', () => {
 function click(
   button: number,
   clicks = 1,
-  mods: { meta?: boolean; ctrl?: boolean } = {},
+  mods: { ctrl?: boolean } = {},
   platform: NodeJS.Platform = 'darwin',
 ) {
-  return classifyClick(
-    { button, clicks, metaKey: mods.meta ?? false, ctrlKey: mods.ctrl ?? false },
-    platform,
-  )
+  return classifyClick({ button, clicks, ctrlKey: mods.ctrl ?? false }, platform)
 }
 
 describe('classifyClick', () => {
-  it('distinguishes buttons and multi-clicks', () => {
+  it('distinguishes left, double and right clicks', () => {
     expect(click(1)).toBe('left')
     expect(click(2)).toBe('right')
-    expect(click(3)).toBe('middle')
     expect(click(1, 2)).toBe('double')
     expect(click(1, 3)).toBeNull()
+    expect(click(3)).toBeNull()
   })
 
   it('treats Ctrl-click as a right-click on macOS only', () => {
     expect(click(1, 1, { ctrl: true }, 'darwin')).toBe('right')
-    expect(click(1, 1, { ctrl: true }, 'win32')).toBe('mod')
-    expect(click(1, 1, { meta: true }, 'darwin')).toBe('mod')
+    expect(click(1, 1, { ctrl: true }, 'win32')).toBe('left')
   })
 })
 
@@ -95,12 +112,5 @@ describe('appendClick', () => {
       { kind: 'double', count: 1 },
       { kind: 'right', count: 1 },
     ])
-  })
-})
-
-describe('isDrag', () => {
-  it('requires the pointer to move a few pixels', () => {
-    expect(isDrag({ x: 0, y: 0 }, { x: 3, y: 4 })).toBe(false)
-    expect(isDrag({ x: 0, y: 0 }, { x: 30, y: 40 })).toBe(true)
   })
 })

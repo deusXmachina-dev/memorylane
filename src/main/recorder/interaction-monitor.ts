@@ -1,8 +1,8 @@
 import { screen } from 'electron'
 import { uIOhook, UiohookKeyboardEvent, UiohookMouseEvent, UiohookWheelEvent } from 'uiohook-napi'
 import { INTERACTION_MONITOR_CONFIG } from '@constants'
-import { ClickClass, InputRun, InteractionContext, KeyClass } from '../../shared/types'
-import { appendClick, appendRun, classifyClick, classifyKey, isDrag } from './input-sequence'
+import { ClickClass, InputRun, InteractionContext, KeyClass } from '@types'
+import { appendClick, appendRun, classifyClick, classifyKey } from '@main/recorder/input-sequence'
 import { addAppWatcherListener, AppWatcherEvent } from './app-watcher'
 import { resolveAppWatcherDisplay } from './app-watcher-display'
 import log from '@main/utils/logger'
@@ -22,8 +22,6 @@ let cachedWindowTitle: string | null = null
 
 // Unsubscribe handle for our app-watcher listener
 let appWatcherUnsubscribe: (() => void) | null = null
-
-let pressPosition: { x: number; y: number } | null = null
 
 /**
  * Resolve which Electron Display contains the given global coordinate.
@@ -248,28 +246,13 @@ function handleMouseClick(event: UiohookMouseEvent): void {
     return
   }
 
-  recordClick(event, classifyClick(event))
-}
-
-function recordClick(event: UiohookMouseEvent, clickClass: ClickClass | null): void {
+  const clickClass = classifyClick(event)
   clickSession.record(Date.now(), (accumulation) => {
     accumulation.count++
     if (clickClass) appendClick(accumulation.sequence, clickClass)
     accumulation.position = { x: event.x, y: event.y }
     accumulation.displayId = getDisplayIdForPoint(event.x, event.y)
   })
-}
-
-function handleMouseDown(event: UiohookMouseEvent): void {
-  pressPosition = event.button === 1 ? { x: event.x, y: event.y } : null
-}
-
-function handleMouseUp(event: UiohookMouseEvent): void {
-  if (!INTERACTION_MONITOR_CONFIG.TRACK_CLICKS) {
-    return
-  }
-  if (pressPosition && isDrag(pressPosition, event)) recordClick(event, 'drag')
-  pressPosition = null
 }
 
 /**
@@ -421,8 +404,6 @@ export function startInteractionMonitoring(): void {
     // Register event handlers
     if (INTERACTION_MONITOR_CONFIG.TRACK_CLICKS) {
       uIOhook.on('click', handleMouseClick)
-      uIOhook.on('mousedown', handleMouseDown)
-      uIOhook.on('mouseup', handleMouseUp)
     }
 
     if (INTERACTION_MONITOR_CONFIG.TRACK_KEYBOARD) {
@@ -471,7 +452,6 @@ export function stopInteractionMonitoring(): void {
     previousWindowDisplayId = null
     cachedDisplayId = null
     cachedWindowTitle = null
-    pressPosition = null
 
     // Stop the native app-watcher process (only our listener; others may still be attached)
     if (appWatcherUnsubscribe) {

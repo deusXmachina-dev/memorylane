@@ -1,31 +1,42 @@
 import { UiohookKey, type UiohookKeyboardEvent, type UiohookMouseEvent } from 'uiohook-napi'
-import type { ClickClass, InputRun, KeyClass } from '../../shared/types'
+import type { ClickClass, InputRun, KeyClass } from '@types'
 
+const MOUSE_BUTTON_LEFT = 1
 const MOUSE_BUTTON_RIGHT = 2
-const MOUSE_BUTTON_MIDDLE = 3
-export const DRAG_MIN_DISTANCE_PX = 10
 
-const MODIFIER_KEYCODES = new Set<number>([
-  UiohookKey.Shift,
-  UiohookKey.ShiftRight,
-  UiohookKey.Ctrl,
-  UiohookKey.CtrlRight,
-  UiohookKey.Alt,
-  UiohookKey.AltRight,
-  UiohookKey.Meta,
-  UiohookKey.MetaRight,
-  UiohookKey.CapsLock,
-])
+const ALPHANUMERIC_KEYS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'.split(
+  '',
+) as (keyof typeof UiohookKey)[]
 
-const NAVIGATION_KEYCODES = new Set<number>([
-  UiohookKey.ArrowLeft,
-  UiohookKey.ArrowRight,
-  UiohookKey.ArrowUp,
-  UiohookKey.ArrowDown,
-  UiohookKey.Home,
-  UiohookKey.End,
-  UiohookKey.PageUp,
-  UiohookKey.PageDown,
+const PRINTABLE_KEYCODES = new Set<number>([
+  ...ALPHANUMERIC_KEYS.map((key) => UiohookKey[key]),
+  UiohookKey.Space,
+  UiohookKey.Semicolon,
+  UiohookKey.Equal,
+  UiohookKey.Comma,
+  UiohookKey.Minus,
+  UiohookKey.Period,
+  UiohookKey.Slash,
+  UiohookKey.Backquote,
+  UiohookKey.BracketLeft,
+  UiohookKey.Backslash,
+  UiohookKey.BracketRight,
+  UiohookKey.Quote,
+  UiohookKey.Numpad0,
+  UiohookKey.Numpad1,
+  UiohookKey.Numpad2,
+  UiohookKey.Numpad3,
+  UiohookKey.Numpad4,
+  UiohookKey.Numpad5,
+  UiohookKey.Numpad6,
+  UiohookKey.Numpad7,
+  UiohookKey.Numpad8,
+  UiohookKey.Numpad9,
+  UiohookKey.NumpadMultiply,
+  UiohookKey.NumpadAdd,
+  UiohookKey.NumpadSubtract,
+  UiohookKey.NumpadDecimal,
+  UiohookKey.NumpadDivide,
 ])
 
 const ENTER_KEYCODES = new Set<number>([UiohookKey.Enter, UiohookKey.NumpadEnter])
@@ -38,45 +49,38 @@ const DELETE_KEYCODES = new Set<number>([
 const MOD_SHORTCUTS = new Map<number, KeyClass>([
   [UiohookKey.Enter, 'mod+enter'],
   [UiohookKey.NumpadEnter, 'mod+enter'],
-  [UiohookKey.S, 'mod+s'],
-  [UiohookKey.C, 'mod+c'],
-  [UiohookKey.V, 'mod+v'],
-  [UiohookKey.X, 'mod+x'],
-  [UiohookKey.Z, 'mod+z'],
-  [UiohookKey.A, 'mod+a'],
-  [UiohookKey.F, 'mod+f'],
+  [UiohookKey.C, 'copy'],
+  [UiohookKey.X, 'cut'],
+  [UiohookKey.V, 'paste'],
+  [UiohookKey.Z, 'undo'],
+  [UiohookKey.S, 'save'],
 ])
 
 export function classifyKey(
-  event: Pick<UiohookKeyboardEvent, 'keycode' | 'metaKey' | 'ctrlKey' | 'shiftKey'>,
+  event: Pick<UiohookKeyboardEvent, 'keycode' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>,
+  platform: NodeJS.Platform = process.platform,
 ): KeyClass | null {
-  if (MODIFIER_KEYCODES.has(event.keycode) || NAVIGATION_KEYCODES.has(event.keycode)) return null
-  if (event.metaKey || event.ctrlKey) {
-    return MOD_SHORTCUTS.get(event.keycode) ?? 'shortcut'
-  }
-  if (ENTER_KEYCODES.has(event.keycode)) return event.shiftKey ? 'shift+enter' : 'enter'
+  const isMac = platform === 'darwin'
+  const mod = isMac ? event.metaKey : event.ctrlKey && !event.altKey
+
+  if (mod) return event.shiftKey ? null : (MOD_SHORTCUTS.get(event.keycode) ?? null)
+  if (event.metaKey || (isMac && event.ctrlKey)) return null
+  if (ENTER_KEYCODES.has(event.keycode)) return event.shiftKey ? 'type' : 'enter'
   if (DELETE_KEYCODES.has(event.keycode)) return 'delete'
   if (event.keycode === UiohookKey.Tab) return 'tab'
   if (event.keycode === UiohookKey.Escape) return 'escape'
-  return 'char'
+  return PRINTABLE_KEYCODES.has(event.keycode) ? 'type' : null
 }
 
 export function classifyClick(
-  event: Pick<UiohookMouseEvent, 'button' | 'clicks' | 'metaKey' | 'ctrlKey'>,
+  event: Pick<UiohookMouseEvent, 'button' | 'clicks' | 'ctrlKey'>,
   platform: NodeJS.Platform = process.platform,
 ): ClickClass | null {
   if (event.button === MOUSE_BUTTON_RIGHT || (platform === 'darwin' && event.ctrlKey)) {
     return 'right'
   }
-  if (event.button === MOUSE_BUTTON_MIDDLE) return 'middle'
-  if (event.metaKey || event.ctrlKey) return 'mod'
-  if (event.clicks === 2) return 'double'
-  if (event.clicks > 2) return null
-  return 'left'
-}
-
-export function isDrag(from: { x: number; y: number }, to: { x: number; y: number }): boolean {
-  return Math.hypot(to.x - from.x, to.y - from.y) >= DRAG_MIN_DISTANCE_PX
+  if (event.button !== MOUSE_BUTTON_LEFT || event.clicks > 2) return null
+  return event.clicks === 2 ? 'double' : 'left'
 }
 
 export function appendRun<T extends string>(sequence: InputRun<T>[], kind: T): void {
