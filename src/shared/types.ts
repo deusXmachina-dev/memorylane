@@ -12,6 +12,26 @@ import type {
   TaskSightingSummary,
 } from './eval-review'
 
+export type KeyClass =
+  | 'type'
+  | 'enter'
+  | 'delete'
+  | 'escape'
+  | 'tab'
+  | 'copy'
+  | 'cut'
+  | 'paste'
+  | 'undo'
+  | 'save'
+  | 'mod+enter'
+
+export type ClickClass = 'left' | 'double' | 'right'
+
+export interface InputRun<T extends string> {
+  kind: T
+  count: number
+}
+
 export interface InteractionContext {
   type: 'click' | 'keyboard' | 'scroll' | 'app_change'
   timestamp: number
@@ -19,10 +39,12 @@ export interface InteractionContext {
 
   // Click-specific
   clickPosition?: { x: number; y: number }
+  clickSequence?: InputRun<ClickClass>[] // Ordered, run-length-encoded click classes
 
   // Keyboard-specific
   keyCount?: number // Number of keys pressed in typing session
   durationMs?: number // Duration of typing session in milliseconds
+  keySequence?: InputRun<KeyClass>[] // Ordered, run-length-encoded key classes; never characters
 
   // Scroll-specific
   scrollDirection?: 'vertical' | 'horizontal'
