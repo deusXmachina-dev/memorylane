@@ -1,5 +1,5 @@
 import type { RemoteModelConfig } from '../../shared/remote-model-config'
-import type { CaptureSettings, Vendor } from '../../shared/types'
+import type { AppSettings, Vendor } from '../../shared/types'
 import { VENDOR_PRESETS, buildModelChain } from '../../shared/vendor-defaults'
 
 /** Structural shape of every live service that consumes a model selection. */
@@ -15,7 +15,7 @@ export interface ModelPushDeps {
 }
 
 type ModelSelection = Pick<
-  CaptureSettings,
+  AppSettings,
   'activeVendor' | 'semanticVideoModel' | 'semanticSnapshotModel' | 'patternDetectionModel'
 >
 

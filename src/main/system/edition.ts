@@ -8,6 +8,7 @@ import {
 } from '@/shared/edition'
 import { getElectronAppOrNull, isPackagedElectronExecutable } from '@main/utils/paths'
 import log from '@main/utils/logger'
+import { ENTERPRISE_BACKEND_CONFIG, MANAGED_KEY_CONFIG } from '@constants'
 
 type RawEditionConfig = Partial<AppEditionConfig>
 
@@ -91,4 +92,10 @@ export function loadAppEditionConfig(): AppEditionConfig {
     cachedConfig = { edition: DEFAULT_EDITION }
   }
   return cachedConfig
+}
+
+export function backendUrlFor(edition: AppEdition): string {
+  return edition === 'enterprise'
+    ? ENTERPRISE_BACKEND_CONFIG.BACKEND_URL
+    : MANAGED_KEY_CONFIG.BACKEND_URL
 }

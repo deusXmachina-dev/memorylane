@@ -230,6 +230,13 @@ export class UserContextBuilder {
     private readonly provider?: InferenceProvider,
   ) {}
 
+  stop(): void {
+    if (this.settleTimer) {
+      clearTimeout(this.settleTimer)
+      this.settleTimer = null
+    }
+  }
+
   updateModel(model: string): void {
     this.model = model.trim()
     log.info(`[UserContextBuilder] Model updated to: ${this.model || '(none — builder idle)'}`)

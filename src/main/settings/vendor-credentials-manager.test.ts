@@ -35,8 +35,6 @@ describe('VendorCredentialsManager', () => {
   function paths() {
     return {
       configPath: path.join(tmpDir, 'vendor-credentials.json'),
-      legacyApiKeyConfigPath: path.join(tmpDir, 'secure-config.json'),
-      legacyCustomEndpointConfigPath: path.join(tmpDir, 'custom-endpoint.json'),
     }
   }
 
@@ -48,7 +46,6 @@ describe('VendorCredentialsManager', () => {
     })
     expect(m.getCredentials('openrouter')).toBeNull()
     expect(m.getCredentials('openai-compatible')).toBeNull()
-    expect(m.migration.ran).toBe(false)
   })
 
   it('saves and round-trips a key per vendor', () => {
@@ -152,74 +149,10 @@ describe('VendorCredentialsManager', () => {
     expect(m.getStatus('openrouter').hasKey).toBe(false)
   })
 
-  it('migrates legacy secure-config.json to v2 openrouter slot', () => {
-    const p = paths()
-    // Production encodes safeStorage.encryptString(plain).toString('base64').
-    // With our shim (encrypt = utf-8 bytes), that becomes base64 of plain bytes.
-    const stored = Buffer.from('legacy-or-key', 'utf-8').toString('base64')
-    fs.writeFileSync(
-      p.legacyApiKeyConfigPath,
-      JSON.stringify({ apiKey: stored, source: 'managed' }),
-    )
-    const m = new VendorCredentialsManager({
-      ...p,
-      safeStorage: makeSafeStorage(),
-      env: {},
-    })
-    expect(m.migration.ran).toBe(true)
-    expect(m.migration.hadCustomEndpoint).toBe(false)
-    expect(m.getCredentials('openrouter')).toEqual({ apiKey: 'legacy-or-key' })
-    expect(m.getStatus('openrouter').source).toBe('managed')
-    expect(fs.existsSync(p.configPath)).toBe(true)
-  })
-
-  it('migrates legacy custom-endpoint.json to v2 openai-compatible slot', () => {
-    const p = paths()
-    const stored = Buffer.from('legacy-ep-key', 'utf-8').toString('base64')
-    fs.writeFileSync(
-      p.legacyCustomEndpointConfigPath,
-      JSON.stringify({
-        serverURL: 'http://localhost:11434/v1',
-        model: 'llama3:8b',
-        encryptedApiKey: stored,
-      }),
-    )
-    const m = new VendorCredentialsManager({
-      ...p,
-      safeStorage: makeSafeStorage(),
-      env: {},
-    })
-    expect(m.migration.ran).toBe(true)
-    expect(m.migration.hadCustomEndpoint).toBe(true)
-    expect(m.migration.customEndpointModel).toBe('llama3:8b')
-    expect(m.getCredentials('openai-compatible')).toEqual({
-      apiKey: 'legacy-ep-key',
-      baseURL: 'http://localhost:11434/v1',
-    })
-  })
-
-  it('legacy custom-endpoint without model leaves customEndpointModel undefined', () => {
-    const p = paths()
-    fs.writeFileSync(
-      p.legacyCustomEndpointConfigPath,
-      JSON.stringify({ serverURL: 'http://localhost:11434/v1' }),
-    )
-    const m = new VendorCredentialsManager({
-      ...p,
-      safeStorage: makeSafeStorage(),
-      env: {},
-    })
-    expect(m.migration.hadCustomEndpoint).toBe(true)
-    expect(m.migration.customEndpointModel).toBeUndefined()
-  })
-
-  it('preserves a corrupt v2 file and does not migrate over it', () => {
+  it('preserves a corrupt config file', () => {
     const p = paths()
     const corrupt = '{ this is not valid json'
     fs.writeFileSync(p.configPath, corrupt)
-    // A legacy file that *would* be migrated if the v2 file weren't present.
-    const stored = Buffer.from('legacy-or-key', 'utf-8').toString('base64')
-    fs.writeFileSync(p.legacyApiKeyConfigPath, JSON.stringify({ apiKey: stored, source: 'byok' }))
 
     const m = new VendorCredentialsManager({
       ...p,
@@ -227,18 +160,14 @@ describe('VendorCredentialsManager', () => {
       env: {},
     })
 
-    // Migration must NOT run, otherwise the corrupt file would be clobbered.
-    expect(m.migration.ran).toBe(false)
     expect(m.getCredentials('openrouter')).toBeNull()
     // Corrupt file is preserved on disk for manual recovery.
     expect(fs.readFileSync(p.configPath, 'utf-8')).toBe(corrupt)
   })
 
-  it('preserves a v2 file with unexpected shape and does not migrate over it', () => {
+  it('preserves a config file with unexpected shape', () => {
     const p = paths()
     fs.writeFileSync(p.configPath, JSON.stringify({ version: 1, foo: 'bar' }))
-    const stored = Buffer.from('legacy-or-key', 'utf-8').toString('base64')
-    fs.writeFileSync(p.legacyApiKeyConfigPath, JSON.stringify({ apiKey: stored, source: 'byok' }))
 
     const m = new VendorCredentialsManager({
       ...p,
@@ -246,7 +175,6 @@ describe('VendorCredentialsManager', () => {
       env: {},
     })
 
-    expect(m.migration.ran).toBe(false)
     expect(m.getCredentials('openrouter')).toBeNull()
     expect(JSON.parse(fs.readFileSync(p.configPath, 'utf-8'))).toEqual({
       version: 1,
@@ -254,12 +182,8 @@ describe('VendorCredentialsManager', () => {
     })
   })
 
-  it('does not re-migrate when v2 file is already present', () => {
+  it('loads credentials from an existing config file', () => {
     const p = paths()
-    fs.writeFileSync(
-      p.legacyApiKeyConfigPath,
-      JSON.stringify({ apiKey: 'should-be-ignored', source: 'byok' }),
-    )
     fs.writeFileSync(
       p.configPath,
       JSON.stringify({
@@ -277,8 +201,6 @@ describe('VendorCredentialsManager', () => {
       safeStorage: makeSafeStorage(),
       env: {},
     })
-    expect(m.migration.ran).toBe(false)
-    // The v2 entry should win — and our shim uses base64 round-trip for "encryption"
     expect(m.getCredentials('openrouter')).toEqual({ apiKey: 'already-here' })
   })
 

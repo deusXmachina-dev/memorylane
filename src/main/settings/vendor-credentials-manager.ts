@@ -42,34 +42,18 @@ const ENV_VARS: Record<Vendor, { apiKey: string; baseURL?: string }> = {
 export interface VendorCredentialsManagerOptions {
   /** Override the v2 file location (test seam). */
   configPath?: string
-  /** Override the legacy api-key-manager file location. */
-  legacyApiKeyConfigPath?: string
-  /** Override the legacy custom-endpoint-manager file location. */
-  legacyCustomEndpointConfigPath?: string
   /** Inject a safeStorage shim (for tests). When omitted, uses Electron's. */
   safeStorage?: SafeStorageLike
   /** Inject a process.env for tests. */
   env?: NodeJS.ProcessEnv
 }
 
-export interface MigrationResult {
-  /** True when a v1 → v2 migration ran during construction. */
-  ran: boolean
-  /** True if a legacy custom-endpoint config was found and migrated. */
-  hadCustomEndpoint: boolean
-  /** Model id read from the legacy custom-endpoint.json, when present. */
-  customEndpointModel?: string
-}
-
 export class VendorCredentialsManager {
   private readonly configPath: string
-  private readonly legacyApiKeyConfigPath: string
-  private readonly legacyCustomEndpointConfigPath: string
   private readonly safeStorage: SafeStorageLike
   private readonly env: NodeJS.ProcessEnv
   private store: StoredV2
   private readonly cachedKeys: Partial<Record<Vendor, string | null>> = {}
-  public readonly migration: MigrationResult
 
   constructor(options: VendorCredentialsManagerOptions = {}) {
     if (options.safeStorage) {
@@ -89,15 +73,9 @@ export class VendorCredentialsManager {
         })()
 
     this.configPath = options.configPath ?? path.join(userDataPath, 'vendor-credentials.json')
-    this.legacyApiKeyConfigPath =
-      options.legacyApiKeyConfigPath ?? path.join(userDataPath, 'secure-config.json')
-    this.legacyCustomEndpointConfigPath =
-      options.legacyCustomEndpointConfigPath ?? path.join(userDataPath, 'custom-endpoint.json')
     this.env = options.env ?? process.env
 
-    const loaded = this.load()
-    this.store = loaded.store
-    this.migration = loaded.migration
+    this.store = this.load()
   }
 
   // ---------- public API ----------
@@ -303,99 +281,18 @@ export class VendorCredentialsManager {
     }
   }
 
-  private load(): { store: StoredV2; migration: MigrationResult } {
-    if (fs.existsSync(this.configPath)) {
-      try {
-        const data = JSON.parse(fs.readFileSync(this.configPath, 'utf-8')) as Partial<StoredV2>
-        if (data.version === 2 && data.vendors && typeof data.vendors === 'object') {
-          return {
-            store: { version: 2, vendors: data.vendors },
-            migration: { ran: false, hadCustomEndpoint: false },
-          }
-        }
-        // The file is present but the shape is wrong. Preserve it for manual
-        // recovery rather than letting legacy migration overwrite it.
-        log.error(
-          '[VendorCredentialsManager] v2 config has unexpected shape; preserving file, skipping migration',
-        )
-      } catch (error) {
-        log.error(
-          '[VendorCredentialsManager] failed to parse v2 config; preserving file, skipping migration:',
-          error,
-        )
+  private load(): StoredV2 {
+    if (!fs.existsSync(this.configPath)) return { version: 2, vendors: {} }
+    try {
+      const data = JSON.parse(fs.readFileSync(this.configPath, 'utf-8')) as Partial<StoredV2>
+      if (data.version === 2 && data.vendors && typeof data.vendors === 'object') {
+        return { version: 2, vendors: data.vendors }
       }
-      return {
-        store: { version: 2, vendors: {} },
-        migration: { ran: false, hadCustomEndpoint: false },
-      }
+      log.error('[VendorCredentialsManager] config has unexpected shape; preserving file')
+    } catch (error) {
+      log.error('[VendorCredentialsManager] failed to parse config; preserving file:', error)
     }
-    return this.migrateFromLegacy()
-  }
-
-  private migrateFromLegacy(): { store: StoredV2; migration: MigrationResult } {
-    const store: StoredV2 = { version: 2, vendors: {} }
-    let ran = false
-    let hadCustomEndpoint = false
-    let customEndpointModel: string | undefined
-
-    // Legacy api-key-manager config (OpenRouter).
-    if (fs.existsSync(this.legacyApiKeyConfigPath)) {
-      try {
-        const raw = JSON.parse(fs.readFileSync(this.legacyApiKeyConfigPath, 'utf-8')) as {
-          apiKey?: string
-          source?: 'byok' | 'managed'
-        }
-        if (raw.apiKey && typeof raw.apiKey === 'string') {
-          store.vendors.openrouter = {
-            apiKey: raw.apiKey,
-            source: raw.source === 'managed' ? 'managed' : 'byok',
-          }
-          ran = true
-          log.info('[VendorCredentialsManager] migrated legacy openrouter key')
-        }
-      } catch (error) {
-        log.warn('[VendorCredentialsManager] failed to read legacy api-key config:', error)
-      }
-    }
-
-    // Legacy custom-endpoint config (openai-compatible).
-    if (fs.existsSync(this.legacyCustomEndpointConfigPath)) {
-      try {
-        const raw = JSON.parse(fs.readFileSync(this.legacyCustomEndpointConfigPath, 'utf-8')) as {
-          serverURL?: string
-          model?: string
-          encryptedApiKey?: string
-        }
-        if (raw.serverURL && typeof raw.serverURL === 'string') {
-          const entry: StoredVendorEntry = {
-            baseURL: raw.serverURL,
-            source: 'byok',
-          }
-          if (raw.encryptedApiKey && typeof raw.encryptedApiKey === 'string') {
-            entry.apiKey = raw.encryptedApiKey
-          }
-          store.vendors['openai-compatible'] = entry
-          if (typeof raw.model === 'string' && raw.model.length > 0) {
-            customEndpointModel = raw.model
-          }
-          ran = true
-          hadCustomEndpoint = true
-          log.info('[VendorCredentialsManager] migrated legacy custom-endpoint config')
-        }
-      } catch (error) {
-        log.warn('[VendorCredentialsManager] failed to read legacy custom-endpoint config:', error)
-      }
-    }
-
-    if (ran) {
-      try {
-        fs.writeFileSync(this.configPath, JSON.stringify(store, null, 2))
-      } catch (error) {
-        log.error('[VendorCredentialsManager] failed to persist migrated config:', error)
-      }
-    }
-
-    return { store, migration: { ran, hadCustomEndpoint, customEndpointModel } }
+    return { version: 2, vendors: {} }
   }
 }
 

@@ -407,6 +407,21 @@ describe('TaskMiner sweep', () => {
     expect(storage.miningDays.getAll().every((d) => d.status === 'completed')).toBe(true)
   })
 
+  it('stop() resolves only after the in-flight sweep settles', async () => {
+    useFakeClockAtNoon()
+    seedDays(2)
+    seedFiller()
+
+    miner.startup()
+    vi.advanceTimersByTime(TASK_BACKFILL.POLL_INTERVAL_MS)
+    expect(miner.isBusy()).toBe(true)
+
+    await miner.stop()
+
+    expect(miner.isBusy()).toBe(false)
+    expect(storage.miningDays.getRunningDay()).toBeNull()
+  })
+
   it('a single day failure gates only that day, not the next sweep', async () => {
     useFakeClockAtNoon()
     seedDays(2)
@@ -824,5 +839,48 @@ describe('TaskMiner sweep', () => {
     miner.updateModel('test/model')
     const resumed = await miner.sweepNow(configuredProvider)
     expect(resumed.daysMined).toBe(2)
+  })
+})
+
+describe('TaskMiner lifecycle', () => {
+  const TEST_DB_PATH = path.join(os.tmpdir(), 'temp_task_miner_lifecycle_test.db')
+  let storage: StorageService
+
+  beforeEach(() => {
+    deleteDbFiles(TEST_DB_PATH)
+    storage = new StorageService(TEST_DB_PATH)
+    applyMigrations(storage.getDatabase())
+  })
+
+  afterEach(() => {
+    storage.close()
+    deleteDbFiles(TEST_DB_PATH)
+  })
+
+  it('getStatus counts only days settled since the sweep started', () => {
+    const miner = new TaskMiner(storage, configuredProvider, embedder)
+    storage.miningDays.enqueueMissing(['2026-07-01', '2026-07-02'])
+    storage.miningDays.claimOldestPending()
+    storage.miningDays.markCompleted('2026-07-01', {})
+
+    expect(miner.getStatus()).toEqual({
+      state: 'idle',
+      currentDay: null,
+      pendingDays: 1,
+      completedDays: 0,
+      failedDays: 0,
+      totalDays: 1,
+    })
+  })
+
+  it('does not sweep after stop()', () => {
+    seedActivities(storage, PATTERN_DETECTION_CONFIG.MIN_ACTIVITIES)
+    const miner = new TaskMiner(storage, configuredProvider, embedder)
+    miner.updateModel('test/model')
+
+    miner.stop()
+    miner.scheduleRun()
+
+    expect(miner.isBusy()).toBe(false)
   })
 })

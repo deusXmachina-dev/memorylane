@@ -19,8 +19,6 @@ import { SettingsSection } from './SettingsSection'
 interface DataTabPanelProps {
   api: MainWindowAPI
   editionConfig: AppEditionConfig | null
-  databaseExportDirectory: string
-  onDatabaseExportDirectoryChange: (directoryPath: string) => void
   uploadDetailLevel: 'off' | 'summary' | 'detailed'
   onUploadDetailLevelChange: (level: 'off' | 'summary' | 'detailed') => void
 }
@@ -28,37 +26,12 @@ interface DataTabPanelProps {
 export function DataTabPanel({
   api,
   editionConfig,
-  databaseExportDirectory,
-  onDatabaseExportDirectoryChange,
   uploadDetailLevel,
   onUploadDetailLevelChange,
 }: DataTabPanelProps): React.JSX.Element {
-  const [isChoosingDirectory, setIsChoosingDirectory] = useState(false)
   const [isPurgeExpanded, setIsPurgeExpanded] = useState(false)
   const [purgeConfirmation, setPurgeConfirmation] = useState('')
   const [isPurging, setIsPurging] = useState(false)
-
-  const handleChooseDirectory = useCallback(async () => {
-    setIsChoosingDirectory(true)
-    try {
-      const result = await api.chooseDatabaseExportDirectory(databaseExportDirectory)
-      if (result.cancelled) {
-        return
-      }
-      if (result.error) {
-        toast.error(result.error)
-        return
-      }
-      if (result.directoryPath) {
-        onDatabaseExportDirectoryChange(result.directoryPath)
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to choose folder'
-      toast.error(message)
-    } finally {
-      setIsChoosingDirectory(false)
-    }
-  }, [api, databaseExportDirectory, onDatabaseExportDirectoryChange])
 
   const resetPurgeState = useCallback(() => {
     setIsPurgeExpanded(false)
@@ -100,50 +73,6 @@ export function DataTabPanel({
           description="Replace the database from an exported ZIP or .db file."
           control={<DatabaseImportSection api={api} />}
         />
-        {!isEnterprise && (
-          <SettingsRow
-            layout="stacked"
-            label="Folder for periodic export"
-            description={
-              databaseExportDirectory
-                ? 'The raw database is mirrored to this folder on a schedule.'
-                : 'Choose a folder to mirror the raw database to on a schedule.'
-            }
-            control={
-              <div className="flex items-center gap-2">
-                <Input
-                  value={databaseExportDirectory}
-                  readOnly
-                  placeholder="Not configured"
-                  aria-label="Raw DB export folder"
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void handleChooseDirectory()}
-                  disabled={isChoosingDirectory}
-                >
-                  {isChoosingDirectory
-                    ? 'Choosing...'
-                    : databaseExportDirectory
-                      ? 'Change'
-                      : 'Choose'}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!databaseExportDirectory}
-                  onClick={() => onDatabaseExportDirectoryChange('')}
-                >
-                  Clear
-                </Button>
-              </div>
-            }
-          />
-        )}
       </SettingsSection>
 
       {isEnterprise && (

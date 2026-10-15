@@ -6,7 +6,7 @@ import type { ObservationState } from '@/shared/types'
 import log from '@main/utils/logger'
 
 interface CaptureSuppressor {
-  setFrameCaptureSuppressed(suppressed: boolean): void | Promise<void>
+  setFrameCaptureSuppressed(suppressed: boolean): Promise<void>
 }
 
 const DEFAULT_DURATION_MS = 120_000
@@ -116,11 +116,9 @@ export function createObservationController(params: ControllerParams): Observati
       endTimer = null
     }
 
-    try {
-      void params.captureControl.setFrameCaptureSuppressed(false)
-    } catch (error) {
-      log.error('[Observation] setFrameCaptureSuppressed(false) threw:', error)
-    }
+    void params.captureControl.setFrameCaptureSuppressed(false).catch((error) => {
+      log.error('[Observation] setFrameCaptureSuppressed(false) failed:', error)
+    })
 
     if (unsubscribe) {
       try {
@@ -179,22 +177,9 @@ export function createObservationController(params: ControllerParams): Observati
       stop('timer')
     }, clamped)
 
-    try {
-      void params.captureControl.setFrameCaptureSuppressed(true)
-    } catch (error) {
-      log.error('[Observation] setFrameCaptureSuppressed(true) threw:', error)
-      clearTimeout(endTimer)
-      endTimer = null
-      try {
-        unsubscribe()
-      } catch (unsubError) {
-        log.error('[Observation] app-watcher unsubscribe threw during rollback:', unsubError)
-      }
-      unsubscribe = null
-      phase = 'idle'
-      endsAt = null
-      throw error
-    }
+    void params.captureControl.setFrameCaptureSuppressed(true).catch((error) => {
+      log.error('[Observation] setFrameCaptureSuppressed(true) failed:', error)
+    })
 
     log.info(`[Observation] Started (durationMs=${clamped})`)
     emit()

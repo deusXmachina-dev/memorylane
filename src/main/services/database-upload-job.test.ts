@@ -17,6 +17,7 @@ vi.mock('./upload-prep', () => ({
 }))
 
 import { databaseUploadJob, type DatabaseUploadJobParams } from './database-upload-job'
+import { readFormFile } from '@main/utils/test-utils'
 
 const HOUR = 60 * 60 * 1000
 
@@ -73,10 +74,12 @@ describe('databaseUploadJob', () => {
     const { job, backupToFile } = makeJob()
     const tempPath = path.join(os.tmpdir(), `db-upload-job-test-${process.pid}.tmp`)
 
-    const bytes = await job.produce(tempPath)
+    const file = await readFormFile(await job.produce(tempPath))
     fs.rmSync(tempPath, { force: true })
+    const bytes = file.bytes
 
     expect(backupToFile).toHaveBeenCalledWith(tempPath)
+    expect(file.name).toBe('memorylane.db.gz')
     expect(bytes[0]).toBe(0x1f)
     expect(bytes[1]).toBe(0x8b)
     expect(zlib.gunzipSync(bytes).toString()).toBe('dbcontent')

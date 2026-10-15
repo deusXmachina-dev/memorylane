@@ -249,6 +249,10 @@ class AutonomousCapture: NSObject, SCStreamOutput {
         self.currentDisplayId = nil
     }
 
+    func drainWrites() {
+        writeQueue.sync {}
+    }
+
     func updateIntervalMs(_ ms: Int) async {
         config.intervalMs = ms
         // Must recreate stream to change minimumFrameInterval
@@ -363,7 +367,7 @@ class AutonomousCapture: NSObject, SCStreamOutput {
 
 // MARK: - Stdin command listener
 
-func listenForCommands(capture: AutonomousCapture) {
+func listenForCommands(capture: AutonomousCapture, onStdinClosed: @escaping () -> Void) {
     DispatchQueue.global(qos: .utility).async {
         while let line = readLine(strippingNewline: true) {
             guard let data = line.data(using: .utf8),
@@ -391,11 +395,7 @@ func listenForCommands(capture: AutonomousCapture) {
             }
         }
 
-        // stdin closed — clean shutdown
-        Task {
-            await capture.stopStream()
-            exit(0)
-        }
+        onStdinClosed()
     }
 }
 
@@ -411,6 +411,30 @@ try FileManager.default.createDirectory(
 
 let capture = AutonomousCapture(config: config)
 
+let shutdownQueue = DispatchQueue(label: "com.memorylane.screenshot.shutdown")
+let shutdownTimeout: TimeInterval = 0.5
+var shuttingDown = false
+func shutdown() {
+    shutdownQueue.async {
+        if shuttingDown { exit(0) }
+        shuttingDown = true
+        shutdownQueue.asyncAfter(deadline: .now() + shutdownTimeout) { exit(0) }
+        Task {
+            await capture.stopStream()
+            capture.drainWrites()
+            exit(0)
+        }
+    }
+}
+
+let signalSources = [SIGTERM, SIGINT, SIGHUP].map { sig in
+    signal(sig, SIG_IGN)
+    let source = DispatchSource.makeSignalSource(signal: sig, queue: shutdownQueue)
+    source.setEventHandler { shutdown() }
+    source.resume()
+    return source
+}
+
 let semaphore = DispatchSemaphore(value: 0)
 Task {
     do {
@@ -419,7 +443,6 @@ Task {
         fail("Failed to start capture stream: \(error)")
     }
 
-    // Start listening for stdin commands
-    listenForCommands(capture: capture)
+    listenForCommands(capture: capture, onStdinClosed: shutdown)
 }
 semaphore.wait()

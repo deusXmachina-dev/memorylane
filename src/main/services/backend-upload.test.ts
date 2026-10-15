@@ -5,7 +5,8 @@ vi.mock('@main/utils/logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
-import { BackendUpload, type BackendUploadParams, type UploadJob } from './backend-upload'
+import { BackendUpload, fileForm, type BackendUploadParams, type UploadJob } from './backend-upload'
+import { BackendClient } from './backend-client'
 import log from '@main/utils/logger'
 import { ManualHostEnvironment } from '@main/monitoring/host-environment'
 
@@ -31,7 +32,7 @@ function deferred() {
 
 type FakeJob = UploadJob & {
   skipReason: Mock<() => string | null>
-  produce: Mock<(tempPath: string) => Promise<Buffer>>
+  produce: Mock<(tempPath: string) => Promise<BodyInit>>
   onSuccess: Mock<(response: Response) => Promise<void>>
 }
 
@@ -39,11 +40,10 @@ function fakeJob(overrides: Partial<FakeJob> = {}): FakeJob {
   return {
     name: 'FakeUpload',
     endpoint: 'api/device/fake',
-    filename: 'fake.bin',
     skipReason: vi.fn<() => string | null>(() => null),
     produce: vi.fn(async (tempPath: string) => {
       fs.writeFileSync(tempPath, 'payload')
-      return Buffer.from('payload')
+      return fileForm(Buffer.from('payload'), 'fake.bin')
     }),
     onSuccess: vi.fn(async () => {}),
     ...overrides,
@@ -51,17 +51,23 @@ function fakeJob(overrides: Partial<FakeJob> = {}): FakeJob {
 }
 
 function makeUpload(
-  overrides: Partial<BackendUploadParams> = {},
+  overrides: Partial<
+    BackendUploadParams & { env: ManualHostEnvironment; getBackendUrl: () => string }
+  > = {},
   jobOverrides: Partial<FakeJob> = {},
 ) {
+  const { env, getBackendUrl, ...params } = overrides
   const job = fakeJob(jobOverrides)
   const upload = new BackendUpload({
     job,
-    getDeviceId: () => 'device-hex-id',
+    backend: new BackendClient({
+      getDeviceId: () => 'device-hex-id',
+      getBackendUrl: getBackendUrl ?? (() => 'http://localhost:8000/'),
+      env: env ?? new ManualHostEnvironment(),
+    }),
     isActivated: () => true,
     isSyncEnabled: () => true,
-    getBackendUrl: () => 'http://localhost:8000/',
-    ...overrides,
+    ...params,
   })
   return { upload, job }
 }
@@ -249,7 +255,7 @@ describe('BackendUpload', () => {
       {
         produce: vi.fn(async () => {
           await gate.promise
-          return Buffer.from('payload')
+          return fileForm(Buffer.from('payload'), 'fake.bin')
         }),
       },
     )
@@ -275,7 +281,7 @@ describe('BackendUpload', () => {
         skipReason: vi.fn(() => (uploaded ? 'already uploaded today' : null)),
         produce: vi.fn(async () => {
           await gate.promise
-          return Buffer.from('payload')
+          return fileForm(Buffer.from('payload'), 'fake.bin')
         }),
         onSuccess: vi.fn(async () => {
           uploaded = true
@@ -304,7 +310,7 @@ describe('BackendUpload', () => {
         skipReason: vi.fn(() => (uploaded ? 'already uploaded today' : null)),
         produce: vi.fn(async () => {
           await gate.promise
-          return Buffer.from('payload')
+          return fileForm(Buffer.from('payload'), 'fake.bin')
         }),
         onSuccess: vi.fn(async () => {
           uploaded = true
@@ -412,7 +418,7 @@ describe('BackendUpload', () => {
 
     host.suspend()
     upload.kick('interval')
-    await upload.stop()
+    await new Promise((resolve) => setImmediate(resolve))
     expect(fetchMock).not.toHaveBeenCalled()
 
     host.resume()

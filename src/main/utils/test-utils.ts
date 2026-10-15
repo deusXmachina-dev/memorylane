@@ -1,5 +1,13 @@
-import type { CaptureSettings } from '../../shared/types'
+import type { AppSettings } from '../../shared/types'
 import { VENDOR_PRESETS } from '../../shared/vendor-defaults'
+
+export async function readFormFile(
+  body: BodyInit,
+  field = 'file',
+): Promise<{ name: string; bytes: Buffer }> {
+  const file = (body as FormData).get(field) as File
+  return { name: file.name, bytes: Buffer.from(await file.arrayBuffer()) }
+}
 
 export function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return {
@@ -10,7 +18,7 @@ export function jsonResponse(body: unknown, ok = true, status = 200): Response {
   } as Response
 }
 
-export function makeCaptureSettings(overrides: Partial<CaptureSettings> = {}): CaptureSettings {
+export function makeAppSettings(overrides: Partial<AppSettings> = {}): AppSettings {
   return {
     autoStartEnabled: true,
     visualThreshold: 8,
@@ -24,7 +32,6 @@ export function makeCaptureSettings(overrides: Partial<CaptureSettings> = {}): C
     taskMiningRequestTimeoutMs: 1200000,
     semanticPipelineMode: 'auto',
     captureHotkeyAccelerator: 'CommandOrControl+Shift+M',
-    databaseExportDirectory: '',
     excludePrivateBrowsing: true,
     excludeLoginScreens: true,
     excludedApps: [],

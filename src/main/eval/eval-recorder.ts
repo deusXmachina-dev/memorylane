@@ -19,7 +19,6 @@ import * as path from 'path'
 import log from '@main/utils/logger'
 import type { StreamSubscription } from '@main/streams/stream'
 import type { PipelineHarness } from '@main/activity/pipeline-harness'
-import type { RuntimeCaptureController } from '@main/capture/capture-controller'
 import { FrameDebugDumper } from '@main/debug/frame-debug-dump'
 import { EventWindowDebugDumper } from '@main/debug/event-window-debug-dump'
 import { ActivityDebugDumper } from './activity-debug-dump'
@@ -38,7 +37,6 @@ export function sanitizeFixtureName(name: string): string {
 
 export class EvalRecorder {
   private readonly harness: PipelineHarness
-  private readonly capture: RuntimeCaptureController
   readonly fixturesRoot: string
 
   private activeName: string | null = null
@@ -51,13 +49,8 @@ export class EvalRecorder {
   private script: RecordingScript | null = null
   private stopping = false
 
-  constructor(deps: {
-    harness: PipelineHarness
-    capture: RuntimeCaptureController
-    fixturesRoot: string
-  }) {
+  constructor(deps: { harness: PipelineHarness; fixturesRoot: string }) {
     this.harness = deps.harness
-    this.capture = deps.capture
     this.fixturesRoot = deps.fixturesRoot
   }
 
@@ -119,8 +112,12 @@ export class EvalRecorder {
 
     // Frames only flow while capture is running; start it for the operator if it
     // is off, and remember so we can restore the prior state on stop.
-    this.startedCapture = !this.capture.isCapturingNow()
-    if (this.startedCapture) this.capture.startCapture()
+    this.startedCapture = !this.harness.capturing()
+    if (this.startedCapture) {
+      void this.harness.start().catch((error) => {
+        log.error('[EvalRecorder] Failed to start capture:', error)
+      })
+    }
 
     this.activeName = safeName
     this.script = script
@@ -145,7 +142,7 @@ export class EvalRecorder {
     // extractor drain. The dumpers stay subscribed through this so the final
     // window/frame/activity is dumped.
     try {
-      await this.capture.waitForIdle()
+      await this.harness.waitForIdle()
       try {
         await this.harness.drainActivities()
       } catch (error) {
@@ -190,8 +187,7 @@ export class EvalRecorder {
       if (this.startedCapture) {
         // We turned capture on for this recording; turn it back off to restore the
         // operator's prior "capture off" state.
-        this.capture.stopCapture()
-        await this.capture.waitForIdle()
+        await this.harness.stop()
       }
     } finally {
       this.frameSub?.unsubscribe()

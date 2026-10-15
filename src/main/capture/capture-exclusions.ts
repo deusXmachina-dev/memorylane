@@ -1,5 +1,4 @@
 import { domainOf } from '@/shared/url-utils'
-import type { InstalledApp } from '@/shared/types'
 
 export interface ExclusionWindowContext {
   processName?: string
@@ -58,47 +57,6 @@ const APP_TOKEN_ALIASES: Record<string, string> = {
 
 function normalizePatternToken(value: string): string {
   return value.trim().toLowerCase()
-}
-
-// True when `token` is one of the legacy forms a previous build could have stored
-// for `app`: the bundle id's last segment (`slackmacgap`), the localized/display
-// name (`slack`), or an over-stripped bundle id that lost its `.app`/`.exe` tail
-// (`com.memorylane` for `com.memorylane.app`).
-function isLegacyTokenFor(token: string, app: InstalledApp): boolean {
-  const id = app.matchToken
-  return (
-    id === token ||
-    id.startsWith(`${token}.`) ||
-    normalizeToken(id.split('.').pop() ?? '') === token ||
-    normalizeToken(app.displayName) === token
-  )
-}
-
-// A reverse-DNS bundle id (`com.vendor.app`) has two or more dots — the current
-// macOS match-token form. Anything shorter is a legacy last-segment/display-name
-// token or a Windows exe name. Expects an already-normalized token.
-export function isBundleIdToken(token: string): boolean {
-  return token.split('.').length - 1 >= 2
-}
-
-// Upgrade legacy excluded-app tokens to the current match token. A reverse-DNS
-// bundle id is already the current form, so leave it; anything shorter is a
-// legacy form and gets fuzzy-mapped to the one installed app it identifies
-// (ambiguous or unknown tokens are left as-is — best-effort, never guess). On
-// Windows the exe-name token resolves to itself, so this is a no-op.
-export function migrateExcludedAppTokens(
-  excludedApps: readonly string[],
-  installedApps: readonly InstalledApp[],
-): string[] {
-  return excludedApps.map((entry) => {
-    const token = normalizeToken(entry)
-    if (isBundleIdToken(token)) return entry
-
-    const resolved = new Set(
-      installedApps.filter((app) => isLegacyTokenFor(token, app)).map((app) => app.matchToken),
-    )
-    return resolved.size === 1 ? [...resolved][0] : entry
-  })
 }
 
 export function normalizeExcludedApps(values: readonly string[] | undefined): string[] {

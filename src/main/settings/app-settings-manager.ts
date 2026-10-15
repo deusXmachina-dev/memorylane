@@ -1,10 +1,8 @@
 import * as fs from 'fs'
-import * as os from 'os'
 import * as path from 'path'
 import log from '@main/utils/logger'
 import type {
-  CaptureSettings,
-  InstalledApp,
+  AppSettings,
   SemanticPipelineMode,
   Vendor,
   VendorModelSelection,
@@ -12,13 +10,7 @@ import type {
 import { VENDORS } from '../../shared/types'
 import type { AppEdition } from '../../shared/edition'
 import { MODEL_DEFAULTS_VERSION, getVendorDefaults } from '../../shared/vendor-defaults'
-import {
-  isBundleIdToken,
-  migrateExcludedAppTokens,
-  normalizeExcludedApps,
-  normalizeToken,
-  normalizeWildcardPatterns,
-} from '@main/capture/capture-exclusions'
+import { normalizeExcludedApps, normalizeWildcardPatterns } from '@main/capture/capture-exclusions'
 import {
   VISUAL_DETECTOR_CONFIG,
   INTERACTION_MONITOR_CONFIG,
@@ -36,91 +28,9 @@ function normalizeVendor(value: unknown): Vendor {
     : 'openrouter'
 }
 
-/**
- * Resolve the list of safe roots a database export directory may live under.
- * Wrapped in try/catch because `electron.app.getPath` throws when called before
- * the app is ready, and `app` is unavailable entirely under
- * `ELECTRON_RUN_AS_NODE` (tests). Falls back to `os.homedir()` so the
- * containment check still has at least one root in those contexts.
- */
-function getSafeRoots(): string[] {
-  const roots: string[] = []
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const electron = require('electron') as typeof import('electron')
-    if (electron && electron.app && typeof electron.app.getPath === 'function') {
-      for (const name of ['home', 'documents', 'desktop', 'userData'] as const) {
-        try {
-          roots.push(electron.app.getPath(name))
-        } catch {
-          // Some paths may be unavailable on some platforms; ignore.
-        }
-      }
-    }
-  } catch {
-    // Electron unavailable — fall through to os.homedir() below.
-  }
-  if (roots.length === 0) {
-    try {
-      roots.push(os.homedir())
-    } catch {
-      // os.homedir() can throw in extreme contexts; we then fail closed.
-    }
-  }
-  return roots
-}
-
-function isContainedIn(child: string, parent: string): boolean {
-  const rel = path.relative(parent, child)
-  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
-}
-
-type ExportDirResult = { ok: true; value: string } | { ok: false; reason: string }
-
-/**
- * Single source of truth for databaseExportDirectory validation rules. Both
- * the forgiving load/merge path (`normalizeDatabaseExportDirectory`) and the
- * strict IPC entry point (`setDatabaseExportDirectory` on the manager) feed
- * through here.
- */
-function validateExportDir(value: unknown): ExportDirResult {
-  if (value === null || value === undefined) return { ok: true, value: '' }
-  if (typeof value !== 'string') return { ok: false, reason: 'Path must be a string' }
-  if (!/\S/.test(value)) return { ok: true, value: '' }
-  if (!path.isAbsolute(value)) return { ok: false, reason: 'Path must be absolute' }
-  // Split on both separators so a `..` segment is caught regardless of which
-  // slash the input uses. On POSIX `path.sep` is `/`; on Windows it's `\` but
-  // both `/` and `\` are valid separators, so a single-separator split would
-  // miss `C:/foo/../bar`.
-  if (value.split(/[\\/]/).includes('..')) return { ok: false, reason: 'Invalid path' }
-  let resolved: string
-  try {
-    resolved = fs.realpathSync(value)
-  } catch {
-    // Path may not yet exist (e.g. user typed a path that hasn't been created);
-    // fall back to path.resolve for the containment check.
-    resolved = path.resolve(value)
-  }
-  const safeRoots = getSafeRoots()
-  if (safeRoots.length === 0) {
-    return { ok: false, reason: 'Safe roots unavailable (app not ready)' }
-  }
-  if (!safeRoots.some((root) => isContainedIn(resolved, root))) {
-    return { ok: false, reason: 'Path is outside allowed locations' }
-  }
-  return { ok: true, value: resolved }
-}
-
-function normalizeDatabaseExportDirectory(value: string | null | undefined): string {
-  const result = validateExportDir(value)
-  if (result.ok) return result.value
-  log.warn(`[CaptureSettings] Rejecting databaseExportDirectory (${result.reason}): ${value}`)
-  return ''
-}
-
 const OPENROUTER_DEFAULTS = getVendorDefaults('openrouter')
 
-function defaultUploadDetailLevel(edition: AppEdition): CaptureSettings['uploadDetailLevel'] {
+function defaultUploadDetailLevel(edition: AppEdition): AppSettings['uploadDetailLevel'] {
   // Enterprise installs opt into syncing by default — the backend is the
   // whole reason the edition exists. Customer installs default to off so
   // nothing leaves the device until the user explicitly turns it on.
@@ -133,12 +43,7 @@ function defaultUploadDetailLevel(edition: AppEdition): CaptureSettings['uploadD
 // their old "contains" behavior carries over as a wildcard.
 const URL_MATCH_SCHEMA_VERSION = 1
 
-// Bump when the meaning of stored excluded-app entries changes. v1: entries are
-// full bundle ids (macOS) / exe names (Windows). `migrateAppTokens` upgrades
-// pre-v1 last-segment/localized-name tokens to bundle ids on first launch.
-const APP_MATCH_SCHEMA_VERSION = 1
-
-const DEFAULTS: CaptureSettings = {
+const DEFAULTS: AppSettings = {
   autoStartEnabled: true,
   visualThreshold: VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT,
   typingDebounceMs: INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS,
@@ -151,13 +56,11 @@ const DEFAULTS: CaptureSettings = {
   taskMiningRequestTimeoutMs: PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS,
   semanticPipelineMode: 'auto',
   captureHotkeyAccelerator: DEFAULT_CAPTURE_HOTKEY_ACCELERATOR,
-  databaseExportDirectory: '',
   excludePrivateBrowsing: true,
   excludeLoginScreens: true,
   excludedApps: [],
   excludedUrlPatterns: [],
   urlMatchSchemaVersion: URL_MATCH_SCHEMA_VERSION,
-  appMatchSchemaVersion: APP_MATCH_SCHEMA_VERSION,
   modelDefaultsVersion: MODEL_DEFAULTS_VERSION,
   activeVendor: 'openrouter',
   semanticVideoModel: OPENROUTER_DEFAULTS.semanticVideoModel,
@@ -241,19 +144,22 @@ function normalizeModelsByVendor(value: unknown): Partial<Record<Vendor, VendorM
   return out
 }
 
-export interface CaptureSettingsManagerOptions {
+export interface AppSettingsManagerOptions {
   configPath?: string
   edition?: AppEdition
 }
 
-export class CaptureSettingsManager {
-  private configPath: string
-  private settings: CaptureSettings
-  private defaults: CaptureSettings
-  private modelDefaultsUpgraded = false
+export type AppSettingsListener = (next: AppSettings, previous: AppSettings) => void
 
-  constructor(options: CaptureSettingsManagerOptions | string = {}) {
-    const opts: CaptureSettingsManagerOptions =
+export class AppSettingsManager {
+  private configPath: string
+  private settings: AppSettings
+  private defaults: AppSettings
+  private modelDefaultsUpgraded = false
+  private readonly listeners = new Set<AppSettingsListener>()
+
+  constructor(options: AppSettingsManagerOptions | string = {}) {
+    const opts: AppSettingsManagerOptions =
       typeof options === 'string' ? { configPath: options } : options
     if (opts.configPath !== undefined) {
       this.configPath = opts.configPath
@@ -267,22 +173,21 @@ export class CaptureSettingsManager {
       uploadDetailLevel: defaultUploadDetailLevel(opts.edition ?? 'customer'),
     }
     this.settings = this.load()
-    // Persist the version stamp once so the override runs a single time, not on
-    // every launch (mirrors migrateAppTokens stamping its schema version).
+    // Persist the version stamp once so the override runs a single time.
     if (this.modelDefaultsUpgraded) {
       this.save({})
     }
   }
 
-  private load(): CaptureSettings {
+  private load(): AppSettings {
     try {
       if (fs.existsSync(this.configPath)) {
-        type StoredCaptureSettings = Partial<CaptureSettings> & {
+        type StoredAppSettings = Partial<AppSettings> & {
           pauseHotkeyAccelerator?: string
           semanticRequestTimeoutMs?: number
           remoteModelConfigVersion?: number
         }
-        const data = JSON.parse(fs.readFileSync(this.configPath, 'utf-8')) as StoredCaptureSettings
+        const data = JSON.parse(fs.readFileSync(this.configPath, 'utf-8')) as StoredAppSettings
         delete data.remoteModelConfigVersion
         const activeVendor = normalizeVendor(data.activeVendor)
         const vendorDefaults = getVendorDefaults(activeVendor)
@@ -338,7 +243,7 @@ export class CaptureSettingsManager {
           }
           this.modelDefaultsUpgraded = true
           log.info(
-            `[CaptureSettings] Model defaults v${data.modelDefaultsVersion ?? 0} → v${MODEL_DEFAULTS_VERSION}: overriding stored model picks with vendor defaults`,
+            `[AppSettings] Model defaults v${data.modelDefaultsVersion ?? 0} → v${MODEL_DEFAULTS_VERSION}: overriding stored model picks with vendor defaults`,
           )
         }
         // Migrate pre-v1 URL patterns (substring era): wrap patterns without a
@@ -357,9 +262,6 @@ export class CaptureSettingsManager {
           excludedApps: normalizeExcludedApps(data.excludedApps),
           excludedUrlPatterns,
           urlMatchSchemaVersion: URL_MATCH_SCHEMA_VERSION,
-          // Preserve the stored value (absent → 0) so the post-load, app-list-aware
-          // migration (migrateAppTokens) can tell a pre-v1 file from a current one.
-          appMatchSchemaVersion: data.appMatchSchemaVersion ?? 0,
           maxScreenshotsForLlm:
             typeof data.maxScreenshotsForLlm === 'number'
               ? data.maxScreenshotsForLlm
@@ -377,7 +279,6 @@ export class CaptureSettingsManager {
             data.taskMiningRequestTimeoutMs,
             this.defaults.taskMiningRequestTimeoutMs,
           ),
-          databaseExportDirectory: normalizeDatabaseExportDirectory(data.databaseExportDirectory),
           modelDefaultsVersion: MODEL_DEFAULTS_VERSION,
           activeVendor,
           semanticVideoModel: finalVideoModel,
@@ -388,24 +289,32 @@ export class CaptureSettingsManager {
         }
       }
     } catch (error) {
-      log.warn('[CaptureSettings] Failed to load settings, using defaults:', error)
+      log.warn('[AppSettings] Failed to load settings, using defaults:', error)
     }
     return { ...this.defaults }
   }
 
-  public get(): CaptureSettings {
+  public get(): AppSettings {
     return { ...this.settings }
   }
 
-  public save(partial: Partial<CaptureSettings>): void {
-    const merged: CaptureSettings = {
+  public onChange(listener: AppSettingsListener): () => void {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
+  }
+
+  private notify(previous: AppSettings): void {
+    for (const listener of this.listeners) listener(this.get(), previous)
+  }
+
+  public save(partial: Partial<AppSettings>): void {
+    const merged: AppSettings = {
       ...this.settings,
       ...partial,
       captureHotkeyAccelerator: normalizeCaptureHotkeyAccelerator(
         partial.captureHotkeyAccelerator ?? this.settings.captureHotkeyAccelerator,
-      ),
-      databaseExportDirectory: normalizeDatabaseExportDirectory(
-        partial.databaseExportDirectory ?? this.settings.databaseExportDirectory,
       ),
       excludedApps: normalizeExcludedApps(partial.excludedApps ?? this.settings.excludedApps),
       excludedUrlPatterns: normalizeWildcardPatterns(
@@ -432,26 +341,16 @@ export class CaptureSettingsManager {
         [merged.activeVendor]: pickVendorSelection(merged),
       }
     }
+    const previous = this.settings
     this.settings = merged
     try {
       fs.writeFileSync(this.configPath, JSON.stringify(this.settings, null, 2))
-      log.info('[CaptureSettings] Settings saved')
+      log.info('[AppSettings] Settings saved')
     } catch (error) {
-      log.error('[CaptureSettings] Failed to save settings:', error)
+      log.error('[AppSettings] Failed to save settings:', error)
       throw error
     }
-  }
-
-  /**
-   * Strict setter for databaseExportDirectory. Throws on invalid input so the
-   * caller (IPC handler) can surface a clear error. Empty string clears.
-   */
-  public setDatabaseExportDirectory(value: unknown): void {
-    const result = validateExportDir(value)
-    if (!result.ok) {
-      throw new Error(result.reason)
-    }
-    this.save({ databaseExportDirectory: result.value })
+    this.notify(previous)
   }
 
   /**
@@ -489,76 +388,22 @@ export class CaptureSettingsManager {
     })
   }
 
-  /**
-   * One-time, best-effort upgrade of pre-v1 excluded-app tokens (last segment /
-   * localized name) to full bundle ids, using the installed-apps list to resolve
-   * them. Version-gated, so it only runs — and only pays the app-enumeration cost
-   * — on the first launch after upgrading. Returns whether tokens were rewritten.
-   */
-  public async migrateAppTokens(getInstalledApps: () => Promise<InstalledApp[]>): Promise<boolean> {
-    if ((this.settings.appMatchSchemaVersion ?? 0) >= APP_MATCH_SCHEMA_VERSION) return false
-
-    // Nothing to migrate — just stamp the version so we don't enumerate apps again.
-    if (this.settings.excludedApps.length === 0) {
-      this.save({ appMatchSchemaVersion: APP_MATCH_SCHEMA_VERSION })
-      return false
-    }
-
-    let installedApps: InstalledApp[]
-    try {
-      installedApps = await getInstalledApps()
-    } catch (error) {
-      // Leave the version unstamped so we retry on a later launch.
-      log.warn('[CaptureSettings] Skipping excluded-app migration (failed to list apps):', error)
-      return false
-    }
-
-    // An empty list (a transient enumeration failure that didn't throw) can't
-    // resolve anything; leave the version unstamped and retry on a later launch
-    // rather than permanently abandoning the migration with tokens unchanged.
-    if (installedApps.length === 0) {
-      log.warn('[CaptureSettings] Skipping excluded-app migration (no installed apps enumerated)')
-      return false
-    }
-
-    const before = this.settings.excludedApps
-    const migrated = migrateExcludedAppTokens(before, installedApps)
-    this.save({ excludedApps: migrated, appMatchSchemaVersion: APP_MATCH_SCHEMA_VERSION })
-
-    // On macOS the matcher keys on bundle ids only, so a legacy short-name token
-    // we couldn't resolve (ambiguous or unknown) will silently stop matching.
-    // Surface it so a lapsed exclusion is diagnosable. A token is lapsed when it
-    // was left unchanged, isn't already a reverse-DNS bundle id, and matches no
-    // installed app's identity (the last check spares aliased ids like `whatsapp`).
-    if (process.platform === 'darwin') {
-      for (let i = 0; i < before.length; i++) {
-        const token = normalizeToken(before[i])
-        if (migrated[i] !== before[i] || isBundleIdToken(token)) continue
-        if (installedApps.some((app) => app.matchToken === token)) continue
-        log.warn(
-          `[CaptureSettings] Excluded app "${before[i]}" could not be migrated to a bundle id and will no longer match`,
-        )
-      }
-    }
-    const changed = JSON.stringify(this.settings.excludedApps) !== JSON.stringify(before)
-    if (changed) log.info('[CaptureSettings] Migrated excluded-app tokens to bundle ids')
-    return changed
-  }
-
   public reset(): void {
+    const previous = this.settings
     this.settings = { ...this.defaults }
     try {
       if (fs.existsSync(this.configPath)) {
         fs.unlinkSync(this.configPath)
       }
-      log.info('[CaptureSettings] Settings reset to defaults')
+      log.info('[AppSettings] Settings reset to defaults')
     } catch (error) {
-      log.error('[CaptureSettings] Failed to reset settings:', error)
+      log.error('[AppSettings] Failed to reset settings:', error)
       throw error
     }
+    this.notify(previous)
   }
 
-  public getDefaults(): CaptureSettings {
+  public getDefaults(): AppSettings {
     return { ...this.defaults }
   }
 

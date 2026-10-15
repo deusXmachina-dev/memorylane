@@ -32,8 +32,6 @@ function buildHarness(
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ip-test-'))
   const credentials = new VendorCredentialsManager({
     configPath: path.join(tmpDir, 'vendor-credentials.json'),
-    legacyApiKeyConfigPath: path.join(tmpDir, '__missing-1.json'),
-    legacyCustomEndpointConfigPath: path.join(tmpDir, '__missing-2.json'),
     safeStorage: makeSafeStorage(),
     env: {},
   })

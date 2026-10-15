@@ -71,7 +71,7 @@ class DebouncedSession<A> {
   private accumulation: A
 
   constructor(
-    // Read lazily so runtime settings changes (capture-settings-manager
+    // Read lazily so runtime settings changes (app-settings-manager
     // mutates INTERACTION_MONITOR_CONFIG) take effect without a restart.
     private readonly debounceMs: () => number,
     private readonly maxSessionMs: () => number,

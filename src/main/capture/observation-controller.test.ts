@@ -44,7 +44,7 @@ describe('observation-controller', () => {
   it('suppresses capture on start, restores on stop, and exposes collected apps/urls in lastRun', async () => {
     const { createObservationController } = await import('./observation-controller')
 
-    const setFrameCaptureSuppressed = vi.fn()
+    const setFrameCaptureSuppressed = vi.fn().mockResolvedValue(undefined)
     const onUpdate = vi.fn()
 
     const ctrl = createObservationController({
@@ -78,7 +78,7 @@ describe('observation-controller', () => {
     const { createObservationController } = await import('./observation-controller')
 
     const ctrl = createObservationController({
-      captureControl: { setFrameCaptureSuppressed: vi.fn() },
+      captureControl: { setFrameCaptureSuppressed: vi.fn().mockResolvedValue(undefined) },
       onUpdate: vi.fn(),
     })
 
@@ -96,7 +96,7 @@ describe('observation-controller', () => {
     const { createObservationController } = await import('./observation-controller')
 
     const ctrl = createObservationController({
-      captureControl: { setFrameCaptureSuppressed: vi.fn() },
+      captureControl: { setFrameCaptureSuppressed: vi.fn().mockResolvedValue(undefined) },
       onUpdate: vi.fn(),
     })
 
@@ -114,7 +114,7 @@ describe('observation-controller', () => {
   it('auto-stops when the timer fires', async () => {
     const { createObservationController } = await import('./observation-controller')
 
-    const setFrameCaptureSuppressed = vi.fn()
+    const setFrameCaptureSuppressed = vi.fn().mockResolvedValue(undefined)
 
     const ctrl = createObservationController({
       captureControl: { setFrameCaptureSuppressed },
@@ -134,7 +134,7 @@ describe('observation-controller', () => {
   it('is idempotent: double start / double stop are no-ops', async () => {
     const { createObservationController } = await import('./observation-controller')
 
-    const setFrameCaptureSuppressed = vi.fn()
+    const setFrameCaptureSuppressed = vi.fn().mockResolvedValue(undefined)
 
     const ctrl = createObservationController({
       captureControl: { setFrameCaptureSuppressed },
@@ -156,7 +156,7 @@ describe('observation-controller', () => {
     const { createObservationController } = await import('./observation-controller')
 
     const ctrl = createObservationController({
-      captureControl: { setFrameCaptureSuppressed: vi.fn() },
+      captureControl: { setFrameCaptureSuppressed: vi.fn().mockResolvedValue(undefined) },
       onUpdate: vi.fn(),
     })
 
@@ -178,7 +178,7 @@ describe('observation-controller', () => {
     const { createObservationController } = await import('./observation-controller')
 
     const ctrl = createObservationController({
-      captureControl: { setFrameCaptureSuppressed: vi.fn() },
+      captureControl: { setFrameCaptureSuppressed: vi.fn().mockResolvedValue(undefined) },
       onUpdate: vi.fn(),
     })
 
@@ -199,7 +199,7 @@ describe('observation-controller', () => {
     const onUpdate = vi.fn()
 
     const ctrl = createObservationController({
-      captureControl: { setFrameCaptureSuppressed: vi.fn() },
+      captureControl: { setFrameCaptureSuppressed: vi.fn().mockResolvedValue(undefined) },
       onUpdate,
     })
 

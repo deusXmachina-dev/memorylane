@@ -1,16 +1,11 @@
-# MemoryLane v1.5.11-alpha.3
+# MemoryLane v1.5.11-alpha.5
 
-Electron 44 and dependency updates, smaller installers.
+Cleaner screen-capture shutdown on macOS.
 
 ## What's Changed
 
-- **Electron 44**: upgraded Electron, Node 24, transformers 4 and other dependencies; npm audit fixes.
-- **Requires macOS 13+**: macOS 12 no longer receives updates.
-- **Smaller installers**: only the current platform's ML runtime is bundled.
-- **Import dialog opens in Documents**, where exports are saved.
-- **Links open in the system browser** (#296).
-- **Fewer false app switches**: title changes of only symbols are ignored (#297).
-- **Scripted eval recordings** in Developer mode, with an on-screen step guide (#302).
+- **Clean capture stop on macOS**: the screenshot stream stops before the capture helper exits, quit no longer waits on it, and a stuck helper is force-closed after 0.5s (#305).
+- **Sync cleanup**: background sync owns its backend connection and access refresh (#306).
 
 ## Known Issues & Limitations
 
@@ -28,4 +23,4 @@ Electron 44 and dependency updates, smaller installers.
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.11-alpha.2...v1.5.11-alpha.3
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.11-alpha.4...v1.5.11-alpha.5

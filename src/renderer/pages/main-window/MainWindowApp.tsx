@@ -32,7 +32,7 @@ import {
 import type { AppEditionConfig } from '@/shared/edition'
 import type {
   AccessState,
-  CaptureSettings,
+  AppSettings,
   MainWindowStats,
   McpRegistrationStatus,
   ClustersView,
@@ -118,7 +118,7 @@ export function MainWindowApp(): React.JSX.Element {
     try {
       const [statuses, settings] = await Promise.all([
         api.getCredentialStatuses(),
-        api.getCaptureSettings() as Promise<CaptureSettings>,
+        api.getAppSettings() as Promise<AppSettings>,
       ])
       setCredentialStatuses(statuses)
       setActiveVendor(settings.activeVendor)

@@ -10,13 +10,7 @@ import {
   SelectValue,
 } from '@components/ui/select'
 import { Switch } from '@components/ui/switch'
-import type {
-  CaptureSettings,
-  MainWindowAPI,
-  SemanticPipelineMode,
-  Vendor,
-  VendorStatus,
-} from '@types'
+import type { AppSettings, MainWindowAPI, SemanticPipelineMode, Vendor, VendorStatus } from '@types'
 import { VENDORS } from '@types'
 import { getVendorDefaults } from '@/shared/vendor-defaults'
 import { MAX_REQUEST_TIMEOUT_MS } from '@constants'
@@ -38,7 +32,7 @@ const VENDOR_LABELS: Record<Vendor, string> = {
 
 interface AiModelsSectionProps {
   api: MainWindowAPI
-  form: CaptureSettings
+  form: AppSettings
   isEnterprise: boolean
   credentialStatuses: Record<Vendor, VendorStatus> | null
   onCredentialsChanged: () => void

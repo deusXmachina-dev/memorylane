@@ -5,7 +5,7 @@ import { LOG_UPLOAD_MIN_INTERVAL_MS } from '@/shared/constants'
 import { collectSupportBundleFiles } from '@main/ui/logs-export'
 import { createZipWithFiles } from '@main/ui/zip'
 import type { LogUploadState } from './log-upload-store'
-import type { UploadJob } from './backend-upload'
+import { fileForm, type UploadJob } from './backend-upload'
 
 export type ZipLogFiles = (files: string[], outputPath: string) => Promise<void>
 
@@ -43,7 +43,6 @@ export function logUploadJob(params: LogUploadJobParams): UploadJob {
   return {
     name: 'LogUpload',
     endpoint: 'api/device/logs',
-    filename: 'memorylane-logs.zip',
     skipReason() {
       const files = collectFiles()
       if (files.length === 0) return 'no log files'
@@ -59,7 +58,7 @@ export function logUploadJob(params: LogUploadJobParams): UploadJob {
       if (files.length === 0) throw new Error('No log files found')
       pendingSig = computeSignature(files)
       await zipFiles(files, tempPath)
-      return fsPromises.readFile(tempPath)
+      return fileForm(await fsPromises.readFile(tempPath), 'memorylane-logs.zip')
     },
     async onSuccess() {
       params.writeState({ lastUploadAt: now(), lastSig: pendingSig })
