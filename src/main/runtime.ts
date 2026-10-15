@@ -53,8 +53,8 @@ export interface MainRuntime {
   isPurging(): boolean
   setRemoteModelConfig(config: RemoteModelConfig): void
   credentialsChanged(): void
-  onStateChanged(listener: () => void): () => void
-  notifyStateChanged(): void
+  onUiRefresh(listener: () => void): () => void
+  requestUiRefresh(): void
   onPrivacyBlockingChanged(listener: (blocked: boolean) => void): () => void
   start(): void
   purgeAll(): Promise<void>
@@ -66,7 +66,7 @@ export async function createMainRuntime(params: {
   vendorCredentials: VendorCredentialsManager
 }): Promise<MainRuntime> {
   const { settings, vendorCredentials } = params
-  const stateChanged = listenerSet<[]>()
+  const uiRefresh = listenerSet<[]>()
   const privacyBlockingChanged = listenerSet<[boolean]>()
   const initialSettings = settings.get()
 
@@ -268,8 +268,8 @@ export async function createMainRuntime(params: {
       applyModels()
       inferenceProvider.notifyConfigChanged()
     },
-    onStateChanged: stateChanged.add,
-    notifyStateChanged: () => stateChanged.emit(),
+    onUiRefresh: uiRefresh.add,
+    requestUiRefresh: () => uiRefresh.emit(),
     onPrivacyBlockingChanged: privacyBlockingChanged.add,
     start(): void {
       taskMiner.startup()

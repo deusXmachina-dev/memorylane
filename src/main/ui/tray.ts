@@ -269,7 +269,7 @@ export const setupTray = (dependencies: TrayDependencies): void => {
 
   tray = new Tray(icon)
 
-  dependencies.runtime.onStateChanged(() => void updateTrayMenu())
+  dependencies.runtime.onUiRefresh(() => void updateTrayMenu())
   dependencies.runtime.onPrivacyBlockingChanged(setPrivacyBlockedState)
   void updateTrayMenu()
 }

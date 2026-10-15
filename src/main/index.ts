@@ -211,7 +211,7 @@ app.on('ready', async () => {
     captureStateManager: captureState,
     isPaused: () => rt.isPurging() || rt.host.shouldPause() || appSync.requiresActivation(),
     userContextBuilder: rt.userContextBuilder,
-    onStateChanged: () => rt.notifyStateChanged(),
+    onStateChanged: () => rt.requestUiRefresh(),
   })
   const capture = coordinator.controls
 
@@ -249,7 +249,7 @@ app.on('ready', async () => {
 
   if (edition === 'customer') {
     initAutoUpdater(() => {
-      rt.notifyStateChanged()
+      rt.requestUiRefresh()
       sendUpdateState()
     })
   } else {
@@ -274,7 +274,7 @@ app.on('ready', async () => {
   if (!shouldStartHiddenOnLaunch()) openMainWindow()
 
   const hotkeyResult = hotkey.reconfigure(settings.get().captureHotkeyAccelerator)
-  if (hotkeyResult.success) rt.notifyStateChanged()
+  if (hotkeyResult.success) rt.requestUiRefresh()
   else log.warn(hotkeyResult.error)
 
   rt.host.start((pause) => {
