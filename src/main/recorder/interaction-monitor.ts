@@ -4,6 +4,7 @@ import { INTERACTION_MONITOR_CONFIG } from '@constants'
 import { InteractionContext } from '../../shared/types'
 import { addAppWatcherListener, AppWatcherEvent } from './app-watcher'
 import { resolveAppWatcherDisplay } from './app-watcher-display'
+import { normalizeTitle } from './title-utils'
 import log from '@main/utils/logger'
 
 // State
@@ -273,13 +274,6 @@ function handleScroll(event: UiohookWheelEvent): void {
     accumulation.eventCount++
     accumulation.direction = event.direction === 3 ? 'vertical' : 'horizontal' // WheelDirection.VERTICAL = 3
   })
-}
-
-function normalizeTitle(title: string): string {
-  return title
-    .replace(/[\p{So}\p{Sk}️‍]/gu, '')
-    .replace(/\s+/g, ' ')
-    .trim()
 }
 
 /**
