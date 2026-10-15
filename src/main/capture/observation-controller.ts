@@ -1,5 +1,5 @@
 import { addAppWatcherListener, AppWatcherEvent } from '@main/recorder/app-watcher'
-import { normalizeToken, tokenFromBundleId } from './capture-exclusions'
+import { appToken, isSelfApp } from './capture-exclusions'
 import { extractTld } from '@main/recorder/tld-utils'
 import { NON_WEBSITE_HOSTS, isBrowserApp } from '@/shared/app-utils'
 import type { ObservationState } from '@/shared/types'
@@ -13,13 +13,6 @@ const DEFAULT_DURATION_MS = 120_000
 const MIN_DURATION_MS = 5_000
 const MAX_DURATION_MS = 30 * 60_000
 
-const SELF_TOKENS = new Set(['memorylane', 'memorylane enterprise'])
-const SELF_BUNDLE_IDS = new Set([
-  'dev.deusxmachina.memorylane',
-  'com.memorylane.app',
-  'com.memorylane.enterprise',
-])
-
 export interface ObservationController {
   start(durationMs: number): ObservationState
   stop(reason: 'user' | 'timer'): ObservationState
@@ -30,24 +23,6 @@ export interface ObservationController {
 interface ControllerParams {
   captureControl: CaptureSuppressor
   onUpdate: (state: ObservationState) => void
-}
-
-function tokenForApp(event: AppWatcherEvent): string | null {
-  if (event.bundleId) {
-    const token = tokenFromBundleId(event.bundleId)
-    if (token) return token
-  }
-  if (event.app) {
-    const token = normalizeToken(event.app)
-    if (token) return token
-  }
-  return null
-}
-
-function isSelf(event: AppWatcherEvent): boolean {
-  if (event.bundleId && SELF_BUNDLE_IDS.has(event.bundleId.toLowerCase())) return true
-  const token = tokenForApp(event)
-  return token !== null && SELF_TOKENS.has(token)
 }
 
 export function createObservationController(params: ControllerParams): ObservationController {
@@ -77,16 +52,16 @@ export function createObservationController(params: ControllerParams): Observati
 
   const handleEvent = (event: AppWatcherEvent): void => {
     if (event.type !== 'app_change' && event.type !== 'window_change') return
-    if (isSelf(event)) return
+    if (isSelfApp(event)) return
 
     let changed = false
 
     const browser = isBrowserApp({ bundleId: event.bundleId, processName: event.app ?? '' })
 
     if (!browser) {
-      const appToken = tokenForApp(event)
-      if (appToken && !apps.has(appToken)) {
-        apps.add(appToken)
+      const token = appToken(event)
+      if (token && !apps.has(token)) {
+        apps.add(token)
         changed = true
       }
     }

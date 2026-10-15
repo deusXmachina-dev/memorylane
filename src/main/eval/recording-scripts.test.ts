@@ -47,6 +47,31 @@ describe('recording scripts', () => {
     expect(getRecordingScript(root, 'two')?.title).toBe('Two v2')
   })
 
+  it('rejects consecutive steps the pipeline could not tell apart', () => {
+    const step = (app: string, tld?: string): RecordingScript['steps'][number] => ({
+      instruction: '',
+      seconds: 5,
+      expect: { app: [app], tld },
+    })
+    const twin = { ...script('twin'), steps: [step('Ghostty'), step('Ghostty')] }
+    expect(() => parseRecordingScripts(JSON.stringify([twin]), { lint: true })).toThrow(
+      'Scenario twin: steps 1 and 2 are both Ghostty — merge them into one step',
+    )
+    const sites = {
+      ...script('sites'),
+      steps: [step('browser', 'calendar.google.com'), step('browser', 'mail.google.com')],
+    }
+    expect(parseRecordingScripts(JSON.stringify([sites]))).toHaveLength(1)
+    const hop = {
+      ...script('hop'),
+      steps: [
+        step('browser', 'github.com'),
+        { ...step('browser'), expect: { app: ['browser'], dropped: true as const } },
+      ],
+    }
+    expect(parseRecordingScripts(JSON.stringify([hop]))).toHaveLength(1)
+  })
+
   it('rejects malformed files', () => {
     expect(() => parseRecordingScripts('{}')).toThrow('JSON array')
     expect(() => parseRecordingScripts(JSON.stringify([{ id: 'x', title: 'x' }]))).toThrow(

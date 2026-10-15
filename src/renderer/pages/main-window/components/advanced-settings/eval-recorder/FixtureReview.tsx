@@ -98,9 +98,11 @@ export function FixtureReview({
     onDeleted()
   }
 
-  const seek = (offsetMs: number): void => {
+  const seek = (block: Pick<GoldenBlock, 'startOffsetMs' | 'endOffsetMs'>): void => {
     if (!videoRef.current) return
-    videoRef.current.currentTime = offsetMs / 1000
+    const nextFrameSec = Math.floor(block.startOffsetMs / 1000) + 1
+    const lastSec = Math.max(block.startOffsetMs, block.endOffsetMs - 100) / 1000
+    videoRef.current.currentTime = Math.min(nextFrameSec, lastSec)
     void videoRef.current.play()
   }
 
@@ -134,6 +136,7 @@ export function FixtureReview({
       {check?.followed && (
         <p className="text-sm text-muted-foreground">
           Summaries are filled in from the script. Check them against the video and edit if needed.
+          {check.strays?.length ? ` Strays marked DROPPED: ${check.strays.join(' · ')}.` : ''}
         </p>
       )}
 
@@ -172,7 +175,7 @@ export function FixtureReview({
                 index={i}
                 block={block}
                 onChange={(patch) => updateBlock(i, patch)}
-                onSeek={() => seek(block.startOffsetMs)}
+                onSeek={() => seek(block)}
               />
             ))}
           </div>
@@ -242,7 +245,7 @@ function CheckCard({
   onLabelByHand: () => void
   onRerecord: () => void
 }): React.JSX.Element {
-  const countIssue = check.expected !== check.produced
+  const countIssue = check.strays === undefined && check.expected !== check.produced
   return (
     <Card>
       <CardContent className="space-y-3">
@@ -250,6 +253,9 @@ function CheckCard({
           <p className="text-sm">
             The script expects {check.expected} activities, the recording has {check.produced}.
           </p>
+        )}
+        {check.strays && check.strays.length > 0 && (
+          <p className="text-sm">Strays marked DROPPED: {check.strays.join(' · ')}</p>
         )}
         {check.steps ? (
           <ol className="divide-y divide-border">
@@ -299,7 +305,7 @@ function SegmentBar({
   onSeek,
 }: {
   blocks: GoldenBlock[]
-  onSeek: (offsetMs: number) => void
+  onSeek: (block: GoldenBlock) => void
 }): React.JSX.Element | null {
   if (blocks.length === 0) return null
   return (
@@ -309,7 +315,7 @@ function SegmentBar({
           key={i}
           type="button"
           title={`${block.appName}${block.tld ? ` · ${block.tld}` : ''}`}
-          onClick={() => onSeek(block.startOffsetMs)}
+          onClick={() => onSeek(block)}
           style={{ flexGrow: Math.max(1, block.endOffsetMs - block.startOffsetMs) }}
           className={cn(
             'min-w-6 basis-0 border-r text-xs last:border-r-0 hover:bg-muted',

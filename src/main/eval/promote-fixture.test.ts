@@ -187,6 +187,127 @@ describe('promoteCapture', () => {
     expect(check.followed).toBe(true)
   })
 
+  it('clips frames, windows and live activities to the step entry times', async () => {
+    const preamble = {
+      id: 'w0',
+      startTimestamp: T0 - 2000,
+      endTimestamp: T0,
+      events: [
+        {
+          type: 'app_change',
+          timestamp: T0 - 2000,
+          activeWindow: { title: 'MemoryLane', processName: 'MemoryLane' },
+        },
+      ],
+      closedBy: 'app_change',
+    }
+    const tail = {
+      id: 'w2',
+      startTimestamp: T0 + 4000,
+      endTimestamp: T0 + 5000,
+      events: [
+        {
+          type: 'app_change',
+          timestamp: T0 + 4000,
+          activeWindow: { title: 'MemoryLane', processName: 'MemoryLane' },
+        },
+      ],
+      closedBy: 'gap',
+    }
+    const main = {
+      ...JSON.parse(fs.readFileSync(path.join(sourceDir, 'event-windows.jsonl'), 'utf8')),
+      endTimestamp: T0 + 4000,
+    }
+    const mainLine = JSON.stringify(main) + '\n'
+    fs.writeFileSync(
+      path.join(sourceDir, 'event-windows.jsonl'),
+      JSON.stringify(preamble) + '\n' + mainLine + JSON.stringify(tail) + '\n',
+    )
+    const earlyFrame = path.join(sourceDir, 'src-frames', 'frame-0000.png')
+    await makePng(earlyFrame, 128)
+    const frames = fs.readFileSync(path.join(sourceDir, 'frames.jsonl'), 'utf8')
+    fs.writeFileSync(
+      path.join(sourceDir, 'frames.jsonl'),
+      JSON.stringify({
+        filepath: earlyFrame,
+        timestamp: T0 - 1000,
+        width: 64,
+        height: 64,
+        displayId: 1,
+        sequenceNumber: 0,
+      }) +
+        '\n' +
+        frames,
+    )
+    fs.writeFileSync(
+      path.join(sourceDir, 'activities.jsonl'),
+      [
+        {
+          id: 'pre',
+          startTimestamp: T0 - 2000,
+          endTimestamp: T0,
+          appName: 'MemoryLane',
+          windowTitle: '',
+          tld: '',
+          summary: 'Pressed record.',
+          summaryModel: 'video',
+        },
+        {
+          id: 'live-1',
+          startTimestamp: T0,
+          endTimestamp: T0 + 4000,
+          appName: 'Code',
+          windowTitle: 'auth.ts',
+          tld: '',
+          summary: 'Live captured summary.',
+          summaryModel: 'video',
+        },
+        {
+          id: 'post',
+          startTimestamp: T0 + 4000,
+          endTimestamp: T0 + 5000,
+          appName: 'MemoryLane',
+          windowTitle: '',
+          tld: '',
+          summary: 'Pressed done.',
+          summaryModel: 'video',
+        },
+      ]
+        .map((a) => JSON.stringify(a))
+        .join('\n') + '\n',
+    )
+
+    const result = await promoteCapture({
+      sourceDir,
+      fixturesRoot,
+      name: 'clipped',
+      video: false,
+      script: {
+        id: 'code-edit',
+        title: 'Edit auth.ts',
+        targets: [],
+        setup: [],
+        steps: [
+          { instruction: '', seconds: 10, expect: { app: ['Code'], summary: 'Edited auth.ts.' } },
+        ],
+      },
+      stepEnteredAt: [T0],
+      leftAt: T0 + 4000,
+    })
+
+    expect(result.frameCount).toBe(2)
+    expect(result.eventWindowCount).toBe(1)
+    expect(result.appMix).toEqual(['Code'])
+    expect(result.scriptFollowed).toBe(true)
+    const fxDir = path.join(fixturesRoot, 'clipped')
+    expect(fs.readFileSync(path.join(fxDir, 'event-windows.jsonl'), 'utf8')).toBe(mainLine)
+    const manifest = JSON.parse(fs.readFileSync(path.join(fxDir, 'manifest.json'), 'utf8'))
+    expect(manifest).toMatchObject({ stepEnteredAt: [T0], leftAt: T0 + 4000, eventWindowCount: 1 })
+    const blocks = parseGoldenMd(fs.readFileSync(path.join(fxDir, 'golden.md'), 'utf8'))
+    expect(blocks.map((b) => b.summary)).toEqual(['Edited auth.ts.'])
+    expect(blocks[0].startOffsetMs).toBe(0)
+  })
+
   it('does not overwrite an existing golden.md unless reseed', async () => {
     writeLiveActivity(sourceDir, 'Live captured summary.')
     const fxDir = path.join(fixturesRoot, 'demo3')

@@ -40,6 +40,32 @@ export function tokenFromBundleId(bundleId: string): string {
   return normalizeToken(bundleId)
 }
 
+const SELF_TOKENS = new Set(['memorylane', 'memorylane enterprise'])
+const SELF_BUNDLE_IDS = new Set([
+  'dev.deusxmachina.memorylane',
+  'com.memorylane.app',
+  'com.memorylane.enterprise',
+  'com.github.electron',
+])
+
+export function appToken(window: { app?: string; bundleId?: string }): string | null {
+  if (window.bundleId) {
+    const token = tokenFromBundleId(window.bundleId)
+    if (token) return token
+  }
+  if (window.app) {
+    const token = normalizeToken(window.app)
+    if (token) return token
+  }
+  return null
+}
+
+export function isSelfApp(window: { app?: string; bundleId?: string }): boolean {
+  if (window.bundleId && SELF_BUNDLE_IDS.has(window.bundleId.toLowerCase())) return true
+  const token = appToken(window)
+  return token !== null && SELF_TOKENS.has(token)
+}
+
 const APP_TOKEN_ALIASES: Record<string, string> = {
   edge: 'msedge',
   'microsoft edge': 'msedge',

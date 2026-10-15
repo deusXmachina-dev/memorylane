@@ -86,8 +86,8 @@ function parseOffset(min: string, sec: string): number {
 
 export type GoldenSource = Pick<
   ReplayActivity,
-  'startTimestamp' | 'endTimestamp' | 'appName' | 'windowTitle' | 'tld' | 'dropped' | 'summary'
-> & { mustMention?: string[] }
+  'startTimestamp' | 'endTimestamp' | 'appName' | 'windowTitle' | 'tld' | 'summary'
+> & { dropped?: { reason: string; detail: string }; mustMention?: string[] }
 
 /** Renders a golden.md scaffold from a replay's activities (summaries left blank
  *  when no LLM ran, so the user fills them in). */

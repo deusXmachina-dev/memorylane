@@ -31,6 +31,10 @@ export interface FixtureManifest {
   downsampled?: boolean
   /** Id of the recording script this session followed. */
   script?: string
+  /** Epoch ms the operator reached each script step; the fixture is clipped to start at the first. */
+  stepEnteredAt?: number[]
+  /** Epoch ms the operator returned to MemoryLane after the last step; the fixture is clipped to end there. */
+  leftAt?: number
   schemaVersion: number
 }
 

@@ -1,15 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@components/ui/button'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
-import {
-  isHandsOffStep,
-  type EvalRecordingStatus,
-  type RecordingScript,
-} from '@/shared/eval-review'
+import type { EvalRecordingStatus, RecordingScript } from '@/shared/eval-review'
 import { cn } from '@/renderer/lib/utils'
-import { formatClock, stepProgress } from '@/renderer/lib/recording-steps'
+import { formatClock, stepState, stepTarget, type StepState } from '@/renderer/lib/recording-steps'
 
 type Busy = 'saving' | 'restarting' | 'canceling' | null
+
+function stepHint(script: RecordingScript, state: StepState, started: boolean): string {
+  if (!started) return `go to: ${stepTarget(script.steps[0])}`
+  const reached = `✓ ${stepTarget(script.steps[state.index])}`
+  if (state.secondsLeft !== null) {
+    const last = state.index === script.steps.length - 1
+    return `${reached} · hands off ~${state.secondsLeft}s${last ? ', then saves by itself' : ''}`
+  }
+  const next = script.steps[state.index + 1]
+  return next
+    ? `${reached} · when done, go to: ${stepTarget(next)}`
+    : `${reached} · last step, press Done when finished`
+}
 
 export function RecordingGuide(): React.JSX.Element | null {
   const api = useMainWindowAPI()
@@ -39,10 +48,10 @@ export function RecordingGuide(): React.JSX.Element | null {
   }, [api])
 
   const script = scripts.find((s) => s.id === status?.scriptId) ?? null
+  const enteredAt = status?.stepEnteredAt ?? []
+  const state = script ? stepState(script.steps, enteredAt, now) : null
+  const saving = busy === 'saving' || (status?.saving ?? false)
   const elapsedMs = status?.startedAt ? now - status.startedAt : 0
-  const progress = script ? stepProgress(script.steps, elapsedMs) : null
-  const lastStep = script?.steps[script.steps.length - 1]
-  const autoStops = lastStep ? isHandsOffStep(lastStep) : false
 
   const done = useCallback(async () => {
     setBusy('saving')
@@ -61,61 +70,50 @@ export function RecordingGuide(): React.JSX.Element | null {
   }, [api])
 
   useEffect(() => {
-    if (autoStops && progress?.finished && busy === null) void done()
-  }, [autoStops, progress?.finished, busy, done])
+    if (state?.finished && busy === null && !status?.saving) void done()
+  }, [state?.finished, busy, status?.saving, done])
+
+  const locked = busy !== null || saving
 
   return (
     <div ref={rootRef} className="space-y-3 border bg-background p-4 text-foreground select-none">
       <div className="flex items-center gap-2 text-sm [-webkit-app-region:drag]">
         <span className="size-2 rounded-full bg-destructive" />
         <span className="flex-1 font-medium">
-          {busy === 'saving'
+          {saving
             ? 'Saving recording…'
-            : script && progress
-              ? `Recording · step ${Math.min(progress.index + 1, script.steps.length)} of ${script.steps.length}`
+            : script && state
+              ? `Recording · step ${state.index + 1} of ${script.steps.length}`
               : 'Recording'}
         </span>
-        <span className="tabular-nums text-muted-foreground">{formatClock(elapsedMs)}</span>
+        {!saving && (
+          <span className="tabular-nums text-muted-foreground">{formatClock(elapsedMs)}</span>
+        )}
       </div>
 
-      {script && progress && (
+      {script && state && !saving && (
         <ol className="space-y-2">
           {script.steps.map((step, i) => {
-            const current = i === progress.index
+            const current = i === state.index
             return (
               <li
                 key={i}
                 className={cn(
-                  i < progress.index && 'text-xs text-muted-foreground line-through',
+                  i < state.index && 'text-xs text-muted-foreground line-through',
                   current && 'text-base leading-snug font-medium',
-                  i > progress.index && 'text-xs text-muted-foreground',
+                  i > state.index && 'text-xs text-muted-foreground',
                 )}
               >
                 {i + 1}. {step.instruction}
                 {current && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full bg-primary transition-[width] duration-500"
-                        style={{ width: `${Math.round(progress.fraction * 100)}%` }}
-                      />
-                    </div>
-                    <span className="text-xs font-normal tabular-nums text-muted-foreground">
-                      ~{progress.secondsLeft}s left
-                    </span>
+                  <div className="mt-1 text-xs font-normal text-muted-foreground">
+                    {stepHint(script, state, enteredAt.length > 0)}
                   </div>
                 )}
               </li>
             )
           })}
         </ol>
-      )}
-
-      {script && progress?.finished && !autoStops && (
-        <p className="text-sm">All steps done. Press Done.</p>
-      )}
-      {autoStops && !progress?.finished && (
-        <p className="text-xs text-muted-foreground">Stops by itself when the timer ends.</p>
       )}
 
       <div className="flex gap-2">
@@ -125,7 +123,7 @@ export function RecordingGuide(): React.JSX.Element | null {
             size="sm"
             className="flex-1"
             onClick={() => void restart()}
-            disabled={busy !== null}
+            disabled={locked}
           >
             Restart
           </Button>
@@ -135,11 +133,11 @@ export function RecordingGuide(): React.JSX.Element | null {
           size="sm"
           className="flex-1"
           onClick={() => void cancel()}
-          disabled={busy !== null}
+          disabled={locked}
         >
           Cancel
         </Button>
-        <Button size="sm" className="flex-1" onClick={() => void done()} disabled={busy !== null}>
+        <Button size="sm" className="flex-1" onClick={() => void done()} disabled={locked}>
           Done
         </Button>
       </div>

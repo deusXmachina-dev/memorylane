@@ -120,15 +120,26 @@ export function RecorderSection({ api }: { api: MainWindowAPI }): React.JSX.Elem
     <div className="mb-4 flex items-center gap-3 rounded-xl p-3 text-sm ring-1 ring-destructive/40">
       <span className="size-2 rounded-full bg-destructive" />
       <span className="flex-1">
-        Recording {status.scriptId && scripts.find((s) => s.id === status.scriptId)?.title}{' '}
-        <span className="tabular-nums text-muted-foreground">
-          {status.startedAt ? formatClock(now - status.startedAt) : ''}
-        </span>
+        {status.saving ? (
+          'Saving recording…'
+        ) : (
+          <>
+            Recording {status.scriptId && scripts.find((s) => s.id === status.scriptId)?.title}{' '}
+            <span className="tabular-nums text-muted-foreground">
+              {status.startedAt ? formatClock(now - status.startedAt) : ''}
+            </span>
+          </>
+        )}
       </span>
-      <Button variant="ghost" size="sm" onClick={() => void api.evalCancelRecording()}>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => void api.evalCancelRecording()}
+        disabled={status.saving}
+      >
         Cancel
       </Button>
-      <Button size="sm" onClick={() => void api.evalStopRecording()}>
+      <Button size="sm" onClick={() => void api.evalStopRecording()} disabled={status.saving}>
         Done
       </Button>
     </div>

@@ -1121,6 +1121,8 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         name: null,
         startedAt: null,
         scriptId: null,
+        stepEnteredAt: [],
+        saving: false,
       }
     )
   })

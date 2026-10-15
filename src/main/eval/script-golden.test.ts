@@ -108,6 +108,154 @@ describe('goldenFromScript', () => {
   })
 })
 
+describe('goldenFromScript with step entry times', () => {
+  const span = (
+    startSec: number,
+    endSec: number,
+    appName: string,
+    extra: Partial<ReplayActivity> = {},
+  ) => block(startSec, appName, { endTimestamp: endSec * 1000, ...extra })
+  const calendar = { tld: 'calendar.google.com' }
+  const mail = { tld: 'mail.google.com' }
+  const twoSites: RecordingScript = {
+    id: 'sites',
+    title: 'Sites',
+    targets: [],
+    setup: [],
+    steps: [
+      {
+        instruction: '',
+        seconds: 30,
+        expect: { app: ['browser'], ...calendar, summary: 'Scheduled.' },
+      },
+      { instruction: '', seconds: 30, expect: { app: ['browser'], ...mail, summary: 'Drafted.' } },
+    ],
+  }
+
+  it('claims the blocks in each span and turns the rest into DROPPED strays', () => {
+    const blocks = [
+      span(0, 0, 'MemoryLane'),
+      span(0, 3, 'Wispr Flow', { summaryModel: 'heuristic:viewed' }),
+      span(3, 7, 'Google Chrome', { tld: 'newtab' }),
+      span(7, 34, 'Google Chrome', calendar),
+      span(34, 40, 'Google Chrome', { tld: 'newtab' }),
+      span(40, 67, 'Google Chrome', mail),
+    ]
+    const { check, golden } = goldenFromScript(twoSites, blocks, [7000, 40_000], 67_000)
+    expect(check.followed).toBe(true)
+    expect(check.steps?.map((s) => s.got)).toEqual([
+      'Google Chrome · calendar.google.com',
+      'Google Chrome · mail.google.com',
+    ])
+    expect(check.strays).toEqual([
+      'MemoryLane',
+      'Wispr Flow',
+      'Google Chrome · newtab',
+      'Google Chrome · newtab',
+    ])
+    const kept = golden?.filter((g) => !g.dropped).map((g) => g.summary)
+    expect(kept).toEqual(['Scheduled.', 'Drafted.'])
+    const strays = golden?.filter((g) => g.dropped).map((g) => g.dropped?.detail)
+    expect(strays).toEqual([
+      'MemoryLane',
+      'Wispr Flow',
+      'Google Chrome · newtab',
+      'Google Chrome · newtab',
+    ])
+  })
+
+  it('unions an over-split step into one golden block', () => {
+    const blocks = [
+      span(0, 10, 'Google Chrome', calendar),
+      span(10, 12, 'Google Chrome', { tld: 'newtab' }),
+      span(12, 30, 'Google Chrome', calendar),
+      span(30, 50, 'Google Chrome', mail),
+    ]
+    const { check, golden } = goldenFromScript(twoSites, blocks, [0, 30_000])
+    expect(check.followed).toBe(true)
+    expect(golden?.[0]).toMatchObject({
+      startTimestamp: 0,
+      endTimestamp: 30_000,
+      summary: 'Scheduled.',
+    })
+    expect(check.strays).toEqual(['Google Chrome · newtab'])
+  })
+
+  it('reports a step whose block merged into the previous one', () => {
+    const blocks = [span(0, 50, 'Google Chrome', calendar)]
+    const { check, golden } = goldenFromScript(twoSites, blocks, [0, 30_000])
+    expect(check.followed).toBe(false)
+    expect(check.steps?.[1].issue).toBe('merged into step 1 (Google Chrome · calendar.google.com)')
+    expect(golden).toBeNull()
+  })
+
+  it('judges the best-overlapping block when nothing fits', () => {
+    const blocks = [
+      span(0, 30, 'Google Chrome', calendar),
+      span(30, 50, 'Google Chrome', { tld: 'github.com' }),
+    ]
+    const { check } = goldenFromScript(twoSites, blocks, [0, 30_000])
+    expect(check.issues).toEqual([
+      'step 2: expected mail.google.com, got Google Chrome · github.com',
+    ])
+  })
+
+  it('names the dropped same-context block over a longer stray', () => {
+    const blocks = [
+      span(0, 2, 'Google Chrome', {
+        ...calendar,
+        dropped: { reason: 'too_short', detail: '2222ms < 3000ms' },
+      }),
+      span(2, 7, 'Google Chrome', { tld: 'newtab' }),
+      span(7, 15, 'Google Chrome', mail),
+    ]
+    const { check } = goldenFromScript(twoSites, blocks, [0, 7000])
+    expect(check.issues).toEqual([
+      'step 1: Google Chrome · calendar.google.com was dropped (2222ms < 3000ms)',
+    ])
+  })
+
+  it('fits a dropped step only to a dropped block', () => {
+    const dropped = span(10, 11, 'Google Chrome', {
+      dropped: { reason: 'too_short', detail: '900ms' },
+    })
+    const ok = goldenFromScript(
+      script,
+      [
+        span(0, 10, 'TextEdit'),
+        dropped,
+        span(11, 30, 'Google Chrome', {
+          tld: 'en.wikipedia.org',
+          summaryModel: 'heuristic:viewed',
+        }),
+      ],
+      [0, 10_000, 11_000],
+    )
+    expect(ok.check.followed).toBe(true)
+    const kept = goldenFromScript(
+      script,
+      [
+        span(0, 10, 'TextEdit'),
+        span(10, 11, 'Google Chrome'),
+        span(11, 30, 'Google Chrome', {
+          tld: 'en.wikipedia.org',
+          summaryModel: 'heuristic:viewed',
+        }),
+      ],
+      [0, 10_000, 11_000],
+    )
+    expect(kept.check.steps?.[1].issue).toBe('expected a drop, got a kept Google Chrome')
+  })
+
+  it('marks steps the operator never reached', () => {
+    const { check } = goldenFromScript(twoSites, [span(0, 30, 'Google Chrome', calendar)], [0])
+    expect(check.steps?.map((s) => s.issue)).toEqual([null, 'not reached'])
+    const none = goldenFromScript(twoSites, [span(0, 30, 'MemoryLane')], [])
+    expect(none.check.steps?.map((s) => s.issue)).toEqual(['not reached', 'not reached'])
+    expect(none.check.strays).toEqual(['MemoryLane'])
+  })
+})
+
 describe('mustMentionRecall', () => {
   it('matches case-insensitively and lists misses', () => {
     expect(
