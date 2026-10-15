@@ -274,7 +274,7 @@ async function startEvalRecording(scriptId: string | undefined): Promise<EvalRec
     await showRecordingGuide()
     try {
       const status = deps.runtime.evalRecorder.start(recordingName(scriptId), scriptId)
-      deps?.runtime.notifyStateChanged()
+      deps?.runtime.requestUiRefresh()
       return status
     } catch (error) {
       closeRecordingGuide()
@@ -293,7 +293,7 @@ async function finishEvalRecording(): Promise<PromoteCaptureResult> {
     return await deps.runtime.evalRecorder.stop()
   } finally {
     closeRecordingGuide()
-    deps?.runtime.notifyStateChanged()
+    deps?.runtime.requestUiRefresh()
     openMainWindow()
   }
 }
@@ -392,7 +392,7 @@ function logAppSettingsChanges(previous: AppSettings, updated: AppSettings): voi
  */
 export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   deps = dependencies
-  dependencies.runtime.onStateChanged(sendStatusToRenderer)
+  dependencies.runtime.onUiRefresh(sendStatusToRenderer)
   dependencies.sync.onManagedExclusionsChanged(sendManagedExclusionsUpdate)
   dependencies.runtime.taskMiner.setStatusListener(() =>
     sendMiningProgress(dependencies.runtime.taskMiner.getStatus()),
@@ -920,7 +920,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         const updated = deps.settings.get()
         logAppSettingsChanges(previous, updated)
         syncAutoStartSetting(updated.autoStartEnabled)
-        deps.runtime.notifyStateChanged()
+        deps.runtime.requestUiRefresh()
         return { success: true }
       } catch (error) {
         if (
@@ -952,7 +952,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         }
       }
       syncAutoStartSetting(updated.autoStartEnabled)
-      deps.runtime.notifyStateChanged()
+      deps.runtime.requestUiRefresh()
       return { success: true }
     } catch (error) {
       deps.hotkey.reconfigure(previous.captureHotkeyAccelerator)
@@ -1072,7 +1072,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
     } finally {
       closeRecordingGuide()
-      deps?.runtime.notifyStateChanged()
+      deps?.runtime.requestUiRefresh()
       openMainWindow()
     }
   })
@@ -1089,7 +1089,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       return { success: true as const, status }
     } catch (error) {
       closeRecordingGuide()
-      deps?.runtime.notifyStateChanged()
+      deps?.runtime.requestUiRefresh()
       openMainWindow()
       return { success: false as const, error: error instanceof Error ? error.message : 'Failed' }
     }
