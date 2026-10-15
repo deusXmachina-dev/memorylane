@@ -44,22 +44,21 @@ describe('classifyKey', () => {
     expect(press(UiohookKey.Enter, { meta: true })).toBe('mod+enter')
   })
 
-  it('ignores other shortcuts and shifted variants', () => {
-    expect(press(UiohookKey.K, { meta: true })).toBeNull()
-    expect(press(UiohookKey.Z, { meta: true, shift: true })).toBeNull()
-    expect(press(UiohookKey.C, { ctrl: true }, 'darwin')).toBeNull()
+  it('counts every other key as typing', () => {
+    expect(press(UiohookKey.K, { meta: true })).toBe('type')
+    expect(press(UiohookKey.Z, { meta: true, shift: true })).toBe('type')
+    expect(press(UiohookKey.C, { ctrl: true }, 'darwin')).toBe('type')
+    expect(press(UiohookKey.ArrowDown)).toBe('type')
+    expect(press(UiohookKey.F5)).toBe('type')
   })
 
   it('treats AltGr on Windows as typing', () => {
     expect(press(UiohookKey.V, { ctrl: true, alt: true }, 'win32')).toBe('type')
   })
 
-  it('ignores modifiers, navigation and function keys', () => {
+  it('ignores lone modifiers', () => {
     expect(press(UiohookKey.Meta, { meta: true })).toBeNull()
     expect(press(UiohookKey.Shift, { shift: true })).toBeNull()
-    expect(press(UiohookKey.ArrowDown)).toBeNull()
-    expect(press(UiohookKey.F5)).toBeNull()
-    expect(press(UiohookKey.PrintScreen)).toBeNull()
   })
 })
 

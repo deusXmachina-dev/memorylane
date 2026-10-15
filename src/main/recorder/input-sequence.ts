@@ -4,39 +4,16 @@ import type { ClickClass, InputRun, KeyClass } from '@types'
 const MOUSE_BUTTON_LEFT = 1
 const MOUSE_BUTTON_RIGHT = 2
 
-const ALPHANUMERIC_KEYS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'.split(
-  '',
-) as (keyof typeof UiohookKey)[]
-
-const PRINTABLE_KEYCODES = new Set<number>([
-  ...ALPHANUMERIC_KEYS.map((key) => UiohookKey[key]),
-  UiohookKey.Space,
-  UiohookKey.Semicolon,
-  UiohookKey.Equal,
-  UiohookKey.Comma,
-  UiohookKey.Minus,
-  UiohookKey.Period,
-  UiohookKey.Slash,
-  UiohookKey.Backquote,
-  UiohookKey.BracketLeft,
-  UiohookKey.Backslash,
-  UiohookKey.BracketRight,
-  UiohookKey.Quote,
-  UiohookKey.Numpad0,
-  UiohookKey.Numpad1,
-  UiohookKey.Numpad2,
-  UiohookKey.Numpad3,
-  UiohookKey.Numpad4,
-  UiohookKey.Numpad5,
-  UiohookKey.Numpad6,
-  UiohookKey.Numpad7,
-  UiohookKey.Numpad8,
-  UiohookKey.Numpad9,
-  UiohookKey.NumpadMultiply,
-  UiohookKey.NumpadAdd,
-  UiohookKey.NumpadSubtract,
-  UiohookKey.NumpadDecimal,
-  UiohookKey.NumpadDivide,
+const MODIFIER_KEYCODES = new Set<number>([
+  UiohookKey.Shift,
+  UiohookKey.ShiftRight,
+  UiohookKey.Ctrl,
+  UiohookKey.CtrlRight,
+  UiohookKey.Alt,
+  UiohookKey.AltRight,
+  UiohookKey.Meta,
+  UiohookKey.MetaRight,
+  UiohookKey.CapsLock,
 ])
 
 const ENTER_KEYCODES = new Set<number>([UiohookKey.Enter, UiohookKey.NumpadEnter])
@@ -60,16 +37,17 @@ export function classifyKey(
   event: Pick<UiohookKeyboardEvent, 'keycode' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>,
   platform: NodeJS.Platform = process.platform,
 ): KeyClass | null {
-  const isMac = platform === 'darwin'
-  const mod = isMac ? event.metaKey : event.ctrlKey && !event.altKey
-
-  if (mod) return event.shiftKey ? null : (MOD_SHORTCUTS.get(event.keycode) ?? null)
-  if (event.metaKey || (isMac && event.ctrlKey)) return null
+  if (MODIFIER_KEYCODES.has(event.keycode)) return null
+  const mod = platform === 'darwin' ? event.metaKey : event.ctrlKey && !event.altKey
+  if (mod && !event.shiftKey) {
+    const shortcut = MOD_SHORTCUTS.get(event.keycode)
+    if (shortcut) return shortcut
+  }
   if (ENTER_KEYCODES.has(event.keycode)) return event.shiftKey ? 'type' : 'enter'
   if (DELETE_KEYCODES.has(event.keycode)) return 'delete'
   if (event.keycode === UiohookKey.Tab) return 'tab'
   if (event.keycode === UiohookKey.Escape) return 'escape'
-  return PRINTABLE_KEYCODES.has(event.keycode) ? 'type' : null
+  return 'type'
 }
 
 export function classifyClick(
