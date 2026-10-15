@@ -54,7 +54,7 @@ describe('recording scripts', () => {
       expect: { app: [app], tld },
     })
     const twin = { ...script('twin'), steps: [step('Ghostty'), step('Ghostty')] }
-    expect(() => parseRecordingScripts(JSON.stringify([twin]))).toThrow(
+    expect(() => parseRecordingScripts(JSON.stringify([twin]), { lint: true })).toThrow(
       'Scenario twin: steps 1 and 2 are both Ghostty — merge them into one step',
     )
     const sites = {

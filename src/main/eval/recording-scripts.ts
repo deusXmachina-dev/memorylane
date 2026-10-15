@@ -18,7 +18,7 @@ export function getRecordingScript(fixturesRoot: string, id: string): RecordingS
 
 /** Merges a scenarios file into the library; same-id scenarios are replaced. */
 export function importRecordingScripts(fixturesRoot: string, sourceFile: string): number {
-  const incoming = parseRecordingScripts(fs.readFileSync(sourceFile, 'utf-8'))
+  const incoming = parseRecordingScripts(fs.readFileSync(sourceFile, 'utf-8'), { lint: true })
   const byId = new Map(listRecordingScripts(fixturesRoot).map((s) => [s.id, s]))
   for (const script of incoming) byId.set(script.id, script)
   fs.mkdirSync(fixturesRoot, { recursive: true })
@@ -33,7 +33,10 @@ function contextKey(apps: string[]): string {
     .join('|')
 }
 
-export function parseRecordingScripts(json: string): RecordingScript[] {
+export function parseRecordingScripts(
+  json: string,
+  { lint = false }: { lint?: boolean } = {},
+): RecordingScript[] {
   const data: unknown = JSON.parse(json)
   if (!Array.isArray(data)) throw new Error('Scenarios file must be a JSON array')
   const ids = new Set<string>()
@@ -54,7 +57,7 @@ export function parseRecordingScripts(json: string): RecordingScript[] {
           Array.isArray(step.expect?.app),
       )
     if (!valid) throw new Error(`Invalid scenario ${label}`)
-    for (let i = 1; i < script.steps.length; i++) {
+    for (let i = 1; lint && i < script.steps.length; i++) {
       const prev = script.steps[i - 1].expect
       const cur = script.steps[i].expect
       if (prev.tld === cur.tld && contextKey(prev.app) === contextKey(cur.app)) {

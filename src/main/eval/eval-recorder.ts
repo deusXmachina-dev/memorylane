@@ -86,7 +86,11 @@ export class EvalRecorder {
       )
       return
     }
-    if (this.leftAt === null && isSelfApp(event)) {
+    if (!isSelfApp(event)) {
+      this.leftAt = null
+      return
+    }
+    if (this.leftAt === null) {
       this.leftAt = event.timestamp
       log.info('[EvalRecorder] Returned to MemoryLane after the last step')
     }
