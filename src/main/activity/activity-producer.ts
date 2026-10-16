@@ -1,5 +1,6 @@
 import { isBrowserApp } from '@/shared/app-utils'
 import { extractTld } from '@main/recorder/tld-utils'
+import { titlesShareWords } from '@main/recorder/title-utils'
 import log from '@main/utils/logger'
 import type { EventWindow, InteractionContext } from '@/shared/types'
 import type { Frame } from '@main/recorder/screen-capturer'
@@ -506,7 +507,7 @@ export class ActivityProducer {
       processName: left.appName,
       bundleId: left.bundleId,
     })
-    if (!browser) return true
+    if (!browser) return titlesShareWords(left.windowTitle, right.windowTitle)
     if (!left.tld || !right.tld) return false
     return left.tld === right.tld
   }

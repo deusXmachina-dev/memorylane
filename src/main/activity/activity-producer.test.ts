@@ -403,6 +403,80 @@ describe('ActivityProducer', () => {
     expect(activities[1].provenance.sourceWindowIds).toEqual(['chrome-docs'])
   })
 
+  describe('title changes', () => {
+    async function runTitleSequence(
+      windows: { title: string; processName: string; bundleId: string; url?: string }[],
+    ): Promise<Activity[]> {
+      const { producer, frameStream, eventStream, activityStream } = createProducer()
+      const activities: Activity[] = []
+      subscriptions.push(
+        activityStream.subscribe({
+          startAt: { type: 'now' },
+          onRecord: (record) => activities.push(record.payload),
+        }),
+      )
+
+      await producer.start()
+      for (let i = 0; i < windows.length; i++) {
+        await frameStream.append(makeFrame(1_000 * (i + 1) + 500, i))
+      }
+      for (let i = 0; i < windows.length; i++) {
+        const start = 1_000 * (i + 1)
+        await eventStream.append(
+          makeWindow({
+            id: `w${i + 1}`,
+            startTimestamp: start,
+            endTimestamp: start + 900,
+            closedBy: i === windows.length - 1 ? 'flush' : 'app_change',
+            events: [makeEvent(start, 'app_change', { activeWindow: windows[i] })],
+          }),
+        )
+      }
+
+      await waitFor(
+        () => activities.some((a) => a.provenance.sourceWindowIds.includes(`w${windows.length}`)),
+        'Expected the last window to be emitted',
+      )
+      return activities
+    }
+
+    const ghostty = { processName: 'Ghostty', bundleId: 'com.mitchellh.ghostty' }
+    const cursor = { processName: 'Cursor', bundleId: 'com.todesktop.230313mzl4w4u92' }
+    const chrome = { processName: 'Google Chrome', bundleId: 'com.google.Chrome' }
+
+    it('splits a non-browser app when the title shares no words', async () => {
+      const activities = await runTitleSequence([
+        { ...ghostty, title: '✳ script-first-eval-recording' },
+        { ...ghostty, title: '◐ script-first-eval-recording' },
+        { ...ghostty, title: '✳ Linear workspace cleanup' },
+      ])
+
+      expect(activities.map((a) => a.provenance.sourceWindowIds)).toEqual([['w1', 'w2'], ['w3']])
+      expect(activities.map((a) => a.context.windowTitle)).toEqual([
+        '✳ script-first-eval-recording',
+        '✳ Linear workspace cleanup',
+      ])
+    })
+
+    it('merges a non-browser app when titles share a word', async () => {
+      const activities = await runTitleSequence([
+        { ...cursor, title: '.env — memorylane' },
+        { ...cursor, title: 'index.ts — memorylane' },
+      ])
+
+      expect(activities.map((a) => a.provenance.sourceWindowIds)).toEqual([['w1', 'w2']])
+    })
+
+    it('keeps browsers splitting by host only', async () => {
+      const activities = await runTitleSequence([
+        { ...chrome, title: 'Pull requests', url: 'https://github.com/pulls' },
+        { ...chrome, title: 'Notifications', url: 'https://github.com/notifications' },
+      ])
+
+      expect(activities.map((a) => a.provenance.sourceWindowIds)).toEqual([['w1', 'w2']])
+    })
+  })
+
   it('splits activities when display changes even with same app and tld', async () => {
     const { producer, frameStream, eventStream, activityStream } = createProducer()
     const activities: Activity[] = []
