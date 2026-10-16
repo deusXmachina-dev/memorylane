@@ -308,16 +308,35 @@ describe('promoteCapture', () => {
     expect(blocks[0].startOffsetMs).toBe(0)
   })
 
-  it('keeps a live activity that started before the first step, clamped to the clip', async () => {
+  it('keeps a live activity and its window that started before the first step', async () => {
+    const early = path.join(sourceDir, 'src-frames', 'frame-0000.png')
+    await makePng(early, 128)
+    const framesPath = path.join(sourceDir, 'frames.jsonl')
+    fs.writeFileSync(
+      framesPath,
+      JSON.stringify({
+        filepath: early,
+        timestamp: T0 - 4000,
+        width: 64,
+        height: 64,
+        displayId: 1,
+        sequenceNumber: 0,
+      }) +
+        '\n' +
+        fs.readFileSync(framesPath, 'utf8'),
+    )
     const windowsPath = path.join(sourceDir, 'event-windows.jsonl')
-    const main = { ...JSON.parse(fs.readFileSync(windowsPath, 'utf8')), endTimestamp: T0 + 4000 }
+    const main = JSON.parse(fs.readFileSync(windowsPath, 'utf8'))
+    main.startTimestamp = T0 - 4000
+    main.endTimestamp = T0 + 4000
+    main.events[0].timestamp = T0 - 4000
     fs.writeFileSync(windowsPath, JSON.stringify(main) + '\n')
     fs.writeFileSync(
       path.join(sourceDir, 'activities.jsonl'),
       JSON.stringify({
         id: 'live-1',
         startTimestamp: T0 - 4000,
-        endTimestamp: T0 + 4000,
+        endTimestamp: T0 + 9000,
         appName: 'Code',
         windowTitle: 'auth.ts',
         tld: '',
@@ -345,11 +364,14 @@ describe('promoteCapture', () => {
     })
 
     expect(result.scriptFollowed).toBe(true)
+    expect(result.eventWindowCount).toBe(1)
+    expect(result.frameCount).toBe(3)
     const blocks = parseGoldenMd(
       fs.readFileSync(path.join(fixturesRoot, 'already-in-app', 'golden.md'), 'utf8'),
     )
     expect(blocks.map((b) => b.summary)).toEqual(['Edited auth.ts.'])
     expect(blocks[0].startOffsetMs).toBe(0)
+    expect(blocks[0].endOffsetMs).toBe(8000)
   })
 
   it('does not overwrite an existing golden.md unless reseed', async () => {
