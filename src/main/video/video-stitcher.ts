@@ -2,6 +2,7 @@ import { spawn } from 'child_process'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
+import sharp from 'sharp'
 import type {
   ActivityVideoAsset,
   ActivityVideoFrameInput,
@@ -76,6 +77,22 @@ function buildConcatManifest(frames: ActivityVideoFrameInput[], durationsMs: num
   lines.push(`file '${escapeConcatPath(resolved[resolved.length - 1])}'`)
 
   return lines.join('\n') + '\n'
+}
+
+async function deriveCanvasSize(
+  frames: ActivityVideoFrameInput[],
+): Promise<{ width: number; height: number }> {
+  let width = 0
+  let height = 0
+  for (const frame of frames) {
+    const metadata = await sharp(frame.filepath).metadata()
+    if (!metadata.width || !metadata.height) {
+      throw new Error(`Could not read frame dimensions: ${frame.filepath}`)
+    }
+    width = Math.max(width, metadata.width)
+    height = Math.max(height, metadata.height)
+  }
+  return { width: width + (width % 2), height: height + (height % 2) }
 }
 
 function resolveAsarUnpackedPath(filepath: string): string {
@@ -187,6 +204,7 @@ export class FfmpegVideoStitcher implements ActivityVideoStitcher {
     const frames = sortFramesByTimestamp(input.frames)
     const frameDurationsMs = deriveFrameDurationsMs(frames)
     const durationMs = frameDurationsMs.reduce((sum, value) => sum + value, 0)
+    const canvas = await deriveCanvasSize(frames)
 
     const outputPath = path.resolve(input.outputPath)
     fs.mkdirSync(path.dirname(outputPath), { recursive: true })
@@ -219,7 +237,7 @@ export class FfmpegVideoStitcher implements ActivityVideoStitcher {
         '-crf',
         FFMPEG_VIDEO_CRF,
         '-vf',
-        'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+        `pad=${canvas.width}:${canvas.height}:(ow-iw)/2:(oh-ih)/2,setsar=1`,
         '-pix_fmt',
         'yuv420p',
         '-movflags',

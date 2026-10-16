@@ -1,9 +1,10 @@
-import type { ChildProcess } from 'child_process'
+import { spawn, type ChildProcess } from 'child_process'
 import { EventEmitter } from 'events'
 import { PassThrough } from 'stream'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
+import sharp from 'sharp'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FfmpegVideoStitcher } from './video-stitcher'
 
@@ -53,10 +54,24 @@ describe('FfmpegVideoStitcher', () => {
     return dir
   }
 
-  function createFrame(tempDir: string, name: string): string {
+  async function createFrame(
+    tempDir: string,
+    name: string,
+    width = 4,
+    height = 4,
+  ): Promise<string> {
     const framePath = path.join(tempDir, name)
-    fs.writeFileSync(framePath, 'fake-frame')
+    await sharp({
+      create: { width, height, channels: 3, background: { r: 0, g: 0, b: 0 } },
+    })
+      .png()
+      .toFile(framePath)
     return framePath
+  }
+
+  async function spawnCall() {
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(1))
+    return vi.mocked(spawn).mock.calls[0]
   }
 
   function cleanup(): void {
@@ -71,8 +86,8 @@ describe('FfmpegVideoStitcher', () => {
   it('builds ffmpeg command and returns stitch result', async () => {
     const childProcess = await import('child_process')
     const tempDir = createTempDir()
-    const frameA = createFrame(tempDir, 'a.png')
-    const frameB = createFrame(tempDir, 'b.png')
+    const frameA = await createFrame(tempDir, 'a.png')
+    const frameB = await createFrame(tempDir, 'b.png')
     const outputPath = path.join(tempDir, 'out.mp4')
 
     const mockChild = createMockChildProcess()
@@ -88,8 +103,7 @@ describe('FfmpegVideoStitcher', () => {
       outputPath,
     })
 
-    expect(childProcess.spawn).toHaveBeenCalledTimes(1)
-    const [command, args] = vi.mocked(childProcess.spawn).mock.calls[0]
+    const [command, args] = await spawnCall()
     expect(command).toBe(ffmpegExecutablePath)
     expect(args).toContain('-f')
     expect(args).toContain('concat')
@@ -104,7 +118,7 @@ describe('FfmpegVideoStitcher', () => {
     expect(args).toContain('-crf')
     expect(args).toContain('28')
     expect(args).toContain('-vf')
-    expect(args).toContain('scale=trunc(iw/2)*2:trunc(ih/2)*2')
+    expect(args).toContain('pad=4:4:(ow-iw)/2:(oh-ih)/2,setsar=1')
     expect(args).toContain('-pix_fmt')
     expect(args).toContain('yuv420p')
     expect(args).toContain('-movflags')
@@ -130,9 +144,9 @@ describe('FfmpegVideoStitcher', () => {
   it('derives frame durations from timestamps', async () => {
     const childProcess = await import('child_process')
     const tempDir = createTempDir()
-    const frameA = createFrame(tempDir, 'a.png')
-    const frameB = createFrame(tempDir, 'b.png')
-    const frameC = createFrame(tempDir, 'c.png')
+    const frameA = await createFrame(tempDir, 'a.png')
+    const frameB = await createFrame(tempDir, 'b.png')
+    const frameC = await createFrame(tempDir, 'c.png')
 
     const mockChild = createMockChildProcess()
     vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
@@ -148,7 +162,7 @@ describe('FfmpegVideoStitcher', () => {
       outputPath: path.join(tempDir, 'out.mp4'),
     })
 
-    const [, args] = vi.mocked(childProcess.spawn).mock.calls[0]
+    const [, args] = await spawnCall()
     const manifestContent = manifestFromSpawnArgs(args)
     expect(manifestContent).toContain('duration 0.500000')
     expect(manifestContent).toContain('duration 1.500000')
@@ -160,8 +174,8 @@ describe('FfmpegVideoStitcher', () => {
   it('sorts frames by timestamp before writing concat manifest', async () => {
     const childProcess = await import('child_process')
     const tempDir = createTempDir()
-    const frameA = createFrame(tempDir, 'a.png')
-    const frameB = createFrame(tempDir, 'b.png')
+    const frameA = await createFrame(tempDir, 'a.png')
+    const frameB = await createFrame(tempDir, 'b.png')
 
     const mockChild = createMockChildProcess()
     vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
@@ -176,7 +190,7 @@ describe('FfmpegVideoStitcher', () => {
       outputPath: path.join(tempDir, 'out.mp4'),
     })
 
-    const [, args] = vi.mocked(childProcess.spawn).mock.calls[0]
+    const [, args] = await spawnCall()
     const manifestContent = manifestFromSpawnArgs(args)
     expect(manifestContent.indexOf(path.resolve(frameA))).toBeLessThan(
       manifestContent.indexOf(path.resolve(frameB)),
@@ -189,7 +203,7 @@ describe('FfmpegVideoStitcher', () => {
   it('creates a one-second video when only one frame is provided', async () => {
     const childProcess = await import('child_process')
     const tempDir = createTempDir()
-    const frameA = createFrame(tempDir, 'a.png')
+    const frameA = await createFrame(tempDir, 'a.png')
     const outputPath = path.join(tempDir, 'out.mp4')
 
     const mockChild = createMockChildProcess()
@@ -202,7 +216,7 @@ describe('FfmpegVideoStitcher', () => {
       outputPath,
     })
 
-    const [, args] = vi.mocked(childProcess.spawn).mock.calls[0]
+    const [, args] = await spawnCall()
     const manifestContent = manifestFromSpawnArgs(args)
     const resolvedFrame = path.resolve(frameA)
     const fileEntries = manifestContent
@@ -219,6 +233,32 @@ describe('FfmpegVideoStitcher', () => {
     })
   })
 
+  it('pads mixed-size frames onto an even canvas without stretching', async () => {
+    const childProcess = await import('child_process')
+    const tempDir = createTempDir()
+    const laptop = await createFrame(tempDir, 'laptop.png', 1727, 1117)
+    const ultrawide = await createFrame(tempDir, 'ultrawide.png', 1920, 804)
+
+    const mockChild = createMockChildProcess()
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
+
+    const stitcher = new FfmpegVideoStitcher()
+    const promise = stitcher.stitch({
+      activityId: 'activity-mixed',
+      frames: [
+        { filepath: laptop, timestamp: 1_000 },
+        { filepath: ultrawide, timestamp: 2_000 },
+      ],
+      outputPath: path.join(tempDir, 'out.mp4'),
+    })
+
+    const [, args] = await spawnCall()
+    expect(args[args.indexOf('-vf') + 1]).toBe('pad=1920:1118:(ow-iw)/2:(oh-ih)/2,setsar=1')
+
+    mockChild.emit('close', 0)
+    await promise
+  })
+
   it('rejects when no frames are provided', async () => {
     const stitcher = new FfmpegVideoStitcher()
     await expect(
@@ -232,7 +272,7 @@ describe('FfmpegVideoStitcher', () => {
 
   it('rejects when a frame path is missing', async () => {
     const tempDir = createTempDir()
-    const frameA = createFrame(tempDir, 'a.png')
+    const frameA = await createFrame(tempDir, 'a.png')
     const missing = path.join(tempDir, 'missing.png')
 
     const stitcher = new FfmpegVideoStitcher()
@@ -250,8 +290,8 @@ describe('FfmpegVideoStitcher', () => {
 
   it('rejects when a frame timestamp is invalid', async () => {
     const tempDir = createTempDir()
-    const frameA = createFrame(tempDir, 'a.png')
-    const frameB = createFrame(tempDir, 'b.png')
+    const frameA = await createFrame(tempDir, 'a.png')
+    const frameB = await createFrame(tempDir, 'b.png')
 
     const stitcher = new FfmpegVideoStitcher()
     await expect(
@@ -269,8 +309,8 @@ describe('FfmpegVideoStitcher', () => {
   it('cleans up concat temp file when ffmpeg exits non-zero', async () => {
     const childProcess = await import('child_process')
     const tempDir = createTempDir()
-    const frameA = createFrame(tempDir, 'a.png')
-    const frameB = createFrame(tempDir, 'b.png')
+    const frameA = await createFrame(tempDir, 'a.png')
+    const frameB = await createFrame(tempDir, 'b.png')
 
     const mockChild = createMockChildProcess()
     vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
@@ -285,7 +325,7 @@ describe('FfmpegVideoStitcher', () => {
       outputPath: path.join(tempDir, 'out.mp4'),
     })
 
-    const [, args] = vi.mocked(childProcess.spawn).mock.calls[0]
+    const [, args] = await spawnCall()
     const concatPath = args[args.indexOf('-i') + 1]
     expect(fs.existsSync(concatPath)).toBe(true)
 
@@ -299,8 +339,8 @@ describe('FfmpegVideoStitcher', () => {
   it('returns a clear error when ffmpeg is missing', async () => {
     const childProcess = await import('child_process')
     const tempDir = createTempDir()
-    const frameA = createFrame(tempDir, 'a.png')
-    const frameB = createFrame(tempDir, 'b.png')
+    const frameA = await createFrame(tempDir, 'a.png')
+    const frameB = await createFrame(tempDir, 'b.png')
 
     const mockChild = createMockChildProcess()
     vi.mocked(childProcess.spawn).mockReturnValue(mockChild)
@@ -315,6 +355,7 @@ describe('FfmpegVideoStitcher', () => {
       outputPath: path.join(tempDir, 'out.mp4'),
     })
 
+    await spawnCall()
     const error = new Error('spawn ffmpeg ENOENT') as NodeJS.ErrnoException
     error.code = 'ENOENT'
     mockChild.emit('error', error)
