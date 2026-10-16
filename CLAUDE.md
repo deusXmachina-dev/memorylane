@@ -31,7 +31,7 @@ MemoryLane is a system tray Electron application that captures screenshots at re
 1. **Main Process** (`src/main/index.ts`): Entry point and tray management
    - Creates system tray with menu (Start/Stop Capture, Capture Now, Quit)
    - Handles app lifecycle as a tray app (doesn't quit when windows close)
-   - Hides dock icon on macOS for pure tray experience
+   - Hides dock icon on macOS while the main window is closed
    - Integrates with recorder and processor modules
 
 2. **Recorder Module** (`src/main/recorder/`): Screenshot capture
@@ -119,7 +119,7 @@ The `findings/` directory contains benchmark results, prompt experiments, and ot
 ### Tray App Behavior
 
 - No main window created by default (pure tray app)
-- Dock icon hidden on macOS for cleaner system tray experience
+- Dock icon hidden on macOS except while the main window is open
 - App doesn't quit when all windows close
 - Tray menu dynamically updates based on capture state
 

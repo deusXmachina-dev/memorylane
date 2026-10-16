@@ -64,7 +64,7 @@ if (!app.isPackaged) {
   }
 }
 
-// Hide dock icon on macOS for pure tray experience
+// Hide dock icon on macOS until the main window opens
 if (process.platform === 'darwin') {
   app.dock?.hide()
 }

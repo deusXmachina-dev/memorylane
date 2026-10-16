@@ -225,6 +225,7 @@ export function openMainWindow(): void {
     if (!isQuitting && mainWindow && !mainWindow.isDestroyed()) {
       e.preventDefault()
       mainWindow.hide()
+      if (process.platform === 'darwin') app.dock?.hide()
     }
   })
 
@@ -235,7 +236,6 @@ export function openMainWindow(): void {
   mainWindow.on('closed', stopPermissionPolling)
 
   if (process.platform === 'darwin') {
-    mainWindow.on('hide', () => app.dock?.hide())
     mainWindow.on('closed', () => app.dock?.hide())
   }
 }
