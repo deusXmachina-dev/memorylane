@@ -234,10 +234,6 @@ export function openMainWindow(): void {
   // restart it.
   mainWindow.on('hide', stopPermissionPolling)
   mainWindow.on('closed', stopPermissionPolling)
-
-  if (process.platform === 'darwin') {
-    mainWindow.on('closed', () => app.dock?.hide())
-  }
 }
 
 /**
