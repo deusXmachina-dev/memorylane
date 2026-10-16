@@ -1,6 +1,8 @@
+import { execFileSync } from 'child_process'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
+import ffmpegPath from 'ffmpeg-static'
 import sharp from 'sharp'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { FfmpegVideoStitcher } from './video-stitcher'
@@ -14,11 +16,12 @@ const RUN_OUTPUT_DIR = path.join(OUTPUT_ROOT_DIR, new Date().toISOString().repla
 async function createFrame(
   filepath: string,
   rgb: { r: number; g: number; b: number },
+  size = { width: 640, height: 360 },
 ): Promise<void> {
   await sharp({
     create: {
-      width: 640,
-      height: 360,
+      width: size.width,
+      height: size.height,
       channels: 3,
       background: rgb,
     },
@@ -93,6 +96,48 @@ describeIntegration('video stitcher integration', () => {
       expect(result.videoPath).toBe(path.resolve(nestedOutput))
       expect(fs.existsSync(nestedOutput)).toBe(true)
       expect(fs.statSync(nestedOutput).size).toBeGreaterThan(0)
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true })
+    }
+  }, 20_000)
+
+  it('letterboxes mixed-size frames instead of stretching them', async () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'video-stitcher-integration-'))
+    try {
+      const laptop = path.join(tempRoot, 'laptop.png')
+      const ultrawide = path.join(tempRoot, 'ultrawide.png')
+      await createFrame(laptop, { r: 255, g: 255, b: 255 }, { width: 1728, height: 1118 })
+      await createFrame(ultrawide, { r: 255, g: 255, b: 255 }, { width: 1920, height: 804 })
+
+      const outputPath = path.join(tempRoot, 'mixed.mp4')
+      await new FfmpegVideoStitcher().stitch({
+        activityId: 'integration-activity-mixed',
+        frames: [
+          { filepath: laptop, timestamp: 1_000 },
+          { filepath: ultrawide, timestamp: 2_000 },
+        ],
+        outputPath,
+      })
+
+      const lastFrame = path.join(tempRoot, 'last.png')
+      execFileSync(ffmpegPath ?? 'ffmpeg', [
+        '-loglevel',
+        'error',
+        '-ss',
+        '1.5',
+        '-i',
+        outputPath,
+        '-frames:v',
+        '1',
+        lastFrame,
+      ])
+      const { data, info } = await sharp(lastFrame).raw().toBuffer({ resolveWithObject: true })
+      const luma = (x: number, y: number): number => data[(y * info.width + x) * info.channels]
+
+      expect([info.width, info.height]).toEqual([1920, 1118])
+      expect(luma(960, 20)).toBeLessThan(40)
+      expect(luma(960, 559)).toBeGreaterThan(215)
+      expect(luma(960, 1098)).toBeLessThan(40)
     } finally {
       fs.rmSync(tempRoot, { recursive: true, force: true })
     }
