@@ -263,8 +263,17 @@ export async function promoteCapture(opts: PromoteCaptureOptions): Promise<Promo
     transformer: new ScaffoldTransformer(),
   })
   const keptActivities = readLiveActivities(opts.sourceDir)
-    .filter((a) => inClip(a.startTimestamp))
-    .map(liveToReplayActivity)
+    .filter(
+      (a) =>
+        (clipStart === undefined || a.endTimestamp > clipStart) &&
+        (clipEnd === undefined || a.startTimestamp < clipEnd),
+    )
+    .map((a) =>
+      liveToReplayActivity({
+        ...a,
+        startTimestamp: Math.max(a.startTimestamp, clipStart ?? a.startTimestamp),
+      }),
+    )
   const transcript = [...keptActivities, ...droppedActivities]
   const lastBlockEnd = transcript.reduce((max, t) => Math.max(max, t.endTimestamp), 0) || undefined
 

@@ -308,6 +308,50 @@ describe('promoteCapture', () => {
     expect(blocks[0].startOffsetMs).toBe(0)
   })
 
+  it('keeps a live activity that started before the first step, clamped to the clip', async () => {
+    const windowsPath = path.join(sourceDir, 'event-windows.jsonl')
+    const main = { ...JSON.parse(fs.readFileSync(windowsPath, 'utf8')), endTimestamp: T0 + 4000 }
+    fs.writeFileSync(windowsPath, JSON.stringify(main) + '\n')
+    fs.writeFileSync(
+      path.join(sourceDir, 'activities.jsonl'),
+      JSON.stringify({
+        id: 'live-1',
+        startTimestamp: T0 - 4000,
+        endTimestamp: T0 + 4000,
+        appName: 'Code',
+        windowTitle: 'auth.ts',
+        tld: '',
+        summary: 'Live captured summary.',
+        summaryModel: 'video',
+      }) + '\n',
+    )
+
+    const result = await promoteCapture({
+      sourceDir,
+      fixturesRoot,
+      name: 'already-in-app',
+      video: false,
+      script: {
+        id: 'code-edit',
+        title: 'Edit auth.ts',
+        targets: [],
+        setup: [],
+        steps: [
+          { instruction: '', seconds: 10, expect: { app: ['Code'], summary: 'Edited auth.ts.' } },
+        ],
+      },
+      stepEnteredAt: [T0],
+      leftAt: T0 + 4000,
+    })
+
+    expect(result.scriptFollowed).toBe(true)
+    const blocks = parseGoldenMd(
+      fs.readFileSync(path.join(fixturesRoot, 'already-in-app', 'golden.md'), 'utf8'),
+    )
+    expect(blocks.map((b) => b.summary)).toEqual(['Edited auth.ts.'])
+    expect(blocks[0].startOffsetMs).toBe(0)
+  })
+
   it('does not overwrite an existing golden.md unless reseed', async () => {
     writeLiveActivity(sourceDir, 'Live captured summary.')
     const fxDir = path.join(fixturesRoot, 'demo3')
