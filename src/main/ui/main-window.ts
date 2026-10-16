@@ -181,7 +181,10 @@ function stopPermissionPolling(): void {
  * Open (or focus) the main application window
  */
 export function openMainWindow(): void {
+  if (process.platform === 'darwin') void app.dock?.show()
+
   if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.show()
     mainWindow.focus()
     return
@@ -197,7 +200,7 @@ export function openMainWindow(): void {
     resizable: true,
     minimizable: true,
     maximizable: true,
-    fullscreenable: true,
+    fullscreenable: false,
     title: 'MemoryLane',
     webPreferences: {
       preload: path.join(appRoot, 'out', 'preload', 'index.js'),
@@ -222,6 +225,7 @@ export function openMainWindow(): void {
     if (!isQuitting && mainWindow && !mainWindow.isDestroyed()) {
       e.preventDefault()
       mainWindow.hide()
+      if (process.platform === 'darwin') app.dock?.hide()
     }
   })
 
