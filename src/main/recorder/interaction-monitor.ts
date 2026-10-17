@@ -5,6 +5,7 @@ import { ClickClass, InputRun, InteractionContext, KeyClass } from '@types'
 import { appendClick, appendRun, classifyClick, classifyKey } from '@main/recorder/input-sequence'
 import { addAppWatcherListener, AppWatcherEvent } from './app-watcher'
 import { resolveAppWatcherDisplay } from './app-watcher-display'
+import { normalizeTitle } from './title-utils'
 import log from '@main/utils/logger'
 
 // State
@@ -285,13 +286,6 @@ function handleScroll(event: UiohookWheelEvent): void {
     accumulation.eventCount++
     accumulation.direction = event.direction === 3 ? 'vertical' : 'horizontal' // WheelDirection.VERTICAL = 3
   })
-}
-
-function normalizeTitle(title: string): string {
-  return title
-    .replace(/[\p{So}\p{Sk}️‍]/gu, '')
-    .replace(/\s+/g, ' ')
-    .trim()
 }
 
 /**
