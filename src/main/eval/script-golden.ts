@@ -86,8 +86,9 @@ function alignBySpans(
     const fitting = inSpan.filter((b) => !claimed.has(b) && stepIssue(step, b) === null)
     if (fitting.length > 0) {
       for (const b of fitting) claimed.set(b, i)
-      targets.set(longest(fitting), step)
-      return { ok: true, got: describeBlock(fitting[0]), issue: null }
+      const target = longest(fitting)
+      targets.set(target, step)
+      return { ok: true, got: describeBlock(target), issue: null }
     }
     for (const b of inSpan) {
       const owner = claimed.get(b)

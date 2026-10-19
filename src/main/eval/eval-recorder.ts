@@ -224,7 +224,6 @@ export class EvalRecorder {
         await this.harness.stop()
       }
     } finally {
-      setIgnoreSelfFocus(false)
       this.frameSub?.unsubscribe()
       this.eventSub?.unsubscribe()
       this.activityUnsub?.()
@@ -237,6 +236,7 @@ export class EvalRecorder {
   }
 
   private release(stagingDir: string): void {
+    setIgnoreSelfFocus(false)
     // Release retention and reclaim the screenshots that piled up; drop staging.
     this.harness.setRetainScreenshots(false)
     this.harness.sweepNow()
