@@ -23,6 +23,7 @@ import { FrameDebugDumper } from '@main/debug/frame-debug-dump'
 import { EventWindowDebugDumper } from '@main/debug/event-window-debug-dump'
 import { isSelfApp } from '@main/capture/capture-exclusions'
 import { addAppWatcherListener, type AppWatcherEvent } from '@main/recorder/app-watcher'
+import { setIgnoreSelfFocus } from '@main/recorder/interaction-monitor'
 import { ActivityDebugDumper } from './activity-debug-dump'
 import { promoteCapture, type PromoteCaptureResult } from './promote-fixture'
 import { getRecordingScript } from './recording-scripts'
@@ -139,6 +140,7 @@ export class EvalRecorder {
         })
       }) ?? null
     if (script) this.trackerUnsub = addAppWatcherListener((event) => this.track(script, event))
+    setIgnoreSelfFocus(true)
 
     // Frames only flow while capture is running; start it for the operator if it
     // is off, and remember so we can restore the prior state on stop.
@@ -222,6 +224,7 @@ export class EvalRecorder {
         await this.harness.stop()
       }
     } finally {
+      setIgnoreSelfFocus(false)
       this.frameSub?.unsubscribe()
       this.eventSub?.unsubscribe()
       this.activityUnsub?.()
