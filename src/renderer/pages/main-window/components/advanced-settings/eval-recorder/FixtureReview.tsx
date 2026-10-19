@@ -136,7 +136,9 @@ export function FixtureReview({
       {check?.followed && (
         <p className="text-sm text-muted-foreground">
           Summaries are filled in from the script. Check them against the video and edit if needed.
-          {check.strays?.length ? ` Strays marked DROPPED: ${check.strays.join(' · ')}.` : ''}
+          {check.strays?.length
+            ? ` Extra activities (live summary kept): ${check.strays.join(' · ')}.`
+            : ''}
         </p>
       )}
 
@@ -255,7 +257,9 @@ function CheckCard({
           </p>
         )}
         {check.strays && check.strays.length > 0 && (
-          <p className="text-sm">Strays marked DROPPED: {check.strays.join(' · ')}</p>
+          <p className="text-sm">
+            Extra activities (live summary kept): {check.strays.join(' · ')}
+          </p>
         )}
         {check.steps ? (
           <ol className="divide-y divide-border">

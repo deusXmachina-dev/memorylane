@@ -5,6 +5,7 @@ import { ClickClass, InputRun, InteractionContext, KeyClass } from '@types'
 import { appendClick, appendRun, classifyClick, classifyKey } from '@main/recorder/input-sequence'
 import { addAppWatcherListener, AppWatcherEvent } from './app-watcher'
 import { resolveAppWatcherDisplay } from './app-watcher-display'
+import { isSelfApp } from '@main/capture/capture-exclusions'
 import log from '@main/utils/logger'
 
 // State
@@ -22,6 +23,8 @@ let cachedWindowTitle: string | null = null
 
 // Unsubscribe handle for our app-watcher listener
 let appWatcherUnsubscribe: (() => void) | null = null
+
+let ignoreSelfFocus = false
 
 /**
  * Resolve which Electron Display contains the given global coordinate.
@@ -311,6 +314,7 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
     log.warn(`[Interaction Monitor] AppWatcher error: ${event.error}`)
     return
   }
+  if (ignoreSelfFocus && isSelfApp(event)) return
 
   // Both app_change and window_change map to the same InteractionContext type
   const current: NonNullable<InteractionContext['activeWindow']> = {
@@ -381,6 +385,11 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
       log.error('Error in interaction callback:', error)
     }
   })
+}
+
+/** While on, focusing MemoryLane's own windows never produces an app change. */
+export function setIgnoreSelfFocus(ignore: boolean): void {
+  ignoreSelfFocus = ignore
 }
 
 /**
