@@ -36,16 +36,15 @@ function stepIssue(step: RecordingScriptStep, block: ReplayActivity): string | n
   return null
 }
 
-function stepGolden(step: RecordingScriptStep, fitting: ReplayActivity[]): GoldenSource {
-  const first = fitting[0]
-  const endTimestamp = Math.max(...fitting.map((b) => b.endTimestamp))
-  if (first.dropped || !step.expect.summary) return { ...first, endTimestamp }
-  return {
-    ...first,
-    endTimestamp,
-    summary: step.expect.summary,
-    mustMention: step.expect.mustMention,
-  }
+function withStepTarget(step: RecordingScriptStep, block: ReplayActivity): GoldenSource {
+  if (block.dropped || !step.expect.summary) return block
+  return { ...block, summary: step.expect.summary, mustMention: step.expect.mustMention }
+}
+
+function longest(blocks: ReplayActivity[]): ReplayActivity {
+  return blocks.reduce((a, b) =>
+    b.endTimestamp - b.startTimestamp > a.endTimestamp - a.startTimestamp ? b : a,
+  )
 }
 
 function overlap(block: ReplayActivity, start: number, end: number): number {
@@ -53,10 +52,11 @@ function overlap(block: ReplayActivity, start: number, end: number): number {
 }
 
 /**
- * Aligns a script's steps to the recorded blocks. With `stepEnteredAt` (the
- * recorder's per-step entry times) each step owns the span until the next
- * entry and claims the blocks in it that fit; unclaimed blocks are strays and
- * become DROPPED golden blocks. Without it, blocks pair with steps by position.
+ * Aligns a script's steps to the recorded blocks. The golden keeps every block
+ * exactly as the pipeline produced it; the script only labels them. With
+ * `stepEnteredAt` (the recorder's per-step entry times) each step owns the span
+ * until the next entry and claims the blocks in it that fit; the longest one
+ * takes the step's target summary. Without it, blocks pair with steps by position.
  */
 export function goldenFromScript(
   script: RecordingScript,
@@ -77,7 +77,7 @@ function alignBySpans(
   leftAt: number | undefined,
 ): { check: ScriptCheck; golden: GoldenSource[] | null } {
   const claimed = new Map<ReplayActivity, number>()
-  const golden: GoldenSource[] = []
+  const targets = new Map<ReplayActivity, RecordingScriptStep>()
   const steps: ScriptStepCheck[] = script.steps.map((step, i) => {
     const start = enteredAt[i]
     if (start === undefined) return { ok: false, got: null, issue: 'not reached' }
@@ -86,7 +86,7 @@ function alignBySpans(
     const fitting = inSpan.filter((b) => !claimed.has(b) && stepIssue(step, b) === null)
     if (fitting.length > 0) {
       for (const b of fitting) claimed.set(b, i)
-      golden.push(stepGolden(step, fitting))
+      targets.set(longest(fitting), step)
       return { ok: true, got: describeBlock(fitting[0]), issue: null }
     }
     for (const b of inSpan) {
@@ -124,8 +124,10 @@ function alignBySpans(
     strays: strays.map(describeBlock),
   }
   if (!check.followed) return { check, golden: null }
-  for (const b of strays)
-    golden.push({ ...b, dropped: { reason: 'stray', detail: describeBlock(b) } })
+  const golden = sorted.map((b) => {
+    const step = targets.get(b)
+    return step ? withStepTarget(step, b) : b
+  })
   return { check, golden }
 }
 

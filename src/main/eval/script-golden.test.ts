@@ -132,10 +132,10 @@ describe('goldenFromScript with step entry times', () => {
     ],
   }
 
-  it('claims the blocks in each span and turns the rest into DROPPED strays', () => {
+  it('keeps unclaimed blocks exactly as the pipeline produced them', () => {
     const blocks = [
       span(0, 0, 'MemoryLane'),
-      span(0, 3, 'Wispr Flow', { summaryModel: 'heuristic:viewed' }),
+      span(0, 3, 'Wispr Flow', { summaryModel: 'heuristic:viewed', summary: 'Viewed Wispr' }),
       span(3, 7, 'Google Chrome', { tld: 'newtab' }),
       span(7, 34, 'Google Chrome', calendar),
       span(34, 40, 'Google Chrome', { tld: 'newtab' }),
@@ -153,32 +153,48 @@ describe('goldenFromScript with step entry times', () => {
       'Google Chrome · newtab',
       'Google Chrome · newtab',
     ])
-    const kept = golden?.filter((g) => !g.dropped).map((g) => g.summary)
-    expect(kept).toEqual(['Scheduled.', 'Drafted.'])
-    const strays = golden?.filter((g) => g.dropped).map((g) => g.dropped?.detail)
-    expect(strays).toEqual([
-      'MemoryLane',
-      'Wispr Flow',
-      'Google Chrome · newtab',
-      'Google Chrome · newtab',
+    expect(golden?.map((g) => g.summary)).toEqual([
+      'live summary',
+      'Viewed Wispr',
+      'live summary',
+      'Scheduled.',
+      'live summary',
+      'Drafted.',
     ])
+    expect(golden?.some((g) => g.dropped)).toBe(false)
   })
 
-  it('unions an over-split step into one golden block', () => {
+  it('keeps every block of a step split by app switches', () => {
+    const sheets = { tld: 'docs.google.com' }
+    const heyreach = { tld: 'app.heyreach.io' }
+    const copy: RecordingScript = {
+      ...twoSites,
+      steps: [
+        {
+          instruction: '',
+          seconds: 60,
+          expect: { app: ['browser'], ...sheets, summary: 'Copied.' },
+        },
+      ],
+    }
     const blocks = [
-      span(0, 10, 'Google Chrome', calendar),
-      span(10, 12, 'Google Chrome', { tld: 'newtab' }),
-      span(12, 30, 'Google Chrome', calendar),
-      span(30, 50, 'Google Chrome', mail),
+      span(0, 10, 'Google Chrome', sheets),
+      span(10, 15, 'Google Chrome', { ...heyreach, summary: 'Viewed HeyReach' }),
+      span(15, 17, 'Google Chrome', {
+        ...sheets,
+        dropped: { reason: 'too_short', detail: '2000ms < 3000ms' },
+      }),
+      span(17, 45, 'Google Chrome', sheets),
     ]
-    const { check, golden } = goldenFromScript(twoSites, blocks, [0, 30_000])
+    const { check, golden } = goldenFromScript(copy, blocks, [0])
     expect(check.followed).toBe(true)
-    expect(golden?.[0]).toMatchObject({
-      startTimestamp: 0,
-      endTimestamp: 30_000,
-      summary: 'Scheduled.',
-    })
-    expect(check.strays).toEqual(['Google Chrome · newtab'])
+    expect(golden?.map((g) => [g.startTimestamp, g.endTimestamp, g.summary])).toEqual([
+      [0, 10_000, 'live summary'],
+      [10_000, 15_000, 'Viewed HeyReach'],
+      [15_000, 17_000, 'live summary'],
+      [17_000, 45_000, 'Copied.'],
+    ])
+    expect(golden?.[2].dropped?.reason).toBe('too_short')
   })
 
   it('reports a step whose block merged into the previous one', () => {
