@@ -1,13 +1,12 @@
-# MemoryLane v1.5.12
+# MemoryLane v1.5.13
 
-Scripted eval recordings now follow what is on screen instead of a timer.
+Dock icon fix and more reliable eval recordings.
 
 ## What's Changed
 
-- **Steps advance from the foreground window**: the recording guide moves to the next step when you switch to its app or site, with no countdown; hands-off steps keep their timer (#309).
-- **Fixtures clip to the script**: frames and activities before step 1 and after the return to MemoryLane are dropped, so goldens align with the steps; detours are marked as strays and never fail the check (#309).
-- **Scenario lint on import only**: a saved library with back-to-back same-app steps still loads (#309).
-- Internal: runtime UI-refresh signal renamed (#308).
+- **Dock icon while the window is open**: on macOS, MemoryLane shows in the Dock while its main window is open and hides again when it closes (#310).
+- **Eval goldens keep every activity**: each pipeline activity stays in the golden; the step target goes to its longest block, and extra activities keep their live summary (#314).
+- **Recording guide no longer splits steps**: clicking the guide during a recording no longer counts as switching apps (#314).
 
 ## Known Issues & Limitations
 
@@ -25,4 +24,4 @@ Scripted eval recordings now follow what is on screen instead of a timer.
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.11...v1.5.12
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.12...v1.5.13
