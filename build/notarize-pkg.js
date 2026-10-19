@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 require('dotenv').config()
 const path = require('node:path')
-const { notarize } = require('@electron/notarize')
+const { notarizeWithRetry } = require('./mac-notarize')
 
 exports.default = async function notarizePkg(context) {
   if (!process.env.APPLE_ID || !process.env.APPLE_APP_SPECIFIC_PASSWORD) {
@@ -15,8 +15,7 @@ exports.default = async function notarizePkg(context) {
   for (const pkgPath of pkgArtifacts) {
     const name = path.basename(pkgPath)
     console.log(`Notarizing ${name}...`)
-    await notarize({
-      tool: 'notarytool',
+    await notarizeWithRetry({
       appPath: pkgPath,
       appleId: process.env.APPLE_ID,
       appleIdPassword: process.env.APPLE_APP_SPECIFIC_PASSWORD,
