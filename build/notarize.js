@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 require('dotenv').config()
-const { notarize } = require('@electron/notarize')
+const { notarizeWithRetry } = require('./mac-notarize')
 
 exports.default = async function notarizing(context) {
   const { electronPlatformName, appOutDir } = context
@@ -15,7 +15,7 @@ exports.default = async function notarizing(context) {
 
   console.log(`Notarizing ${appName}...`)
 
-  await notarize({
+  await notarizeWithRetry({
     appBundleId: context.packager.appInfo.id,
     appPath: `${appOutDir}/${appName}.app`,
     appleId: process.env.APPLE_ID,
