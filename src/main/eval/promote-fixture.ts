@@ -256,8 +256,9 @@ export async function promoteCapture(opts: PromoteCaptureOptions): Promise<Promo
   const wantSeed = opts.seed ?? true
   if (!wantVideo && !wantSeed) return result
 
-  // The no-LLM replay supplies the DROPPED spans (drops are never persisted) and
-  // the session clock; kept blocks come from the live recording's summaries.
+  // The no-LLM replay supplies the session clock and the dropped spans the
+  // script check needs (drops are never persisted); golden blocks come from
+  // the live recording's summaries.
   const { droppedActivities, sessionStartMs } = await replayFixture({
     fixtureDir,
     transformer: new ScaffoldTransformer(),
@@ -277,7 +278,7 @@ export async function promoteCapture(opts: PromoteCaptureOptions): Promise<Promo
     if (fs.existsSync(goldenPath) && !opts.reseed) {
       result.golden = { seeded: false, kept: 0, dropped: 0, summariesFilled: 0 }
     } else {
-      let goldenBlocks: GoldenSource[] = transcript
+      let goldenBlocks: GoldenSource[] = keptActivities
       const checkPath = path.join(fixtureDir, 'script-check.json')
       fs.rmSync(checkPath, { force: true })
       if (opts.script) {
