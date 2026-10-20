@@ -70,7 +70,7 @@ export interface SemanticAttempt {
 export interface SemanticRunDiagnostics {
   activityId: string
   pipelinePreference: SemanticPipelinePreference
-  promptChars: number
+  prompt: string
   chosenMode: SemanticMode | null
   chosenModel: string | null
   fallbackReason: string | null

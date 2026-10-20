@@ -1,4 +1,4 @@
-import type { SemanticRunDiagnostics } from '@main/semantic/types'
+import type { SemanticRunDiagnostics, SemanticPipelinePreference } from '@main/semantic/types'
 import type { DroppedActivityReason } from '@main/activity/activity-types'
 import type { ActivityProducerStats } from '@main/activity/activity-producer'
 
@@ -152,6 +152,7 @@ export interface ScoredSummary {
   summaryCostUsd: number | null
   /** Eval-time equivalence-judge cost in USD, or null when unpriced. */
   judgeCostUsd: number | null
+  diagnostics: SemanticRunDiagnostics | null
 }
 
 /** How a replay's segmentation lined up with the golden.md blocks. */
@@ -202,7 +203,11 @@ export interface FixtureScore {
 
 export interface EvalReport {
   generatedAt: string
+  label: string | null
   vendor: string
+  pipeline: SemanticPipelinePreference | null
   judgeModel: string | null
+  gitSha: string | null
+  gitDirty: boolean | null
   fixtures: FixtureScore[]
 }

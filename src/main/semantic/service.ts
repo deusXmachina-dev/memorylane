@@ -188,7 +188,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
     const diagnostics: SemanticRunDiagnostics = {
       activityId: input.activity.id,
       pipelinePreference: this.pipelinePreference,
-      promptChars: 0,
+      prompt: '',
       chosenMode: null,
       chosenModel: null,
       fallbackReason: null,
@@ -229,7 +229,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
       'video',
       this.userContextGetter?.() ?? undefined,
     )
-    diagnostics.promptChars = videoPrompt.length
+    diagnostics.prompt = videoPrompt
 
     const shouldAttemptVideo = this.pipelinePreference !== 'image' && this.videoModels.length > 0
     const shouldAttemptSnapshots = this.pipelinePreference !== 'video'
@@ -374,6 +374,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
       'snapshot',
       this.userContextGetter?.() ?? undefined,
     )
+    diagnostics.prompt = snapshotPrompt
     const snapshotResult = await trySemanticModelChain({
       requestTimeoutMs: this.requestTimeoutMs,
       mode: 'snapshot',

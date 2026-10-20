@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { renderMarkdown, renderComparisonMarkdown } from './report'
+import {
+  aggregate,
+  renderHeader,
+  renderMarkdown,
+  renderComparisonMarkdown,
+  renderPromptsMarkdown,
+  runIdFor,
+} from './report'
 import type { EvalReport, FixtureScore, ScoredSummary } from './types'
+import type { SemanticRunDiagnostics } from '@main/semantic/types'
 
 function summary(over: Partial<ScoredSummary> = {}): ScoredSummary {
   return {
@@ -19,6 +27,7 @@ function summary(over: Partial<ScoredSummary> = {}): ScoredSummary {
     summaryTokensOut: 50,
     summaryCostUsd: 0.0004,
     judgeCostUsd: 0.0002,
+    diagnostics: null,
     ...over,
   }
 }
@@ -48,9 +57,29 @@ function fixtureScore(over: Partial<FixtureScore> = {}): FixtureScore {
 function report(over: Partial<EvalReport> = {}): EvalReport {
   return {
     generatedAt: '2026-06-14T10:00:00.000Z',
+    label: null,
     vendor: 'openrouter',
+    pipeline: 'video',
     judgeModel: 'google/gemini-2.5-flash',
+    gitSha: null,
+    gitDirty: null,
     fixtures: [fixtureScore()],
+    ...over,
+  }
+}
+
+function diagnostics(over: Partial<SemanticRunDiagnostics> = {}): SemanticRunDiagnostics {
+  return {
+    activityId: 'a1',
+    pipelinePreference: 'video',
+    prompt: '## Rules\n- Be specific.\n\n## Context\n- App: Code\n',
+    chosenMode: 'video',
+    chosenModel: 'google/gemini-2.5-flash',
+    fallbackReason: null,
+    attempts: [],
+    selectedSnapshotPaths: [],
+    videoSizeBytes: 3_250_000,
+    videoMimeType: 'video/mp4',
     ...over,
   }
 }
@@ -250,6 +279,23 @@ describe('renderComparisonMarkdown', () => {
     expect(cmp).toContain('**equiv 0.40**<br>A summary from model B.')
   })
 
+  it('shows label, pipeline and git provenance in the header', () => {
+    const md = renderMarkdown(
+      report({ label: 'enriched-timeline', gitSha: 'abcdef1234567890', gitDirty: true }),
+    )
+    expect(md).toContain('- Label: enriched-timeline')
+    expect(md).toContain('- Pipeline: video')
+    expect(md).toContain('- Git: abcdef1234 (dirty)')
+    expect(md).toContain('- Models: google/gemini-2.5-flash')
+  })
+
+  it('marks unknown git and omits the label line when absent', () => {
+    const lines = renderHeader(report({ pipeline: null }), 'T')
+    expect(lines).toContain('- Git: (unknown)')
+    expect(lines).toContain('- Pipeline: (unknown)')
+    expect(lines.some((l) => l.startsWith('- Label:'))).toBe(false)
+  })
+
   it('surfaces model-chain fallback (requested → actual) when the model differs', () => {
     // Snapshot-only model requested, but the chain fell through to flash-lite.
     const md = renderMarkdown(
@@ -263,5 +309,159 @@ describe('renderComparisonMarkdown', () => {
       }),
     )
     expect(md).toContain('mistralai/mistral-small-3.2-24b-instruct → google/gemini-2.5-flash-lite')
+  })
+})
+
+describe('aggregate', () => {
+  const golden = (equivalence: number | null, mustMentionRecall: number | null) => ({
+    index: 1,
+    summary: 'g',
+    overlapRatio: 1,
+    equivalence,
+    mustMentionRecall,
+    mustMentionMissed: [],
+  })
+
+  it('weights equivalence by matched activities and sums hard fails and cost', () => {
+    const all = aggregate([
+      fixtureScore({
+        costUsd: 0.01,
+        hardFails: 2,
+        segmentation: {
+          goldenCount: 2,
+          coverage: 1,
+          unmatchedGoldenIndexes: [],
+          extraActivityCount: 0,
+          expectedDropCount: 0,
+          dropViolationIndexes: [],
+        },
+        summaries: [
+          summary({
+            golden: golden(1, 1),
+            deterministic: { checks: [], hardFails: 2, softWarns: 0, passRate: 0.5 },
+          }),
+          summary({ golden: golden(0.5, 0) }),
+          summary({ golden: golden(0.5, null) }),
+        ],
+      }),
+      fixtureScore({
+        costUsd: 0.02,
+        segmentation: {
+          goldenCount: 1,
+          coverage: 0.5,
+          unmatchedGoldenIndexes: [1],
+          extraActivityCount: 0,
+          expectedDropCount: 0,
+          dropViolationIndexes: [],
+        },
+        summaries: [summary({ golden: golden(1, 1) }), summary({ golden: null })],
+      }),
+    ])
+    expect(all.activities).toBe(5)
+    expect(all.matched).toBe(4)
+    expect(all.equivalence).toBe(0.75)
+    expect(all.mustMention).toBeCloseTo(2 / 3)
+    expect(all.hardFails).toBe(2)
+    expect(all.detPassRate).toBeCloseTo(0.9)
+    expect(all.segCoverage).toBe(0.75)
+    expect(all.costUsd).toBeCloseTo(0.03)
+  })
+
+  it('is null-safe for an unjudged, unpriced run', () => {
+    const all = aggregate([fixtureScore({ costUsd: null, summaries: [summary()] })])
+    expect(all.equivalence).toBeNull()
+    expect(all.mustMention).toBeNull()
+    expect(all.segCoverage).toBeNull()
+    expect(all.costUsd).toBeNull()
+  })
+
+  it('prints an overall line only for multi-fixture reports', () => {
+    expect(renderMarkdown(report())).not.toContain('**Overall:**')
+    const md = renderMarkdown(
+      report({ fixtures: [fixtureScore(), fixtureScore({ fixture: 'b' })] }),
+    )
+    expect(md).toContain('**Overall:** 0/2 matched')
+  })
+})
+
+describe('renderPromptsMarkdown', () => {
+  it('renders the video media line and the fenced prompt', () => {
+    const md = renderPromptsMarkdown(
+      report({
+        fixtures: [fixtureScore({ summaries: [summary({ diagnostics: diagnostics() })] })],
+      }),
+    )
+    expect(md).toContain('# Activity-Summary Prompts')
+    expect(md).toContain('### [0:00–0:10] Code — auth.ts')
+    expect(md).toContain('[video 3.1 MB video/mp4]')
+    expect(md).toContain('~~~~\n## Rules\n- Be specific.\n\n## Context\n- App: Code\n~~~~')
+  })
+
+  it('lists snapshot basenames for the image lane', () => {
+    const md = renderPromptsMarkdown(
+      report({
+        fixtures: [
+          fixtureScore({
+            summaries: [
+              summary({
+                diagnostics: diagnostics({
+                  chosenMode: 'snapshot',
+                  selectedSnapshotPaths: ['/tmp/x/frame-1.jpg', '/tmp/x/frame-2.jpg'],
+                }),
+              }),
+            ],
+          }),
+        ],
+      }),
+    )
+    expect(md).toContain('[2 snapshots: frame-1.jpg, frame-2.jpg]')
+  })
+
+  it('explains a heuristic activity without a fence', () => {
+    const md = renderPromptsMarkdown(
+      report({
+        fixtures: [
+          fixtureScore({
+            summaries: [summary({ summaryModel: 'heuristic:viewed', diagnostics: null })],
+          }),
+        ],
+      }),
+    )
+    expect(md).toContain('[no LLM call — heuristic:viewed]')
+    expect(md).not.toContain('~~~~')
+  })
+
+  it('names the fallback reason when every model failed', () => {
+    const md = renderPromptsMarkdown(
+      report({
+        fixtures: [
+          fixtureScore({
+            summaries: [
+              summary({
+                summary: '',
+                summaryModel: '',
+                diagnostics: diagnostics({
+                  chosenMode: null,
+                  fallbackReason: 'all models failed',
+                  prompt: '',
+                }),
+              }),
+            ],
+          }),
+        ],
+      }),
+    )
+    expect(md).toContain('[no LLM call — all models failed]')
+  })
+})
+
+describe('runIdFor', () => {
+  it('appends a slug of the label to the timestamp', () => {
+    expect(runIdFor({ generatedAt: '2026-06-14T10:00:00.000Z', label: null })).toBe(
+      '2026-06-14T10-00-00-000Z',
+    )
+    expect(runIdFor({ generatedAt: '2026-06-14T10:00:00.000Z', label: 'Baseline @ abc12' })).toBe(
+      '2026-06-14T10-00-00-000Z-baseline-abc12',
+    )
   })
 })

@@ -20,9 +20,13 @@
  * Usage:
  *   npm run eval-summaries                                  (all fixtures, default model, no judge)
  *   npm run eval-summaries -- --fixture vscode-debug
+ *   npm run eval-summaries -- --label enriched-timeline     (tag the run; shown in every report header)
  *   npm run eval-summaries -- --model google/gemini-2.5-flash --judge
  *   npm run eval-summaries -- --judge-model moonshotai/kimi-k3   (implies --judge)
  *   npm run eval-summaries -- --pipeline image              (benchmark snapshot models)
+ *
+ * Run from the repo root: fixture/result paths and the recorded git sha resolve
+ * against the cwd. Compare two runs with `npm run compare-summaries`.
  */
 
 import { config as loadEnv } from 'dotenv'
@@ -30,6 +34,7 @@ loadEnv()
 
 import * as fs from 'fs'
 import * as path from 'path'
+import { execFileSync } from 'child_process'
 import { VENDOR_PRESETS } from '../src/shared/vendor-defaults'
 import type { SemanticPipelinePreference } from '../src/main/semantic/activity-semantic-service'
 import { mustMentionRecall, scoreDeterministic } from '../src/main/eval/deterministic'
@@ -49,6 +54,7 @@ import type {
 import { replayCell } from './replay-cell'
 import { loadCliInferenceProvider, type CliInferenceProviderHandle } from './cli-inference-provider'
 
+const REPO_ROOT = path.resolve('.')
 const FIXTURES_ROOT = path.resolve('evals/semantic-summary/fixtures')
 const RESULTS_DIR = path.resolve('evals/semantic-summary/results')
 const FIXTURE_FILE = 'event-windows.jsonl'
@@ -60,12 +66,20 @@ interface CliArgs {
   pipeline: SemanticPipelinePreference
   judge: boolean
   judgeModel: string | null
+  label: string | null
 }
 
 function parseArgs(): CliArgs {
   const args = process.argv.slice(2)
   // Video is the production default pipeline, so benchmark there by default.
-  const a: CliArgs = { fixtures: [], models: [], pipeline: 'video', judge: false, judgeModel: null }
+  const a: CliArgs = {
+    fixtures: [],
+    models: [],
+    pipeline: 'video',
+    judge: false,
+    judgeModel: null,
+    label: null,
+  }
   const list = (s: string): string[] =>
     s
       .split(',')
@@ -103,9 +117,24 @@ function parseArgs(): CliArgs {
           a.judge = true
         }, i)
         break
+      case '--label':
+        i = take((v) => (a.label = v), i)
+        break
     }
   }
   return a
+}
+
+function git(...args: string[]): string | null {
+  try {
+    return execFileSync('git', args, {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+  } catch {
+    return null
+  }
 }
 
 function resolveFixtureDir(nameOrPath: string): string {
@@ -163,6 +192,8 @@ const mean = (xs: number[]): number => xs.reduce((x, y) => x + y, 0) / xs.length
 
 async function main() {
   const a = parseArgs()
+  const gitSha = git('rev-parse', 'HEAD')
+  const dirty = git('status', '--porcelain', '--', 'src/main/semantic', 'src/shared')
   const fixtureDirs = resolveFixtureDirs(a)
   const handle = loadCliInferenceProvider()
   const presets = VENDOR_PRESETS[handle.vendor]
@@ -183,7 +214,8 @@ async function main() {
       cells.push({ fixtureDir: dir, fixtureName: path.basename(dir), model })
 
   console.log(
-    `=== Eval ===  vendor=${handle.vendor} cells=${cells.length} judge=${judgeModel ?? 'none'}`,
+    `=== Eval ===  vendor=${handle.vendor} cells=${cells.length} judge=${judgeModel ?? 'none'} ` +
+      `git=${gitSha?.slice(0, 10) ?? '?'}${dirty ? ' (dirty)' : ''}${a.label ? ` label=${a.label}` : ''}`,
   )
 
   const fixtures: FixtureScore[] = await runWithConcurrency(cells, CONCURRENCY, async (cell) => {
@@ -245,8 +277,12 @@ async function main() {
 
   const report: EvalReport = {
     generatedAt: new Date().toISOString(),
+    label: a.label,
     vendor: handle.vendor,
+    pipeline: a.pipeline,
     judgeModel,
+    gitSha,
+    gitDirty: dirty === null ? null : dirty.length > 0,
     fixtures,
   }
 
@@ -266,6 +302,7 @@ async function main() {
   console.log(`Wrote ${runDir}/`)
   console.log(`  report.md     full scorecard + per-summary detail`)
   console.log(`  report.json   raw data`)
+  console.log(`  prompts.md    exact prompt text + media sent per activity`)
   if (comparePath) console.log(`  comparison.md ← golden vs models, side by side`)
   else console.log(`  (no comparison.md — needs a golden.md or 2+ models)`)
 }
@@ -393,6 +430,7 @@ async function scoreActivities(params: {
       summaryTokensOut,
       summaryCostUsd,
       judgeCostUsd: judgeCosts.length ? sumCosts(judgeCosts) : null,
+      diagnostics: act.diagnostics,
     })
   }
   return summaries
