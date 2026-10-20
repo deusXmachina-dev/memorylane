@@ -162,18 +162,6 @@ export class MiningDayRepository {
       .run().changes
   }
 
-  getLatestFailure(): string | null {
-    const row = this.db
-      .prepare(
-        `SELECT status, last_error FROM mining_days
-         WHERE started_at IS NOT NULL
-         ORDER BY started_at DESC LIMIT 1`,
-      )
-      .get() as { status: MiningDayStatus; last_error: string | null } | undefined
-    if (!row || row.status === 'running' || row.last_error === 'interrupted') return null
-    return row.last_error
-  }
-
   /** Earliest time any pending day becomes claimable (no cooldown counts as 0); null when nothing is pending. */
   nextClaimableAt(): number | null {
     const row = this.db

@@ -485,6 +485,26 @@ describe('TaskMiner sweep', () => {
     await drain()
   })
 
+  it('a later success clears the failure', async () => {
+    seedDays(2)
+    seedFiller()
+    mockedRunDetection.mockRejectedValueOnce(new Error('blip'))
+
+    await miner.sweepNow(configuredProvider)
+
+    expect(miner.getStatus().failure).toBeNull()
+  })
+
+  it('retry clears the failure and pushes status even with nothing to reopen', () => {
+    const listener = vi.fn()
+    miner.setStatusListener(listener)
+
+    expect(miner.retryFailed()).toBe(0)
+
+    expect(listener).toHaveBeenCalled()
+    expect(miner.getStatus().failure).toBeNull()
+  })
+
   it('aborts a backlog sweep no more than a wave deep', async () => {
     seedDays(TASK_BACKFILL.CLUSTER_EVERY_DAYS + 3)
     mockedRunDetection.mockRejectedValue(new Error('down'))
@@ -528,6 +548,7 @@ describe('TaskMiner sweep', () => {
     const all = storage.miningDays.getAll()
     expect(all.every((d) => d.status === 'pending' && d.attempts === 0)).toBe(true)
     expect(mockedRunClustering).not.toHaveBeenCalled()
+    expect(miner.getStatus().failure).toBeNull()
 
     // The days are claimable again immediately; the sweep-level backoff waits.
     miner.scheduleRun()

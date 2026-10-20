@@ -165,41 +165,7 @@ describe('MiningDayRepository', () => {
 
     expect(storage.miningDays.retryFailed()).toBe(1)
 
-    expect(storage.miningDays.getLatestFailure()).toBeNull()
     expect(storage.miningDays.claimOldestPending(2000)?.day).toBe('2026-07-01')
-  })
-
-  it('reports the error of the most recently started day only', () => {
-    storage.miningDays.enqueueMissing(['2026-07-01', '2026-07-02'])
-    expect(storage.miningDays.getLatestFailure()).toBeNull()
-
-    storage.miningDays.claimOldestPending(1000)
-    storage.miningDays.claimOldestPending(1001)
-    storage.miningDays.markCompleted('2026-07-01', {}, 5000)
-    storage.miningDays.markAttemptFailed('2026-07-02', 'Incorrect API key', 3, 0, 6000)
-    expect(storage.miningDays.getLatestFailure()).toBe('Incorrect API key')
-
-    storage.miningDays.claimOldestPending(7000)
-    expect(storage.miningDays.getLatestFailure()).toBeNull()
-
-    storage.miningDays.markCompleted('2026-07-02', {}, 8000)
-    expect(storage.miningDays.getLatestFailure()).toBeNull()
-  })
-
-  it('a released claim is not a failure', () => {
-    storage.miningDays.enqueueMissing(['2026-07-01'])
-    storage.miningDays.claimOldestPending()
-    storage.miningDays.releaseClaim('2026-07-01', '429 rate limited')
-
-    expect(storage.miningDays.getLatestFailure()).toBeNull()
-  })
-
-  it('a crash-interrupted run is not a failure', () => {
-    storage.miningDays.enqueueMissing(['2026-07-01'])
-    storage.miningDays.claimOldestPending()
-    storage.miningDays.resetStaleRunning(3)
-
-    expect(storage.miningDays.getLatestFailure()).toBeNull()
   })
 
   it('counts by status and reports the running day', () => {

@@ -89,10 +89,10 @@ function TaskMaintenanceSection({ api }: { api: MainWindowAPI }): React.JSX.Elem
   const retryFailedDays = useCallback(async () => {
     const { retried } = await api.retryFailedMiningDays()
     if (retried === 0) {
-      toast.info('No failed mining days to retry')
+      toast.info('No mining days to retry')
       return
     }
-    toast.success(`Reopened ${retried} failed day(s) — mining resumes shortly`)
+    toast.success(`Reopened ${retried} day(s) — mining resumes shortly`)
   }, [api])
 
   return (
