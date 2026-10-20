@@ -52,8 +52,9 @@ function overlap(block: ReplayActivity, start: number, end: number): number {
 }
 
 /**
- * Aligns a script's steps to the recorded blocks. The golden keeps every block
- * exactly as the pipeline produced it; the script only labels them. With
+ * Aligns a script's steps to the recorded blocks. The golden keeps every kept
+ * block exactly as the pipeline produced it; the script only labels them, and
+ * dropped windows appear only when a step expects the drop. With
  * `stepEnteredAt` (the recorder's per-step entry times) each step owns the span
  * until the next entry and claims the blocks in it that fit; the longest one
  * takes the step's target summary. Without it, blocks pair with steps by position.
@@ -125,9 +126,10 @@ function alignBySpans(
     strays: strays.map(describeBlock),
   }
   if (!check.followed) return { check, golden: null }
-  const golden = sorted.map((b) => {
+  const golden = sorted.flatMap((b) => {
     const step = targets.get(b)
-    return step ? withStepTarget(step, b) : b
+    if (b.dropped && !step?.expect.dropped) return []
+    return [step ? withStepTarget(step, b) : b]
   })
   return { check, golden }
 }

@@ -164,7 +164,7 @@ describe('goldenFromScript with step entry times', () => {
     expect(golden?.some((g) => g.dropped)).toBe(false)
   })
 
-  it('keeps every block of a step split by app switches', () => {
+  it('keeps every kept block of a step split by app switches, without its drops', () => {
     const sheets = { tld: 'docs.google.com' }
     const heyreach = { tld: 'app.heyreach.io' }
     const copy: RecordingScript = {
@@ -191,10 +191,9 @@ describe('goldenFromScript with step entry times', () => {
     expect(golden?.map((g) => [g.startTimestamp, g.endTimestamp, g.summary])).toEqual([
       [0, 10_000, 'live summary'],
       [10_000, 15_000, 'Viewed HeyReach'],
-      [15_000, 17_000, 'live summary'],
       [17_000, 45_000, 'Copied.'],
     ])
-    expect(golden?.[2].dropped?.reason).toBe('too_short')
+    expect(golden?.some((g) => g.dropped)).toBe(false)
   })
 
   it('reports a step whose block merged into the previous one', () => {
