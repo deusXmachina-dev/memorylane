@@ -1,6 +1,5 @@
 import { networkErrorCode } from '@main/utils/network-error'
 import type { ActivityDetail } from '../../storage'
-import type { MiningFailureKind } from '@types'
 
 interface TimeBounded {
   startTimestamp: number
@@ -129,20 +128,4 @@ export function formatApiError(error: unknown): string {
   }
   if (error instanceof Error) return error.message + suffix
   return String(error) + suffix
-}
-
-export function classifyMiningFailure(status: number | null, message: string): MiningFailureKind {
-  const text = message.toLowerCase()
-  if (status === 401 || status === 403) return 'auth'
-  if (status === 402 || text.includes('insufficient_quota') || text.includes('credit')) {
-    return 'quota'
-  }
-  if (
-    status === 404 ||
-    (text.includes('model') && /not found|does not exist|not available/.test(text))
-  ) {
-    return 'model'
-  }
-  if (text.includes('no usable output')) return 'output'
-  return 'other'
 }

@@ -80,7 +80,7 @@ describe('MiningDayRepository', () => {
     for (let attempt = 1; attempt <= 3; attempt++) {
       const claim = storage.miningDays.claimOldestPending()
       expect(claim).toEqual({ day: '2026-07-01', attempts: attempt })
-      storage.miningDays.markAttemptFailed('2026-07-01', `boom ${attempt}`, null, 3, 0)
+      storage.miningDays.markAttemptFailed('2026-07-01', `boom ${attempt}`, 3, 0)
     }
 
     const row = storage.miningDays.getAll()[0]
@@ -93,7 +93,7 @@ describe('MiningDayRepository', () => {
   it('a failed attempt sets a cooldown that gates the claim', () => {
     storage.miningDays.enqueueMissing(['2026-07-01', '2026-07-02'])
     storage.miningDays.claimOldestPending(1000)
-    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', null, 3, 500, 1000)
+    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', 3, 500, 1000)
 
     const row = storage.miningDays.getAll().find((d) => d.day === '2026-07-01')
     expect(row?.status).toBe('pending')
@@ -112,14 +112,14 @@ describe('MiningDayRepository', () => {
     storage.miningDays.claimOldestPending(1000)
     expect(storage.miningDays.nextClaimableAt()).toBeNull()
 
-    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', null, 3, 500, 1000)
+    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', 3, 500, 1000)
     expect(storage.miningDays.nextClaimableAt()).toBe(1500)
   })
 
   it('completing a day clears its error and cooldown and stores stats', () => {
     storage.miningDays.enqueueMissing(['2026-07-01'])
     storage.miningDays.claimOldestPending()
-    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', null, 3, 0)
+    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', 3, 0)
     storage.miningDays.claimOldestPending()
 
     storage.miningDays.markCompleted('2026-07-01', { candidatesKept: 2 }, 9000)
@@ -139,7 +139,7 @@ describe('MiningDayRepository', () => {
 
     // Exhaust attempts, then crash mid-run: stale reset marks it failed.
     storage.miningDays.claimOldestPending() // 07-01, attempt 2
-    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', null, 3, 0)
+    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', 3, 0)
     storage.miningDays.claimOldestPending() // 07-01, attempt 3
     expect(storage.miningDays.resetStaleRunning(3)).toBe(1)
     expect(storage.miningDays.getAll().find((d) => d.day === '2026-07-01')?.status).toBe('failed')
@@ -148,7 +148,7 @@ describe('MiningDayRepository', () => {
   it('retryFailed re-opens exhausted days with fresh attempts', () => {
     storage.miningDays.enqueueMissing(['2026-07-01'])
     storage.miningDays.claimOldestPending()
-    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', null, 1, 0)
+    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', 1, 0)
     expect(storage.miningDays.getAll().filter((d) => d.status === 'failed')).toHaveLength(1)
 
     expect(storage.miningDays.retryFailed()).toBe(1)
@@ -157,39 +157,33 @@ describe('MiningDayRepository', () => {
     expect(claim).toEqual({ day: '2026-07-01', attempts: 1 })
   })
 
-  it('a failed attempt records its HTTP status; completing clears it', () => {
+  it('retryFailed also re-opens cooling-down days and clears their error', () => {
     storage.miningDays.enqueueMissing(['2026-07-01'])
-    storage.miningDays.claimOldestPending()
-    storage.miningDays.markAttemptFailed('2026-07-01', 'Incorrect API key', 401, 3, 0)
-    expect(storage.miningDays.getAll()[0].lastErrorStatus).toBe(401)
+    storage.miningDays.claimOldestPending(1000)
+    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', 3, 60_000, 1000)
+    expect(storage.miningDays.claimOldestPending(2000)).toBeNull()
 
-    storage.miningDays.claimOldestPending()
-    storage.miningDays.markCompleted('2026-07-01', {})
-    expect(storage.miningDays.getAll()[0].lastErrorStatus).toBeNull()
+    expect(storage.miningDays.retryFailed()).toBe(1)
+
+    expect(storage.miningDays.getLatestFailure()).toBeNull()
+    expect(storage.miningDays.claimOldestPending(2000)?.day).toBe('2026-07-01')
   })
 
-  it('reports the latest failure since the last completed day', () => {
-    storage.miningDays.enqueueMissing(['2026-07-01', '2026-07-02', '2026-07-03'])
+  it('reports the error of the most recently started day only', () => {
+    storage.miningDays.enqueueMissing(['2026-07-01', '2026-07-02'])
     expect(storage.miningDays.getLatestFailure()).toBeNull()
 
     storage.miningDays.claimOldestPending(1000)
-    storage.miningDays.markAttemptFailed('2026-07-01', 'old', 500, 3, 10_000, 1000)
-    storage.miningDays.claimOldestPending(2000)
-    storage.miningDays.markCompleted('2026-07-02', {}, 3000)
+    storage.miningDays.claimOldestPending(1001)
+    storage.miningDays.markCompleted('2026-07-01', {}, 5000)
+    storage.miningDays.markAttemptFailed('2026-07-02', 'Incorrect API key', 3, 0, 6000)
+    expect(storage.miningDays.getLatestFailure()).toBe('Incorrect API key')
+
+    storage.miningDays.claimOldestPending(7000)
     expect(storage.miningDays.getLatestFailure()).toBeNull()
 
-    storage.miningDays.claimOldestPending(4000)
-    storage.miningDays.markAttemptFailed('2026-07-03', 'first', 401, 3, 10_000, 4000)
-    storage.miningDays.claimOldestPending(12_000)
-    storage.miningDays.markAttemptFailed('2026-07-01', 'Incorrect API key', 401, 3, 10_000, 12_000)
-
-    expect(storage.miningDays.getLatestFailure()).toEqual({
-      error: 'Incorrect API key',
-      status: 401,
-      at: 12_000,
-      attempts: 2,
-      days: 2,
-    })
+    storage.miningDays.markCompleted('2026-07-02', {}, 8000)
+    expect(storage.miningDays.getLatestFailure()).toBeNull()
   })
 
   it('a released claim is not a failure', () => {
@@ -206,18 +200,6 @@ describe('MiningDayRepository', () => {
     storage.miningDays.resetStaleRunning(3)
 
     expect(storage.miningDays.getLatestFailure()).toBeNull()
-  })
-
-  it('clearCooldowns makes cooling-down days claimable and clears their errors', () => {
-    storage.miningDays.enqueueMissing(['2026-07-01'])
-    storage.miningDays.claimOldestPending(1000)
-    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', 401, 3, 60_000, 1000)
-    expect(storage.miningDays.claimOldestPending(2000)).toBeNull()
-
-    expect(storage.miningDays.clearCooldowns()).toBe(1)
-
-    expect(storage.miningDays.getLatestFailure()).toBeNull()
-    expect(storage.miningDays.claimOldestPending(2000)?.day).toBe('2026-07-01')
   })
 
   it('counts by status and reports the running day', () => {
@@ -297,37 +279,5 @@ describe('migration 0018_mining_day_cooldown', () => {
     expect(
       db.prepare(`SELECT next_attempt_at FROM mining_days WHERE day = '2026-07-01'`).get(),
     ).toEqual({ next_attempt_at: null })
-  })
-})
-
-describe('migration 0025_mining_day_error_status', () => {
-  const TEST_DB_PATH = path.join(os.tmpdir(), 'temp_migration_0025_test.db')
-  let storage: StorageService
-  let db: Database.Database
-
-  const idx0025 = migrations.findIndex((m) => m.name === '0025_mining_day_error_status')
-
-  beforeEach(() => {
-    deleteDbFiles(TEST_DB_PATH)
-    storage = new StorageService(TEST_DB_PATH)
-    db = storage.getDatabase()
-    for (const m of migrations.slice(0, idx0025)) m.up(db)
-  })
-
-  afterEach(() => {
-    storage.close()
-    deleteDbFiles(TEST_DB_PATH)
-  })
-
-  it('adds last_error_status with NULL for existing rows', () => {
-    db.prepare(
-      `INSERT INTO mining_days (day, status, last_error, enqueued_at) VALUES ('2026-07-01', 'failed', 'boom', 1)`,
-    ).run()
-
-    migrations[idx0025].up(db)
-
-    expect(
-      db.prepare(`SELECT last_error_status FROM mining_days WHERE day = '2026-07-01'`).get(),
-    ).toEqual({ last_error_status: null })
   })
 })

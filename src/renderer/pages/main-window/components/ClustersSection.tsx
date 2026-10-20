@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { Button } from '@components/ui/button'
 import { PingDot } from '@components/ui/ping-dot'
 import { ScrollArea } from '@components/ui/scroll-area'
-import type { ClusterInfo, MainWindowAPI, MiningFailureKind, MiningStatus } from '@types'
+import type { ClusterInfo, MainWindowAPI, MiningStatus } from '@types'
 import { ClusterListItem } from './ClusterListItem'
 import { ClusterDetailPane } from './ClusterDetailPane'
 
@@ -22,31 +22,21 @@ function MiningProgressBanner({ status }: { status: MiningStatus }): React.JSX.E
   )
 }
 
-const FAILURE_HINTS: Record<MiningFailureKind, string | null> = {
-  auth: 'Your API key was rejected.',
-  quota: 'Your AI provider account is out of credit.',
-  model: "The selected model isn't available from your provider.",
-  output: 'The model returned unusable results. Try a stronger model.',
-  other: null,
-}
-
 function MiningFailureBanner({
   api,
   failure,
   onOpenAiSettings,
 }: {
   api: MainWindowAPI
-  failure: NonNullable<MiningStatus['failure']>
+  failure: string
   onOpenAiSettings?: () => void
 }): React.JSX.Element {
   const [retrying, setRetrying] = useState(false)
-  const hint = FAILURE_HINTS[failure.kind]
   return (
     <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 space-y-2">
       <div className="space-y-1">
         <p className="text-sm font-medium text-destructive">Task discovery is failing</p>
-        {hint && <p className="text-xs text-foreground/85">{hint}</p>}
-        <p className="text-[11px] text-muted-foreground break-words">{failure.message}</p>
+        <p className="text-xs text-muted-foreground break-words">{failure}</p>
       </div>
       <div className="flex gap-2">
         {onOpenAiSettings && (
@@ -161,7 +151,6 @@ export function ClustersSection({
 
   const failure = miningStatus?.failure ?? null
   const miningActive =
-    failure === null &&
     miningStatus !== null &&
     miningStatus.totalDays > 0 &&
     (miningStatus.state === 'mining' || miningStatus.pendingDays > 0)
@@ -190,11 +179,9 @@ export function ClustersSection({
 
       {clusters.length === 0 ? (
         <div className="text-sm text-muted-foreground py-12 text-center">
-          {failure
-            ? 'No patterns yet.'
-            : hiddenCount > 0
-              ? `No recurring patterns yet. ${hiddenCount} one-off group${hiddenCount === 1 ? '' : 's'} will appear here if seen again.`
-              : 'No patterns yet. Keep using your computer — MemoryLane surfaces recurring tasks once it has enough history.'}
+          {hiddenCount > 0
+            ? `No recurring patterns yet. ${hiddenCount} one-off group${hiddenCount === 1 ? '' : 's'} will appear here if seen again.`
+            : 'No patterns yet. Keep using your computer — MemoryLane surfaces recurring tasks once it has enough history.'}
         </div>
       ) : (
         <div className="grid grid-cols-[360px_1fr] gap-4 flex-1 min-h-0">
