@@ -151,6 +151,7 @@ export function ClustersSection({
 
   const failure = miningStatus?.failure ?? null
   const miningActive =
+    failure === null &&
     miningStatus !== null &&
     miningStatus.totalDays > 0 &&
     (miningStatus.state === 'mining' || miningStatus.pendingDays > 0)
