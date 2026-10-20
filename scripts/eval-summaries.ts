@@ -24,6 +24,7 @@
  *   npm run eval-summaries -- --model google/gemini-2.5-flash --judge
  *   npm run eval-summaries -- --judge-model moonshotai/kimi-k3   (implies --judge)
  *   npm run eval-summaries -- --pipeline image              (benchmark snapshot models)
+ *   npm run eval-summaries -- --vendor openrouter           (ignore the dev profile's active vendor)
  *
  * Run from the repo root: fixture/result paths and the recorded git sha resolve
  * against the cwd. Compare two runs with `npm run compare-summaries`.
@@ -67,6 +68,7 @@ interface CliArgs {
   judge: boolean
   judgeModel: string | null
   label: string | null
+  vendor: string | null
 }
 
 function parseArgs(): CliArgs {
@@ -79,6 +81,7 @@ function parseArgs(): CliArgs {
     judge: false,
     judgeModel: null,
     label: null,
+    vendor: null,
   }
   const list = (s: string): string[] =>
     s
@@ -119,6 +122,9 @@ function parseArgs(): CliArgs {
         break
       case '--label':
         i = take((v) => (a.label = v), i)
+        break
+      case '--vendor':
+        i = take((v) => (a.vendor = v), i)
         break
     }
   }
@@ -195,7 +201,7 @@ async function main() {
   const gitSha = git('rev-parse', 'HEAD')
   const dirty = git('status', '--porcelain', '--', 'src/main/semantic', 'src/shared')
   const fixtureDirs = resolveFixtureDirs(a)
-  const handle = loadCliInferenceProvider()
+  const handle = loadCliInferenceProvider({ vendorOverride: a.vendor ?? undefined })
   const presets = VENDOR_PRESETS[handle.vendor]
   const judgeModel = a.judge ? (a.judgeModel ?? defaultJudgeModel(handle)) : null
 

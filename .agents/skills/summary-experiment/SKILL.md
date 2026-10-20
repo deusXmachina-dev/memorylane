@@ -17,7 +17,7 @@ The user may hand you run ids and ask only for scoring. Then start at step 6.
 ## Prerequisites
 
 - Repo root as cwd. Fixture paths, result paths and the recorded git sha all resolve against the cwd; from `evals/` you would record the nested evals repo's sha.
-- `OPENROUTER_API_KEY` in the repo-root `.env`; the prod `capture-settings.json` supplies vendor and default models.
+- `OPENROUTER_API_KEY` in the repo-root `.env`. Always pass `--vendor openrouter`: the CLI otherwise follows the dev profile's active vendor, which may be a local Ollama with no video model.
 - `evals/` is a separate git repo (`memorylane-evals`), ignored by the main repo. Fixtures and results are committed there, code here.
 - `src/main/semantic` and `src/shared` clean before a baseline run. A dirty tree is stamped `(dirty)` in every report header and a baseline must not carry it.
 
@@ -60,8 +60,8 @@ Never branch off the checked-out feature branch. One PR per effort; follow-ups g
 Reuse an existing run pair whose header shows the same git sha for `src/main/semantic`, the same pipeline and no `(dirty)`. Otherwise, with the prompt still unchanged:
 
 ```bash
-caffeinate -i npm run eval-summaries -- --label baseline-$(git rev-parse --short HEAD) &
-caffeinate -i npm run eval-summaries -- --label baseline-$(git rev-parse --short HEAD) &
+caffeinate -i npm run eval-summaries -- --vendor openrouter --label baseline-$(git rev-parse --short HEAD) &
+caffeinate -i npm run eval-summaries -- --vendor openrouter --label baseline-$(git rev-parse --short HEAD) &
 wait
 ```
 
@@ -72,7 +72,7 @@ Mode B: add `--model <incumbent>`.
 Make the change, then run one fixture and read what was sent:
 
 ```bash
-npm run eval-summaries -- --fixture petr-test-tenant-2026-10-16-11-32-08 --label probe-<slug>
+npm run eval-summaries -- --vendor openrouter --fixture petr-test-tenant-2026-10-16-11-32-08 --label probe-<slug>
 ```
 
 Open `prompts.md` in the new run dir and show the user one activity's rendered prompt next to the baseline's. Stop here if the rendering is not what the hypothesis intended.
@@ -80,8 +80,8 @@ Open `prompts.md` in the new run dir and show the user one activity's rendered p
 ### 5. Candidate runs
 
 ```bash
-caffeinate -i npm run eval-summaries -- --label <slug> &
-caffeinate -i npm run eval-summaries -- --label <slug> &
+caffeinate -i npm run eval-summaries -- --vendor openrouter --label <slug> &
+caffeinate -i npm run eval-summaries -- --vendor openrouter --label <slug> &
 wait
 ```
 
