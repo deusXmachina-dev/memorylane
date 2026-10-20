@@ -1,4 +1,4 @@
-import type { ClickClass, InteractionContext, KeyClass } from '../../shared/types'
+import type { InteractionContext } from '../../shared/types'
 import type { Activity } from '@main/activity/activity-types'
 import { isPassiveView } from '@main/activity/passive-view'
 import { scrubPII } from '@/shared/sanitize'
@@ -57,10 +57,6 @@ export function buildSemanticPrompt(
   if (activity.context.tld) {
     prompt += `- TLD: ${activity.context.tld}\n`
   }
-  const url = pageUrl(activity.context.url)
-  if (url) {
-    prompt += `- URL: ${scrubPII(url)}\n`
-  }
   prompt += `- Duration: ${durationStr}\n`
   prompt += `- Start: ${new Date(activity.startTimestamp).toISOString()}\n`
   prompt += `- End: ${new Date(activity.endTimestamp).toISOString()}\n`
@@ -104,77 +100,25 @@ function buildInteractionTimeline(activity: Activity): string {
   return items.join('\n')
 }
 
-const KEY_WORDS: Record<KeyClass, string> = {
-  type: 'typed text',
-  enter: 'pressed Enter',
-  delete: 'deleted',
-  escape: 'pressed Escape',
-  tab: 'pressed Tab',
-  copy: 'copied',
-  cut: 'cut',
-  paste: 'pasted',
-  undo: 'undid',
-  save: 'saved',
-  'mod+enter': 'submitted with Cmd/Ctrl+Enter',
-}
-
-const CLICK_WORDS: Record<ClickClass, string> = {
-  left: 'click',
-  double: 'double-click',
-  right: 'right-click',
-}
-
-const MAX_RUNS = 8
-
 export function describeInteraction(interaction: InteractionContext): string {
   switch (interaction.type) {
     case 'app_change': {
       const processName = interaction.activeWindow?.processName ?? 'unknown app'
       const title = interaction.activeWindow?.title
-      const url = pageUrl(interaction.activeWindow?.url)
-      const head = title
-        ? `app switched to ${processName} (${title})`
-        : `app switched to ${processName}`
-      return url ? `${head} at ${url}` : head
+      return title ? `app switched to ${processName} (${title})` : `app switched to ${processName}`
     }
     case 'keyboard': {
-      const runs = interaction.keySequence ?? []
-      if (runs.length === 0) return 'typed text'
-      const words = runs
-        .slice(0, MAX_RUNS)
-        .map((run) =>
-          run.kind === 'type' || run.count === 1
-            ? KEY_WORDS[run.kind]
-            : `${KEY_WORDS[run.kind]} ×${run.count}`,
-        )
-      if (runs.length > MAX_RUNS) words.push('…')
-      return words.join(', ')
+      const keyCount = interaction.keyCount ?? 0
+      return keyCount > 0 ? `typing session (${keyCount} keys)` : 'typing session'
     }
     case 'scroll': {
-      return 'scrolled'
+      return 'scrolling activity'
     }
     case 'click': {
-      const runs = interaction.clickSequence ?? []
-      if (runs.length === 0) return 'click'
-      return runs
-        .map((run) =>
-          run.count === 1 ? CLICK_WORDS[run.kind] : `${run.count}× ${CLICK_WORDS[run.kind]}`,
-        )
-        .join(', ')
+      return 'mouse click'
     }
     default:
       return interaction.type
-  }
-}
-
-function pageUrl(raw: string | undefined): string | undefined {
-  if (!raw) return undefined
-  try {
-    const u = new URL(raw)
-    if (u.protocol !== 'http:' && u.protocol !== 'https:') return undefined
-    return `${u.origin}${u.pathname === '/' ? '' : u.pathname}`
-  } catch {
-    return undefined
   }
 }
 
