@@ -729,6 +729,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
         completedDays: 0,
         failedDays: 0,
         totalDays: 0,
+        failure: null,
       }
     )
   })

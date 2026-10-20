@@ -387,6 +387,7 @@ export interface MiningStatus {
   failedDays: number
   /** Days this sweep is processing (completed + failed this run + still pending). */
   totalDays: number
+  failure: string | null
 }
 
 /** Result of the dev-only wipe-and-re-mine action. */

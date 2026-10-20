@@ -157,6 +157,17 @@ describe('MiningDayRepository', () => {
     expect(claim).toEqual({ day: '2026-07-01', attempts: 1 })
   })
 
+  it('retryFailed also re-opens cooling-down days and clears their error', () => {
+    storage.miningDays.enqueueMissing(['2026-07-01'])
+    storage.miningDays.claimOldestPending(1000)
+    storage.miningDays.markAttemptFailed('2026-07-01', 'boom', 3, 60_000, 1000)
+    expect(storage.miningDays.claimOldestPending(2000)).toBeNull()
+
+    expect(storage.miningDays.retryFailed()).toBe(1)
+
+    expect(storage.miningDays.claimOldestPending(2000)?.day).toBe('2026-07-01')
+  })
+
   it('counts by status and reports the running day', () => {
     storage.miningDays.enqueueMissing(['2026-07-01', '2026-07-02', '2026-07-03'])
     storage.miningDays.claimOldestPending()

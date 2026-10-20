@@ -151,12 +151,13 @@ export class MiningDayRepository {
       .run(maxAttempts).changes
   }
 
-  /** Give exhausted days a fresh set of attempts (dev "retry failed days"). */
+  /** Give failed and cooling-down days a fresh set of attempts. */
   retryFailed(): number {
     return this.db
       .prepare(
-        `UPDATE mining_days SET status = 'pending', attempts = 0, next_attempt_at = NULL
-         WHERE status = 'failed'`,
+        `UPDATE mining_days
+         SET status = 'pending', attempts = 0, next_attempt_at = NULL, last_error = NULL
+         WHERE status = 'failed' OR (status = 'pending' AND next_attempt_at IS NOT NULL)`,
       )
       .run().changes
   }

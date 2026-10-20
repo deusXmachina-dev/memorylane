@@ -59,6 +59,7 @@ export class TaskMiner {
   private sweepBaseline: { completed: number; failed: number } | null = null
   private pollTimer: ReturnType<typeof setInterval> | null = null
   private nextAttemptAt = 0
+  private lastFailure: string | null = null
   private model = ''
   /** Remote override for the clustering (label/merge/split) passes; null = follow `model`. */
   private clusterModel: string | null = null
@@ -163,16 +164,17 @@ export class TaskMiner {
       completedDays,
       failedDays,
       totalDays: pendingDays + completedDays + failedDays,
+      failure: this.lastFailure,
     }
   }
 
-  /** Reopens failed days and polls now, skipping any failure backoff. */
+  /** Reopens failed and cooling-down days and polls now, skipping any failure backoff. */
   retryFailed(): number {
     const retried = this.storage.miningDays.retryFailed()
-    if (retried > 0) {
-      this.resetBackoff()
-      this.scheduleRun()
-    }
+    this.lastFailure = null
+    this.resetBackoff()
+    this.scheduleRun()
+    this.emitStatus()
     return retried
   }
 
@@ -378,6 +380,7 @@ export class TaskMiner {
           daysMined++
           minedSinceCluster++
           failuresSinceSuccess = 0
+          this.lastFailure = null
           const counts = this.storage.miningDays.countByStatus()
           log.info(
             `[TaskMiner] Day ${claim.day} completed (attempt ${claim.attempts}) — ` +
@@ -418,6 +421,7 @@ export class TaskMiner {
             )
             daysFailed++
             failuresSinceSuccess++
+            this.lastFailure = message
             log.error(
               `[TaskMiner] Day ${claim.day} failed (attempt ${claim.attempts}/${TASK_BACKFILL.MAX_DAY_ATTEMPTS}), ` +
                 `cooling down ${Math.round(cooldownMs / 60_000)}m: ${message}`,

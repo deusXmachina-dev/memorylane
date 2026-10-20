@@ -22,6 +22,47 @@ function MiningProgressBanner({ status }: { status: MiningStatus }): React.JSX.E
   )
 }
 
+function MiningFailureBanner({
+  api,
+  failure,
+  onOpenAiSettings,
+}: {
+  api: MainWindowAPI
+  failure: string
+  onOpenAiSettings?: () => void
+}): React.JSX.Element {
+  const [retrying, setRetrying] = useState(false)
+  return (
+    <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 space-y-2">
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-destructive">Task discovery is failing</p>
+        <p className="text-xs text-muted-foreground break-words">{failure}</p>
+      </div>
+      <div className="flex gap-2">
+        {onOpenAiSettings && (
+          <Button size="sm" variant="secondary" onClick={onOpenAiSettings}>
+            AI settings
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={retrying}
+          onClick={() => {
+            setRetrying(true)
+            api
+              .retryFailedMiningDays()
+              .catch(() => toast.error('Retry failed'))
+              .finally(() => setRetrying(false))
+          }}
+        >
+          Retry now
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 const SORTS = [
   { id: 'seen', label: 'Most often' },
   { id: 'recent', label: 'Recent' },
@@ -37,6 +78,7 @@ interface ClustersSectionProps {
   /** Clusters hidden by the noise floor (seen once, little total time). */
   hiddenCount: number
   miningStatus: MiningStatus | null
+  onOpenAiSettings?: () => void
 }
 
 export function ClustersSection({
@@ -44,6 +86,7 @@ export function ClustersSection({
   clusters,
   hiddenCount,
   miningStatus,
+  onOpenAiSettings,
 }: ClustersSectionProps): React.JSX.Element {
   const [sort, setSort] = useState<SortId>('seen')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -106,13 +149,18 @@ export function ClustersSection({
     )
   }
 
+  const failure = miningStatus?.failure ?? null
   const miningActive =
+    failure === null &&
     miningStatus !== null &&
     miningStatus.totalDays > 0 &&
     (miningStatus.state === 'mining' || miningStatus.pendingDays > 0)
 
   return (
     <div className="flex flex-col gap-4 h-full min-h-0">
+      {failure && (
+        <MiningFailureBanner api={api} failure={failure} onOpenAiSettings={onOpenAiSettings} />
+      )}
       {miningActive && <MiningProgressBanner status={miningStatus} />}
       {clusters.length > 0 && (
         <div className="flex items-center gap-1">
