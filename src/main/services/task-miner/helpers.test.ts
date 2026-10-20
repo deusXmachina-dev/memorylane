@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { computeEpisodeWindow, formatApiError, tryExtractJsonArray } from './helpers'
+import {
+  classifyMiningFailure,
+  computeEpisodeWindow,
+  formatApiError,
+  tryExtractJsonArray,
+} from './helpers'
 
 describe('computeEpisodeWindow', () => {
   it('derives the window from min start / max end and sums active time', () => {
@@ -168,5 +173,22 @@ describe('formatApiError', () => {
     expect(formatApiError({ error: { message: 'bad request', code: 400 } })).toBe(
       'bad request code=400',
     )
+  })
+})
+
+describe('classifyMiningFailure', () => {
+  it.each([
+    [401, 'Incorrect API key provided', 'auth'],
+    [403, 'Forbidden', 'auth'],
+    [402, 'Payment required', 'quota'],
+    [429, 'You exceeded your current quota code=insufficient_quota', 'quota'],
+    [null, 'Insufficient credits', 'quota'],
+    [404, 'Not Found', 'model'],
+    [400, 'The model `gpt-9` does not exist', 'model'],
+    [null, 'Scan produced no usable output after 3 attempts', 'output'],
+    [500, 'Internal server error', 'other'],
+    [null, 'fetch failed transport=ECONNRESET', 'other'],
+  ] as const)('%s %s → %s', (status, message, kind) => {
+    expect(classifyMiningFailure(status, message)).toBe(kind)
   })
 })

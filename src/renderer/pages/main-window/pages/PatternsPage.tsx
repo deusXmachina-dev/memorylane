@@ -7,12 +7,14 @@ interface PatternsPageProps {
   api: MainWindowAPI
   clusters: ClustersView | null
   miningStatus: MiningStatus | null
+  onOpenAiSettings?: () => void
 }
 
 export function PatternsPage({
   api,
   clusters,
   miningStatus,
+  onOpenAiSettings,
 }: PatternsPageProps): React.JSX.Element {
   return (
     <PageLayout
@@ -32,6 +34,7 @@ export function PatternsPage({
           clusters={clusters.clusters}
           hiddenCount={clusters.hiddenCount}
           miningStatus={miningStatus}
+          onOpenAiSettings={onOpenAiSettings}
         />
       )}
     </PageLayout>

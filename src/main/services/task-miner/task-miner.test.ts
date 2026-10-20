@@ -25,12 +25,16 @@ vi.mock('./clustering', () => ({ runClustering: vi.fn(async () => ({})) }))
 const mockedRunDetection = vi.mocked(runDetection)
 const mockedRunClustering = vi.mocked(runClustering)
 
-const providerFor = (vendor: Vendor, baseURL = 'https://provider.test/v1') =>
-  ({
-    isConfigured: () => true,
-    getActiveVendor: () => vendor,
-    getRouteSnapshot: () => ({ vendor, baseURL, apiKey: 'test' }),
-  }) as InferenceProvider
+const providerFor = (vendor: Vendor, baseURL = 'https://provider.test/v1'): InferenceProvider => ({
+  isConfigured: () => true,
+  getActiveVendor: () => vendor,
+  languageModel: () => {
+    throw new Error('runDetection is mocked')
+  },
+  getRouteSnapshot: () => ({ vendor, baseURL, apiKey: 'test' }),
+  notifyConfigChanged: () => {},
+  onConfigChanged: () => () => {},
+})
 const configuredProvider = providerFor('openrouter')
 const embedder: MinerEmbedder = {
   embed: async () => [0.1, 0.2, 0.3],
@@ -463,6 +467,76 @@ describe('TaskMiner sweep', () => {
     await drain()
   })
 
+  it('surfaces a rejected API key as an auth failure until retried', async () => {
+    seedDays(5)
+    seedFiller()
+    mockedRunDetection.mockRejectedValue(
+      new APICallError({
+        message: 'Incorrect API key provided',
+        url: 'https://api.openai.com/v1/chat/completions',
+        requestBodyValues: {},
+        statusCode: 401,
+      }),
+    )
+
+    await miner.sweepNow(configuredProvider)
+
+    expect(miner.getStatus().failure).toMatchObject({
+      kind: 'auth',
+      message: 'Incorrect API key provided',
+    })
+
+    mockedRunDetection.mockImplementation(commitDay)
+    expect(miner.retryFailed()).toBeGreaterThan(0)
+    expect(miner.getStatus().failure).toBeNull()
+  })
+
+  it('treats an out-of-quota 429 as a failure, not throttling', async () => {
+    seedDays(5)
+    seedFiller()
+    mockedRunDetection.mockRejectedValue(
+      new APICallError({
+        message: 'You exceeded your current quota code=insufficient_quota',
+        url: 'https://api.openai.com/v1/chat/completions',
+        requestBodyValues: {},
+        statusCode: 429,
+      }),
+    )
+
+    const summary = await miner.sweepNow(configuredProvider)
+
+    expect(summary).toMatchObject({ aborted: true, abortReason: 'failures' })
+    expect(miner.getStatus().failure?.kind).toBe('quota')
+  })
+
+  it('a single failed attempt is not reported as a failure', async () => {
+    seedDays(1)
+    mockedRunDetection.mockRejectedValueOnce(new Error('timeout'))
+
+    await miner.sweepNow(configuredProvider)
+
+    expect(miner.getStatus().failure).toBeNull()
+  })
+
+  it('a provider config change reopens failed days', () => {
+    let notify = (): void => {}
+    const provider: InferenceProvider = {
+      ...configuredProvider,
+      onConfigChanged: (listener) => {
+        notify = listener
+        return () => {}
+      },
+    }
+    new TaskMiner(storage, provider, embedder).updateModel('test/model')
+    storage.miningDays.enqueueMissing(['2026-07-01'])
+    storage.miningDays.claimOldestPending()
+    storage.miningDays.markAttemptFailed('2026-07-01', 'Incorrect API key', 401, 1, 0)
+
+    notify()
+
+    expect(storage.miningDays.getAll()[0]).toMatchObject({ status: 'pending', attempts: 0 })
+  })
+
   it('aborts a backlog sweep no more than a wave deep', async () => {
     seedDays(TASK_BACKFILL.CLUSTER_EVERY_DAYS + 3)
     mockedRunDetection.mockRejectedValue(new Error('down'))
@@ -870,6 +944,7 @@ describe('TaskMiner lifecycle', () => {
       completedDays: 0,
       failedDays: 0,
       totalDays: 1,
+      failure: null,
     })
   })
 

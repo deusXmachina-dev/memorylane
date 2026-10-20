@@ -2,11 +2,20 @@ import type Database from 'better-sqlite3'
 
 export type MiningDayStatus = 'pending' | 'running' | 'completed' | 'failed'
 
+export interface MiningFailure {
+  error: string
+  status: number | null
+  at: number
+  attempts: number
+  days: number
+}
+
 export interface MiningDay {
   day: string
   status: MiningDayStatus
   attempts: number
   lastError: string | null
+  lastErrorStatus: number | null
   enqueuedAt: number
   startedAt: number | null
   completedAt: number | null
@@ -19,6 +28,7 @@ interface MiningDayRow {
   status: MiningDayStatus
   attempts: number
   last_error: string | null
+  last_error_status: number | null
   enqueued_at: number
   started_at: number | null
   completed_at: number | null
@@ -32,6 +42,7 @@ function toMiningDay(row: MiningDayRow): MiningDay {
     status: row.status,
     attempts: row.attempts,
     lastError: row.last_error,
+    lastErrorStatus: row.last_error_status,
     enqueuedAt: row.enqueued_at,
     startedAt: row.started_at,
     completedAt: row.completed_at,
@@ -90,7 +101,7 @@ export class MiningDayRepository {
       .prepare(
         `UPDATE mining_days
          SET status = 'completed', completed_at = ?, stats = ?, last_error = NULL,
-             next_attempt_at = NULL
+             last_error_status = NULL, next_attempt_at = NULL
          WHERE day = ?`,
       )
       .run(now, JSON.stringify(stats), day)
@@ -103,6 +114,7 @@ export class MiningDayRepository {
   markAttemptFailed(
     day: string,
     error: string,
+    status: number | null,
     maxAttempts: number,
     cooldownMs: number,
     now: number = Date.now(),
@@ -112,10 +124,10 @@ export class MiningDayRepository {
         `UPDATE mining_days
          SET status = CASE WHEN attempts < ? THEN 'pending' ELSE 'failed' END,
              next_attempt_at = CASE WHEN attempts < ? THEN ? ELSE NULL END,
-             last_error = ?
+             last_error = ?, last_error_status = ?
          WHERE day = ?`,
       )
-      .run(maxAttempts, maxAttempts, now + cooldownMs, error, day)
+      .run(maxAttempts, maxAttempts, now + cooldownMs, error, status, day)
   }
 
   /**
@@ -151,14 +163,54 @@ export class MiningDayRepository {
       .run(maxAttempts).changes
   }
 
-  /** Give exhausted days a fresh set of attempts (dev "retry failed days"). */
+  /** Give exhausted days a fresh set of attempts. */
   retryFailed(): number {
     return this.db
       .prepare(
-        `UPDATE mining_days SET status = 'pending', attempts = 0, next_attempt_at = NULL
+        `UPDATE mining_days
+         SET status = 'pending', attempts = 0, next_attempt_at = NULL,
+             last_error = NULL, last_error_status = NULL
          WHERE status = 'failed'`,
       )
       .run().changes
+  }
+
+  clearCooldowns(): number {
+    return this.db
+      .prepare(
+        `UPDATE mining_days
+         SET next_attempt_at = NULL, last_error = NULL, last_error_status = NULL
+         WHERE status = 'pending' AND (next_attempt_at IS NOT NULL OR last_error IS NOT NULL)`,
+      )
+      .run().changes
+  }
+
+  getLatestFailure(): MiningFailure | null {
+    const rows = this.db
+      .prepare(
+        `SELECT last_error, last_error_status, started_at, attempts FROM mining_days
+         WHERE status IN ('pending', 'failed')
+           AND last_error IS NOT NULL AND last_error != 'interrupted'
+           AND started_at IS NOT NULL
+           AND started_at > COALESCE(
+             (SELECT MAX(completed_at) FROM mining_days WHERE status = 'completed'), 0)
+         ORDER BY started_at DESC`,
+      )
+      .all() as {
+      last_error: string
+      last_error_status: number | null
+      started_at: number
+      attempts: number
+    }[]
+    if (rows.length === 0) return null
+    const latest = rows[0]
+    return {
+      error: latest.last_error,
+      status: latest.last_error_status,
+      at: latest.started_at,
+      attempts: latest.attempts,
+      days: rows.length,
+    }
   }
 
   /** Earliest time any pending day becomes claimable (no cooldown counts as 0); null when nothing is pending. */

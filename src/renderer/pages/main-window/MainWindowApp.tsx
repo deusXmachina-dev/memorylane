@@ -600,7 +600,14 @@ export function MainWindowApp(): React.JSX.Element {
           />
         )
       case 'patterns':
-        return <PatternsPage api={api} clusters={clusters} miningStatus={miningStatus} />
+        return (
+          <PatternsPage
+            api={api}
+            clusters={clusters}
+            miningStatus={miningStatus}
+            onOpenAiSettings={isEnterprise ? undefined : handleOpenLlmSettings}
+          />
+        )
       case 'settings':
         return (
           <SettingsPage

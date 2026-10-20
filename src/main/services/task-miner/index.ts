@@ -28,7 +28,7 @@ import type { InferenceProvider } from '../../llm'
 import { PATTERN_DETECTION_CONFIG, TASK_BACKFILL } from '../../../shared/constants'
 import log from '@main/utils/logger'
 import type { MiningStatus } from '@types'
-import { formatApiError } from './helpers'
+import { classifyMiningFailure, formatApiError } from './helpers'
 import {
   HostEnvironment,
   ManualHostEnvironment,
@@ -67,6 +67,7 @@ export class TaskMiner {
   private statusListener?: () => void
   private stopped = false
   private inFlight: Promise<void> = Promise.resolve()
+  private readonly unsubscribeProvider: () => void
 
   // The app injects the MlWorkerClient; enode scripts pass an in-process
   // EmbeddingService (no utilityProcess there). Not defaulted — a default
@@ -77,7 +78,9 @@ export class TaskMiner {
     private readonly provider: InferenceProvider | undefined,
     private readonly embedder: MinerEmbedder,
     private readonly env: HostEnvironment = new ManualHostEnvironment(),
-  ) {}
+  ) {
+    this.unsubscribeProvider = provider?.onConfigChanged(() => this.retryFailed()) ?? (() => {})
+  }
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled
@@ -90,7 +93,10 @@ export class TaskMiner {
   }
 
   updateModel(model: string): void {
+    const previous = this.model
     this.model = model.trim()
+    if (this.model === previous) return
+    if (previous && this.model) this.retryFailed()
     log.info(`[TaskMiner] Model updated to: ${this.model || '(none — mining idle)'}`)
   }
 
@@ -141,6 +147,7 @@ export class TaskMiner {
    */
   stop(): Promise<void> {
     this.stopped = true
+    this.unsubscribeProvider()
     if (this.pollTimer) {
       clearInterval(this.pollTimer)
       this.pollTimer = null
@@ -163,15 +170,28 @@ export class TaskMiner {
       completedDays,
       failedDays,
       totalDays: pendingDays + completedDays + failedDays,
+      failure: this.getFailure(),
     }
   }
 
-  /** Reopens failed days and polls now, skipping any failure backoff. */
+  private getFailure(): MiningStatus['failure'] {
+    const latest = this.storage.miningDays.getLatestFailure()
+    if (!latest) return null
+    if (latest.days < 2 && latest.attempts < 2) return null
+    return {
+      kind: classifyMiningFailure(latest.status, latest.error),
+      message: latest.error,
+      at: latest.at,
+    }
+  }
+
+  /** Reopens failed and cooling-down days and polls now, skipping any failure backoff. */
   retryFailed(): number {
-    const retried = this.storage.miningDays.retryFailed()
+    const retried = this.storage.miningDays.retryFailed() + this.storage.miningDays.clearCooldowns()
     if (retried > 0) {
       this.resetBackoff()
-      this.scheduleRun()
+      this.emitStatus()
+      this.kick()
     }
     return retried
   }
@@ -385,7 +405,8 @@ export class TaskMiner {
           )
         } catch (error) {
           const message = formatApiError(error)
-          const throttled = isThrottleStatus(extractHttpStatus(error))
+          const status = extractHttpStatus(error)
+          const throttled = isThrottleStatus(status) && !message.includes('insufficient_quota')
           const offline =
             !throttled &&
             this.env.interruptedBy(claimedAt, provider.getRouteSnapshot()?.baseURL, error)
@@ -413,6 +434,7 @@ export class TaskMiner {
             this.storage.miningDays.markAttemptFailed(
               claim.day,
               message,
+              status,
               TASK_BACKFILL.MAX_DAY_ATTEMPTS,
               cooldownMs,
             )

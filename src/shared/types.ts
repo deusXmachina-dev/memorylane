@@ -387,7 +387,10 @@ export interface MiningStatus {
   failedDays: number
   /** Days this sweep is processing (completed + failed this run + still pending). */
   totalDays: number
+  failure: { kind: MiningFailureKind; message: string; at: number } | null
 }
+
+export type MiningFailureKind = 'auth' | 'quota' | 'model' | 'output' | 'other'
 
 /** Result of the dev-only wipe-and-re-mine action. */
 export interface WipeAndRemineResult {
