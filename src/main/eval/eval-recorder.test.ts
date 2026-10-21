@@ -237,6 +237,23 @@ describe('EvalRecorder', () => {
     expect(manifest).toMatchObject({ stepEnteredAt: [T0, T0 + 500], leftAt: T0 + 900 })
   })
 
+  it('tracks steps once armed but dumps nothing until capture begins', async () => {
+    writeScript()
+    const recorder = new EvalRecorder({ harness, fixturesRoot })
+    recorder.arm('armed', 'edit-then-browse')
+    expect(watcherListeners.size).toBe(1)
+    expect(startCapture).not.toHaveBeenCalled()
+
+    focus('Code', T0)
+    await appendFrameAndWindow()
+    expect(recorder.getStatus().stepEnteredAt).toEqual([T0])
+
+    recorder.beginCapture()
+    expect(startCapture).toHaveBeenCalled()
+    await recorder.cancel()
+    expect(watcherListeners.size).toBe(0)
+  })
+
   it('drops the watcher subscription on cancel', async () => {
     writeScript()
     const recorder = new EvalRecorder({ harness, fixturesRoot })

@@ -99,6 +99,12 @@ export class EvalRecorder {
 
   /** Begins capturing the producer's frame + event-window streams to a staging dir. */
   start(name: string, scriptId?: string): EvalRecordingStatus {
+    this.arm(name, scriptId)
+    return this.beginCapture()
+  }
+
+  /** Opens the recording and starts step tracking, without capturing anything yet. */
+  arm(name: string, scriptId?: string): void {
     if (this.isRecording()) throw new Error('A recording is already in progress')
     const script = scriptId ? getRecordingScript(this.fixturesRoot, scriptId) : null
     if (scriptId && !script) throw new Error(`Unknown script: ${scriptId}`)
@@ -111,6 +117,21 @@ export class EvalRecorder {
     // Hold frame PNGs on disk for the whole recording so the cleanup sweep can't
     // delete them before we promote (the dumped frames.jsonl references them).
     this.harness.setRetainScreenshots(true)
+
+    if (script) this.trackerUnsub = addAppWatcherListener((event) => this.track(script, event))
+    setIgnoreSelfFocus(true)
+
+    this.activeName = safeName
+    this.script = script
+    this.stagingDir = stagingDir
+    log.info(`[EvalRecorder] Recording "${safeName}" -> ${stagingDir}`)
+  }
+
+  /** Starts dumping the producer's streams for an armed recording. */
+  beginCapture(): EvalRecordingStatus {
+    const stagingDir = this.stagingDir
+    if (!stagingDir) throw new Error('No recording in progress')
+    if (this.startedAt !== null) throw new Error('Recording already capturing')
 
     const frameDumper = new FrameDebugDumper(stagingDir)
     const eventDumper = new EventWindowDebugDumper(stagingDir)
@@ -139,8 +160,6 @@ export class EvalRecorder {
           summaryModel: extracted.summaryModel,
         })
       }) ?? null
-    if (script) this.trackerUnsub = addAppWatcherListener((event) => this.track(script, event))
-    setIgnoreSelfFocus(true)
 
     // Frames only flow while capture is running; start it for the operator if it
     // is off, and remember so we can restore the prior state on stop.
@@ -151,11 +170,7 @@ export class EvalRecorder {
       })
     }
 
-    this.activeName = safeName
-    this.script = script
     this.startedAt = Date.now()
-    this.stagingDir = stagingDir
-    log.info(`[EvalRecorder] Recording "${safeName}" -> ${stagingDir}`)
     return this.getStatus()
   }
 

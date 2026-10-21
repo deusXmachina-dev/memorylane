@@ -117,6 +117,7 @@ export function createPipelineHarness(params: {
     eventStream,
     activityStream,
     config: params.activityProducerConfig,
+    isCapturingFrames: () => screenCapturer.capturing,
   })
 
   if (

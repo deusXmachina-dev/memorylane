@@ -52,6 +52,7 @@ export class ActivityProducer {
   private readonly eventStream: DurableStream<EventWindow>
   private readonly activityStream: DurableStream<Activity>
   private config: ActivityProducerConfig
+  private readonly isCapturingFrames: () => boolean
 
   private frameSubscription: StreamSubscription | null = null
   private eventSubscription: StreamSubscription | null = null
@@ -76,10 +77,12 @@ export class ActivityProducer {
     eventStream: DurableStream<EventWindow>
     activityStream: DurableStream<Activity>
     config?: Partial<ActivityProducerConfig>
+    isCapturingFrames?: () => boolean
   }) {
     this.frameStream = params.frameStream
     this.eventStream = params.eventStream
     this.activityStream = params.activityStream
+    this.isCapturingFrames = params.isCapturingFrames ?? (() => true)
     this.config = {
       ...createDefaultActivityProducerConfig(),
       ...(params.config ?? {}),
@@ -516,12 +519,18 @@ export class ActivityProducer {
     const activeWindowEvent = recentEvents.find((event) => event.activeWindow)
     const latestDisplayId = recentEvents.find((event) => event.displayId !== undefined)?.displayId
     const latestWindowTitle = recentEvents.find((event) => event.windowTitle)?.windowTitle
+    const latestTitleIndex = recentEvents.findIndex((event) => event.windowTitle)
+    const typedSinceSwitch =
+      latestTitleIndex !== -1 &&
+      latestTitleIndex < recentEvents.findIndex((event) => event.activeWindow)
 
     if (activeWindowEvent?.activeWindow) {
       const context: ActivityContext = {
         appName: activeWindowEvent.activeWindow.processName,
         bundleId: activeWindowEvent.activeWindow.bundleId,
-        windowTitle: activeWindowEvent.activeWindow.title ?? latestWindowTitle,
+        windowTitle: typedSinceSwitch
+          ? latestWindowTitle
+          : (activeWindowEvent.activeWindow.title ?? latestWindowTitle),
         url: activeWindowEvent.activeWindow.url,
         tld: extractTld(activeWindowEvent.activeWindow.url) ?? undefined,
         displayId: latestDisplayId ?? undefined,
@@ -556,8 +565,8 @@ export class ActivityProducer {
     const targetTimestamp = windowEndTimestamp + this.config.frameJoinGraceMs
     const deadline = Date.now() + this.config.maxFrameWaitMs
 
-    // Once stopped (capture already torn down) no more frames will arrive.
-    while (this.started && Date.now() < deadline) {
+    // No frames arrive once stopped or while frame capture is off.
+    while (this.started && this.isCapturingFrames() && Date.now() < deadline) {
       if (this.latestFrameTimestamp >= targetTimestamp) return
       await sleep(20)
     }

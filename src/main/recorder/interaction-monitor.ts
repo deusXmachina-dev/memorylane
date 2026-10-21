@@ -6,6 +6,7 @@ import { appendClick, appendRun, classifyClick, classifyKey } from '@main/record
 import { addAppWatcherListener, AppWatcherEvent } from './app-watcher'
 import { resolveAppWatcherDisplay } from './app-watcher-display'
 import { isSelfApp } from '@main/capture/capture-exclusions'
+import { getLoginScreenMatch } from '@main/capture/capture-login-gate'
 import log from '@main/utils/logger'
 
 // State
@@ -25,6 +26,10 @@ let cachedWindowTitle: string | null = null
 let appWatcherUnsubscribe: (() => void) | null = null
 
 let ignoreSelfFocus = false
+
+let lastTextKeyAt = Number.NEGATIVE_INFINITY
+
+const TITLE_EDIT_TYPING_WINDOW_MS = 1500
 
 /**
  * Resolve which Electron Display contains the given global coordinate.
@@ -268,7 +273,10 @@ function handleKeyboard(event: UiohookKeyboardEvent): void {
   }
 
   const keyClass = classifyKey(event)
-  typingSession.record(Date.now(), (accumulation) => {
+  const now = Date.now()
+  const shortcut = event.metaKey || event.ctrlKey !== event.altKey
+  if ((keyClass === 'type' || keyClass === 'delete') && !shortcut) lastTextKeyAt = now
+  typingSession.record(now, (accumulation) => {
     accumulation.keyCount++
     if (keyClass) appendRun(accumulation.keySequence, keyClass)
   })
@@ -373,10 +381,13 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
   // starting a new window or cutting the typing session.
   if (
     previousWindow &&
-    previousWindow.processName === current.processName &&
+    current.hwnd &&
     previousWindow.hwnd === current.hwnd &&
+    previousWindow.processName === current.processName &&
     previousWindow.url === current.url &&
     previousWindowDisplayId === resolvedDisplayId &&
+    Date.now() - lastTextKeyAt <= TITLE_EDIT_TYPING_WINDOW_MS &&
+    getLoginScreenMatch(current) === null &&
     isIncrementalTitleEdit(normalizeTitle(previousWindow.title), normalizeTitle(current.title))
   ) {
     log.debug(`[Interaction Monitor] Title edited in place: "${current.title}"`)
@@ -498,6 +509,7 @@ export function stopInteractionMonitoring(): void {
     previousWindowDisplayId = null
     cachedDisplayId = null
     cachedWindowTitle = null
+    lastTextKeyAt = Number.NEGATIVE_INFINITY
 
     // Stop the native app-watcher process (only our listener; others may still be attached)
     if (appWatcherUnsubscribe) {

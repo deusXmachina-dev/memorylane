@@ -90,17 +90,21 @@ function maybeStopBackend(): void {
 export function addAppWatcherListener(listener: Listener): () => void {
   // Start the backend first. If it throws, the listener is never added — so a
   // leaked entry can't block a future clean restart.
-  const joinedRunningBackend = backendStarted
   ensureBackendStarted()
   listeners.add(listener)
-  const current = joinedRunningBackend ? lastWindowEvent : null
+  const current = isAppWatcherRunning() ? lastWindowEvent : null
   if (current) {
     // Deferred so the caller finishes its own setup first. Stamped now: to this
     // listener the window is in front as of subscribing, not since it appeared.
     queueMicrotask(() => {
       if (!listeners.has(listener)) return
       try {
-        listener({ ...current, timestamp: Date.now() })
+        listener({
+          ...current,
+          windowBounds: undefined,
+          displayId: undefined,
+          timestamp: Date.now(),
+        })
       } catch (error) {
         log.warn(`[AppWatcher] Listener threw:`, error)
       }
