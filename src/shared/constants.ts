@@ -92,6 +92,7 @@ export const LLM_HEALTH_CONFIG = {
 export const EVENT_CAPTURER_CONFIG = {
   MAX_WINDOW_DURATION_MS: 5 * 60 * 1000,
   LATE_EVENT_GRACE_MS: 3_500, // Hold closed windows briefly to absorb debounced late arrivals
+  TYPED_TITLE_MAX_LAG_MS: 2_000,
 }
 
 // OCR Pipeline Configuration

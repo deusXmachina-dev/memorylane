@@ -5,6 +5,7 @@ import '@main/system/onnxruntime-path-fix'
 import { app, globalShortcut } from 'electron'
 import path from 'node:path'
 import { config as loadEnv } from 'dotenv'
+import { cache as setSharpCache } from 'sharp'
 import {
   AUTO_START_HIDDEN_ARG,
   shouldStartHiddenOnLaunch,
@@ -46,6 +47,8 @@ if (app.isPackaged && !app.requestSingleInstanceLock()) {
 
 // Privileged schemes must be registered before `ready`.
 registerEvalMediaScheme()
+
+setSharpCache(false)
 
 try {
   if (!app.isPackaged) {

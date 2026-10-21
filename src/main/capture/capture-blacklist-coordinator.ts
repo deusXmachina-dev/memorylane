@@ -61,13 +61,13 @@ export function createCaptureBlacklistCoordinator(params: {
   let blockedByExcludedUrl = false
   let blockedByAnonymousBrowser = false
   let blockedByLoginScreen = false
-  const privateBrowserWindowHandles = new Set<string>()
+  const privateBrowserWindowIds = new Set<string>()
   let lastActiveWindow: InteractionContext['activeWindow'] | undefined
 
-  const getWindowHandle = (activeWindow: InteractionContext['activeWindow']): string | null => {
-    const hwnd = activeWindow?.hwnd?.trim()
-    if (!hwnd) return null
-    return hwnd
+  const getWindowId = (activeWindow: InteractionContext['activeWindow']): string | null => {
+    const windowId = activeWindow?.windowId?.trim()
+    if (!windowId) return null
+    return windowId
   }
 
   const resolveAnonymousModeMatch = (
@@ -76,16 +76,16 @@ export function createCaptureBlacklistCoordinator(params: {
   ): string | null => {
     if (!excludePrivateBrowsing) return null
 
-    const hwnd = getWindowHandle(activeWindow)
+    const windowId = getWindowId(activeWindow)
     if (detectedAnonymousModeMatch !== null) {
-      if (hwnd !== null) {
-        privateBrowserWindowHandles.add(hwnd)
+      if (windowId !== null) {
+        privateBrowserWindowIds.add(windowId)
       }
       return detectedAnonymousModeMatch
     }
 
-    if (hwnd !== null && privateBrowserWindowHandles.has(hwnd)) {
-      return `hwnd=${hwnd}`
+    if (windowId !== null && privateBrowserWindowIds.has(windowId)) {
+      return `window=${windowId}`
     }
 
     return null
@@ -202,7 +202,7 @@ export function createCaptureBlacklistCoordinator(params: {
       excludePrivateBrowsing = exclusions.excludePrivateBrowsing
       excludeLoginScreens = exclusions.excludeLoginScreens
       if (!excludePrivateBrowsing) {
-        privateBrowserWindowHandles.clear()
+        privateBrowserWindowIds.clear()
       }
       recomputeEffective()
       reconcileBlockingState('settings_update', lastActiveWindow)

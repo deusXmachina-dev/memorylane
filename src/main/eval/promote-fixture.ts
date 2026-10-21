@@ -187,7 +187,11 @@ export async function promoteCapture(opts: PromoteCaptureOptions): Promise<Promo
   const clipEnd = opts.leftAt
   const inClip = (ts: number): boolean =>
     (clipStart === undefined || ts >= clipStart) && (clipEnd === undefined || ts < clipEnd)
-  const windows = readJsonl<EventWindow>(windowsSrc).filter((w) => inClip(w.startTimestamp))
+  const overlapsClip = (start: number, end: number): boolean =>
+    (clipStart === undefined || end > clipStart) && (clipEnd === undefined || start < clipEnd)
+  const windows = readJsonl<EventWindow>(windowsSrc).filter((w) =>
+    overlapsClip(w.startTimestamp, w.endTimestamp),
+  )
   const frames = readJsonl<DumpedFrame>(framesSrc).filter((f) => inClip(f.timestamp))
 
   const fixtureDir = path.join(opts.fixturesRoot, opts.name)
@@ -264,7 +268,7 @@ export async function promoteCapture(opts: PromoteCaptureOptions): Promise<Promo
     transformer: new ScaffoldTransformer(),
   })
   const keptActivities = readLiveActivities(opts.sourceDir)
-    .filter((a) => inClip(a.startTimestamp))
+    .filter((a) => overlapsClip(a.startTimestamp, a.endTimestamp))
     .map(liveToReplayActivity)
   const transcript = [...keptActivities, ...droppedActivities]
   const lastBlockEnd = transcript.reduce((max, t) => Math.max(max, t.endTimestamp), 0) || undefined

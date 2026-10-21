@@ -73,7 +73,7 @@ vi.mock('@main/recorder/native-screenshot', () => ({
 }))
 
 const { cleanupSpy, sweepSpy } = vi.hoisted(() => ({
-  cleanupSpy: vi.fn(),
+  cleanupSpy: vi.fn(() => Promise.resolve()),
   sweepSpy: vi.fn(),
 }))
 

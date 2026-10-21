@@ -57,7 +57,7 @@ export interface InteractionContext {
   activeWindow?: {
     title: string
     processName: string
-    hwnd?: string // Stable window identity on Windows (native HWND as hex string)
+    windowId?: string // Stable per-window identity, when the platform provides one
     bundleId?: string
     url?: string // Browser tab URL (Chrome, Safari, Arc, etc.)
   }
@@ -66,7 +66,7 @@ export interface InteractionContext {
   previousWindow?: {
     title: string
     processName: string
-    hwnd?: string
+    windowId?: string
     bundleId?: string
     url?: string
   }

@@ -41,14 +41,14 @@ fn normalize_candidate_url(raw: &str) -> Option<String> {
         return Some(trimmed.to_string());
     }
 
-    let host_like = trimmed.contains('.')
-        && trimmed.chars().all(|ch| {
-            ch.is_ascii_alphanumeric()
-                || matches!(
-                    ch,
-                    '.' | '-' | ':' | '/' | '?' | '#' | '&' | '=' | '%' | '+' | '@' | '_' | '~'
-                )
-        });
+    let host = trimmed
+        .split(|ch| matches!(ch, '/' | '?' | '#'))
+        .next()
+        .unwrap_or_default();
+    let host_like = host.contains('.')
+        && host
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | ':' | '@' | '_'));
     if host_like {
         return Some(format!("https://{}", trimmed));
     }
@@ -146,4 +146,49 @@ pub fn read_browser_url(hwnd: HWND, app: &str) -> Option<String> {
     }
 
     fallback_candidate
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_candidate_url;
+
+    #[test]
+    fn accepts_scheme_less_urls_with_free_form_paths() {
+        for (raw, expected) in [
+            (
+                "google.com/maps/place/Prague+Castle/@50.0910,14.4016,17z/data=!3m1!4b1!4m6",
+                "https://google.com/maps/place/Prague+Castle/@50.0910,14.4016,17z/data=!3m1!4b1!4m6",
+            ),
+            (
+                "google.com/maps/search/prague+castle/@50.0910,14.4016,15z",
+                "https://google.com/maps/search/prague+castle/@50.0910,14.4016,15z",
+            ),
+            (
+                "google.com/maps/place/Pražský+hrad",
+                "https://google.com/maps/place/Pražský+hrad",
+            ),
+            (
+                "google.com/search?q=prague+castle&sca_esv=abc",
+                "https://google.com/search?q=prague+castle&sca_esv=abc",
+            ),
+            (
+                "mail.google.com/mail/u/0/#inbox",
+                "https://mail.google.com/mail/u/0/#inbox",
+            ),
+            (
+                "drive.google.com/drive/my-drive",
+                "https://drive.google.com/drive/my-drive",
+            ),
+            ("localhost.test:5173", "https://localhost.test:5173"),
+        ] {
+            assert_eq!(normalize_candidate_url(raw).as_deref(), Some(expected), "{raw}");
+        }
+    }
+
+    #[test]
+    fn rejects_search_text_and_non_hosts() {
+        for raw in ["prague castle", "foo", "foo/bar.baz", "", "about:blank", "ex!ample.com/x"] {
+            assert_eq!(normalize_candidate_url(raw), None, "{raw}");
+        }
+    }
 }
