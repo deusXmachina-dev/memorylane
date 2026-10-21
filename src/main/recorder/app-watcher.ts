@@ -44,8 +44,14 @@ const PLATFORM_APP_WATCHER_BACKENDS: Partial<Record<NodeJS.Platform, AppWatcherB
 
 const listeners = new Set<Listener>()
 let backendStarted = false
+// Latest foreground window, replayed to listeners that join a running backend:
+// the native watchers only report the current window once, at startup.
+let lastWindowEvent: AppWatcherEvent | null = null
 
 function dispatch(event: AppWatcherEvent): void {
+  if (event.type === 'app_change' || event.type === 'window_change') {
+    lastWindowEvent = event
+  }
   for (const listener of listeners) {
     try {
       listener(event)
@@ -78,13 +84,28 @@ function maybeStopBackend(): void {
   const backend = PLATFORM_APP_WATCHER_BACKENDS[process.platform]
   backend?.stop()
   backendStarted = false
+  lastWindowEvent = null
 }
 
 export function addAppWatcherListener(listener: Listener): () => void {
   // Start the backend first. If it throws, the listener is never added — so a
   // leaked entry can't block a future clean restart.
+  const joinedRunningBackend = backendStarted
   ensureBackendStarted()
   listeners.add(listener)
+  const current = joinedRunningBackend ? lastWindowEvent : null
+  if (current) {
+    // Deferred so the caller finishes its own setup first. Stamped now: to this
+    // listener the window is in front as of subscribing, not since it appeared.
+    queueMicrotask(() => {
+      if (!listeners.has(listener)) return
+      try {
+        listener({ ...current, timestamp: Date.now() })
+      } catch (error) {
+        log.warn(`[AppWatcher] Listener threw:`, error)
+      }
+    })
+  }
   return () => {
     if (!listeners.delete(listener)) return
     maybeStopBackend()

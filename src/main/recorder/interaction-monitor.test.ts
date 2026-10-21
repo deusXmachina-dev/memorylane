@@ -286,4 +286,41 @@ describe('interaction-monitor session emission', () => {
       ['Editor', 'Fix login · PR #262'],
     ])
   })
+
+  it('treats typing into a title (Notepad) as the same window, without cutting the session', () => {
+    appChange('Notepad', 'Untitled - Notepad', 0)
+    appChange('Notepad', 'I - Notepad', 500)
+    vi.advanceTimersByTime(1000) // now = 1000
+    key()
+    appChange('Notepad', 'I n - Notepad', 1100)
+    key()
+    appChange('Notepad', 'I ne - Notepad', 1200)
+    appChange('Notepad', '*I ne - Notepad', 1300)
+    appChange('Notepad', '*I n - Notepad', 1400)
+
+    expect(emitted.map((c) => [c.type, c.activeWindow?.title])).toEqual([
+      ['app_change', 'Untitled - Notepad'],
+      ['app_change', 'I - Notepad'],
+    ])
+
+    vi.advanceTimersByTime(INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS)
+    const keyboard = emitted[2]
+    expect(keyboard.type).toBe('keyboard')
+    expect(keyboard.keyCount).toBe(2)
+    expect(keyboard.windowTitle).toBe('*I n - Notepad')
+  })
+
+  it('still splits on title replacements in the same window', () => {
+    appChange('Code', 'a.ts - repo - Visual Studio Code', 0)
+    appChange('Code', 'b.ts - repo - Visual Studio Code', 1000)
+    appChange('Slack', '(3) Slack', 2000)
+    appChange('Slack', '(4) Slack', 3000)
+
+    expect(emitted.map((c) => c.activeWindow?.title)).toEqual([
+      'a.ts - repo - Visual Studio Code',
+      'b.ts - repo - Visual Studio Code',
+      '(3) Slack',
+      '(4) Slack',
+    ])
+  })
 })

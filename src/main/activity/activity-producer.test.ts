@@ -181,6 +181,41 @@ describe('ActivityProducer', () => {
     expect(await frameStream.getLowestAvailableOffset()).toBe(2)
   })
 
+  it('stop does not wait for frames that can no longer arrive', async () => {
+    const { producer, frameStream, eventStream, activityStream } = createProducer({
+      frameJoinGraceMs: 750,
+      maxFrameWaitMs: 5_000,
+    })
+
+    const activities: Activity[] = []
+    subscriptions.push(
+      activityStream.subscribe({
+        startAt: { type: 'now' },
+        onRecord: (record) => activities.push(record.payload),
+      }),
+    )
+
+    await producer.start()
+    await frameStream.append(makeFrame(1_000, 0))
+    await eventStream.append(
+      makeWindow({
+        id: 'window-1',
+        startTimestamp: 900,
+        endTimestamp: 1_500,
+        closedBy: 'flush',
+        events: [
+          makeEvent(900, 'app_change', { activeWindow: { title: 'Doc', processName: 'Notepad' } }),
+        ],
+      }),
+    )
+
+    const stoppedAt = Date.now()
+    await producer.stop()
+
+    expect(Date.now() - stoppedAt).toBeLessThan(1_000)
+    expect(activities).toHaveLength(1)
+  })
+
   it('emits deterministic UUIDv5 ids for the same source window chunk', async () => {
     const runOnce = async (): Promise<string> => {
       const { producer, frameStream, eventStream, activityStream } = createProducer()

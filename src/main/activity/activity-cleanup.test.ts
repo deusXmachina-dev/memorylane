@@ -59,7 +59,7 @@ describe('cleanupActivityFiles', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  it('deletes frame PNGs and video MP4', () => {
+  it('deletes frame PNGs and video MP4', async () => {
     const frame0 = path.join(tmpDir, 'frame-0.png')
     const frame1 = path.join(tmpDir, 'frame-1.png')
     const video = path.join(tmpDir, 'act-1.mp4')
@@ -69,26 +69,26 @@ describe('cleanupActivityFiles', () => {
     fs.writeFileSync(video, 'mp4')
 
     const activity = makeActivity('act-1', [frame0, frame1])
-    cleanupActivityFiles(activity, tmpDir)
+    await cleanupActivityFiles(activity, tmpDir)
 
     expect(fs.existsSync(frame0)).toBe(false)
     expect(fs.existsSync(frame1)).toBe(false)
     expect(fs.existsSync(video)).toBe(false)
   })
 
-  it('tolerates missing files gracefully', () => {
+  it('tolerates missing files gracefully', async () => {
     const activity = makeActivity('missing-act', [
       path.join(tmpDir, 'nonexistent-0.png'),
       path.join(tmpDir, 'nonexistent-1.png'),
     ])
 
-    expect(() => cleanupActivityFiles(activity, tmpDir)).not.toThrow()
+    await expect(cleanupActivityFiles(activity, tmpDir)).resolves.toBeUndefined()
     expect(log.warn).not.toHaveBeenCalled()
   })
 
-  it('with zero frames is a no-op', () => {
+  it('with zero frames is a no-op', async () => {
     const activity = makeActivity('empty-act', [])
 
-    expect(() => cleanupActivityFiles(activity, tmpDir)).not.toThrow()
+    await expect(cleanupActivityFiles(activity, tmpDir)).resolves.toBeUndefined()
   })
 })

@@ -274,17 +274,22 @@ async function startEvalRecording(scriptId: string | undefined): Promise<EvalRec
   }
   startingEvalRecording = true
   try {
-    await hideForRecording()
-    await showRecordingGuide()
+    // Start before hiding: minimizing hands focus to the operator's next app,
+    // and the step tracker must already be listening to see that switch.
+    const status = deps.runtime.evalRecorder.start(recordingName(scriptId), scriptId)
     try {
-      const status = deps.runtime.evalRecorder.start(recordingName(scriptId), scriptId)
-      deps?.runtime.requestUiRefresh()
-      return status
+      await hideForRecording()
+      await showRecordingGuide()
     } catch (error) {
+      await deps.runtime.evalRecorder.cancel().catch((cancelError) => {
+        log.warn('[MainWindow] Failed to cancel eval recording:', cancelError)
+      })
       closeRecordingGuide()
       openMainWindow()
       throw error
     }
+    deps.runtime.requestUiRefresh()
+    return status
   } finally {
     startingEvalRecording = false
   }

@@ -4,9 +4,11 @@ import log from '@main/utils/logger'
 import { SCREENSHOT_CLEANUP_CONFIG } from '@constants'
 import type { Activity } from './activity-types'
 
-function deleteFileIfPresent(filepath: string, label: 'frame' | 'video'): boolean {
+// Async on purpose: rmSync's retries sleep synchronously on Windows, blocking
+// the main process for seconds whenever a frame is briefly locked.
+async function deleteFileIfPresent(filepath: string, label: 'frame' | 'video'): Promise<boolean> {
   try {
-    fs.rmSync(filepath, { force: true, maxRetries: 5, retryDelay: 100 })
+    await fs.promises.rm(filepath, { force: true, maxRetries: 5, retryDelay: 100 })
     return fs.existsSync(filepath) === false
   } catch {
     log.debug(`[ActivityCleanup] Failed to delete ${label}: ${filepath}`)
@@ -14,19 +16,17 @@ function deleteFileIfPresent(filepath: string, label: 'frame' | 'video'): boolea
   }
 }
 
-export function cleanupActivityFiles(activity: Activity, videoOutputDir: string): void {
-  let deleted = 0
-
-  for (const activityFrame of activity.frames) {
-    if (deleteFileIfPresent(activityFrame.frame.filepath, 'frame')) {
-      deleted++
-    }
-  }
-
-  const videoPath = `${videoOutputDir}/${activity.id}.mp4`
-  if (deleteFileIfPresent(videoPath, 'video')) {
-    deleted++
-  }
+export async function cleanupActivityFiles(
+  activity: Activity,
+  videoOutputDir: string,
+): Promise<void> {
+  const results = await Promise.all([
+    ...activity.frames.map((activityFrame) =>
+      deleteFileIfPresent(activityFrame.frame.filepath, 'frame'),
+    ),
+    deleteFileIfPresent(`${videoOutputDir}/${activity.id}.mp4`, 'video'),
+  ])
+  const deleted = results.filter(Boolean).length
 
   if (deleted > 0) {
     log.info(`[ActivityCleanup] Deleted ${deleted} file(s) for activity ${activity.id}`)

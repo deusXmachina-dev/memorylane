@@ -298,6 +298,27 @@ function normalizeTitle(title: string): string {
 }
 
 /**
+ * True when `next` is `prev` with text inserted or deleted at one spot, the way
+ * typing changes a title that mirrors document text (Windows 11 Notepad shows an
+ * unsaved tab's first line). Replacements like `a.ts` -> `b.ts` or `(3)` -> `(4)`
+ * are real changes.
+ */
+function isIncrementalTitleEdit(prev: string, next: string): boolean {
+  if (!prev || !next || prev === next) return false
+  const shorter = Math.min(prev.length, next.length)
+  let prefix = 0
+  while (prefix < shorter && prev[prefix] === next[prefix]) prefix++
+  let suffix = 0
+  while (
+    suffix < shorter - prefix &&
+    prev[prev.length - 1 - suffix] === next[next.length - 1 - suffix]
+  ) {
+    suffix++
+  }
+  return prev.length === prefix + suffix || next.length === prefix + suffix
+}
+
+/**
  * Handle events from the native app-watcher process.
  * Translates AppWatcherEvent into InteractionContext for downstream consumers.
  */
@@ -345,6 +366,22 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
     log.debug(
       `[Interaction Monitor] Skipping duplicate: ${current.processName} "${current.title}" url=${current.url} (prevUrl=${previousWindow.url})`,
     )
+    return
+  }
+
+  // Same window whose title is being typed into: track the new title without
+  // starting a new window or cutting the typing session.
+  if (
+    previousWindow &&
+    previousWindow.processName === current.processName &&
+    previousWindow.hwnd === current.hwnd &&
+    previousWindow.url === current.url &&
+    previousWindowDisplayId === resolvedDisplayId &&
+    isIncrementalTitleEdit(normalizeTitle(previousWindow.title), normalizeTitle(current.title))
+  ) {
+    log.debug(`[Interaction Monitor] Title edited in place: "${current.title}"`)
+    previousWindow = { ...previousWindow, title: current.title }
+    cachedWindowTitle = current.title
     return
   }
 

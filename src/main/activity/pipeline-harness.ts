@@ -136,7 +136,9 @@ export function createPipelineHarness(params: {
             ...params.activityExtractorConfig,
             onTaskComplete: (activity) => {
               if (!retainScreenshots) {
-                cleanupActivityFiles(activity, params.outputDir)
+                void cleanupActivityFiles(activity, params.outputDir).catch((error) => {
+                  log.warn('[PipelineHarness] Activity file cleanup failed:', error)
+                })
               }
             },
           },
