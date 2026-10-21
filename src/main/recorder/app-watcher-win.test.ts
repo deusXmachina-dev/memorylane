@@ -85,7 +85,7 @@ describe('app-watcher-win backend', () => {
       type: 'app_change',
       timestamp: 2,
       app: 'chrome',
-      hwnd: '0x3A0F2',
+      windowId: '0x3A0F2',
       pid: 101,
       title: 'Google',
       url: 'https://example.com',

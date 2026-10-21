@@ -65,8 +65,8 @@ function key(keycode = 16, mods: { metaKey?: boolean; ctrlKey?: boolean } = {}):
   })
 }
 
-function appChange(app: string, title: string, timestamp: number, hwnd?: string): void {
-  appWatcher.listener?.({ type: 'app_change', app, title, timestamp, hwnd })
+function appChange(app: string, title: string, timestamp: number, windowId?: string): void {
+  appWatcher.listener?.({ type: 'app_change', app, title, timestamp, windowId })
 }
 
 describe('interaction-monitor session emission', () => {
@@ -310,7 +310,7 @@ describe('interaction-monitor session emission', () => {
     expect(keyboard.windowTitle).toBe('*I n - Notepad')
   })
 
-  it('splits title insertions without recent plain typing in the same hwnd', () => {
+  it('splits title insertions without recent plain typing in the same window', () => {
     appChange('Terminal', '~ — zsh', 0)
     key()
     appChange('Terminal', '~/repo — zsh', 100)

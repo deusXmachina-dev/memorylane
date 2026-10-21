@@ -349,7 +349,7 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
   const current: NonNullable<InteractionContext['activeWindow']> = {
     title: event.title ?? '',
     processName: event.app ?? '',
-    ...(event.hwnd && { hwnd: event.hwnd }),
+    ...(event.windowId && { windowId: event.windowId }),
     ...(event.bundleId && { bundleId: event.bundleId }),
     ...(event.url && { url: event.url }),
   }
@@ -367,7 +367,7 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
     previousWindow &&
     normalizeTitle(previousWindow.title) === normalizeTitle(current.title) &&
     previousWindow.processName === current.processName &&
-    previousWindow.hwnd === current.hwnd &&
+    previousWindow.windowId === current.windowId &&
     previousWindow.url === current.url &&
     previousWindowDisplayId === resolvedDisplayId
   ) {
@@ -381,8 +381,8 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
   // starting a new window or cutting the typing session.
   if (
     previousWindow &&
-    current.hwnd &&
-    previousWindow.hwnd === current.hwnd &&
+    current.windowId &&
+    previousWindow.windowId === current.windowId &&
     previousWindow.processName === current.processName &&
     previousWindow.url === current.url &&
     previousWindowDisplayId === resolvedDisplayId &&
