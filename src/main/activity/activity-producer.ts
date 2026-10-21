@@ -559,7 +559,6 @@ export class ActivityProducer {
     const targetTimestamp = windowEndTimestamp + this.config.frameJoinGraceMs
     const deadline = Date.now() + this.config.maxFrameWaitMs
 
-    // No frames arrive once stopped or while frame capture is off.
     while (this.started && this.isCapturingFrames() && Date.now() < deadline) {
       if (this.latestFrameTimestamp >= targetTimestamp) return
       await sleep(20)

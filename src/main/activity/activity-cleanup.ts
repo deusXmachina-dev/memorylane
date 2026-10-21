@@ -4,8 +4,6 @@ import log from '@main/utils/logger'
 import { SCREENSHOT_CLEANUP_CONFIG } from '@constants'
 import type { Activity } from './activity-types'
 
-// Async on purpose: rmSync's retries sleep synchronously on Windows, blocking
-// the main process for seconds whenever a frame is briefly locked.
 async function deleteFileIfPresent(filepath: string, label: 'frame' | 'video'): Promise<boolean> {
   try {
     await fs.promises.rm(filepath, { force: true, maxRetries: 5, retryDelay: 100 })

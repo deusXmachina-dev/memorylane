@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { InteractionContext, EventWindow } from '@/shared/types'
+import type { InteractionContext, EventWindow, KeyClass } from '@/shared/types'
 import { InMemoryStream } from '@main/streams/in-memory-stream'
 import type { StreamSubscription } from '@main/streams/stream'
 
@@ -7,6 +7,7 @@ import type { StreamSubscription } from '@main/streams/stream'
 vi.mock('@constants', () => ({
   EVENT_CAPTURER_CONFIG: {
     MAX_WINDOW_DURATION_MS: 500,
+    TYPED_TITLE_MAX_LAG_MS: 2_000,
   },
 }))
 
@@ -93,15 +94,18 @@ describe('EventCapturer', () => {
     expect(windows).toHaveLength(2)
   })
 
+  const notepad = (title: string, timestamp: number): InteractionContext =>
+    makeEvent({
+      type: 'app_change',
+      timestamp,
+      activeWindow: { processName: 'Notepad', windowId: '0x1', title },
+    })
+  const typing = (timestamp: number, kind: KeyClass = 'type'): InteractionContext =>
+    makeEvent({ type: 'keyboard', timestamp, keySequence: [{ kind, count: 1 }] })
+
   it('retitles the window instead of splitting when typing retitles Notepad', async () => {
-    const notepad = (title: string, timestamp: number): InteractionContext =>
-      makeEvent({
-        type: 'app_change',
-        timestamp,
-        activeWindow: { processName: 'Notepad', windowId: '0x1', title },
-      })
     capturer.handleEvent(notepad('I - Notepad', 1000))
-    capturer.handleEvent(makeEvent({ type: 'keyboard', timestamp: 1050 }))
+    capturer.handleEvent(typing(1050))
     capturer.handleEvent(notepad('I n - Notepad', 1100))
     capturer.handleEvent(notepad('I ne - Notepad', 1150))
     capturer.handleEvent(notepad('*I ne - Notepad', 1200))
@@ -114,6 +118,51 @@ describe('EventCapturer', () => {
       ['*I ne - Notepad', 'keyboard'],
       ['other.txt - Notepad'],
     ])
+  })
+
+  it('splits a Notepad tab switch that follows a click', async () => {
+    capturer.handleEvent(notepad('report - Notepad', 1000))
+    capturer.handleEvent(makeEvent({ type: 'click', timestamp: 1050 }))
+    capturer.handleEvent(notepad('report draft - Notepad', 1100))
+    await flushAsyncAppends()
+
+    expect(windows.map((w) => w.events.map((e) => e.activeWindow?.title ?? e.type))).toEqual([
+      ['report - Notepad', 'click'],
+    ])
+  })
+
+  it('splits a Notepad tab switch made with a navigation key', async () => {
+    capturer.handleEvent(notepad('report - Notepad', 1000))
+    capturer.handleEvent(typing(1050, 'tab'))
+    capturer.handleEvent(notepad('report draft - Notepad', 1100))
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].events.map((e) => e.activeWindow?.title ?? e.type)).toEqual([
+      'report - Notepad',
+      'keyboard',
+    ])
+  })
+
+  it('splits a Notepad retitle long after the last keystroke', async () => {
+    capturer.handleEvent(notepad('report - Notepad', 1000))
+    capturer.handleEvent(typing(1050))
+    capturer.handleEvent(notepad('report draft - Notepad', 4000))
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].events[0].activeWindow?.title).toBe('report - Notepad')
+  })
+
+  it('extends the window end to the last retitle', async () => {
+    capturer.handleEvent(notepad('I - Notepad', 1000))
+    capturer.handleEvent(typing(1050))
+    capturer.handleEvent(notepad('I n - Notepad', 1100))
+    capturer.flush(1060)
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(1)
+    expect(windows[0].endTimestamp).toBe(1100)
   })
 
   it('splits on title insertions in other apps', async () => {

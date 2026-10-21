@@ -41,8 +41,6 @@ fn normalize_candidate_url(raw: &str) -> Option<String> {
         return Some(trimmed.to_string());
     }
 
-    // Browsers hide the scheme, so the omnibox shows e.g. `google.com/maps/...`.
-    // Only the host is validated; paths (Maps uses `,` `!` and non-ASCII) are free-form.
     let host = trimmed
         .split(|ch| matches!(ch, '/' | '?' | '#'))
         .next()

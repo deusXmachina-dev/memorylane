@@ -274,9 +274,6 @@ async function startEvalRecording(scriptId: string | undefined): Promise<EvalRec
   }
   startingEvalRecording = true
   try {
-    // Arm before hiding: minimizing hands focus to the operator's next app, and
-    // the step tracker must already be listening to see that switch. Capture
-    // begins after the hide so MemoryLane's own window stays out of the fixture.
     deps.runtime.evalRecorder.arm(recordingName(scriptId), scriptId)
     let status: EvalRecordingStatus
     try {

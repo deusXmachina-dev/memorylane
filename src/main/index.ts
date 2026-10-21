@@ -48,8 +48,6 @@ if (app.isPackaged && !app.requestSingleInstanceLock()) {
 // Privileged schemes must be registered before `ready`.
 registerEvalMediaScheme()
 
-// libvips' cache keeps decoded source files open; on Windows an open handle
-// blocks deleting the frame afterwards. Frames are decoded once, so skip it.
 setSharpCache(false)
 
 try {
