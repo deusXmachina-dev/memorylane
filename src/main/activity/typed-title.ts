@@ -8,7 +8,8 @@ const TYPED_TITLE_APPS = new Set(['notepad'])
 /** True when `next` is `prev` retitled by typing: text inserted or deleted at one spot. */
 export function isTypedTitleEdit(prev: ActiveWindow, next: ActiveWindow): boolean {
   if (!TYPED_TITLE_APPS.has(next.processName.toLowerCase())) return false
-  if (prev.processName !== next.processName || prev.windowId !== next.windowId) return false
+  if (!next.windowId || prev.windowId !== next.windowId) return false
+  if (prev.processName !== next.processName) return false
   const a = prev.title
   const b = next.title
   if (!a || !b || a === b) return false
