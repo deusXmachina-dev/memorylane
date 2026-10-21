@@ -49,6 +49,14 @@ describe('enteredStep', () => {
     expect(enteredStep(gmail, event(chrome))).toBe(false)
   })
 
+  it('matches a host with or without www', () => {
+    const maps = step({ app: ['browser'], tld: 'www.google.com' })
+    expect(enteredStep(maps, event({ app: 'chrome', url: 'https://google.com/maps' }))).toBe(true)
+    expect(enteredStep(maps, event({ app: 'chrome', url: 'https://drive.google.com/' }))).toBe(
+      false,
+    )
+  })
+
   it('matches a tld-less browser step on any browser', () => {
     const hop = step({ app: ['browser'], dropped: true })
     expect(enteredStep(hop, event({ app: 'Google Chrome', bundleId: 'com.google.Chrome' }))).toBe(

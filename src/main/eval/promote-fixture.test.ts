@@ -191,7 +191,7 @@ describe('promoteCapture', () => {
     const preamble = {
       id: 'w0',
       startTimestamp: T0 - 2000,
-      endTimestamp: T0,
+      endTimestamp: T0 - 5,
       events: [
         {
           type: 'app_change',
@@ -216,6 +216,7 @@ describe('promoteCapture', () => {
     }
     const main = {
       ...JSON.parse(fs.readFileSync(path.join(sourceDir, 'event-windows.jsonl'), 'utf8')),
+      startTimestamp: T0 - 5,
       endTimestamp: T0 + 4000,
     }
     const mainLine = JSON.stringify(main) + '\n'
@@ -245,7 +246,7 @@ describe('promoteCapture', () => {
         {
           id: 'pre',
           startTimestamp: T0 - 2000,
-          endTimestamp: T0,
+          endTimestamp: T0 - 5,
           appName: 'MemoryLane',
           windowTitle: '',
           tld: '',
@@ -254,7 +255,7 @@ describe('promoteCapture', () => {
         },
         {
           id: 'live-1',
-          startTimestamp: T0,
+          startTimestamp: T0 - 5,
           endTimestamp: T0 + 4000,
           appName: 'Code',
           windowTitle: 'auth.ts',

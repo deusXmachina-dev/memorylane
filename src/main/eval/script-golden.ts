@@ -18,6 +18,11 @@ export function appMatches(
   )
 }
 
+export function hostMatches(expected: string, host: string | null | undefined): boolean {
+  const bare = (h: string): string => h.replace(/^www\./, '')
+  return !!host && bare(expected) === bare(host)
+}
+
 function describeBlock(block: ReplayActivity): string {
   return `${block.appName}${block.tld ? ` · ${block.tld}` : ''}`
 }
@@ -27,7 +32,8 @@ function stepIssue(step: RecordingScriptStep, block: ReplayActivity): string | n
   const where = describeBlock(block)
   if (!appMatches(expect.app, { processName: block.appName }))
     return `expected ${expect.app.join('/')}, got ${where}`
-  if (expect.tld && expect.tld !== block.tld) return `expected ${expect.tld}, got ${where}`
+  if (expect.tld && !hostMatches(expect.tld, block.tld))
+    return `expected ${expect.tld}, got ${where}`
   if (expect.dropped && !block.dropped) return `expected a drop, got a kept ${where}`
   if (!expect.dropped && block.dropped) return `${where} was dropped (${block.dropped.detail})`
   if (isHandsOffStep(step) && !block.summaryModel.startsWith('heuristic:')) {
@@ -104,7 +110,7 @@ function alignBySpans(
     const sameContext = inSpan.filter(
       (b) =>
         appMatches(step.expect.app, { processName: b.appName }) &&
-        (!step.expect.tld || step.expect.tld === b.tld),
+        (!step.expect.tld || hostMatches(step.expect.tld, b.tld)),
     )
     const best = (sameContext.length > 0 ? sameContext : inSpan).reduce<ReplayActivity | null>(
       (acc, b) => (acc && overlap(acc, start, end) >= overlap(b, start, end) ? acc : b),
