@@ -33,7 +33,7 @@ export interface InputRun<T extends string> {
 }
 
 export interface InteractionContext {
-  type: 'click' | 'keyboard' | 'scroll' | 'app_change' | 'title_change'
+  type: 'click' | 'keyboard' | 'scroll' | 'app_change'
   timestamp: number
   displayId?: number // Electron Display.id of the screen where the interaction occurred
 

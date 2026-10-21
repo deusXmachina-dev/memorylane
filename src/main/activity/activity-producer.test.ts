@@ -253,41 +253,6 @@ describe('ActivityProducer', () => {
     expect(activities).toHaveLength(1)
   })
 
-  it('takes the window title from a later title change, outside the interactions', async () => {
-    const { producer, frameStream, eventStream, activityStream } = createProducer()
-
-    const activities: Activity[] = []
-    subscriptions.push(
-      activityStream.subscribe({
-        startAt: { type: 'now' },
-        onRecord: (record) => activities.push(record.payload),
-      }),
-    )
-
-    await producer.start()
-    await frameStream.append(makeFrame(1_000, 0))
-    await eventStream.append(
-      makeWindow({
-        id: 'window-1',
-        startTimestamp: 900,
-        endTimestamp: 1_500,
-        closedBy: 'flush',
-        events: [
-          makeEvent(900, 'app_change', {
-            activeWindow: { title: 'I - Notepad', processName: 'Notepad' },
-          }),
-          makeEvent(1_200, 'title_change', {
-            activeWindow: { title: '*I ne - Notepad', processName: 'Notepad' },
-          }),
-        ],
-      }),
-    )
-    await producer.flush()
-
-    expect(activities[0].context.windowTitle).toBe('*I ne - Notepad')
-    expect(activities[0].interactions.map((event) => event.type)).toEqual(['app_change'])
-  })
-
   it('emits deterministic UUIDv5 ids for the same source window chunk', async () => {
     const runOnce = async (): Promise<string> => {
       const { producer, frameStream, eventStream, activityStream } = createProducer()

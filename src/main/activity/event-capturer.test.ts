@@ -93,6 +93,51 @@ describe('EventCapturer', () => {
     expect(windows).toHaveLength(2)
   })
 
+  it('retitles the window instead of splitting when typing retitles Notepad', async () => {
+    const notepad = (title: string, timestamp: number): InteractionContext =>
+      makeEvent({
+        type: 'app_change',
+        timestamp,
+        activeWindow: { processName: 'Notepad', windowId: '0x1', title },
+      })
+    capturer.handleEvent(notepad('I - Notepad', 1000))
+    capturer.handleEvent(makeEvent({ type: 'keyboard', timestamp: 1050 }))
+    capturer.handleEvent(notepad('I n - Notepad', 1100))
+    capturer.handleEvent(notepad('I ne - Notepad', 1150))
+    capturer.handleEvent(notepad('*I ne - Notepad', 1200))
+    capturer.handleEvent(notepad('other.txt - Notepad', 1300))
+    await flushAsyncAppends()
+    capturer.flush()
+    await flushAsyncAppends()
+
+    expect(windows.map((w) => w.events.map((e) => e.activeWindow?.title ?? e.type))).toEqual([
+      ['*I ne - Notepad', 'keyboard'],
+      ['other.txt - Notepad'],
+    ])
+  })
+
+  it('splits on title insertions in other apps', async () => {
+    capturer.handleEvent(
+      makeEvent({
+        type: 'app_change',
+        timestamp: 1000,
+        activeWindow: { processName: 'Slack', title: 'Slack' },
+      }),
+    )
+    capturer.handleEvent(
+      makeEvent({
+        type: 'app_change',
+        timestamp: 1100,
+        activeWindow: { processName: 'Slack', title: '(3) Slack' },
+      }),
+    )
+    await flushAsyncAppends()
+    capturer.flush()
+    await flushAsyncAppends()
+
+    expect(windows).toHaveLength(2)
+  })
+
   it('emits with flush when flush() is called', async () => {
     capturer.handleEvent(makeEvent({ type: 'click', timestamp: 2000 }))
     capturer.flush()

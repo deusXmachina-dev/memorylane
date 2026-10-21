@@ -3,6 +3,7 @@ import { EVENT_CAPTURER_CONFIG } from '@constants'
 import { EventWindow, InteractionContext } from '@/shared/types'
 import log from '@main/utils/logger'
 import type { DurableStream } from '@main/streams/stream'
+import { isTypedTitleEdit } from './typed-title'
 
 interface PendingWindow {
   id: string
@@ -58,6 +59,7 @@ export class EventCapturer {
         this.awayContext = event
         return
       }
+      if (this.retitleCurrentWindow(event)) return
       if (this.currentWindow !== null) {
         this.closeWindow('app_change', {
           boundaryTimestamp: event.timestamp,
@@ -74,6 +76,16 @@ export class EventCapturer {
 
     this.away = false
     this.currentWindow.events.push(event)
+  }
+
+  private retitleCurrentWindow(event: InteractionContext): boolean {
+    if (this.currentWindow === null || !event.activeWindow) return false
+    const events = this.currentWindow.events
+    const index = events.findLastIndex((e) => e.type === 'app_change')
+    const current = events[index]?.activeWindow
+    if (!current || !isTypedTitleEdit(current, event.activeWindow)) return false
+    events[index] = { ...events[index], activeWindow: event.activeWindow }
+    return true
   }
 
   closeIdle(lastInputAt: number): void {

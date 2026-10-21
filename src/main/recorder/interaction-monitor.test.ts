@@ -54,7 +54,7 @@ function wheel(rotation = 1): void {
   handlers['wheel']?.({ rotation, direction: 3, x: 0, y: 0 })
 }
 
-function key(keycode = 16, mods: { metaKey?: boolean; ctrlKey?: boolean } = {}): void {
+function key(keycode = 16, mods: { metaKey?: boolean } = {}): void {
   handlers['keydown']?.({
     keycode,
     metaKey: false,
@@ -65,8 +65,8 @@ function key(keycode = 16, mods: { metaKey?: boolean; ctrlKey?: boolean } = {}):
   })
 }
 
-function appChange(app: string, title: string, timestamp: number, windowId?: string): void {
-  appWatcher.listener?.({ type: 'app_change', app, title, timestamp, windowId })
+function appChange(app: string, title: string, timestamp: number): void {
+  appWatcher.listener?.({ type: 'app_change', app, title, timestamp })
 }
 
 describe('interaction-monitor session emission', () => {
@@ -284,75 +284,6 @@ describe('interaction-monitor session emission', () => {
       ['Browser', 'Fix login · PR #261'],
       ['Browser', 'Fix login · PR #262'],
       ['Editor', 'Fix login · PR #262'],
-    ])
-  })
-
-  it('treats typing into a title (Notepad) as the same window, without cutting the session', () => {
-    appChange('Notepad', 'Untitled - Notepad', 0, '0x1')
-    appChange('Notepad', 'I - Notepad', 500, '0x1')
-    vi.advanceTimersByTime(1000) // now = 1000
-    key()
-    appChange('Notepad', 'I n - Notepad', 1100, '0x1')
-    key()
-    appChange('Notepad', 'I ne - Notepad', 1200, '0x1')
-    appChange('Notepad', '*I ne - Notepad', 1300, '0x1')
-    appChange('Notepad', '*I n - Notepad', 1400, '0x1')
-
-    expect(emitted.map((c) => [c.type, c.activeWindow?.title])).toEqual([
-      ['app_change', 'Untitled - Notepad'],
-      ['app_change', 'I - Notepad'],
-      ['title_change', 'I n - Notepad'],
-      ['title_change', 'I ne - Notepad'],
-      ['title_change', '*I ne - Notepad'],
-      ['title_change', '*I n - Notepad'],
-    ])
-
-    vi.advanceTimersByTime(INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS)
-    const keyboard = emitted[6]
-    expect(keyboard.type).toBe('keyboard')
-    expect(keyboard.keyCount).toBe(2)
-    expect(keyboard.windowTitle).toBe('*I n - Notepad')
-  })
-
-  it('splits title insertions without recent plain typing in the same window', () => {
-    appChange('Terminal', '~ — zsh', 0)
-    key()
-    appChange('Terminal', '~/repo — zsh', 100)
-    vi.advanceTimersByTime(2000)
-    appChange('Slack', 'Slack', 200, '0x2')
-    appChange('Slack', '(3) Slack', 300, '0x2')
-    key(16, { ctrlKey: true })
-    appChange('Code', 'a.ts - Code', 400, '0x3')
-    appChange('Code', 'a.test.ts - Code', 500, '0x3')
-    vi.advanceTimersByTime(2000)
-    key()
-    vi.advanceTimersByTime(2000)
-    appChange('Code', 'a.test.tsx - Code', 600, '0x3')
-
-    expect(
-      emitted.filter((c) => c.type === 'app_change').map((c) => c.activeWindow?.title),
-    ).toEqual([
-      '~ — zsh',
-      '~/repo — zsh',
-      'Slack',
-      '(3) Slack',
-      'a.ts - Code',
-      'a.test.ts - Code',
-      'a.test.tsx - Code',
-    ])
-  })
-
-  it('still splits on title replacements in the same window', () => {
-    appChange('Code', 'a.ts - repo - Visual Studio Code', 0)
-    appChange('Code', 'b.ts - repo - Visual Studio Code', 1000)
-    appChange('Slack', '(3) Slack', 2000)
-    appChange('Slack', '(4) Slack', 3000)
-
-    expect(emitted.map((c) => c.activeWindow?.title)).toEqual([
-      'a.ts - repo - Visual Studio Code',
-      'b.ts - repo - Visual Studio Code',
-      '(3) Slack',
-      '(4) Slack',
     ])
   })
 })

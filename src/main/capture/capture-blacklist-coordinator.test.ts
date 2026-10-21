@@ -323,31 +323,6 @@ describe('capture blacklist coordinator', () => {
     expect(forwarded).toHaveLength(0)
   })
 
-  it('blocks when a title change in the same window shows a login screen', () => {
-    const forwarded: InteractionContext[] = []
-    const suppressionTransitions: boolean[] = []
-
-    const coordinator = createCaptureBlacklistCoordinator({
-      initialExcludedApps: [],
-      forwardInteraction: (event) => forwarded.push(event),
-      flushEvents: () => undefined,
-      setScreenshotsSuppressed: (suppressed) => {
-        suppressionTransitions.push(suppressed)
-      },
-    })
-
-    const slack = appChangeEvent('Slack', { windowId: '0x2', title: 'Slack' })
-    coordinator.handleInteraction(slack)
-    coordinator.handleInteraction({
-      ...appChangeEvent('Slack', { windowId: '0x2', title: 'Sign in - Slack' }),
-      type: 'title_change',
-    })
-    coordinator.handleInteraction({ type: 'keyboard', timestamp: Date.now(), keyCount: 4 })
-
-    expect(suppressionTransitions).toEqual([true])
-    expect(forwarded).toEqual([slack])
-  })
-
   it('resumes after navigating from a login screen to a post-auth url in the same window', () => {
     const forwarded: InteractionContext[] = []
     const suppressionTransitions: boolean[] = []

@@ -272,10 +272,7 @@ export class ActivityProducer {
       )
       if (frameSlice.length > 0) {
         const interactionSlice = window.events.filter(
-          (event) =>
-            event.type !== 'title_change' &&
-            event.timestamp >= chunkStart &&
-            event.timestamp <= chunkEnd,
+          (event) => event.timestamp >= chunkStart && event.timestamp <= chunkEnd,
         )
         chunks.push({
           eventOffset: eventWindowRecord.offset,

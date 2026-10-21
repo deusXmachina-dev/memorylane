@@ -3,7 +3,6 @@ import { uIOhook, UiohookKeyboardEvent, UiohookMouseEvent, UiohookWheelEvent } f
 import { INTERACTION_MONITOR_CONFIG } from '@constants'
 import { ClickClass, InputRun, InteractionContext, KeyClass } from '@types'
 import { appendClick, appendRun, classifyClick, classifyKey } from '@main/recorder/input-sequence'
-import { isIncrementalTitleEdit, normalizeTitle } from '@main/recorder/window-title'
 import { addAppWatcherListener, AppWatcherEvent } from './app-watcher'
 import { resolveAppWatcherDisplay } from './app-watcher-display'
 import { isSelfApp } from '@main/capture/capture-exclusions'
@@ -26,10 +25,6 @@ let cachedWindowTitle: string | null = null
 let appWatcherUnsubscribe: (() => void) | null = null
 
 let ignoreSelfFocus = false
-
-let lastTextKeyAt = Number.NEGATIVE_INFINITY
-
-const TITLE_EDIT_TYPING_WINDOW_MS = 1500
 
 /**
  * Resolve which Electron Display contains the given global coordinate.
@@ -273,10 +268,7 @@ function handleKeyboard(event: UiohookKeyboardEvent): void {
   }
 
   const keyClass = classifyKey(event)
-  const now = Date.now()
-  const shortcut = event.metaKey || event.ctrlKey !== event.altKey
-  if ((keyClass === 'type' || keyClass === 'delete') && !shortcut) lastTextKeyAt = now
-  typingSession.record(now, (accumulation) => {
+  typingSession.record(Date.now(), (accumulation) => {
     accumulation.keyCount++
     if (keyClass) appendRun(accumulation.keySequence, keyClass)
   })
@@ -296,6 +288,13 @@ function handleScroll(event: UiohookWheelEvent): void {
     accumulation.eventCount++
     accumulation.direction = event.direction === 3 ? 'vertical' : 'horizontal' // WheelDirection.VERTICAL = 3
   })
+}
+
+function normalizeTitle(title: string): string {
+  return title
+    .replace(/[\p{So}\p{Sk}️‍]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 /**
@@ -346,30 +345,6 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
     log.debug(
       `[Interaction Monitor] Skipping duplicate: ${current.processName} "${current.title}" url=${current.url} (prevUrl=${previousWindow.url})`,
     )
-    return
-  }
-
-  // Same window whose title is being typed into: report the new title without
-  // starting a new window or cutting the typing session.
-  if (
-    previousWindow &&
-    current.windowId &&
-    previousWindow.windowId === current.windowId &&
-    previousWindow.processName === current.processName &&
-    previousWindow.url === current.url &&
-    previousWindowDisplayId === resolvedDisplayId &&
-    Date.now() - lastTextKeyAt <= TITLE_EDIT_TYPING_WINDOW_MS &&
-    isIncrementalTitleEdit(normalizeTitle(previousWindow.title), normalizeTitle(current.title))
-  ) {
-    log.debug(`[Interaction Monitor] Title edited in place: "${current.title}"`)
-    previousWindow = current
-    cachedWindowTitle = current.title
-    notifyInteraction({
-      type: 'title_change',
-      timestamp: event.timestamp,
-      displayId: resolvedDisplayId,
-      activeWindow: current,
-    })
     return
   }
 
@@ -486,7 +461,6 @@ export function stopInteractionMonitoring(): void {
     previousWindowDisplayId = null
     cachedDisplayId = null
     cachedWindowTitle = null
-    lastTextKeyAt = Number.NEGATIVE_INFINITY
 
     // Stop the native app-watcher process (only our listener; others may still be attached)
     if (appWatcherUnsubscribe) {
