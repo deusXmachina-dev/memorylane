@@ -1,12 +1,15 @@
-# MemoryLane v1.5.13
+# MemoryLane v1.5.14-alpha.1
 
-Dock icon fix and more reliable eval recordings.
+Windows capture fixes: no more freeze on pause, fewer capture gaps.
 
 ## What's Changed
 
-- **Dock icon while the window is open**: on macOS, MemoryLane shows in the Dock while its main window is open and hides again when it closes (#310).
-- **Eval goldens keep every activity**: each pipeline activity stays in the golden; the step target goes to its longest block, and extra activities keep their live summary (#314).
-- **Recording guide no longer splits steps**: clicking the guide during a recording no longer counts as switching apps (#314).
+- **Pause no longer freezes the window on Windows**: frame cleanup no longer blocks the app when a file is briefly locked (#319).
+- **Faster resume**: capture no longer waits for frames that can't arrive while paused (#319).
+- **Current app is picked up right away**: capture and observation mode see the window already in front when they start, on the right monitor (#319).
+- **Google Maps URLs captured on Windows** (#319).
+- **Notepad typing stays one activity**: Windows 11 Notepad retitling an unsaved tab as you type no longer splits it per keystroke (#319).
+- **Eval recordings keep the first app** (#319).
 
 ## Known Issues & Limitations
 
@@ -24,4 +27,4 @@ Dock icon fix and more reliable eval recordings.
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.12...v1.5.13
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.13...v1.5.14-alpha.1
