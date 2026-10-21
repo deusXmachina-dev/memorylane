@@ -99,12 +99,7 @@ export function addAppWatcherListener(listener: Listener): () => void {
     queueMicrotask(() => {
       if (!listeners.has(listener)) return
       try {
-        listener({
-          ...current,
-          windowBounds: undefined,
-          displayId: undefined,
-          timestamp: Date.now(),
-        })
+        listener({ ...current, timestamp: Date.now() })
       } catch (error) {
         log.warn(`[AppWatcher] Listener threw:`, error)
       }

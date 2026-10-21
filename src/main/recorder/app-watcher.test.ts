@@ -217,8 +217,10 @@ describe('app-watcher backend selection and fan-out', () => {
     expect(late).toHaveBeenCalledTimes(1)
     expect(late.mock.calls[0][0]).toMatchObject({ type: 'app_change', app: 'claude' })
     expect(late.mock.calls[0][0].timestamp).toBeGreaterThanOrEqual(before)
-    expect(late.mock.calls[0][0].displayId).toBeUndefined()
-    expect(late.mock.calls[0][0].windowBounds).toBeUndefined()
+    expect(late.mock.calls[0][0]).toMatchObject({
+      displayId: 7,
+      windowBounds: { x: 0, y: 0, width: 800, height: 600 },
+    })
     expect(first).toHaveBeenCalledTimes(2)
   })
 
