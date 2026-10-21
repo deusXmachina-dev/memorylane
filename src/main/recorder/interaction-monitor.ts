@@ -3,6 +3,7 @@ import { uIOhook, UiohookKeyboardEvent, UiohookMouseEvent, UiohookWheelEvent } f
 import { INTERACTION_MONITOR_CONFIG } from '@constants'
 import { ClickClass, InputRun, InteractionContext, KeyClass } from '@types'
 import { appendClick, appendRun, classifyClick, classifyKey } from '@main/recorder/input-sequence'
+import { isIncrementalTitleEdit, normalizeTitle } from '@main/recorder/window-title'
 import { addAppWatcherListener, AppWatcherEvent } from './app-watcher'
 import { resolveAppWatcherDisplay } from './app-watcher-display'
 import { isSelfApp } from '@main/capture/capture-exclusions'
@@ -295,34 +296,6 @@ function handleScroll(event: UiohookWheelEvent): void {
     accumulation.eventCount++
     accumulation.direction = event.direction === 3 ? 'vertical' : 'horizontal' // WheelDirection.VERTICAL = 3
   })
-}
-
-function normalizeTitle(title: string): string {
-  return title
-    .replace(/[\p{So}\p{Sk}️‍]/gu, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-/**
- * True when `next` is `prev` with text inserted or deleted at one spot, the way
- * typing changes a title that mirrors document text (Windows 11 Notepad shows an
- * unsaved tab's first line). Replacements like `a.ts` -> `b.ts` or `(3)` -> `(4)`
- * are real changes.
- */
-function isIncrementalTitleEdit(prev: string, next: string): boolean {
-  if (!prev || !next || prev === next) return false
-  const shorter = Math.min(prev.length, next.length)
-  let prefix = 0
-  while (prefix < shorter && prev[prefix] === next[prefix]) prefix++
-  let suffix = 0
-  while (
-    suffix < shorter - prefix &&
-    prev[prev.length - 1 - suffix] === next[next.length - 1 - suffix]
-  ) {
-    suffix++
-  }
-  return prev.length === prefix + suffix || next.length === prefix + suffix
 }
 
 /**
