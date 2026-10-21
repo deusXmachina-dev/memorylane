@@ -20,17 +20,11 @@ export async function cleanupActivityFiles(
   activity: Activity,
   videoOutputDir: string,
 ): Promise<void> {
-  let deleted = 0
-
-  for (const activityFrame of activity.frames) {
-    if (await deleteFileIfPresent(activityFrame.frame.filepath, 'frame')) {
-      deleted++
-    }
-  }
-
-  if (await deleteFileIfPresent(`${videoOutputDir}/${activity.id}.mp4`, 'video')) {
-    deleted++
-  }
+  const results = await Promise.all([
+    ...activity.frames.map((f) => deleteFileIfPresent(f.frame.filepath, 'frame')),
+    deleteFileIfPresent(`${videoOutputDir}/${activity.id}.mp4`, 'video'),
+  ])
+  const deleted = results.filter(Boolean).length
 
   if (deleted > 0) {
     log.info(`[ActivityCleanup] Deleted ${deleted} file(s) for activity ${activity.id}`)
