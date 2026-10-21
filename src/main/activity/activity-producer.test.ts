@@ -253,7 +253,7 @@ describe('ActivityProducer', () => {
     expect(activities).toHaveLength(1)
   })
 
-  it('takes the window title from typing after the app change', async () => {
+  it('takes the window title from a later title change, outside the interactions', async () => {
     const { producer, frameStream, eventStream, activityStream } = createProducer()
 
     const activities: Activity[] = []
@@ -276,13 +276,16 @@ describe('ActivityProducer', () => {
           makeEvent(900, 'app_change', {
             activeWindow: { title: 'I - Notepad', processName: 'Notepad' },
           }),
-          makeEvent(1_200, 'keyboard', { windowTitle: '*I ne - Notepad' }),
+          makeEvent(1_200, 'title_change', {
+            activeWindow: { title: '*I ne - Notepad', processName: 'Notepad' },
+          }),
         ],
       }),
     )
     await producer.flush()
 
     expect(activities[0].context.windowTitle).toBe('*I ne - Notepad')
+    expect(activities[0].interactions.map((event) => event.type)).toEqual(['app_change'])
   })
 
   it('emits deterministic UUIDv5 ids for the same source window chunk', async () => {

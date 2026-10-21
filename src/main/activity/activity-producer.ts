@@ -272,7 +272,10 @@ export class ActivityProducer {
       )
       if (frameSlice.length > 0) {
         const interactionSlice = window.events.filter(
-          (event) => event.timestamp >= chunkStart && event.timestamp <= chunkEnd,
+          (event) =>
+            event.type !== 'title_change' &&
+            event.timestamp >= chunkStart &&
+            event.timestamp <= chunkEnd,
         )
         chunks.push({
           eventOffset: eventWindowRecord.offset,
@@ -519,18 +522,12 @@ export class ActivityProducer {
     const activeWindowEvent = recentEvents.find((event) => event.activeWindow)
     const latestDisplayId = recentEvents.find((event) => event.displayId !== undefined)?.displayId
     const latestWindowTitle = recentEvents.find((event) => event.windowTitle)?.windowTitle
-    const latestTitleIndex = recentEvents.findIndex((event) => event.windowTitle)
-    const typedSinceSwitch =
-      latestTitleIndex !== -1 &&
-      latestTitleIndex < recentEvents.findIndex((event) => event.activeWindow)
 
     if (activeWindowEvent?.activeWindow) {
       const context: ActivityContext = {
         appName: activeWindowEvent.activeWindow.processName,
         bundleId: activeWindowEvent.activeWindow.bundleId,
-        windowTitle: typedSinceSwitch
-          ? latestWindowTitle
-          : (activeWindowEvent.activeWindow.title ?? latestWindowTitle),
+        windowTitle: activeWindowEvent.activeWindow.title ?? latestWindowTitle,
         url: activeWindowEvent.activeWindow.url,
         tld: extractTld(activeWindowEvent.activeWindow.url) ?? undefined,
         displayId: latestDisplayId ?? undefined,

@@ -6,7 +6,6 @@ import { appendClick, appendRun, classifyClick, classifyKey } from '@main/record
 import { addAppWatcherListener, AppWatcherEvent } from './app-watcher'
 import { resolveAppWatcherDisplay } from './app-watcher-display'
 import { isSelfApp } from '@main/capture/capture-exclusions'
-import { getLoginScreenMatch } from '@main/capture/capture-login-gate'
 import log from '@main/utils/logger'
 
 // State
@@ -377,7 +376,7 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
     return
   }
 
-  // Same window whose title is being typed into: track the new title without
+  // Same window whose title is being typed into: report the new title without
   // starting a new window or cutting the typing session.
   if (
     previousWindow &&
@@ -387,12 +386,17 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
     previousWindow.url === current.url &&
     previousWindowDisplayId === resolvedDisplayId &&
     Date.now() - lastTextKeyAt <= TITLE_EDIT_TYPING_WINDOW_MS &&
-    getLoginScreenMatch(current) === null &&
     isIncrementalTitleEdit(normalizeTitle(previousWindow.title), normalizeTitle(current.title))
   ) {
     log.debug(`[Interaction Monitor] Title edited in place: "${current.title}"`)
-    previousWindow = { ...previousWindow, title: current.title }
+    previousWindow = current
     cachedWindowTitle = current.title
+    notifyInteraction({
+      type: 'title_change',
+      timestamp: event.timestamp,
+      displayId: resolvedDisplayId,
+      activeWindow: current,
+    })
     return
   }
 

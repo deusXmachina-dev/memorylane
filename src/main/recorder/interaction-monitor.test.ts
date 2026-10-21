@@ -301,10 +301,14 @@ describe('interaction-monitor session emission', () => {
     expect(emitted.map((c) => [c.type, c.activeWindow?.title])).toEqual([
       ['app_change', 'Untitled - Notepad'],
       ['app_change', 'I - Notepad'],
+      ['title_change', 'I n - Notepad'],
+      ['title_change', 'I ne - Notepad'],
+      ['title_change', '*I ne - Notepad'],
+      ['title_change', '*I n - Notepad'],
     ])
 
     vi.advanceTimersByTime(INTERACTION_MONITOR_CONFIG.TYPING_DEBOUNCE_MS)
-    const keyboard = emitted[2]
+    const keyboard = emitted[6]
     expect(keyboard.type).toBe('keyboard')
     expect(keyboard.keyCount).toBe(2)
     expect(keyboard.windowTitle).toBe('*I n - Notepad')
@@ -336,16 +340,6 @@ describe('interaction-monitor session emission', () => {
       'a.test.ts - Code',
       'a.test.tsx - Code',
     ])
-  })
-
-  it('lets a login title through as an app change even while typing', () => {
-    appChange('Slack', 'Slack', 0, '0x2')
-    key()
-    appChange('Slack', 'Sign in - Slack', 100, '0x2')
-
-    expect(
-      emitted.filter((c) => c.type === 'app_change').map((c) => c.activeWindow?.title),
-    ).toEqual(['Slack', 'Sign in - Slack'])
   })
 
   it('still splits on title replacements in the same window', () => {

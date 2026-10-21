@@ -176,9 +176,9 @@ export function createCaptureBlacklistCoordinator(params: {
 
   return {
     handleInteraction(event: InteractionContext): void {
-      if (event.type === 'app_change') {
+      if (event.type === 'app_change' || event.type === 'title_change') {
         lastActiveWindow = event.activeWindow
-        if (!reconcileBlockingState('app_change', event.activeWindow, event.timestamp)) {
+        if (!reconcileBlockingState(event.type, event.activeWindow, event.timestamp)) {
           return
         }
 
