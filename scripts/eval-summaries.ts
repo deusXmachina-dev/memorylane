@@ -38,7 +38,11 @@ import * as path from 'path'
 import { execFileSync } from 'child_process'
 import { VENDOR_PRESETS } from '../src/shared/vendor-defaults'
 import type { SemanticPipelinePreference } from '../src/main/semantic/activity-semantic-service'
-import { mustMentionRecall, scoreDeterministic } from '../src/main/eval/deterministic'
+import {
+  mustMentionRecall,
+  scoreDeterministic,
+  unexpectedRedactions,
+} from '../src/main/eval/deterministic'
 import { judgeEquivalence } from '../src/main/eval/judge'
 import { priceUsd, sumCosts } from '../src/main/eval/cost'
 import { renderMarkdown, writeReport } from '../src/main/eval/report'
@@ -405,6 +409,7 @@ async function scoreActivities(params: {
         equivalence,
         mustMentionRecall: mention?.recall ?? null,
         mustMentionMissed: mention?.missed ?? [],
+        unexpectedRedactions: unexpectedRedactions(act.summary, matched.golden.summary),
       }
     }
 

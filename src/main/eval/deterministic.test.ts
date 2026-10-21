@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { scoreDeterministic, RAW_INTERACTION_RE, META_OPENER_RE } from './deterministic'
+import {
+  scoreDeterministic,
+  unexpectedRedactions,
+  RAW_INTERACTION_RE,
+  META_OPENER_RE,
+} from './deterministic'
 
 function check(summary: string, id: string) {
   return scoreDeterministic(summary).checks.find((c) => c.id === id)!
@@ -77,5 +82,25 @@ describe('scoreDeterministic', () => {
     expect(RAW_INTERACTION_RE.test('typescript')).toBe(false)
     expect(META_OPENER_RE.test('During this session')).toBe(true)
     expect(META_OPENER_RE.test('Reviewed the user guide')).toBe(false)
+  })
+})
+
+describe('unexpectedRedactions', () => {
+  it('flags a redaction slot the golden does not contain', () => {
+    expect(
+      unexpectedRedactions(
+        'Saved a screenshot containing a [payment card] area to the Desktop.',
+        'Circled the castle in Paint and saved it as castle.png.',
+      ),
+    ).toEqual(['[payment card]'])
+  })
+
+  it('allows slots the golden expects, with or without the redacted prefix', () => {
+    expect(
+      unexpectedRedactions(
+        'Paid invoice with [redacted payment card] and logged [phone number].',
+        'Paid the invoice with [payment card] and logged [phone number].',
+      ),
+    ).toEqual([])
   })
 })

@@ -10,6 +10,7 @@ function golden(index: number, over: Partial<GoldenMatch> = {}): GoldenMatch {
     equivalence: null,
     mustMentionRecall: null,
     mustMentionMissed: [],
+    unexpectedRedactions: [],
     ...over,
   }
 }

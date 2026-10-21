@@ -182,6 +182,19 @@ function finalize(checks: DeterministicCheck[]): DeterministicResult {
   }
 }
 
+const REDACTION_RE =
+  /\[(?:redacted )?(?:password|secret|tax file number|medicare number|ird number|nhi number|bank account|payment card|id number|phone number|date of birth|employee id)\]/gi
+
+const redactionKey = (token: string): string => token.toLowerCase().replace('[redacted ', '[')
+
+/** Redaction slots in the summary that the golden doesn't contain (scrubber false positives). */
+export function unexpectedRedactions(summary: string, golden: string): string[] {
+  const allowed = new Set((golden.match(REDACTION_RE) ?? []).map(redactionKey))
+  return [...new Set(summary.match(REDACTION_RE) ?? [])].filter(
+    (t) => !allowed.has(redactionKey(t)),
+  )
+}
+
 /** Share of `facts` the summary contains (case-insensitive), plus the ones it missed. */
 export function mustMentionRecall(
   summary: string,

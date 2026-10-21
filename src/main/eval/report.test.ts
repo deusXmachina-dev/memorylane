@@ -177,6 +177,7 @@ describe('renderMarkdown', () => {
                   equivalence: 0.82,
                   mustMentionRecall: null,
                   mustMentionMissed: [],
+                  unexpectedRedactions: [],
                 },
               }),
             ],
@@ -220,6 +221,7 @@ describe('renderComparisonMarkdown', () => {
                   equivalence: 0.8,
                   mustMentionRecall: null,
                   mustMentionMissed: [],
+                  unexpectedRedactions: [],
                 },
               }),
             ],
@@ -239,6 +241,7 @@ describe('renderComparisonMarkdown', () => {
       overlapRatio: 0.9,
       mustMentionRecall: null,
       mustMentionMissed: [],
+      unexpectedRedactions: [],
     }
     const cmp = renderComparisonMarkdown(
       report({
@@ -320,6 +323,7 @@ describe('aggregate', () => {
     equivalence,
     mustMentionRecall,
     mustMentionMissed: [],
+    unexpectedRedactions: [],
   })
 
   it('weights equivalence by matched activities and sums hard fails and cost', () => {

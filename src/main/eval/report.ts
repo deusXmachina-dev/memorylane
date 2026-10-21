@@ -48,6 +48,7 @@ export interface Aggregate {
   matched: number
   equivalence: number | null
   mustMention: number | null
+  unexpectedRedactions: number
   hardFails: number
   detPassRate: number | null
   segCoverage: number | null
@@ -70,6 +71,7 @@ export function aggregate(fixtures: FixtureScore[]): Aggregate {
     mustMention: meanOrNull(
       matched.map((s) => s.golden!.mustMentionRecall).filter((n): n is number => n !== null),
     ),
+    unexpectedRedactions: matched.reduce((n, s) => n + s.golden!.unexpectedRedactions.length, 0),
     hardFails: det.reduce((n, d) => n + d.hardFails, 0),
     detPassRate: meanOrNull(det.map((d) => d.passRate)),
     segCoverage: meanOrNull(
@@ -102,7 +104,8 @@ export function renderMarkdown(report: EvalReport): string {
     const all = aggregate(report.fixtures)
     lines.push(
       `**Overall:** ${all.matched}/${all.activities} matched · equiv ${fmt(all.equivalence, 2)} · ` +
-        `mention ${pct(all.mustMention)} · ${all.hardFails} hard fails · ` +
+        `mention ${pct(all.mustMention)} · ${all.unexpectedRedactions} unexpected redactions · ` +
+        `${all.hardFails} hard fails · ` +
         `det ${pct(all.detPassRate)} · seg ${pct(all.segCoverage)} · ${usd(all.costUsd)}`,
     )
     lines.push('')
@@ -146,6 +149,9 @@ export function renderMarkdown(report: EvalReport): string {
         lines.push(`  - golden #${s.golden.index}: ${s.golden.summary || '_(empty)_'}`)
         if (s.golden.mustMentionMissed.length) {
           lines.push(`  - missing: ${s.golden.mustMentionMissed.join('; ')}`)
+        }
+        if (s.golden.unexpectedRedactions.length) {
+          lines.push(`  - unexpected redaction: ${s.golden.unexpectedRedactions.join('; ')}`)
         }
       }
       const failed = s.deterministic?.checks.filter((ch) => !ch.passed && ch.detail) ?? []
@@ -252,6 +258,9 @@ export function renderComparisonMarkdown(report: EvalReport): string | null {
         if (sum.deterministic?.hardFails) parts.push(`${sum.deterministic.hardFails} hard-fail(s)`)
         if (sum.golden?.mustMentionMissed.length) {
           parts.push(`missing ${sum.golden.mustMentionMissed.join('; ')}`)
+        }
+        if (sum.golden?.unexpectedRedactions.length) {
+          parts.push(`unexpected ${sum.golden.unexpectedRedactions.join('; ')}`)
         }
         // Note the model that actually ran if it differs from the requested one.
         const ran = sum.summaryModel && sum.summaryModel !== s.model ? ` → ${sum.summaryModel}` : ''

@@ -129,6 +129,8 @@ export interface GoldenMatch {
   /** Share of the golden's `mustMention` facts found in the candidate, or null when none. */
   mustMentionRecall: number | null
   mustMentionMissed: string[]
+  /** Redaction slots in the candidate that the golden doesn't contain. */
+  unexpectedRedactions: string[]
 }
 
 export interface ScoredSummary {
