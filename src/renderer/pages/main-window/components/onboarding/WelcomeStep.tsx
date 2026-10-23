@@ -8,11 +8,11 @@ interface WelcomeStepProps {
 const POINTS = [
   {
     title: 'Spots the busywork',
-    body: 'MemoryLane watches what you do and surfaces tasks worth automating — without you having to write anything down.',
+    body: 'MemoryLane watches what you do and surfaces tasks worth automating, without you having to write anything down.',
   },
   {
-    title: 'Stays on your device',
-    body: 'Captures and patterns live locally. Nothing leaves your machine unless you ship it somewhere yourself.',
+    title: 'Stored on your device',
+    body: 'Your history and patterns live locally. Screenshots are summarized by AI (zero data retention on our plan), then deleted.',
   },
   {
     title: 'Works with your AI assistant',
