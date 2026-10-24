@@ -174,7 +174,8 @@ export async function replayFixture(params: ReplayFixtureParams): Promise<Replay
   const diagnosticsById = new Map<string, SemanticRunDiagnostics | null>()
   if (getLastDiagnostics) {
     extractor.addPersistedListener(({ activity }) => {
-      diagnosticsById.set(activity.id, getLastDiagnostics())
+      const diagnostics = getLastDiagnostics()
+      diagnosticsById.set(activity.id, diagnostics?.activityId === activity.id ? diagnostics : null)
     })
   }
 

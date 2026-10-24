@@ -229,7 +229,6 @@ export class ActivitySemanticService implements SemanticServiceContract {
       'video',
       this.userContextGetter?.() ?? undefined,
     )
-    diagnostics.prompt = videoPrompt
 
     const shouldAttemptVideo = this.pipelinePreference !== 'image' && this.videoModels.length > 0
     const shouldAttemptSnapshots = this.pipelinePreference !== 'video'
@@ -252,6 +251,7 @@ export class ActivitySemanticService implements SemanticServiceContract {
           const videoAsset = videoLoad.asset
           diagnostics.videoSizeBytes = videoAsset.sizeBytes
           diagnostics.videoMimeType = videoAsset.mimeType
+          diagnostics.prompt = videoPrompt
 
           const videoResult = await trySemanticModelChain({
             requestTimeoutMs: this.requestTimeoutMs,

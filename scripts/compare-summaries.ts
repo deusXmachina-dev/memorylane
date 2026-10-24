@@ -62,18 +62,7 @@ function resolveRunDir(idOrPath: string): string {
 }
 
 function loadReport(runDir: string): EvalReport {
-  const raw = JSON.parse(fs.readFileSync(path.join(runDir, 'report.json'), 'utf8'))
-  return {
-    ...raw,
-    label: raw.label ?? null,
-    pipeline: raw.pipeline ?? null,
-    gitSha: raw.gitSha ?? null,
-    gitDirty: raw.gitDirty ?? null,
-    fixtures: raw.fixtures.map((f: EvalReport['fixtures'][number]) => ({
-      ...f,
-      summaries: f.summaries.map((s) => ({ ...s, diagnostics: s.diagnostics ?? null })),
-    })),
-  }
+  return JSON.parse(fs.readFileSync(path.join(runDir, 'report.json'), 'utf8'))
 }
 
 function loadArm(name: string, ids: string[]): Arm {

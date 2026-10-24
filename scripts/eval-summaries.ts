@@ -203,7 +203,7 @@ const mean = (xs: number[]): number => xs.reduce((x, y) => x + y, 0) / xs.length
 async function main() {
   const a = parseArgs()
   const gitSha = git('rev-parse', 'HEAD')
-  const dirty = git('status', '--porcelain', '--', 'src/main/semantic', 'src/shared')
+  const dirty = git('status', '--porcelain', '--', 'src', 'scripts')
   const fixtureDirs = resolveFixtureDirs(a)
   const handle = loadCliInferenceProvider({ vendorOverride: a.vendor ?? undefined })
   const presets = VENDOR_PRESETS[handle.vendor]

@@ -41,6 +41,8 @@ export interface FixtureComparison {
 
 const REVIEW_DELTA = 0.1
 
+const bigDelta = (d: number | null): boolean => d !== null && Math.abs(d) >= REVIEW_DELTA - 1e-9
+
 const meanOrNull = (xs: number[]): number | null =>
   xs.length ? xs.reduce((x, y) => x + y, 0) / xs.length : null
 
@@ -164,12 +166,7 @@ export function compareArms(a: Arm, b: Arm): FixtureComparison[] {
 export function reviewFirst(fixtures: FixtureComparison[]): ActivityComparison[] {
   return fixtures
     .flatMap((f) => f.activities)
-    .filter(
-      (x) =>
-        x.hardFailChanged ||
-        x.mentionFlipped.length > 0 ||
-        (x.delta !== null && Math.abs(x.delta) >= REVIEW_DELTA),
-    )
+    .filter((x) => x.hardFailChanged || x.mentionFlipped.length > 0 || bigDelta(x.delta))
     .sort((x, y) => Math.abs(y.delta ?? 0) - Math.abs(x.delta ?? 0))
 }
 
@@ -306,7 +303,7 @@ export function renderCompareMarkdown(a: Arm, b: Arm, fixtures: FixtureCompariso
   if (flagged.length === 0) lines.push('(nothing flagged)')
   for (const x of flagged) {
     const why: string[] = []
-    if (x.delta !== null && Math.abs(x.delta) >= REVIEW_DELTA) {
+    if (bigDelta(x.delta)) {
       why.push(`equiv ${fmt(x.equivA)} → ${fmt(x.equivB)} (${deltaNum(x.equivA, x.equivB)})`)
     }
     if (x.hardFailChanged)
