@@ -6,7 +6,7 @@ function diagnostics(overrides: Partial<SemanticRunDiagnostics>): SemanticRunDia
   return {
     activityId: 'a1',
     pipelinePreference: 'auto',
-    promptChars: 0,
+    prompt: '',
     chosenMode: null,
     chosenModel: null,
     fallbackReason: null,

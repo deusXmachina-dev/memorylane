@@ -47,6 +47,7 @@
     "mine-tasks": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/mine-tasks.ts",
     "build-user-context": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/build-user-context.ts",
     "eval-summaries": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/eval-summaries.ts",
+    "compare-summaries": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/compare-summaries.ts",
     "eval-tasks": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/eval-tasks.ts",
     "eval-cluster-review": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/eval-cluster-review.ts",
     "dump-review-input": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/dump-review-input.ts",

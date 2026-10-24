@@ -2,6 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { formatOffset } from './golden-md'
 import { num as fmt, pct, usd, cell } from './format'
+import { sumCosts } from './cost'
 import type { EvalReport, FixtureScore, ScoredSummary } from './types'
 
 /** Renders an EvalReport into a findings-style Markdown scorecard + raw JSON. */
@@ -13,7 +14,7 @@ import type { EvalReport, FixtureScore, ScoredSummary } from './types'
  * to the next video-capable model), show `requested → actual` so the row isn't
  * silently attributed to a model that never ran.
  */
-function modelLabel(f: FixtureScore): string {
+export function modelLabel(f: FixtureScore): string {
   const requested = f.model || '-'
   const actual = [...new Set(f.summaries.map((s) => s.summaryModel).filter(Boolean))]
   if (actual.length === 0 || (actual.length === 1 && actual[0] === f.model)) return requested
@@ -24,13 +25,64 @@ export function renderJson(report: EvalReport): string {
   return JSON.stringify(report, null, 2)
 }
 
-export function renderMarkdown(report: EvalReport): string {
-  const lines: string[] = []
-  lines.push(`# Activity-Summary Eval — ${report.generatedAt}`)
-  lines.push('')
+export function gitLabel(report: Pick<EvalReport, 'gitSha' | 'gitDirty'>): string {
+  if (!report.gitSha) return '(unknown)'
+  return report.gitSha.slice(0, 10) + (report.gitDirty ? ' (dirty)' : '')
+}
+
+export function renderHeader(report: EvalReport, title: string): string[] {
+  const models = [...new Set(report.fixtures.map((f) => f.model || '-'))]
+  const lines = [`# ${title} — ${report.generatedAt}`, '']
+  if (report.label) lines.push(`- Label: ${report.label}`)
+  lines.push(`- Pipeline: ${report.pipeline ?? '(unknown)'}`)
+  lines.push(`- Git: ${gitLabel(report)}`)
   lines.push(`- Vendor: ${report.vendor}`)
+  lines.push(`- Models: ${models.join(', ')}`)
   lines.push(`- Judge: ${report.judgeModel ?? '(none — deterministic only)'}`)
   lines.push('')
+  return lines
+}
+
+export interface Aggregate {
+  activities: number
+  matched: number
+  equivalence: number | null
+  mustMention: number | null
+  unexpectedRedactions: number
+  hardFails: number
+  detPassRate: number | null
+  segCoverage: number | null
+  costUsd: number | null
+}
+
+const meanOrNull = (xs: number[]): number | null =>
+  xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null
+
+export function aggregate(fixtures: FixtureScore[]): Aggregate {
+  const summaries = fixtures.flatMap((f) => f.summaries)
+  const matched = summaries.filter((s) => s.golden)
+  const det = summaries.map((s) => s.deterministic).filter((d) => d !== null)
+  return {
+    activities: summaries.length,
+    matched: matched.length,
+    equivalence: meanOrNull(
+      matched.map((s) => s.golden!.equivalence).filter((n): n is number => n !== null),
+    ),
+    mustMention: meanOrNull(
+      matched.map((s) => s.golden!.mustMentionRecall).filter((n): n is number => n !== null),
+    ),
+    unexpectedRedactions: matched.reduce((n, s) => n + s.golden!.unexpectedRedactions.length, 0),
+    hardFails: det.reduce((n, d) => n + d.hardFails, 0),
+    detPassRate: meanOrNull(det.map((d) => d.passRate)),
+    segCoverage: meanOrNull(
+      fixtures.map((f) => f.segmentation?.coverage).filter((n): n is number => n != null),
+    ),
+    costUsd: sumCosts(fixtures.map((f) => f.costUsd)),
+  }
+}
+
+export function renderMarkdown(report: EvalReport): string {
+  const lines: string[] = renderHeader(report, 'Activity-Summary Eval')
 
   // Scorecard
   lines.push('## Scorecard')
@@ -48,6 +100,16 @@ export function renderMarkdown(report: EvalReport): string {
     )
   }
   lines.push('')
+  if (report.fixtures.length > 1) {
+    const all = aggregate(report.fixtures)
+    lines.push(
+      `**Overall:** ${all.matched}/${all.activities} matched · equiv ${fmt(all.equivalence, 2)} · ` +
+        `mention ${pct(all.mustMention)} · ${all.unexpectedRedactions} unexpected redactions · ` +
+        `${all.hardFails} hard fails · ` +
+        `det ${pct(all.detPassRate)} · seg ${pct(all.segCoverage)} · ${usd(all.costUsd)}`,
+    )
+    lines.push('')
+  }
   if (report.fixtures.some((f) => f.costUsd != null)) {
     lines.push(
       '> Cost is the **summarizer** (production) spend per run. Eval-time judge cost is separate.',
@@ -88,6 +150,9 @@ export function renderMarkdown(report: EvalReport): string {
         if (s.golden.mustMentionMissed.length) {
           lines.push(`  - missing: ${s.golden.mustMentionMissed.join('; ')}`)
         }
+        if (s.golden.unexpectedRedactions.length) {
+          lines.push(`  - unexpected redaction: ${s.golden.unexpectedRedactions.join('; ')}`)
+        }
       }
       const failed = s.deterministic?.checks.filter((ch) => !ch.passed && ch.detail) ?? []
       if (failed.length) {
@@ -120,12 +185,7 @@ export function renderComparisonMarkdown(report: EvalReport): string | null {
   const hasGolden = report.fixtures.some((f) => f.summaries.some((s) => s.golden))
   if (!multiVariant && !hasGolden) return null
 
-  const lines: string[] = []
-  lines.push(`# Activity-Summary Comparison — ${report.generatedAt}`)
-  lines.push('')
-  lines.push(`- Vendor: ${report.vendor}`)
-  lines.push(`- Judge: ${report.judgeModel ?? '(none — deterministic only)'}`)
-  lines.push('')
+  const lines: string[] = renderHeader(report, 'Activity-Summary Comparison')
 
   for (const [fixture, scores] of byFixture) {
     lines.push(`## ${fixture}`)
@@ -199,6 +259,9 @@ export function renderComparisonMarkdown(report: EvalReport): string | null {
         if (sum.golden?.mustMentionMissed.length) {
           parts.push(`missing ${sum.golden.mustMentionMissed.join('; ')}`)
         }
+        if (sum.golden?.unexpectedRedactions.length) {
+          parts.push(`unexpected ${sum.golden.unexpectedRedactions.join('; ')}`)
+        }
         // Note the model that actually ran if it differs from the requested one.
         const ran = sum.summaryModel && sum.summaryModel !== s.model ? ` → ${sum.summaryModel}` : ''
         return `**${parts.join(' · ')}${ran}**<br>${cell(sum.summary || '_(empty)_')}`
@@ -211,23 +274,78 @@ export function renderComparisonMarkdown(report: EvalReport): string | null {
   return lines.join('\n')
 }
 
+export function mediaLine(s: ScoredSummary): string {
+  const d = s.diagnostics
+  if (d?.chosenMode === 'video') {
+    const parts = ['video']
+    if (d.videoSizeBytes != null) parts.push(`${(d.videoSizeBytes / 1048576).toFixed(1)} MB`)
+    if (d.videoMimeType) parts.push(d.videoMimeType)
+    return `[${parts.join(' ')}]`
+  }
+  if (d?.chosenMode === 'snapshot') {
+    const names = d.selectedSnapshotPaths.map((p) => path.basename(p))
+    return `[${names.length} snapshots: ${names.join(', ')}]`
+  }
+  return `[no LLM call — ${d?.fallbackReason || s.summaryModel || 'unknown'}]`
+}
+
+export function renderPromptsMarkdown(report: EvalReport): string {
+  const lines: string[] = renderHeader(report, 'Activity-Summary Prompts')
+  for (const f of report.fixtures) {
+    lines.push(`## ${f.fixture} | ${f.model || '-'}`)
+    lines.push('')
+    for (const s of f.summaries) {
+      const range = `${formatOffset(s.startOffsetMs)}–${formatOffset(s.endOffsetMs)}`
+      const title = s.windowTitle ? ` — ${s.windowTitle}` : ''
+      lines.push(`### [${range}] ${s.appName}${title}`)
+      lines.push('')
+      lines.push(mediaLine(s))
+      lines.push('')
+      if (s.diagnostics?.prompt) {
+        lines.push('~~~~')
+        lines.push(s.diagnostics.prompt.trimEnd())
+        lines.push('~~~~')
+        lines.push('')
+      }
+    }
+  }
+  return lines.join('\n')
+}
+
+export function runIdFor(report: Pick<EvalReport, 'generatedAt' | 'label'>): string {
+  const stamp = report.generatedAt.replace(/[:.]/g, '-')
+  const slug = report.label
+    ?.toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+  return slug ? `${stamp}-${slug}` : stamp
+}
+
 /**
  * Writes one run into its own timestamped folder under `resultsDir`:
- *   <resultsDir>/<run-id>/{report.json, report.md, comparison.md}
+ *   <resultsDir>/<run-id>/{report.json, report.md, comparison.md, prompts.md}
  * so each run's artifacts stay together instead of sharing a flat directory.
  */
 export function writeReport(
   resultsDir: string,
   report: EvalReport,
-): { runDir: string; jsonPath: string; mdPath: string; comparePath: string | null } {
-  const runId = report.generatedAt.replace(/[:.]/g, '-')
-  const runDir = path.join(resultsDir, runId)
+): {
+  runDir: string
+  jsonPath: string
+  mdPath: string
+  comparePath: string | null
+  promptsPath: string
+} {
+  const runDir = path.join(resultsDir, runIdFor(report))
   fs.mkdirSync(runDir, { recursive: true })
 
   const jsonPath = path.join(runDir, 'report.json')
   const mdPath = path.join(runDir, 'report.md')
+  const promptsPath = path.join(runDir, 'prompts.md')
   fs.writeFileSync(jsonPath, renderJson(report), 'utf8')
   fs.writeFileSync(mdPath, renderMarkdown(report), 'utf8')
+  fs.writeFileSync(promptsPath, renderPromptsMarkdown(report), 'utf8')
 
   const comparison = renderComparisonMarkdown(report)
   let comparePath: string | null = null
@@ -235,5 +353,5 @@ export function writeReport(
     comparePath = path.join(runDir, 'comparison.md')
     fs.writeFileSync(comparePath, comparison, 'utf8')
   }
-  return { runDir, jsonPath, mdPath, comparePath }
+  return { runDir, jsonPath, mdPath, comparePath, promptsPath }
 }

@@ -1,4 +1,4 @@
-import type { SemanticRunDiagnostics } from '@main/semantic/types'
+import type { SemanticRunDiagnostics, SemanticPipelinePreference } from '@main/semantic/types'
 import type { DroppedActivityReason } from '@main/activity/activity-types'
 import type { ActivityProducerStats } from '@main/activity/activity-producer'
 
@@ -129,6 +129,8 @@ export interface GoldenMatch {
   /** Share of the golden's `mustMention` facts found in the candidate, or null when none. */
   mustMentionRecall: number | null
   mustMentionMissed: string[]
+  /** Redaction slots in the candidate that the golden doesn't contain. */
+  unexpectedRedactions: string[]
 }
 
 export interface ScoredSummary {
@@ -152,6 +154,7 @@ export interface ScoredSummary {
   summaryCostUsd: number | null
   /** Eval-time equivalence-judge cost in USD, or null when unpriced. */
   judgeCostUsd: number | null
+  diagnostics: SemanticRunDiagnostics | null
 }
 
 /** How a replay's segmentation lined up with the golden.md blocks. */
@@ -202,7 +205,11 @@ export interface FixtureScore {
 
 export interface EvalReport {
   generatedAt: string
+  label: string | null
   vendor: string
+  pipeline: SemanticPipelinePreference | null
   judgeModel: string | null
+  gitSha: string | null
+  gitDirty: boolean | null
   fixtures: FixtureScore[]
 }
