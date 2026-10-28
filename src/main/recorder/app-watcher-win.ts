@@ -16,7 +16,9 @@ interface AppWatcherExecutable {
   readonly args: readonly string[]
 }
 
-function isAppWatcherEvent(value: unknown): value is AppWatcherEvent {
+type NativeAppWatcherEvent = AppWatcherEvent & { hwnd?: string }
+
+function isAppWatcherEvent(value: unknown): value is NativeAppWatcherEvent {
   if (typeof value !== 'object' || value === null) {
     return false
   }
@@ -131,8 +133,9 @@ function spawnWatcher(): void {
       log.debug('[AppWatcher:win] Ready event received — watcher is alive')
     }
 
+    const { hwnd, ...event } = parsed
     try {
-      onEvent?.(parsed)
+      onEvent?.(hwnd ? { ...event, windowId: hwnd } : event)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       log.error(`[AppWatcher:win] Event callback failed: ${message}`)

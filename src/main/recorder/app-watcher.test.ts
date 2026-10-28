@@ -178,6 +178,109 @@ describe('app-watcher backend selection and fan-out', () => {
     expect(stopMac).toHaveBeenCalledTimes(1)
   })
 
+  it('replays the current window to a listener that joins a running backend', async () => {
+    setPlatform('win32')
+    let capturedDispatch: ((event: unknown) => void) | null = null
+    vi.doMock('./app-watcher-mac', () => ({
+      startAppWatcherMac: vi.fn(),
+      stopAppWatcherMac: vi.fn(),
+      isAppWatcherRunningMac: vi.fn().mockReturnValue(false),
+    }))
+    vi.doMock('./app-watcher-win', () => ({
+      startAppWatcherWin: (cb: (event: unknown) => void) => {
+        capturedDispatch = cb
+      },
+      stopAppWatcherWin: vi.fn(),
+      isAppWatcherRunningWin: vi.fn().mockReturnValue(true),
+    }))
+    mockLogger()
+
+    const { addAppWatcherListener } = await import('./app-watcher')
+    const first = vi.fn()
+    addAppWatcherListener(first)
+    capturedDispatch!({ type: 'ready', timestamp: 1 })
+    capturedDispatch!({
+      type: 'app_change',
+      timestamp: 2,
+      app: 'claude',
+      title: 'Claude',
+      displayId: 7,
+      windowBounds: { x: 0, y: 0, width: 800, height: 600 },
+    })
+
+    const late = vi.fn()
+    const before = Date.now()
+    addAppWatcherListener(late)
+    expect(late).not.toHaveBeenCalled()
+    await Promise.resolve()
+
+    expect(late).toHaveBeenCalledTimes(1)
+    expect(late.mock.calls[0][0]).toMatchObject({ type: 'app_change', app: 'claude' })
+    expect(late.mock.calls[0][0].timestamp).toBeGreaterThanOrEqual(before)
+    expect(late.mock.calls[0][0]).toMatchObject({
+      displayId: 7,
+      windowBounds: { x: 0, y: 0, width: 800, height: 600 },
+    })
+    expect(first).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not replay while the native watcher is down', async () => {
+    setPlatform('win32')
+    let capturedDispatch: ((event: unknown) => void) | null = null
+    const isRunning = vi.fn().mockReturnValue(true)
+    vi.doMock('./app-watcher-mac', () => ({
+      startAppWatcherMac: vi.fn(),
+      stopAppWatcherMac: vi.fn(),
+      isAppWatcherRunningMac: vi.fn().mockReturnValue(false),
+    }))
+    vi.doMock('./app-watcher-win', () => ({
+      startAppWatcherWin: (cb: (event: unknown) => void) => {
+        capturedDispatch = cb
+      },
+      stopAppWatcherWin: vi.fn(),
+      isAppWatcherRunningWin: isRunning,
+    }))
+    mockLogger()
+
+    const { addAppWatcherListener } = await import('./app-watcher')
+    addAppWatcherListener(vi.fn())
+    capturedDispatch!({ type: 'app_change', timestamp: 2, app: 'claude' })
+    isRunning.mockReturnValue(false)
+
+    const late = vi.fn()
+    addAppWatcherListener(late)
+    await Promise.resolve()
+    expect(late).not.toHaveBeenCalled()
+  })
+
+  it('does not replay a window from a previous backend run', async () => {
+    setPlatform('win32')
+    let capturedDispatch: ((event: unknown) => void) | null = null
+    vi.doMock('./app-watcher-mac', () => ({
+      startAppWatcherMac: vi.fn(),
+      stopAppWatcherMac: vi.fn(),
+      isAppWatcherRunningMac: vi.fn().mockReturnValue(false),
+    }))
+    vi.doMock('./app-watcher-win', () => ({
+      startAppWatcherWin: (cb: (event: unknown) => void) => {
+        capturedDispatch = cb
+      },
+      stopAppWatcherWin: vi.fn(),
+      isAppWatcherRunningWin: vi.fn().mockReturnValue(true),
+    }))
+    mockLogger()
+
+    const { addAppWatcherListener } = await import('./app-watcher')
+    const unsubscribe = addAppWatcherListener(vi.fn())
+    capturedDispatch!({ type: 'app_change', timestamp: 2, app: 'claude' })
+    unsubscribe()
+
+    const fresh = vi.fn()
+    addAppWatcherListener(fresh)
+    await Promise.resolve()
+    expect(fresh).not.toHaveBeenCalled()
+  })
+
   it('warns and no-ops on unsupported platforms', async () => {
     setPlatform('linux')
     const warn = vi.fn()

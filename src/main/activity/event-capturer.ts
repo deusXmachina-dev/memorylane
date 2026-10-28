@@ -1,8 +1,11 @@
 import { v4 as uuidv4 } from 'uuid'
 import { EVENT_CAPTURER_CONFIG } from '@constants'
-import { EventWindow, InteractionContext } from '@/shared/types'
+import { EventWindow, InteractionContext, KeyClass } from '@/shared/types'
 import log from '@main/utils/logger'
 import type { DurableStream } from '@main/streams/stream'
+import { isTypedTitleEdit } from './typed-title'
+
+const TEXT_EDIT_KEYS = new Set<KeyClass>(['type', 'enter', 'delete', 'paste', 'cut', 'undo'])
 
 interface PendingWindow {
   id: string
@@ -26,6 +29,7 @@ interface CloseWindowOptions {
 export class EventCapturer {
   private readonly eventStream: DurableStream<EventWindow>
   private readonly lateEventGraceMs: number
+  private readonly typedTitleMaxLagMs: number
 
   private appendChain: Promise<void> = Promise.resolve()
 
@@ -33,6 +37,7 @@ export class EventCapturer {
     id: string
     startTimestamp: number
     events: InteractionContext[]
+    retitledAt: number | null
   } | null = null
 
   /**
@@ -50,6 +55,7 @@ export class EventCapturer {
   constructor(eventStream: DurableStream<EventWindow>) {
     this.eventStream = eventStream
     this.lateEventGraceMs = EVENT_CAPTURER_CONFIG.LATE_EVENT_GRACE_MS ?? 0
+    this.typedTitleMaxLagMs = EVENT_CAPTURER_CONFIG.TYPED_TITLE_MAX_LAG_MS
   }
 
   handleEvent(event: InteractionContext): void {
@@ -58,6 +64,7 @@ export class EventCapturer {
         this.awayContext = event
         return
       }
+      if (this.retitleCurrentWindow(event)) return
       if (this.currentWindow !== null) {
         this.closeWindow('app_change', {
           boundaryTimestamp: event.timestamp,
@@ -74,6 +81,25 @@ export class EventCapturer {
 
     this.away = false
     this.currentWindow.events.push(event)
+  }
+
+  private retitleCurrentWindow(event: InteractionContext): boolean {
+    if (this.currentWindow === null || !event.activeWindow) return false
+    const events = this.currentWindow.events
+    const index = events.findLastIndex((e) => e.type === 'app_change')
+    const current = events[index]?.activeWindow
+    if (!current || !isTypedTitleEdit(current, event.activeWindow)) return false
+    if (!this.isTypingAt(event.timestamp)) return false
+    events[index] = { ...events[index], activeWindow: event.activeWindow }
+    this.currentWindow.retitledAt = event.timestamp
+    return true
+  }
+
+  private isTypingAt(timestamp: number): boolean {
+    const last = this.currentWindow?.events.at(-1)
+    if (last?.type !== 'keyboard') return false
+    if (timestamp - last.timestamp > this.typedTitleMaxLagMs) return false
+    return last.keySequence?.some((run) => TEXT_EDIT_KEYS.has(run.kind)) ?? false
   }
 
   closeIdle(lastInputAt: number): void {
@@ -147,8 +173,8 @@ export class EventCapturer {
       requestedBoundary !== undefined && Number.isFinite(requestedBoundary)
         ? requestedBoundary
         : Date.now()
-    const { startTimestamp, events } = this.currentWindow
-    const lastInputAt = options?.lastInputAt ?? boundaryTimestamp
+    const { startTimestamp, events, retitledAt } = this.currentWindow
+    const lastInputAt = Math.max(options?.lastInputAt ?? boundaryTimestamp, retitledAt ?? 0)
     if (events.length === 0 && lastInputAt <= startTimestamp) {
       this.currentWindow = null
       this.nextWindowStartTimestamp = null
@@ -177,7 +203,7 @@ export class EventCapturer {
 
   private openWindow(startTimestamp: number): NonNullable<EventCapturer['currentWindow']> {
     this.startMaxDurationTimer()
-    return { id: uuidv4(), startTimestamp, events: [] }
+    return { id: uuidv4(), startTimestamp, events: [], retitledAt: null }
   }
 
   private openWindowAt(timestamp: number): NonNullable<EventCapturer['currentWindow']> {

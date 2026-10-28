@@ -52,6 +52,7 @@ export class ActivityProducer {
   private readonly eventStream: DurableStream<EventWindow>
   private readonly activityStream: DurableStream<Activity>
   private config: ActivityProducerConfig
+  private readonly shouldWaitForFrames: () => boolean
 
   private frameSubscription: StreamSubscription | null = null
   private eventSubscription: StreamSubscription | null = null
@@ -76,10 +77,12 @@ export class ActivityProducer {
     eventStream: DurableStream<EventWindow>
     activityStream: DurableStream<Activity>
     config?: Partial<ActivityProducerConfig>
+    shouldWaitForFrames?: () => boolean
   }) {
     this.frameStream = params.frameStream
     this.eventStream = params.eventStream
     this.activityStream = params.activityStream
+    this.shouldWaitForFrames = params.shouldWaitForFrames ?? (() => true)
     this.config = {
       ...createDefaultActivityProducerConfig(),
       ...(params.config ?? {}),
@@ -556,7 +559,7 @@ export class ActivityProducer {
     const targetTimestamp = windowEndTimestamp + this.config.frameJoinGraceMs
     const deadline = Date.now() + this.config.maxFrameWaitMs
 
-    while (Date.now() < deadline) {
+    while (this.started && this.shouldWaitForFrames() && Date.now() < deadline) {
       if (this.latestFrameTimestamp >= targetTimestamp) return
       await sleep(20)
     }

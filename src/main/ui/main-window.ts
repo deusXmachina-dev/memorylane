@@ -274,17 +274,22 @@ async function startEvalRecording(scriptId: string | undefined): Promise<EvalRec
   }
   startingEvalRecording = true
   try {
-    await hideForRecording()
-    await showRecordingGuide()
+    deps.runtime.evalRecorder.arm(recordingName(scriptId), scriptId)
+    let status: EvalRecordingStatus
     try {
-      const status = deps.runtime.evalRecorder.start(recordingName(scriptId), scriptId)
-      deps?.runtime.requestUiRefresh()
-      return status
+      await hideForRecording()
+      status = deps.runtime.evalRecorder.beginCapture()
+      await showRecordingGuide()
     } catch (error) {
+      await deps.runtime.evalRecorder.cancel().catch((cancelError) => {
+        log.warn('[MainWindow] Failed to cancel eval recording:', cancelError)
+      })
       closeRecordingGuide()
       openMainWindow()
       throw error
     }
+    deps.runtime.requestUiRefresh()
+    return status
   } finally {
     startingEvalRecording = false
   }

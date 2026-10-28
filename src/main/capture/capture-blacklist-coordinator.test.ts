@@ -5,7 +5,7 @@ import { createCaptureBlacklistCoordinator } from './capture-blacklist-coordinat
 function appChangeEvent(
   appName: string,
   options?: {
-    hwnd?: string
+    windowId?: string
     title?: string
     bundleId?: string
     url?: string
@@ -16,7 +16,7 @@ function appChangeEvent(
     timestamp: Date.now(),
     activeWindow: {
       processName: appName,
-      hwnd: options?.hwnd,
+      windowId: options?.windowId,
       title: options?.title ?? `${appName} window`,
       bundleId: options?.bundleId,
       url: options?.url,
@@ -170,7 +170,7 @@ describe('capture blacklist coordinator', () => {
     expect(forwarded).toEqual([normalEdgeWindow])
   })
 
-  it('keeps anonymous suppression for the same windows hwnd after title/url changes', () => {
+  it('keeps anonymous suppression for the same window after title/url changes', () => {
     const forwarded: InteractionContext[] = []
     const suppressionTransitions: boolean[] = []
     let flushCount = 0
@@ -188,19 +188,19 @@ describe('capture blacklist coordinator', () => {
 
     coordinator.handleInteraction(
       appChangeEvent('chrome', {
-        hwnd: '0x6B0A0A',
+        windowId: '0x6B0A0A',
         title: 'New Incognito tab - Google Chrome',
       }),
     )
     coordinator.handleInteraction(
       appChangeEvent('chrome', {
-        hwnd: '0x6B0A0A',
+        windowId: '0x6B0A0A',
         title: 'Seznam - Google Chrome',
         url: 'https://seznam.cz',
       }),
     )
     const normalChromeWindow = appChangeEvent('chrome', {
-      hwnd: '0x10770',
+      windowId: '0x10770',
       title: 'MemoryLane docs - Google Chrome',
       url: 'https://trymemorylane.com',
     })
@@ -234,7 +234,7 @@ describe('capture blacklist coordinator', () => {
     expect(forwarded).toEqual([incognitoEdgeWindow])
   })
 
-  it('clears sticky anonymous hwnd suppression when private browsing exclusion is disabled', () => {
+  it('clears sticky anonymous window suppression when private browsing exclusion is disabled', () => {
     const forwarded: InteractionContext[] = []
     const suppressionTransitions: boolean[] = []
 
@@ -249,7 +249,7 @@ describe('capture blacklist coordinator', () => {
 
     coordinator.handleInteraction(
       appChangeEvent('chrome', {
-        hwnd: '0x6B0A0A',
+        windowId: '0x6B0A0A',
         title: 'New Incognito tab - Google Chrome',
       }),
     )
@@ -262,7 +262,7 @@ describe('capture blacklist coordinator', () => {
     })
 
     const sameWindowAfterDisable = appChangeEvent('chrome', {
-      hwnd: '0x6B0A0A',
+      windowId: '0x6B0A0A',
       title: 'Seznam - Google Chrome',
       url: 'https://seznam.cz',
     })
@@ -338,13 +338,13 @@ describe('capture blacklist coordinator', () => {
 
     coordinator.handleInteraction(
       appChangeEvent('Google Chrome', {
-        hwnd: '0x6B0A0A',
+        windowId: '0x6B0A0A',
         title: 'Sign in to GitHub',
         url: 'https://github.com/session/new',
       }),
     )
     const postAuthWindow = appChangeEvent('Google Chrome', {
-      hwnd: '0x6B0A0A',
+      windowId: '0x6B0A0A',
       title: 'Pull requests - GitHub',
       url: 'https://github.com/pulls',
     })

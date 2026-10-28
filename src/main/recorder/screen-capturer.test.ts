@@ -96,3 +96,33 @@ describe('ScreenCapturer.setDisplayId', () => {
     expect(mockBackend.send).toHaveBeenCalledWith({ displayId: 4 })
   })
 })
+
+describe('ScreenCapturer.stop', () => {
+  it('reports capturing until the backend has stopped', async () => {
+    let finishStop: () => void = () => {}
+    vi.mocked(mockBackend.stop).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishStop = resolve
+        }),
+    )
+    const capturer = new ScreenCapturer({ outputDir: '/tmp', stream: new InMemoryStream<Frame>() })
+    await capturer.start()
+    expect(capturer.capturing).toBe(true)
+
+    const stopped = capturer.stop()
+    expect(capturer.capturing).toBe(true)
+    finishStop()
+    await stopped
+    expect(capturer.capturing).toBe(false)
+  })
+
+  it('stops reporting capturing when the backend stop fails', async () => {
+    vi.mocked(mockBackend.stop).mockRejectedValueOnce(new Error('sidecar gone'))
+    const capturer = new ScreenCapturer({ outputDir: '/tmp', stream: new InMemoryStream<Frame>() })
+    await capturer.start()
+
+    await expect(capturer.stop()).rejects.toThrow('sidecar gone')
+    expect(capturer.capturing).toBe(false)
+  })
+})

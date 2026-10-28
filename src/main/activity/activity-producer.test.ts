@@ -114,6 +114,7 @@ describe('ActivityProducer', () => {
 
   function createProducer(
     params?: Partial<ConstructorParameters<typeof ActivityProducer>[0]['config']>,
+    shouldWaitForFrames?: () => boolean,
   ) {
     const frameStream = new InMemoryStream<Frame>()
     const eventStream = new InMemoryStream<EventWindow>()
@@ -132,6 +133,7 @@ describe('ActivityProducer', () => {
         frameConsumerId: 'test:frame',
         ...(params ?? {}),
       },
+      shouldWaitForFrames,
     })
     producers.push(producer)
     return { producer, frameStream, eventStream, activityStream }
@@ -179,6 +181,76 @@ describe('ActivityProducer', () => {
     expect(await eventStream.getLowestAvailableOffset()).toBe(eventOffset + 1)
     expect(await frameStream.getAck('test:frame')).toBe(1)
     expect(await frameStream.getLowestAvailableOffset()).toBe(2)
+  })
+
+  it('stop does not wait for frames that can no longer arrive', async () => {
+    const { producer, frameStream, eventStream, activityStream } = createProducer({
+      frameJoinGraceMs: 750,
+      maxFrameWaitMs: 5_000,
+    })
+
+    const activities: Activity[] = []
+    subscriptions.push(
+      activityStream.subscribe({
+        startAt: { type: 'now' },
+        onRecord: (record) => activities.push(record.payload),
+      }),
+    )
+
+    await producer.start()
+    await frameStream.append(makeFrame(1_000, 0))
+    await eventStream.append(
+      makeWindow({
+        id: 'window-1',
+        startTimestamp: 900,
+        endTimestamp: 1_500,
+        closedBy: 'flush',
+        events: [
+          makeEvent(900, 'app_change', { activeWindow: { title: 'Doc', processName: 'Notepad' } }),
+        ],
+      }),
+    )
+
+    const stoppedAt = Date.now()
+    await producer.stop()
+
+    expect(Date.now() - stoppedAt).toBeLessThan(1_000)
+    expect(activities).toHaveLength(1)
+  })
+
+  it('does not wait for frames while the pipeline is stopping', async () => {
+    const { producer, frameStream, eventStream, activityStream } = createProducer(
+      { frameJoinGraceMs: 750, maxFrameWaitMs: 5_000 },
+      () => false,
+    )
+
+    const activities: Activity[] = []
+    subscriptions.push(
+      activityStream.subscribe({
+        startAt: { type: 'now' },
+        onRecord: (record) => activities.push(record.payload),
+      }),
+    )
+
+    await producer.start()
+    await frameStream.append(makeFrame(1_000, 0))
+    await eventStream.append(
+      makeWindow({
+        id: 'window-1',
+        startTimestamp: 900,
+        endTimestamp: 1_500,
+        closedBy: 'flush',
+        events: [
+          makeEvent(900, 'app_change', { activeWindow: { title: 'Doc', processName: 'Notepad' } }),
+        ],
+      }),
+    )
+
+    const flushedAt = Date.now()
+    await producer.flush()
+
+    expect(Date.now() - flushedAt).toBeLessThan(1_000)
+    expect(activities).toHaveLength(1)
   })
 
   it('emits deterministic UUIDv5 ids for the same source window chunk', async () => {

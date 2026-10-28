@@ -6,7 +6,7 @@ export interface AppWatcherEvent {
   type: 'app_change' | 'window_change' | 'ready' | 'error'
   timestamp: number
   app?: string
-  hwnd?: string
+  windowId?: string
   bundleId?: string
   pid?: number
   title?: string
@@ -44,8 +44,12 @@ const PLATFORM_APP_WATCHER_BACKENDS: Partial<Record<NodeJS.Platform, AppWatcherB
 
 const listeners = new Set<Listener>()
 let backendStarted = false
+let lastWindowEvent: AppWatcherEvent | null = null
 
 function dispatch(event: AppWatcherEvent): void {
+  if (event.type === 'app_change' || event.type === 'window_change') {
+    lastWindowEvent = event
+  }
   for (const listener of listeners) {
     try {
       listener(event)
@@ -78,6 +82,7 @@ function maybeStopBackend(): void {
   const backend = PLATFORM_APP_WATCHER_BACKENDS[process.platform]
   backend?.stop()
   backendStarted = false
+  lastWindowEvent = null
 }
 
 export function addAppWatcherListener(listener: Listener): () => void {
@@ -85,6 +90,17 @@ export function addAppWatcherListener(listener: Listener): () => void {
   // leaked entry can't block a future clean restart.
   ensureBackendStarted()
   listeners.add(listener)
+  const current = isAppWatcherRunning() ? lastWindowEvent : null
+  if (current) {
+    queueMicrotask(() => {
+      if (!listeners.has(listener)) return
+      try {
+        listener({ ...current, timestamp: Date.now() })
+      } catch (error) {
+        log.warn(`[AppWatcher] Listener threw:`, error)
+      }
+    })
+  }
   return () => {
     if (!listeners.delete(listener)) return
     maybeStopBackend()
