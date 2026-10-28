@@ -214,15 +214,15 @@ export function AiModelsSection({
                   />
                 </div>
                 <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Capture sensitivity</p>
+                  <p className="text-xs font-medium text-muted-foreground">Summary screenshots</p>
                   <SliderRow
-                    label="Visual change sensitivity"
+                    label="Minimum change between screenshots"
                     value={form.visualThreshold}
                     min={1}
                     max={20}
                     step={1}
                     format={(v) =>
-                      `${v}% — ${v <= 5 ? 'more captures' : v >= 15 ? 'fewer captures' : 'balanced'}`
+                      `${v}% — ${v <= 5 ? 'more screenshots' : v >= 15 ? 'fewer screenshots' : 'balanced'}`
                     }
                     onChange={(v) => onSettingChange('visualThreshold', v)}
                     onCommit={(v) => onSettingCommit('visualThreshold', v)}
