@@ -24,15 +24,14 @@ export interface DatabaseUploadJobParams {
   backend: Pick<BackendClient, 'request'>
   getDbPath: () => string
   backupToFile: (destinationPath: string) => Promise<void>
-  hasActivitiesEndedAfter: (ts: number) => boolean
-  getLastSnapshotAt: () => number | null
-  recordSnapshotAt: (ts: number) => void
+  getLastUploadAt: () => number | null
+  recordUploadAt: (ts: number) => void
   prepareUpload?: PrepareUpload
 }
 
 export function databaseUploadJob(params: DatabaseUploadJobParams): UploadJob {
   const prepareUpload = params.prepareUpload ?? defaultPrepareUpload
-  let pending: { snapshot: boolean; count: number; more: boolean } | null = null
+  let pending: { count: number; more: boolean } | null = null
 
   async function fetchSyncState(): Promise<SyncState> {
     const response = await params.backend.request('api/device/sync-state', {
@@ -53,33 +52,31 @@ export function databaseUploadJob(params: DatabaseUploadJobParams): UploadJob {
   return {
     name: 'DatabaseUpload',
     endpoint: 'api/device/upload',
-    skipReason: () => null,
-    async produce(tempPath, force) {
-      const state = await fetchSyncState()
-      const lastSnapshotAt = params.getLastSnapshotAt()
-      const snapshotDue = force || lastSnapshotAt === null || !isSameDay(lastSnapshotAt, Date.now())
+    skipReason() {
+      const lastUploadAt = params.getLastUploadAt()
+      if (lastUploadAt !== null && isSameDay(lastUploadAt, Date.now())) {
+        return 'already uploaded today'
+      }
+      return null
+    },
+    async produce(tempPath) {
+      const { format, lastEndTs } = await fetchSyncState()
 
-      if (state.format === 'snapshot') {
-        if (!snapshotDue) return null
+      if (format === 'snapshot') {
         await params.backupToFile(tempPath)
         const { gzip, count } = await prepareUpload({ kind: 'snapshot', path: tempPath })
-        pending = { snapshot: true, count, more: false }
+        pending = { count, more: false }
         return fileForm(gzip, 'memorylane.db.gz')
       }
 
-      const { lastEndTs } = state
-      if (!snapshotDue && lastEndTs !== null && !params.hasActivitiesEndedAfter(lastEndTs)) {
-        return null
-      }
       const { gzip, count } = await prepareUpload({
         kind: 'slice',
         dbPath: params.getDbPath(),
         outPath: tempPath,
         sinceTs: lastEndTs === null ? 0 : lastEndTs - SLICE_OVERLAP_MS,
         pageSize: SLICE_PAGE_SIZE,
-        includeSnapshot: snapshotDue,
       })
-      pending = { snapshot: snapshotDue, count, more: count === SLICE_PAGE_SIZE }
+      pending = { count, more: count === SLICE_PAGE_SIZE }
 
       const form = new FormData()
       form.append('format', 'delta-v1')
@@ -90,10 +87,8 @@ export function databaseUploadJob(params: DatabaseUploadJobParams): UploadJob {
       const sent = pending
       pending = null
       if (sent === null) return false
-      if (sent.snapshot) params.recordSnapshotAt(Date.now())
-      log.info(
-        `[DatabaseUpload] sent ${sent.count} activities${sent.snapshot ? ' + snapshot' : ''}`,
-      )
+      if (!sent.more) params.recordUploadAt(Date.now())
+      log.info(`[DatabaseUpload] sent ${sent.count} activities`)
       return sent.more
     },
   }

@@ -49,13 +49,6 @@ export class ActivityRepository {
     insert()
   }
 
-  hasEndedAfter(ts: number): boolean {
-    return (
-      this.db.prepare('SELECT 1 FROM activities WHERE end_timestamp > ? LIMIT 1').get(ts) !==
-      undefined
-    )
-  }
-
   searchFTS(query: string, limit = 5, filters?: SearchFilters): ActivitySummary[] {
     if (this.getRowCount() === 0) return []
 
