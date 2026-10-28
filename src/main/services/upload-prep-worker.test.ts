@@ -53,7 +53,6 @@ describe('buildSliceSync', () => {
       outPath,
       sinceTs: 0,
       pageSize: 100,
-      includeSnapshot: false,
       ...req,
     })
     const unzipped = tempPath('unzipped')
@@ -72,10 +71,9 @@ describe('buildSliceSync', () => {
   }
 
   it('includes activities ending at or after sinceTs, with a fixed column list', () => {
-    const { slice, tables, activities } = build({ dbPath: makeDb([100, 200, 300]), sinceTs: 200 })
+    const { slice, activities } = build({ dbPath: makeDb([100, 200, 300]), sinceTs: 200 })
 
     expect(slice.count).toBe(2)
-    expect(tables).toEqual(['activities'])
     expect(activities.map((a) => a.end_timestamp)).toEqual([200, 300])
     expect(Object.keys(activities[0])).toEqual([
       'id',
@@ -97,9 +95,8 @@ describe('buildSliceSync', () => {
     expect(activities.map((a) => a.end_timestamp)).toEqual([100, 200])
   })
 
-  it('adds the snapshot tables only when requested', () => {
-    const dbPath = makeDb([100])
-    const { tables } = build({ dbPath, includeSnapshot: true })
+  it('adds the full snapshot tables', () => {
+    const { tables } = build({ dbPath: makeDb([100]) })
 
     expect(tables).toEqual([
       'activities',

@@ -9,7 +9,6 @@ export interface SliceRequest {
   outPath: string
   sinceTs: number
   pageSize: number
-  includeSnapshot: boolean
 }
 
 export interface SnapshotRequest {
@@ -55,10 +54,8 @@ export function buildSliceSync(req: SliceRequest): Slice {
       )
       .run(req.sinceTs, req.pageSize)
     count = (out.prepare('SELECT COUNT(*) AS n FROM main.activities').get() as { n: number }).n
-    if (req.includeSnapshot) {
-      for (const table of SNAPSHOT_TABLES) {
-        out.exec(`CREATE TABLE main.${table} AS SELECT * FROM src.${table}`)
-      }
+    for (const table of SNAPSHOT_TABLES) {
+      out.exec(`CREATE TABLE main.${table} AS SELECT * FROM src.${table}`)
     }
     out.exec('DETACH DATABASE src')
   } finally {

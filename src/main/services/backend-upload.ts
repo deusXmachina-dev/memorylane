@@ -28,7 +28,7 @@ export interface UploadJob {
   endpoint: string
   timeoutMs?: number
   skipReason(): string | null
-  produce(tempPath: string, force?: boolean): Promise<BodyInit | null>
+  produce(tempPath: string): Promise<BodyInit>
   onSuccess(response: Response): Promise<boolean | void>
 }
 
@@ -116,11 +116,7 @@ export class BackendUpload {
     try {
       for (let page = 1; page <= MAX_PAGES_PER_RUN; page++) {
         try {
-          const body = await this.job.produce(tempPath, force)
-          if (body === null) {
-            log.debug(`${tag} Nothing to upload (${reason})`)
-            return
-          }
+          const body = await this.job.produce(tempPath)
           const response = await this.backend.request(this.job.endpoint, {
             method: 'POST',
             body,

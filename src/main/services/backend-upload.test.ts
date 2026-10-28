@@ -32,7 +32,7 @@ function deferred() {
 
 type FakeJob = UploadJob & {
   skipReason: Mock<() => string | null>
-  produce: Mock<(tempPath: string, force?: boolean) => Promise<BodyInit | null>>
+  produce: Mock<(tempPath: string) => Promise<BodyInit>>
   onSuccess: Mock<(response: Response) => Promise<boolean | void>>
 }
 
@@ -141,19 +141,6 @@ describe('BackendUpload', () => {
     ).toBe(true)
   })
 
-  it('posts nothing when the job has nothing to upload', async () => {
-    const fetchMock = mockFetchResponse(200)
-    globalThis.fetch = fetchMock
-    const { upload, job } = makeUpload({}, { produce: vi.fn(async () => null) })
-
-    upload.kick('startup')
-    await upload.stop()
-
-    expect(job.produce).toHaveBeenCalledTimes(1)
-    expect(fetchMock).not.toHaveBeenCalled()
-    expect(job.onSuccess).not.toHaveBeenCalled()
-  })
-
   it('uploads further pages in the same run while the job asks for more', async () => {
     const fetchMock = mockFetchResponse(200)
     globalThis.fetch = fetchMock
@@ -205,7 +192,6 @@ describe('BackendUpload', () => {
     expect(await upload.triggerUpload()).toEqual({ success: true })
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(job.skipReason).not.toHaveBeenCalled()
-    expect(job.produce).toHaveBeenCalledWith(expect.any(String), true)
   })
 
   it('triggerUpload surfaces a server failure', async () => {

@@ -105,9 +105,8 @@ export function createSync(deps: SyncDeps): AppSync {
           backend,
           getDbPath: () => storage.getDbPath(),
           backupToFile: (destinationPath) => storage.backupToFile(destinationPath),
-          hasActivitiesEndedAfter: (ts) => storage.activities.hasEndedAfter(ts),
-          getLastSnapshotAt: () => storage.uploadRuns.getLastRunTimestamp(),
-          recordSnapshotAt: (ts) => storage.uploadRuns.record(ts),
+          getLastUploadAt: () => storage.uploadRuns.getLastRunTimestamp(),
+          recordUploadAt: (ts) => storage.uploadRuns.record(ts),
         }),
       })
     : null
