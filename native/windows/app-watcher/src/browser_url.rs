@@ -46,6 +46,7 @@ fn normalize_candidate_url(raw: &str) -> Option<String> {
         .next()
         .unwrap_or_default();
     let host_like = host.contains('.')
+        && !trimmed.chars().any(char::is_whitespace)
         && host
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | ':' | '@' | '_'));
@@ -187,7 +188,16 @@ mod tests {
 
     #[test]
     fn rejects_search_text_and_non_hosts() {
-        for raw in ["prague castle", "foo", "foo/bar.baz", "", "about:blank", "ex!ample.com/x"] {
+        for raw in [
+            "prague castle",
+            "foo",
+            "foo/bar.baz",
+            "",
+            "about:blank",
+            "ex!ample.com/x",
+            "node.js/express tutorial",
+            "github.com/foo bar",
+        ] {
             assert_eq!(normalize_candidate_url(raw), None, "{raw}");
         }
     }

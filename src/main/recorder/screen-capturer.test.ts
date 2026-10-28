@@ -116,4 +116,13 @@ describe('ScreenCapturer.stop', () => {
     await stopped
     expect(capturer.capturing).toBe(false)
   })
+
+  it('stops reporting capturing when the backend stop fails', async () => {
+    vi.mocked(mockBackend.stop).mockRejectedValueOnce(new Error('sidecar gone'))
+    const capturer = new ScreenCapturer({ outputDir: '/tmp', stream: new InMemoryStream<Frame>() })
+    await capturer.start()
+
+    await expect(capturer.stop()).rejects.toThrow('sidecar gone')
+    expect(capturer.capturing).toBe(false)
+  })
 })

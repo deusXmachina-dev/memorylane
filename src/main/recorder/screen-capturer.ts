@@ -76,7 +76,10 @@ export class ScreenCapturer {
   }
 
   async stop(): Promise<void> {
-    await this.backend.stop()
-    this._capturing = false
+    try {
+      await this.backend.stop()
+    } finally {
+      this._capturing = false
+    }
   }
 }

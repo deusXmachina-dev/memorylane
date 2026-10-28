@@ -114,7 +114,7 @@ describe('ActivityProducer', () => {
 
   function createProducer(
     params?: Partial<ConstructorParameters<typeof ActivityProducer>[0]['config']>,
-    isCapturingFrames?: () => boolean,
+    shouldWaitForFrames?: () => boolean,
   ) {
     const frameStream = new InMemoryStream<Frame>()
     const eventStream = new InMemoryStream<EventWindow>()
@@ -133,7 +133,7 @@ describe('ActivityProducer', () => {
         frameConsumerId: 'test:frame',
         ...(params ?? {}),
       },
-      isCapturingFrames,
+      shouldWaitForFrames,
     })
     producers.push(producer)
     return { producer, frameStream, eventStream, activityStream }
@@ -218,7 +218,7 @@ describe('ActivityProducer', () => {
     expect(activities).toHaveLength(1)
   })
 
-  it('does not wait for frames while frame capture is off', async () => {
+  it('does not wait for frames while the pipeline is stopping', async () => {
     const { producer, frameStream, eventStream, activityStream } = createProducer(
       { frameJoinGraceMs: 750, maxFrameWaitMs: 5_000 },
       () => false,
