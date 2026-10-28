@@ -1,14 +1,12 @@
-import log from '@main/utils/logger'
 import { isSameDay } from '@main/utils/day'
 import { BACKEND_REQUEST_TIMEOUT_MS } from '@/shared/constants'
 import type { BackendClient } from './backend-client'
-import type { Slice, UploadPrepRequest } from './upload-prep-worker'
+import type { UploadPrepRequest } from './upload-prep-worker'
 import { fileForm, type UploadJob } from './backend-upload'
 
-export const SLICE_PAGE_SIZE = 20_000
 export const SLICE_OVERLAP_MS = 60 * 60 * 1000
 
-export type PrepareUpload = (req: UploadPrepRequest) => Promise<Slice>
+export type PrepareUpload = (req: UploadPrepRequest) => Promise<Buffer>
 
 const defaultPrepareUpload: PrepareUpload = async (req) => {
   const { prepareUploadInWorker } = await import('./upload-prep')
@@ -31,7 +29,6 @@ export interface DatabaseUploadJobParams {
 
 export function databaseUploadJob(params: DatabaseUploadJobParams): UploadJob {
   const prepareUpload = params.prepareUpload ?? defaultPrepareUpload
-  let pending: { count: number; more: boolean } | null = null
 
   async function fetchSyncState(): Promise<SyncState> {
     const response = await params.backend.request('api/device/sync-state', {
@@ -64,32 +61,25 @@ export function databaseUploadJob(params: DatabaseUploadJobParams): UploadJob {
 
       if (format === 'snapshot') {
         await params.backupToFile(tempPath)
-        const { gzip, count } = await prepareUpload({ kind: 'snapshot', path: tempPath })
-        pending = { count, more: false }
-        return fileForm(gzip, 'memorylane.db.gz')
+        return fileForm(
+          await prepareUpload({ kind: 'snapshot', path: tempPath }),
+          'memorylane.db.gz',
+        )
       }
 
-      const { gzip, count } = await prepareUpload({
+      const gzip = await prepareUpload({
         kind: 'slice',
         dbPath: params.getDbPath(),
         outPath: tempPath,
         sinceTs: lastEndTs === null ? 0 : lastEndTs - SLICE_OVERLAP_MS,
-        pageSize: SLICE_PAGE_SIZE,
       })
-      pending = { count, more: count === SLICE_PAGE_SIZE }
-
       const form = new FormData()
       form.append('format', 'delta-v1')
       form.append('file', new Blob([gzip]), 'slice.db.gz')
       return form
     },
     async onSuccess() {
-      const sent = pending
-      pending = null
-      if (sent === null) return false
-      if (!sent.more) params.recordUploadAt(Date.now())
-      log.info(`[DatabaseUpload] sent ${sent.count} activities`)
-      return sent.more
+      params.recordUploadAt(Date.now())
     },
   }
 }

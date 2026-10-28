@@ -33,7 +33,7 @@ function deferred() {
 type FakeJob = UploadJob & {
   skipReason: Mock<() => string | null>
   produce: Mock<(tempPath: string) => Promise<BodyInit>>
-  onSuccess: Mock<(response: Response) => Promise<boolean | void>>
+  onSuccess: Mock<(response: Response) => Promise<void>>
 }
 
 function fakeJob(overrides: Partial<FakeJob> = {}): FakeJob {
@@ -45,7 +45,7 @@ function fakeJob(overrides: Partial<FakeJob> = {}): FakeJob {
       fs.writeFileSync(tempPath, 'payload')
       return fileForm(Buffer.from('payload'), 'fake.bin')
     }),
-    onSuccess: vi.fn<(response: Response) => Promise<boolean | void>>(async () => {}),
+    onSuccess: vi.fn(async () => {}),
     ...overrides,
   }
 }
@@ -139,31 +139,6 @@ describe('BackendUpload', () => {
     expect(
       vi.mocked(log.debug).mock.calls.some(([m]) => /already uploaded today/.test(String(m))),
     ).toBe(true)
-  })
-
-  it('uploads further pages in the same run while the job asks for more', async () => {
-    const fetchMock = mockFetchResponse(200)
-    globalThis.fetch = fetchMock
-    let remaining = 2
-    const { upload, job } = makeUpload({}, { onSuccess: vi.fn(async () => remaining-- > 0) })
-
-    upload.kick('startup')
-    await upload.stop()
-
-    expect(job.produce).toHaveBeenCalledTimes(3)
-    expect(fetchMock).toHaveBeenCalledTimes(3)
-  })
-
-  it('stops paging after the per-run cap', async () => {
-    const fetchMock = mockFetchResponse(200)
-    globalThis.fetch = fetchMock
-    const { upload } = makeUpload({}, { onSuccess: vi.fn(async () => true) })
-
-    upload.kick('startup')
-    await upload.stop()
-
-    expect(fetchMock).toHaveBeenCalledTimes(50)
-    expect(vi.mocked(log.warn).mock.calls.some(([m]) => /50 pages/.test(String(m)))).toBe(true)
   })
 
   it('triggerUpload reports sharing disabled', async () => {

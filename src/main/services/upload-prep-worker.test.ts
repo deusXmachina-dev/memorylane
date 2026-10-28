@@ -48,15 +48,14 @@ describe('buildSliceSync', () => {
 
   function build(req: Partial<SliceRequest> & { dbPath: string }) {
     const outPath = tempPath('out')
-    const slice = buildSliceSync({
+    const gzip = buildSliceSync({
       kind: 'slice',
       outPath,
       sinceTs: 0,
-      pageSize: 100,
       ...req,
     })
     const unzipped = tempPath('unzipped')
-    fs.writeFileSync(unzipped, zlib.gunzipSync(slice.gzip))
+    fs.writeFileSync(unzipped, zlib.gunzipSync(gzip))
     const db = new Database(unzipped, { readonly: true })
     const tables = (
       db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name`).all() as {
@@ -67,13 +66,12 @@ describe('buildSliceSync', () => {
       .prepare('SELECT * FROM activities ORDER BY end_timestamp')
       .all() as Record<string, unknown>[]
     db.close()
-    return { slice, tables, activities }
+    return { tables, activities }
   }
 
   it('includes activities ending at or after sinceTs, with a fixed column list', () => {
-    const { slice, activities } = build({ dbPath: makeDb([100, 200, 300]), sinceTs: 200 })
+    const { activities } = build({ dbPath: makeDb([100, 200, 300]), sinceTs: 200 })
 
-    expect(slice.count).toBe(2)
     expect(activities.map((a) => a.end_timestamp)).toEqual([200, 300])
     expect(Object.keys(activities[0])).toEqual([
       'id',
@@ -86,13 +84,6 @@ describe('buildSliceSync', () => {
       'summary_model',
       'ocr_text',
     ])
-  })
-
-  it('caps the page at pageSize, oldest first', () => {
-    const { slice, activities } = build({ dbPath: makeDb([300, 100, 200]), pageSize: 2 })
-
-    expect(slice.count).toBe(2)
-    expect(activities.map((a) => a.end_timestamp)).toEqual([100, 200])
   })
 
   it('adds the full snapshot tables', () => {
@@ -110,14 +101,13 @@ describe('buildSliceSync', () => {
   it('compacts and gzips the whole database for a snapshot', () => {
     const dbPath = makeDb([100, 200])
 
-    const { gzip, count } = compactSnapshotSync({ kind: 'snapshot', path: dbPath })
+    const gzip = compactSnapshotSync({ kind: 'snapshot', path: dbPath })
 
     const unzipped = tempPath('unzipped')
     fs.writeFileSync(unzipped, zlib.gunzipSync(gzip))
     const db = new Database(unzipped, { readonly: true })
     const tables = db.prepare(`SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'`).get()
     db.close()
-    expect(count).toBe(2)
     expect(tables).toEqual({ n: 6 })
   })
 })
