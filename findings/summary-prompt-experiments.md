@@ -34,7 +34,8 @@ gpt-6-luna image pipeline, submit-keys prompt, all 17 fixtures. New eval flag `-
 - vocab prompt + 2% on other models: claude-haiku-5.5 80/79 mention but 13 hard fails ("typed", "cursor") and 75 words; glm-5.3-flash 79/78, 4 hard fails, $0.175/run; gemini-3-flash-preview image 77, $0.221/run. None beats Luna at 2% on the gates. gemini-3-flash-preview video with submit-keys: 75.8, 4 hard fails, $0.145.
 - One vocab+2% batch hit a DNS outage (33–47 empty per run); discarded and rerun.
 - Judgment files: `compare-2026-10-28T09-57-58-202Z-submit-keys-image-vs-2026-10-28T14-34-00-034Z-dhash2-image.judgment.md`, `compare-2026-10-28T09-30-36-179Z-baseline-video-5356aac-vs-2026-10-28T14-34-00-034Z-dhash2-image.judgment.md`.
-- OpenRouter spend for the day: $6.97 of $10 (key usage + BYOK).
+- Ship branch `feat/summary-quality` `e095a0e` (defaults only, no override flags): 77.2 / 76.1 mention, 0 / 1 hard fails, $0.099/run.
+- OpenRouter spend for the day: $7.03 of $10 (key usage + BYOK).
 
 **Verdict:** Ship snapshot dedupe 2% with submit-keys on the gpt-6-luna image pipeline. It needs the pipeline switch for existing installs (stored `semanticPipelineMode` / video pick survive a `MODEL_DEFAULTS_VERSION` bump) and the 2% default reaching installs that persisted `visualThreshold: 8`.
 
