@@ -810,6 +810,7 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     return importDatabase({
       dbPath: deps.runtime.storage.getDbPath(),
       parentWindow: getMainWindow(),
+      deleteServerData: deps.sync.deleteServerData,
     })
   })
 
@@ -842,11 +843,20 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
       }
       try {
         await deps.runtime.purgeAll()
-        return { success: true }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to purge database'
         log.error('[MainWindow] Purge failed:', error)
         return { success: false, error: message }
+      }
+      try {
+        await deps.sync.deleteServerData()
+        return { success: true }
+      } catch (error) {
+        log.error('[MainWindow] Server delete after purge failed:', error)
+        return {
+          success: false,
+          error: 'Local data purged, but the server copy was not deleted. Retry purge.',
+        }
       }
     },
   )

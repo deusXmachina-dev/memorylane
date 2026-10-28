@@ -18,27 +18,22 @@ export interface DatabaseUploadJobParams {
   getDbPath: () => string
   getLastUploadAt: () => number | null
   recordUploadAt: (ts: number) => void
-  getResetRequestedAt: () => number | null
-  clearResetRequest: () => void
   prepareUpload?: PrepareUpload
+}
+
+export async function deleteServerData(backend: Pick<BackendClient, 'request'>): Promise<void> {
+  const response = await backend.request('api/device/data', {
+    method: 'DELETE',
+    timeoutMs: BACKEND_REQUEST_TIMEOUT_MS,
+  })
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw new Error(`Server delete failed (${response.status}): ${text}`)
+  }
 }
 
 export function databaseUploadJob(params: DatabaseUploadJobParams): UploadJob {
   const prepareUpload = params.prepareUpload ?? defaultPrepareUpload
-
-  async function deleteServerData(): Promise<void> {
-    const resetAt = params.getResetRequestedAt()
-    if (resetAt === null) return
-    const response = await params.backend.request('api/device/data', {
-      method: 'DELETE',
-      timeoutMs: BACKEND_REQUEST_TIMEOUT_MS,
-    })
-    if (!response.ok && response.status !== 404) {
-      const text = await response.text().catch(() => '')
-      throw new Error(`Data reset failed (${response.status}): ${text}`)
-    }
-    if (params.getResetRequestedAt() === resetAt) params.clearResetRequest()
-  }
 
   async function fetchLastEndTs(): Promise<number | null> {
     const response = await params.backend.request('api/device/data/state', {
@@ -63,7 +58,6 @@ export function databaseUploadJob(params: DatabaseUploadJobParams): UploadJob {
       return null
     },
     async produce(tempPath) {
-      await deleteServerData()
       const lastEndTs = await fetchLastEndTs()
       const gzip = await prepareUpload({
         dbPath: params.getDbPath(),

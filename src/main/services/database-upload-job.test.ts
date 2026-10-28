@@ -6,34 +6,30 @@ vi.mock('@main/utils/logger', () => ({
 
 import {
   databaseUploadJob,
+  deleteServerData,
   DELTA_OVERLAP_MS,
   type DatabaseUploadJobParams,
   type PrepareUpload,
 } from './database-upload-job'
-import type { BackendRequest } from './backend-client'
+import type { BackendClient } from './backend-client'
 import { jsonResponse, readFormFile } from '@main/utils/test-utils'
 
 const HOUR = 60 * 60 * 1000
 
 function makeJob(overrides: Partial<DatabaseUploadJobParams> & { syncState?: object } = {}) {
   const { syncState = { last_end_ts: null }, ...params } = overrides
-  const request = vi.fn(async (_path: string, init: BackendRequest) =>
-    init.method === 'DELETE' ? jsonResponse({}, true, 204) : jsonResponse(syncState),
-  )
+  const request = vi.fn<BackendClient['request']>(async () => jsonResponse(syncState))
   const prepareUpload = vi.fn<PrepareUpload>(async () => Buffer.from('gz'))
   const recordUploadAt = vi.fn()
-  const clearResetRequest = vi.fn()
   const job = databaseUploadJob({
     backend: { request },
     getDbPath: () => '/db/memorylane.db',
     getLastUploadAt: () => null,
     recordUploadAt,
-    getResetRequestedAt: () => null,
-    clearResetRequest,
     prepareUpload,
     ...params,
   })
-  return { job, request, prepareUpload, recordUploadAt, clearResetRequest }
+  return { job, request, prepareUpload, recordUploadAt }
 }
 
 const created = jsonResponse({}, true, 201)
@@ -103,71 +99,23 @@ describe('databaseUploadJob', () => {
 
     expect(recordUploadAt).toHaveBeenCalledWith(1_700_000_000_000)
   })
+})
 
-  it('deletes the server copy before uploading after a purge or import', async () => {
-    const { job, request, clearResetRequest } = makeJob({ getResetRequestedAt: () => 5 })
+describe('deleteServerData', () => {
+  it('sends DELETE to the device data endpoint', async () => {
+    const request = vi.fn<BackendClient['request']>(async () => jsonResponse({}, true, 204))
 
-    await job.produce('/tmp/out')
+    await deleteServerData({ request })
 
-    expect(request.mock.calls[0]).toEqual([
+    expect(request).toHaveBeenCalledWith(
       'api/device/data',
       expect.objectContaining({ method: 'DELETE' }),
-    ])
-    expect(request.mock.calls[1][0]).toBe('api/device/data/state')
-    expect(clearResetRequest).toHaveBeenCalled()
+    )
   })
 
-  it('does not delete when no reset is pending', async () => {
-    const { job, request } = makeJob()
+  it('throws on any non-OK response, including 404', async () => {
+    const request = async () => jsonResponse({}, false, 404)
 
-    await job.produce('/tmp/out')
-
-    expect(request.mock.calls.some(([, init]) => init.method === 'DELETE')).toBe(false)
-  })
-
-  it('treats a 404 on delete as done', async () => {
-    const clearResetRequest = vi.fn()
-    const { job } = makeJob({
-      backend: {
-        request: async (_path: string, init: BackendRequest) =>
-          init.method === 'DELETE'
-            ? jsonResponse({}, false, 404)
-            : jsonResponse({ last_end_ts: null }),
-      },
-      getResetRequestedAt: () => 5,
-      clearResetRequest,
-    })
-
-    await job.produce('/tmp/out')
-
-    expect(clearResetRequest).toHaveBeenCalled()
-  })
-
-  it('keeps the reset and stops when the delete fails', async () => {
-    const { job, prepareUpload, clearResetRequest } = makeJob({
-      backend: { request: async () => jsonResponse({}, false, 500) },
-      getResetRequestedAt: () => 5,
-    })
-
-    await expect(job.produce('/tmp/out')).rejects.toThrow('Data reset failed (500)')
-    expect(clearResetRequest).not.toHaveBeenCalled()
-    expect(prepareUpload).not.toHaveBeenCalled()
-  })
-
-  it('keeps a reset requested while the delete was in flight', async () => {
-    let resetAt = 5
-    const { job, clearResetRequest } = makeJob({
-      backend: {
-        request: async (_path: string, init: BackendRequest) => {
-          if (init.method === 'DELETE') resetAt = 6
-          return jsonResponse({ last_end_ts: null })
-        },
-      },
-      getResetRequestedAt: () => resetAt,
-    })
-
-    await job.produce('/tmp/out')
-
-    expect(clearResetRequest).not.toHaveBeenCalled()
+    await expect(deleteServerData({ request })).rejects.toThrow('Server delete failed (404)')
   })
 })
