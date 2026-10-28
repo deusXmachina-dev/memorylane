@@ -28,6 +28,7 @@ gpt-6-luna image pipeline, submit-keys prompt, all 17 fixtures. New eval flag `-
 
 - 2% vs submit-keys: `wrong-action` A 7 / B 6, `missed-action` A 14 / B 10, `wrong-detail` A 14 / B 19, `vague` A 3 / B 0, `over-long` A 5 / B 7. Net +13 = 17% of judged activities; all gates pass.
 - **Candidate vs production** (video gemini-3.1-flash-lite, prompt `5356aac`): judged B 47 · A 30 · tie 1 of 78. `wrong-action` A 12 / B 7, `missed-action` A 15 / B 12, `wrong-detail` A 21 / B 19, `over-long` A 2 / B 23. Mention 68 → 76%, hard fails 2.0 → 0.5, $0.071 → $0.099 per run (+39%). Most production wins are the candidate padding trivial activities.
+- Ship branch + "skip navigation menus, sidebars, page layout and incidental listings" rule (`exp/no-chrome` `c9ce192`), 2 runs: 75.3 / 74.5 mention, 46 words. Judged vs ship B 19 · A 15 · tie 44 of 78, `wrong-action` A 7 / B 9, `over-long` A 8 / B 6 — fails (net 5%, wrong-action up). Third length/padding rule to lose; padding stays.
 - Reasoning effort low, 2 runs: 74.9 / 72.9 mention (default 76–77), $0.091/run, p50 call 6.0 s vs 9.4 s at default (eval concurrency, relative only). A latency/cost option, not a quality one; not shipped.
 - With 2%, 24 of 79 activities hit the cap of 6, yet cap 10 still loses: more frames past 6 dilute rather than inform.
 - Outcome frames add images but not the right ones once dedupe keeps small changes.
