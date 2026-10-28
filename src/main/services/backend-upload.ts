@@ -28,7 +28,6 @@ export interface UploadJob {
   timeoutMs?: number
   skipReason(): string | null
   produce(tempPath: string): Promise<BodyInit>
-  fallback?(response: Response, tempPath: string): Promise<BodyInit | null>
   onSuccess(response: Response): Promise<void>
 }
 
@@ -114,17 +113,12 @@ export class BackendUpload {
     )
 
     try {
-      const post = (body: BodyInit) =>
-        this.backend.request(this.job.endpoint, {
-          method: 'POST',
-          body,
-          timeoutMs: this.job.timeoutMs ?? BACKEND_UPLOAD_TIMEOUT_MS,
-        })
-      let response = await post(await this.job.produce(tempPath))
-      if (!response.ok && this.job.fallback) {
-        const body = await this.job.fallback(response, tempPath)
-        if (body !== null) response = await post(body)
-      }
+      const body = await this.job.produce(tempPath)
+      const response = await this.backend.request(this.job.endpoint, {
+        method: 'POST',
+        body,
+        timeoutMs: this.job.timeoutMs ?? BACKEND_UPLOAD_TIMEOUT_MS,
+      })
 
       if (!response.ok) {
         const text = await response.text().catch(() => '')

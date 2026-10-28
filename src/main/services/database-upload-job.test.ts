@@ -21,13 +21,11 @@ function makeJob(overrides: Partial<DatabaseUploadJobParams> & { syncState?: obj
     init.method === 'DELETE' ? jsonResponse({}, true, 204) : jsonResponse(syncState),
   )
   const prepareUpload = vi.fn<PrepareUpload>(async () => Buffer.from('gz'))
-  const backupToFile = vi.fn(async () => {})
   const recordUploadAt = vi.fn()
   const clearResetRequest = vi.fn()
   const job = databaseUploadJob({
     backend: { request },
     getDbPath: () => '/db/memorylane.db',
-    backupToFile,
     getLastUploadAt: () => null,
     recordUploadAt,
     getResetRequestedAt: () => null,
@@ -35,7 +33,7 @@ function makeJob(overrides: Partial<DatabaseUploadJobParams> & { syncState?: obj
     prepareUpload,
     ...params,
   })
-  return { job, request, prepareUpload, backupToFile, recordUploadAt, clearResetRequest }
+  return { job, request, prepareUpload, recordUploadAt, clearResetRequest }
 }
 
 const created = jsonResponse({}, true, 201)
@@ -64,45 +62,6 @@ describe('databaseUploadJob', () => {
     expect(job.skipReason()).toBeNull()
   })
 
-  it('uploads the whole database when the state endpoint is missing or sync is off', async () => {
-    for (const status of [404, 409]) {
-      const { job, prepareUpload, backupToFile } = makeJob({
-        backend: { request: async () => jsonResponse({}, false, status) },
-      })
-
-      const body = await job.produce('/tmp/out')
-
-      expect(job.endpoint).toBe('api/device/upload')
-      expect(backupToFile).toHaveBeenCalledWith('/tmp/out')
-      expect(prepareUpload).toHaveBeenCalledWith({ kind: 'snapshot', path: '/tmp/out' })
-      expect((body as FormData).has('format')).toBe(false)
-      expect((await readFormFile(body)).name).toBe('memorylane.db.gz')
-    }
-  })
-
-  it('falls back to a snapshot when the delta is rejected with 404 or 409', async () => {
-    for (const status of [404, 409]) {
-      const { job, prepareUpload } = makeJob()
-      await job.produce('/tmp/out')
-
-      const body = await job.fallback!(jsonResponse({}, false, status), '/tmp/out')
-
-      expect(body).not.toBeNull()
-      expect(job.endpoint).toBe('api/device/upload')
-      expect(prepareUpload.mock.calls[1][0]).toEqual({ kind: 'snapshot', path: '/tmp/out' })
-    }
-  })
-
-  it('does not fall back on other delta failures or after a snapshot', async () => {
-    const delta = makeJob()
-    await delta.job.produce('/tmp/out')
-    expect(await delta.job.fallback!(jsonResponse({}, false, 500), '/tmp/out')).toBeNull()
-
-    const snap = makeJob({ backend: { request: async () => jsonResponse({}, false, 409) } })
-    await snap.job.produce('/tmp/out')
-    expect(await snap.job.fallback!(jsonResponse({}, false, 404), '/tmp/out')).toBeNull()
-  })
-
   it('sends a delta starting one overlap window before the server cursor', async () => {
     const { job, request, prepareUpload } = makeJob({
       syncState: { last_end_ts: 10 * HOUR },
@@ -112,12 +71,10 @@ describe('databaseUploadJob', () => {
 
     expect(request).toHaveBeenCalledWith('api/device/data/state', expect.anything())
     expect(prepareUpload).toHaveBeenCalledWith({
-      kind: 'delta',
       dbPath: '/db/memorylane.db',
       outPath: '/tmp/out',
       sinceTs: 10 * HOUR - DELTA_OVERLAP_MS,
     })
-    expect((body as FormData).get('format')).toBe('delta-v1')
     expect((await readFormFile(body)).name).toBe('delta.db.gz')
   })
 
@@ -127,7 +84,7 @@ describe('databaseUploadJob', () => {
     await job.produce('/tmp/out')
 
     const req = prepareUpload.mock.calls[0][0]
-    expect(req.kind === 'delta' && req.sinceTs).toBe(0)
+    expect(req.sinceTs).toBe(0)
   })
 
   it('fails when the sync state request fails', async () => {
@@ -145,15 +102,6 @@ describe('databaseUploadJob', () => {
     await job.onSuccess(created)
 
     expect(recordUploadAt).toHaveBeenCalledWith(1_700_000_000_000)
-  })
-
-  it('rejects a delta upload that is not answered with 201', async () => {
-    const { job, recordUploadAt } = makeJob()
-
-    await job.produce('/tmp/out')
-
-    await expect(job.onSuccess(jsonResponse({}))).rejects.toThrow('expected 201')
-    expect(recordUploadAt).not.toHaveBeenCalled()
   })
 
   it('deletes the server copy before uploading after a purge or import', async () => {
@@ -180,7 +128,12 @@ describe('databaseUploadJob', () => {
   it('treats a 404 on delete as done', async () => {
     const clearResetRequest = vi.fn()
     const { job } = makeJob({
-      backend: { request: async () => jsonResponse({}, false, 404) },
+      backend: {
+        request: async (_path: string, init: BackendRequest) =>
+          init.method === 'DELETE'
+            ? jsonResponse({}, false, 404)
+            : jsonResponse({ last_end_ts: null }),
+      },
       getResetRequestedAt: () => 5,
       clearResetRequest,
     })

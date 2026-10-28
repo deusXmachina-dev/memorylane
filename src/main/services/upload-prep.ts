@@ -1,7 +1,7 @@
 import { app, utilityProcess } from 'electron'
 import * as path from 'path'
 import { isWorkerLogEvent, logWorkerEvent, type WorkerLogEvent } from '@main/utils/worker-log'
-import type { UploadPrepRequest, UploadPrepResponse } from './upload-prep-worker'
+import type { DeltaRequest, UploadPrepResponse } from './upload-prep-worker'
 
 // Built alongside index.js (see electron.vite.config.ts rollup input).
 // app.getAppPath() resolves to the asar root when packaged and to the project
@@ -14,7 +14,7 @@ function workerScriptPath(): string {
 // so a stuck child can't leave the upload `inFlight` promise unresolved.
 const WORKER_TIMEOUT_MS = 2 * 60 * 1000
 
-export function prepareUploadInWorker(req: UploadPrepRequest): Promise<Buffer> {
+export function prepareUploadInWorker(req: DeltaRequest): Promise<Buffer> {
   return new Promise<Buffer>((resolve, reject) => {
     const child = utilityProcess.fork(workerScriptPath(), [], { serviceName: 'upload-prep' })
     let settled = false

@@ -105,7 +105,6 @@ export function createSync(deps: SyncDeps): AppSync {
         job: databaseUploadJob({
           backend,
           getDbPath: () => storage.getDbPath(),
-          backupToFile: (destinationPath) => storage.backupToFile(destinationPath),
           getLastUploadAt: () => storage.uploadRuns.getLastRunTimestamp(),
           recordUploadAt: (ts) => storage.uploadRuns.record(ts),
           getResetRequestedAt: () => readResetRequestedAt(),

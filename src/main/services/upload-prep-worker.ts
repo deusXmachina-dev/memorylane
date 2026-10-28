@@ -4,18 +4,10 @@ import * as zlib from 'zlib'
 import { forwardLogsToParent, type WorkerLogEvent } from '@main/utils/worker-log'
 
 export interface DeltaRequest {
-  kind: 'delta'
   dbPath: string
   outPath: string
   sinceTs: number
 }
-
-export interface SnapshotRequest {
-  kind: 'snapshot'
-  path: string
-}
-
-export type UploadPrepRequest = DeltaRequest | SnapshotRequest
 
 export type UploadPrepResponse = { ok: true; gzip: ArrayBuffer } | { ok: false; error: string }
 
@@ -56,22 +48,8 @@ export function buildDeltaSync(req: DeltaRequest): Buffer {
   return zlib.gzipSync(fs.readFileSync(req.outPath))
 }
 
-export function compactSnapshotSync(req: SnapshotRequest): Buffer {
-  const db = new Database(req.path)
-  try {
-    db.exec('VACUUM')
-  } finally {
-    db.close()
-  }
-  return zlib.gzipSync(fs.readFileSync(req.path))
-}
-
-export function prepareUploadSync(req: UploadPrepRequest): Buffer {
-  return req.kind === 'delta' ? buildDeltaSync(req) : compactSnapshotSync(req)
-}
-
 interface ParentPortLike {
-  on(event: 'message', listener: (e: { data: UploadPrepRequest }) => void): void
+  on(event: 'message', listener: (e: { data: DeltaRequest }) => void): void
   postMessage(message: UploadPrepResponse | WorkerLogEvent, transfer?: ArrayBuffer[]): void
 }
 const parentPort = process.parentPort as ParentPortLike | undefined
@@ -79,7 +57,7 @@ if (parentPort) {
   forwardLogsToParent(parentPort)
   parentPort.on('message', ({ data }) => {
     try {
-      const gzip = prepareUploadSync(data)
+      const gzip = buildDeltaSync(data)
       const ab = new ArrayBuffer(gzip.byteLength)
       new Uint8Array(ab).set(gzip)
       parentPort.postMessage({ ok: true, gzip: ab }, [ab])
