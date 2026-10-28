@@ -4,6 +4,7 @@ import { AlertTriangle, Database, ScrollText, Share2 } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Label } from '@components/ui/label'
+import { Switch } from '@components/ui/switch'
 import type { AppEditionConfig } from '@/shared/edition'
 import { PURGE_CONFIRMATION_PHRASE } from '@/shared/constants'
 import type { MainWindowAPI } from '@types'
@@ -12,22 +13,21 @@ import { DatabaseImportSection } from '../DatabaseImportSection'
 import { DatabaseSyncSection } from '../DatabaseSyncSection'
 import { LogsExportSection } from '../LogsExportSection'
 import { LogsSyncSection } from '../LogsSyncSection'
-import { SegmentedControl } from './SegmentedControl'
 import { SettingsRow } from './SettingsRow'
 import { SettingsSection } from './SettingsSection'
 
 interface DataTabPanelProps {
   api: MainWindowAPI
   editionConfig: AppEditionConfig | null
-  uploadDetailLevel: 'off' | 'summary' | 'detailed'
-  onUploadDetailLevelChange: (level: 'off' | 'summary' | 'detailed') => void
+  remoteSyncEnabled: boolean
+  onRemoteSyncEnabledChange: (enabled: boolean) => void
 }
 
 export function DataTabPanel({
   api,
   editionConfig,
-  uploadDetailLevel,
-  onUploadDetailLevelChange,
+  remoteSyncEnabled,
+  onRemoteSyncEnabledChange,
 }: DataTabPanelProps): React.JSX.Element {
   const [isPurgeExpanded, setIsPurgeExpanded] = useState(false)
   const [purgeConfirmation, setPurgeConfirmation] = useState('')
@@ -76,31 +76,22 @@ export function DataTabPanel({
       </SettingsSection>
 
       {isEnterprise && (
-        <SettingsSection
-          title="Share with remote"
-          icon={<Share2 className="h-4 w-4" />}
-          description="Off disables sharing. Summary strips OCR text and full-text search index."
-        >
+        <SettingsSection title="Remote" icon={<Share2 className="h-4 w-4" />}>
           <SettingsRow
-            layout="stacked"
-            label="Detail level"
+            label="Remote sync"
+            description="Send activities and patterns to your organization."
             control={
-              <SegmentedControl
-                ariaLabel="Detail level"
-                value={uploadDetailLevel}
-                onChange={onUploadDetailLevelChange}
-                options={[
-                  { value: 'off', label: 'Off' },
-                  { value: 'summary', label: 'Summary' },
-                  { value: 'detailed', label: 'Detailed' },
-                ]}
+              <Switch
+                checked={remoteSyncEnabled}
+                onCheckedChange={onRemoteSyncEnabledChange}
+                aria-label="Remote sync"
               />
             }
           />
-          {uploadDetailLevel !== 'off' && (
+          {remoteSyncEnabled && (
             <SettingsRow
-              label="Sync database now"
-              description="Push the current database to remote."
+              label="Sync now"
+              description="Send new data without waiting for the hourly sync."
               control={<DatabaseSyncSection api={api} />}
             />
           )}
@@ -113,7 +104,7 @@ export function DataTabPanel({
           description="Download a ZIP of the app logs to share for debugging."
           control={<LogsExportSection api={api} />}
         />
-        {isEnterprise && uploadDetailLevel !== 'off' && (
+        {isEnterprise && remoteSyncEnabled && (
           <SettingsRow
             label="Sync logs now"
             description="Push the latest app logs to remote for debugging."

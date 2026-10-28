@@ -263,7 +263,7 @@ export interface AppSettings {
   patternDetectionModel: string
   modelsByVendor: Partial<Record<Vendor, VendorModelSelection>>
   patternDetectionEnabled: boolean
-  uploadDetailLevel: 'off' | 'summary' | 'detailed'
+  remoteSyncEnabled: boolean
 }
 
 export interface VendorModelSelection {

@@ -7,6 +7,7 @@ import type { BackendClient } from './backend-client'
 import { PeriodicJob } from './periodic-job'
 
 const DEFAULT_CHECK_INTERVAL_MS = 60 * 60 * 1000
+const MAX_PAGES_PER_RUN = 50
 
 function removeQuietly(filePath: string): void {
   try {
@@ -27,8 +28,8 @@ export interface UploadJob {
   endpoint: string
   timeoutMs?: number
   skipReason(): string | null
-  produce(tempPath: string): Promise<BodyInit>
-  onSuccess(response: Response): Promise<void>
+  produce(tempPath: string, force?: boolean): Promise<BodyInit | null>
+  onSuccess(response: Response): Promise<boolean | void>
 }
 
 export interface BackendUploadParams {
@@ -113,20 +114,32 @@ export class BackendUpload {
     )
 
     try {
-      const body = await this.job.produce(tempPath)
-      const response = await this.backend.request(this.job.endpoint, {
-        method: 'POST',
-        body,
-        timeoutMs: this.job.timeoutMs ?? BACKEND_UPLOAD_TIMEOUT_MS,
-      })
+      for (let page = 1; page <= MAX_PAGES_PER_RUN; page++) {
+        try {
+          const body = await this.job.produce(tempPath, force)
+          if (body === null) {
+            log.debug(`${tag} Nothing to upload (${reason})`)
+            return
+          }
+          const response = await this.backend.request(this.job.endpoint, {
+            method: 'POST',
+            body,
+            timeoutMs: this.job.timeoutMs ?? BACKEND_UPLOAD_TIMEOUT_MS,
+          })
 
-      if (!response.ok) {
-        const text = await response.text().catch(() => '')
-        throw new Error(`Upload failed (${response.status}): ${text}`)
+          if (!response.ok) {
+            const text = await response.text().catch(() => '')
+            throw new Error(`Upload failed (${response.status}): ${text}`)
+          }
+
+          const more = await this.job.onSuccess(response)
+          log.info(`${tag} Upload succeeded (${reason})`)
+          if (more !== true) return
+        } finally {
+          removeQuietly(tempPath)
+        }
       }
-
-      await this.job.onSuccess(response)
-      log.info(`${tag} Upload succeeded (${reason})`)
+      log.warn(`${tag} Stopped after ${MAX_PAGES_PER_RUN} pages (${reason})`)
     } catch (error) {
       if (!force && this.backend.interrupted(startedAt, error)) {
         const message = error instanceof Error ? error.message : String(error)
@@ -134,8 +147,6 @@ export class BackendUpload {
         return
       }
       throw error
-    } finally {
-      removeQuietly(tempPath)
     }
   }
 }

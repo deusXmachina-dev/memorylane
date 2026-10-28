@@ -96,18 +96,18 @@ export function createSync(deps: SyncDeps): AppSync {
   const uploads = {
     backend,
     isActivated: isEnterpriseActivated,
-    isSyncEnabled: () => settings.get().uploadDetailLevel !== 'off',
+    isSyncEnabled: () => settings.get().remoteSyncEnabled,
   }
   const databaseUpload = enterprise
     ? new BackendUpload({
         ...uploads,
         job: databaseUploadJob({
-          storage,
-          getStripOptions: () => ({
-            detailLevel: settings.get().uploadDetailLevel === 'detailed' ? 'detailed' : 'summary',
-          }),
-          getLastUploadAt: () => storage.uploadRuns.getLastRunTimestamp(),
-          recordUploadAt: (ts) => storage.uploadRuns.record(ts),
+          backend,
+          getDbPath: () => storage.getDbPath(),
+          backupToFile: (destinationPath) => storage.backupToFile(destinationPath),
+          hasActivitiesEndedAfter: (ts) => storage.activities.hasEndedAfter(ts),
+          getLastSnapshotAt: () => storage.uploadRuns.getLastRunTimestamp(),
+          recordSnapshotAt: (ts) => storage.uploadRuns.record(ts),
         }),
       })
     : null
@@ -166,7 +166,7 @@ export function createSync(deps: SyncDeps): AppSync {
       })
       host.onAwake(() => kick('resume'))
       unsubscribeSettings = settings.onChange((next, previous) => {
-        if (previous.uploadDetailLevel === 'off' && next.uploadDetailLevel !== 'off') {
+        if (!previous.remoteSyncEnabled && next.remoteSyncEnabled) {
           kick('sharing enabled')
         }
       })
