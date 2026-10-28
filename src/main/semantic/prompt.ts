@@ -1,4 +1,4 @@
-import type { InteractionContext } from '../../shared/types'
+import type { InteractionContext, KeyClass } from '../../shared/types'
 import type { Activity } from '@main/activity/activity-types'
 import { isPassiveView } from '@main/activity/passive-view'
 import { scrubPII } from '@/shared/sanitize'
@@ -100,6 +100,13 @@ function buildInteractionTimeline(activity: Activity): string {
   return items.join('\n')
 }
 
+const SUBMIT_KEY_WORDS: Partial<Record<KeyClass, string>> = {
+  enter: 'pressed Enter',
+  'mod+enter': 'submitted with Cmd/Ctrl+Enter',
+  paste: 'pasted',
+  save: 'saved',
+}
+
 export function describeInteraction(interaction: InteractionContext): string {
   switch (interaction.type) {
     case 'app_change': {
@@ -109,7 +116,13 @@ export function describeInteraction(interaction: InteractionContext): string {
     }
     case 'keyboard': {
       const keyCount = interaction.keyCount ?? 0
-      return keyCount > 0 ? `typing session (${keyCount} keys)` : 'typing session'
+      const head = keyCount > 0 ? `typing session (${keyCount} keys)` : 'typing session'
+      const submits = (interaction.keySequence ?? []).flatMap((run) => {
+        const word = SUBMIT_KEY_WORDS[run.kind]
+        if (!word) return []
+        return [run.count > 1 ? `${word} ×${run.count}` : word]
+      })
+      return submits.length ? `${head}: ${submits.join(', ')}` : head
     }
     case 'scroll': {
       return 'scrolling activity'
