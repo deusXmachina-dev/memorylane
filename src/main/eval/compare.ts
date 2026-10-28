@@ -186,7 +186,9 @@ function armHeader(arm: Arm): string[] {
     const models = [...new Set(r.fixtures.map((f) => f.model || '-'))].join(', ')
     lines.push(
       `- ${arm.runIds[i]}: ${r.label ? `label ${r.label} · ` : ''}git ${gitLabel(r)} · ` +
-        `pipeline ${r.pipeline ?? '(unknown)'} · ${models} · judge ${r.judgeModel ?? 'none'}`,
+        `pipeline ${r.pipeline ?? '(unknown)'}` +
+        (r.maxSnapshots !== undefined ? ` · max ${r.maxSnapshots} snapshots` : '') +
+        ` · ${models} · judge ${r.judgeModel ?? 'none'}`,
     )
   })
   lines.push('')
