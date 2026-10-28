@@ -4,9 +4,16 @@ import * as os from 'os'
 import * as path from 'path'
 import * as zlib from 'zlib'
 import { afterEach, describe, expect, it } from 'vitest'
-import { buildSliceSync, compactSnapshotSync, type SliceRequest } from './upload-prep-worker'
+import { StorageService } from '@main/storage'
+import { applyMigrations } from '@main/storage/migrator'
+import {
+  ACTIVITY_COLUMNS,
+  buildDeltaSync,
+  compactSnapshotSync,
+  type DeltaRequest,
+} from './upload-prep-worker'
 
-describe('buildSliceSync', () => {
+describe('buildDeltaSync', () => {
   const tempFiles: string[] = []
 
   afterEach(() => {
@@ -15,7 +22,7 @@ describe('buildSliceSync', () => {
   })
 
   function tempPath(tag: string): string {
-    const p = path.join(os.tmpdir(), `.slice-${tag}-${process.pid}.${Math.random()}.db`)
+    const p = path.join(os.tmpdir(), `.delta-${tag}-${process.pid}.${Math.random()}.db`)
     tempFiles.push(p)
     return p
   }
@@ -46,10 +53,10 @@ describe('buildSliceSync', () => {
     return p
   }
 
-  function build(req: Partial<SliceRequest> & { dbPath: string }) {
+  function build(req: Partial<DeltaRequest> & { dbPath: string }) {
     const outPath = tempPath('out')
-    const gzip = buildSliceSync({
-      kind: 'slice',
+    const gzip = buildDeltaSync({
+      kind: 'delta',
       outPath,
       sinceTs: 0,
       ...req,
@@ -96,6 +103,19 @@ describe('buildSliceSync', () => {
       'sightings',
       'user_context',
     ])
+  })
+
+  it('uploads every activities column of the migrated schema', () => {
+    const dbPath = tempPath('migrated')
+    const storage = new StorageService(dbPath)
+    applyMigrations(storage.getDatabase())
+    const columns = (
+      storage.getDatabase().prepare('PRAGMA table_info(activities)').all() as { name: string }[]
+    ).map((c) => c.name)
+    storage.close()
+
+    expect(columns.sort()).toEqual([...ACTIVITY_COLUMNS].sort())
+    expect(build({ dbPath }).tables).toContain('sightings')
   })
 
   it('compacts and gzips the whole database for a snapshot', () => {

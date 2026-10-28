@@ -102,6 +102,28 @@ describe('BackendUpload', () => {
     expect(job.onSuccess).toHaveBeenCalledTimes(1)
   })
 
+  it('posts the fallback body when the job offers one for a failed upload', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('', { status: 409 }))
+      .mockResolvedValueOnce(new Response('', { status: 200 }))
+    globalThis.fetch = fetchMock
+    const fallback = vi.fn(async () => fileForm(Buffer.from('fallback'), 'fallback.bin'))
+    const { upload, job } = makeUpload({}, { fallback })
+
+    await expect(upload.triggerUpload()).resolves.toEqual({ success: true })
+
+    expect(fallback).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 409 }),
+      expect.any(String),
+    )
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(
+      ((fetchMock.mock.calls[1][1] as RequestInit).body as FormData).get('file'),
+    ).toHaveProperty('name', 'fallback.bin')
+    expect(job.onSuccess).toHaveBeenCalledTimes(1)
+  })
+
   it('skips when sharing is disabled', async () => {
     const fetchMock = mockFetchResponse(200)
     globalThis.fetch = fetchMock
