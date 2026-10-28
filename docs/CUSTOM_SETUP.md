@@ -50,7 +50,7 @@ ollama pull llama2:70b-chat   # use the full tag, not just "llama2"
 
 ## Connecting your own AI client (MCP)
 
-MemoryLane can serve your captured history to an AI assistant over MCP (read-only; it never touches recording). Claude Desktop and Cursor are registered automatically when you install the app; in those clients you'll find a **memorylane** server with tools to search your timeline and activity.
+MemoryLane can serve your captured history to an AI assistant over MCP (read-only; it never touches recording). To connect Claude Cowork or Claude Code, click **Connect** in Settings → Integrations. The client then shows a **memorylane** server with tools to search your timeline and activity.
 
 ## Local processing: nothing to configure
 

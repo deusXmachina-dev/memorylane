@@ -24,13 +24,14 @@ See what you actually work on and which tasks are worth automating. These skills
 
 **What it reads.** Your MemoryLane activity database on this computer: app names, window titles, website domains, times, AI-written activity summaries, text read from your screen (OCR), and detected task patterns. It does not return screenshots.
 
-**Where it goes.** Into your Claude conversation, only when a skill asks for it. The plugin sends your activity to no other service.
+**Where it goes.** Into your Claude conversation, only when a skill asks for it. Some skills also send details of your work elsewhere, as listed below.
 
 **What it downloads or contacts.**
 
 - The data reader may download a public text-search model (all-MiniLM-L6-v2) from Hugging Face the first time it runs. None of your data is sent.
-- `report-new` downloads logos and brand icons from the web (a logo link you give it, cdn.simpleicons.org, cdn.jsdelivr.net) and may install Playwright from npm to make PDFs.
-- `process-to-n8n` and `process-to-netsuite` read public documentation on the web. They use your own n8n or NetSuite connection only if you've added one to Claude. NetSuite is read-only; n8n workflows are created unpublished.
+- `report-new` downloads logos and brand icons from the web (a logo link you give it, cdn.simpleicons.org, cdn.jsdelivr.net). The icon links contain the names of tools and clients from your activity, so those sites can see them. It may also install Playwright from npm to make PDFs.
+- `pattern-to-pdf` uses the Chrome installed on your computer to make the PDF.
+- `process-to-n8n` and `process-to-netsuite` search the web for documentation, and those searches can include details of your process. If you've added an n8n or NetSuite connection to Claude, they use it: `process-to-n8n` creates the workflow, built from your activity, in your n8n (unpublished); NetSuite is read-only.
 
 **What it saves.** Only files you ask for (reports, PDFs, workflow files) in your working folder, `~/Desktop/automation/`, or a temp folder. `process-analyst-new` may copy the database to a temp folder to query it. If you choose a different database, its path is saved in `~/.config/memorylane/cli.json`.
 
