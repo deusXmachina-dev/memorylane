@@ -7,7 +7,6 @@ vi.mock('@main/utils/logger', () => ({
 import {
   databaseUploadJob,
   SLICE_OVERLAP_MS,
-  SLICE_PAGE_SIZE,
   type DatabaseUploadJobParams,
   type PrepareUpload,
 } from './database-upload-job'
@@ -15,12 +14,10 @@ import { jsonResponse, readFormFile } from '@main/utils/test-utils'
 
 const HOUR = 60 * 60 * 1000
 
-function makeJob(
-  overrides: Partial<DatabaseUploadJobParams> & { syncState?: object; count?: number } = {},
-) {
-  const { syncState = { format: 'delta-v1', last_end_ts: null }, count = 3, ...params } = overrides
+function makeJob(overrides: Partial<DatabaseUploadJobParams> & { syncState?: object } = {}) {
+  const { syncState = { format: 'delta-v1', last_end_ts: null }, ...params } = overrides
   const request = vi.fn(async () => jsonResponse(syncState))
-  const prepareUpload = vi.fn<PrepareUpload>(async () => ({ gzip: Buffer.from('gz'), count }))
+  const prepareUpload = vi.fn<PrepareUpload>(async () => Buffer.from('gz'))
   const backupToFile = vi.fn(async () => {})
   const recordUploadAt = vi.fn()
   const job = databaseUploadJob({
@@ -95,7 +92,6 @@ describe('databaseUploadJob', () => {
       dbPath: '/db/memorylane.db',
       outPath: '/tmp/out',
       sinceTs: 10 * HOUR - SLICE_OVERLAP_MS,
-      pageSize: SLICE_PAGE_SIZE,
     })
     expect((body as FormData).get('format')).toBe('delta-v1')
     expect((await readFormFile(body)).name).toBe('slice.db.gz')
@@ -116,17 +112,14 @@ describe('databaseUploadJob', () => {
     await expect(job.produce('/tmp/out')).rejects.toThrow('Sync state failed (500)')
   })
 
-  it('pages on while slices are full and records the day after the last page', async () => {
+  it('records the upload day on success', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(1_700_000_000_000)
-    const full = makeJob({ count: SLICE_PAGE_SIZE })
-    await full.job.produce('/tmp/out')
-    expect(await full.job.onSuccess(ok)).toBe(true)
-    expect(full.recordUploadAt).not.toHaveBeenCalled()
+    const { job, recordUploadAt } = makeJob()
 
-    const partial = makeJob({ count: 10 })
-    await partial.job.produce('/tmp/out')
-    expect(await partial.job.onSuccess(ok)).toBe(false)
-    expect(partial.recordUploadAt).toHaveBeenCalledWith(1_700_000_000_000)
+    await job.produce('/tmp/out')
+    await job.onSuccess(ok)
+
+    expect(recordUploadAt).toHaveBeenCalledWith(1_700_000_000_000)
   })
 })

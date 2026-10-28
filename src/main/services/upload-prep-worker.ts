@@ -8,7 +8,6 @@ export interface SliceRequest {
   dbPath: string
   outPath: string
   sinceTs: number
-  pageSize: number
 }
 
 export interface SnapshotRequest {
@@ -18,14 +17,7 @@ export interface SnapshotRequest {
 
 export type UploadPrepRequest = SliceRequest | SnapshotRequest
 
-export interface Slice {
-  gzip: Buffer
-  count: number
-}
-
-export type UploadPrepResponse =
-  | { ok: true; gzip: ArrayBuffer; count: number }
-  | { ok: false; error: string }
+export type UploadPrepResponse = { ok: true; gzip: ArrayBuffer } | { ok: false; error: string }
 
 const ACTIVITY_COLUMNS = [
   'id',
@@ -41,19 +33,17 @@ const ACTIVITY_COLUMNS = [
 
 const SNAPSHOT_TABLES = ['clusters', 'cluster_sightings', 'sightings', 'user_context']
 
-export function buildSliceSync(req: SliceRequest): Slice {
+export function buildSliceSync(req: SliceRequest): Buffer {
   const out = new Database(req.outPath)
-  let count: number
   try {
     out.prepare('ATTACH DATABASE ? AS src').run(req.dbPath)
     out
       .prepare(
         `CREATE TABLE main.activities AS
          SELECT ${ACTIVITY_COLUMNS.join(', ')} FROM src.activities
-         WHERE end_timestamp >= ? ORDER BY end_timestamp LIMIT ?`,
+         WHERE end_timestamp >= ?`,
       )
-      .run(req.sinceTs, req.pageSize)
-    count = (out.prepare('SELECT COUNT(*) AS n FROM main.activities').get() as { n: number }).n
+      .run(req.sinceTs)
     for (const table of SNAPSHOT_TABLES) {
       out.exec(`CREATE TABLE main.${table} AS SELECT * FROM src.${table}`)
     }
@@ -61,22 +51,20 @@ export function buildSliceSync(req: SliceRequest): Slice {
   } finally {
     out.close()
   }
-  return { gzip: zlib.gzipSync(fs.readFileSync(req.outPath)), count }
+  return zlib.gzipSync(fs.readFileSync(req.outPath))
 }
 
-export function compactSnapshotSync(req: SnapshotRequest): Slice {
+export function compactSnapshotSync(req: SnapshotRequest): Buffer {
   const db = new Database(req.path)
-  let count: number
   try {
     db.exec('VACUUM')
-    count = (db.prepare('SELECT COUNT(*) AS n FROM activities').get() as { n: number }).n
   } finally {
     db.close()
   }
-  return { gzip: zlib.gzipSync(fs.readFileSync(req.path)), count }
+  return zlib.gzipSync(fs.readFileSync(req.path))
 }
 
-export function prepareUploadSync(req: UploadPrepRequest): Slice {
+export function prepareUploadSync(req: UploadPrepRequest): Buffer {
   return req.kind === 'slice' ? buildSliceSync(req) : compactSnapshotSync(req)
 }
 
@@ -89,10 +77,10 @@ if (parentPort) {
   forwardLogsToParent(parentPort)
   parentPort.on('message', ({ data }) => {
     try {
-      const { gzip, count } = prepareUploadSync(data)
+      const gzip = prepareUploadSync(data)
       const ab = new ArrayBuffer(gzip.byteLength)
       new Uint8Array(ab).set(gzip)
-      parentPort.postMessage({ ok: true, gzip: ab, count }, [ab])
+      parentPort.postMessage({ ok: true, gzip: ab }, [ab])
     } catch (err) {
       parentPort.postMessage({
         ok: false,
