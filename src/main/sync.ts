@@ -12,6 +12,7 @@ import { BackendClient } from '@main/services/backend-client'
 import { backendUrlFor } from '@main/system/edition'
 import { BackendUpload } from '@main/services/backend-upload'
 import { databaseUploadJob } from '@main/services/database-upload-job'
+import { readResetRequestedAt, writeResetRequestedAt } from '@main/services/database-upload-store'
 import { logUploadJob } from '@main/services/log-upload-job'
 import { readLogUploadState, writeLogUploadState } from '@main/services/log-upload-store'
 import { RemoteBlacklistService } from '@main/services/remote-blacklist-service'
@@ -107,6 +108,8 @@ export function createSync(deps: SyncDeps): AppSync {
           backupToFile: (destinationPath) => storage.backupToFile(destinationPath),
           getLastUploadAt: () => storage.uploadRuns.getLastRunTimestamp(),
           recordUploadAt: (ts) => storage.uploadRuns.record(ts),
+          getResetRequestedAt: () => readResetRequestedAt(),
+          clearResetRequest: () => writeResetRequestedAt(null),
         }),
       })
     : null

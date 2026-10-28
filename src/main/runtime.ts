@@ -15,6 +15,7 @@ import { SummaryModeTracker } from '@main/services/summary-mode-tracker'
 import { TaskMiner } from '@main/services/task-miner'
 import { UserContextBuilder } from '@main/services/user-context-builder'
 import { readRemoteModelConfig } from '@main/services/remote-model-config-store'
+import { writeResetRequestedAt } from '@main/services/database-upload-store'
 import type { RemoteModelConfig } from '@/shared/remote-model-config'
 import { pushModelSelections, resolveModelPush } from '@main/ui/apply-models'
 import { createPipelineHarness, type PipelineHarness } from '@main/activity/pipeline-harness'
@@ -83,7 +84,7 @@ export async function createMainRuntime(params: {
   const dev = !app.isPackaged
   const userDataPath = app.getPath('userData')
   const dbPath = path.join(userDataPath, dev ? 'memorylane-dev.db' : 'memorylane.db')
-  applyPendingDatabaseImport(dbPath)
+  if (applyPendingDatabaseImport(dbPath)) writeResetRequestedAt(Date.now())
   const storage = new StorageService(dbPath)
   applyMigrations(storage.getDatabase())
   const usageTracker = new UsageTracker()
@@ -222,6 +223,7 @@ export async function createMainRuntime(params: {
     }
 
     storage.purge()
+    writeResetRequestedAt(Date.now())
 
     try {
       if (fs.existsSync(outputDir)) {

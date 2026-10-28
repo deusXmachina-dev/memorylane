@@ -91,7 +91,7 @@ export function DataTabPanel({
           {remoteSyncEnabled && (
             <SettingsRow
               label="Sync now"
-              description="Send new data without waiting for the hourly sync."
+              description="Send new data now instead of waiting for the daily sync."
               control={<DatabaseSyncSection api={api} />}
             />
           )}

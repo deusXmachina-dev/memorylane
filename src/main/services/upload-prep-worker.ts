@@ -3,8 +3,8 @@ import * as fs from 'fs'
 import * as zlib from 'zlib'
 import { forwardLogsToParent, type WorkerLogEvent } from '@main/utils/worker-log'
 
-export interface SliceRequest {
-  kind: 'slice'
+export interface DeltaRequest {
+  kind: 'delta'
   dbPath: string
   outPath: string
   sinceTs: number
@@ -15,11 +15,11 @@ export interface SnapshotRequest {
   path: string
 }
 
-export type UploadPrepRequest = SliceRequest | SnapshotRequest
+export type UploadPrepRequest = DeltaRequest | SnapshotRequest
 
 export type UploadPrepResponse = { ok: true; gzip: ArrayBuffer } | { ok: false; error: string }
 
-const ACTIVITY_COLUMNS = [
+export const ACTIVITY_COLUMNS = [
   'id',
   'start_timestamp',
   'end_timestamp',
@@ -33,20 +33,22 @@ const ACTIVITY_COLUMNS = [
 
 const SNAPSHOT_TABLES = ['clusters', 'cluster_sightings', 'sightings', 'user_context']
 
-export function buildSliceSync(req: SliceRequest): Buffer {
+export function buildDeltaSync(req: DeltaRequest): Buffer {
   const out = new Database(req.outPath)
   try {
     out.prepare('ATTACH DATABASE ? AS src').run(req.dbPath)
-    out
-      .prepare(
-        `CREATE TABLE main.activities AS
-         SELECT ${ACTIVITY_COLUMNS.join(', ')} FROM src.activities
-         WHERE end_timestamp >= ?`,
-      )
-      .run(req.sinceTs)
-    for (const table of SNAPSHOT_TABLES) {
-      out.exec(`CREATE TABLE main.${table} AS SELECT * FROM src.${table}`)
-    }
+    out.transaction(() => {
+      out
+        .prepare(
+          `CREATE TABLE main.activities AS
+           SELECT ${ACTIVITY_COLUMNS.join(', ')} FROM src.activities
+           WHERE end_timestamp >= ?`,
+        )
+        .run(req.sinceTs)
+      for (const table of SNAPSHOT_TABLES) {
+        out.exec(`CREATE TABLE main.${table} AS SELECT * FROM src.${table}`)
+      }
+    })()
     out.exec('DETACH DATABASE src')
   } finally {
     out.close()
@@ -65,7 +67,7 @@ export function compactSnapshotSync(req: SnapshotRequest): Buffer {
 }
 
 export function prepareUploadSync(req: UploadPrepRequest): Buffer {
-  return req.kind === 'slice' ? buildSliceSync(req) : compactSnapshotSync(req)
+  return req.kind === 'delta' ? buildDeltaSync(req) : compactSnapshotSync(req)
 }
 
 interface ParentPortLike {
