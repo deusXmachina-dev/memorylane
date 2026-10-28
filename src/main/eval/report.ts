@@ -35,6 +35,7 @@ export function renderHeader(report: EvalReport, title: string): string[] {
   const lines = [`# ${title} — ${report.generatedAt}`, '']
   if (report.label) lines.push(`- Label: ${report.label}`)
   lines.push(`- Pipeline: ${report.pipeline ?? '(unknown)'}`)
+  if (report.maxSnapshots !== undefined) lines.push(`- Max snapshots: ${report.maxSnapshots}`)
   lines.push(`- Git: ${gitLabel(report)}`)
   lines.push(`- Vendor: ${report.vendor}`)
   lines.push(`- Models: ${models.join(', ')}`)
