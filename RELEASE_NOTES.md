@@ -1,12 +1,13 @@
-# MemoryLane v1.5.13
+# MemoryLane v1.5.14-alpha.2
 
-Dock icon fix and more reliable eval recordings.
+Smaller daily database uploads and a simpler remote sync setting.
 
 ## What's Changed
 
-- **Dock icon while the window is open**: on macOS, MemoryLane shows in the Dock while its main window is open and hides again when it closes (#310).
-- **Eval goldens keep every activity**: each pipeline activity stays in the golden; the step target goes to its longest block, and extra activities keep their live summary (#314).
-- **Recording guide no longer splits steps**: clicking the guide during a recording no longer counts as switching apps (#314).
+- **Daily upload sends only new data**: the database upload now sends only what changed since the last upload, not the whole database.
+- **Remote sync is on/off**: the Off/Summary/Detailed level becomes one switch. Users who had Summary are moved to on, which also sends OCR text.
+- **Purge and import clear server data**: purging or importing a database also deletes this device's data on the server.
+- **Task-mining failures shown on the Patterns page** (#317).
 
 ## Known Issues & Limitations
 
@@ -24,4 +25,4 @@ Dock icon fix and more reliable eval recordings.
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.12...v1.5.13
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.13...v1.5.14-alpha.2
