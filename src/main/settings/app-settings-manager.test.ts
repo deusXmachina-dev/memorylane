@@ -48,7 +48,7 @@ describe('AppSettingsManager', () => {
       expect(defaults.maxScreenshotsForLlm).toBe(ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM)
       expect(defaults.activityRequestTimeoutMs).toBe(ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS)
       expect(defaults.taskMiningRequestTimeoutMs).toBe(PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS)
-      expect(defaults.semanticPipelineMode).toBe('auto')
+      expect(defaults.semanticPipelineMode).toBe('image')
       expect(defaults.captureHotkeyAccelerator).toBe(DEFAULT_CAPTURE_HOTKEY_ACCELERATOR)
       expect(defaults.excludePrivateBrowsing).toBe(true)
       expect(defaults.excludeLoginScreens).toBe(true)
@@ -364,6 +364,52 @@ describe('AppSettingsManager', () => {
       expect(settings.semanticVideoModel).toBe(expected)
       expect(settings.modelsByVendor.openrouter?.semanticVideoModel).toBe(expected)
       expect(settings.modelDefaultsVersion).toBe(MODEL_DEFAULTS_VERSION)
+    })
+
+    it('resets pipeline mode and visual threshold to defaults on a version bump', () => {
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          activeVendor: 'openrouter',
+          semanticPipelineMode: 'auto',
+          visualThreshold: 8,
+          modelsByVendor: {
+            openrouter: {
+              semanticVideoModel: 'google/gemini-3.1-flash-lite',
+              semanticSnapshotModel: 'openai/gpt-6-luna',
+              patternDetectionModel: 'z-ai/glm-5.3-flash',
+              semanticPipelineMode: 'auto',
+            },
+            google: {
+              semanticVideoModel: 'gemini-3.5-flash-lite',
+              semanticSnapshotModel: 'gemini-3.5-flash-lite',
+              patternDetectionModel: 'gemini-3.5-flash-lite',
+              semanticPipelineMode: 'video',
+            },
+          },
+          modelDefaultsVersion: MODEL_DEFAULTS_VERSION - 1,
+        }),
+      )
+      const settings = new AppSettingsManager(configPath).get()
+      expect(settings.semanticPipelineMode).toBe('image')
+      expect(settings.modelsByVendor.openrouter?.semanticPipelineMode).toBe('image')
+      expect(settings.modelsByVendor.google?.semanticPipelineMode).toBe('auto')
+      expect(settings.visualThreshold).toBe(VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT)
+    })
+
+    it('keeps pipeline mode and visual threshold when stored defaults version is current', () => {
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          activeVendor: 'openrouter',
+          semanticPipelineMode: 'video',
+          visualThreshold: 8,
+          modelDefaultsVersion: MODEL_DEFAULTS_VERSION,
+        }),
+      )
+      const settings = new AppSettingsManager(configPath).get()
+      expect(settings.semanticPipelineMode).toBe('video')
+      expect(settings.visualThreshold).toBe(8)
     })
 
     it('keeps custom picks when stored defaults version is current', () => {
