@@ -136,4 +136,24 @@ export const MODEL_PRICING_USD_PER_MILLION: Record<
     input_tokens_per_million: 1.5,
     completion_tokens_per_million: 7.5,
   },
+  'anthropic/claude-haiku-5.5': {
+    input_tokens_per_million: 0.1,
+    completion_tokens_per_million: 0.5,
+  },
+  'openai/gpt-6-luna-pro': {
+    input_tokens_per_million: 0.1,
+    completion_tokens_per_million: 0.5,
+  },
+  'minimax/minimax-m3.1-flash': {
+    input_tokens_per_million: 0.15,
+    completion_tokens_per_million: 0.6,
+  },
+  'nvidia/nemotron-3.5-super-vl': {
+    input_tokens_per_million: 0.15,
+    completion_tokens_per_million: 0.5,
+  },
+  'perceptron/perceptron-mk1.5': {
+    input_tokens_per_million: 0.15,
+    completion_tokens_per_million: 1.5,
+  },
 }
