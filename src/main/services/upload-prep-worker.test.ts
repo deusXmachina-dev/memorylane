@@ -6,12 +6,7 @@ import * as zlib from 'zlib'
 import { afterEach, describe, expect, it } from 'vitest'
 import { StorageService } from '@main/storage'
 import { applyMigrations } from '@main/storage/migrator'
-import {
-  ACTIVITY_COLUMNS,
-  buildDeltaSync,
-  compactSnapshotSync,
-  type DeltaRequest,
-} from './upload-prep-worker'
+import { ACTIVITY_COLUMNS, buildDeltaSync, type DeltaRequest } from './upload-prep-worker'
 
 describe('buildDeltaSync', () => {
   const tempFiles: string[] = []
@@ -56,7 +51,6 @@ describe('buildDeltaSync', () => {
   function build(req: Partial<DeltaRequest> & { dbPath: string }) {
     const outPath = tempPath('out')
     const gzip = buildDeltaSync({
-      kind: 'delta',
       outPath,
       sinceTs: 0,
       ...req,
@@ -116,18 +110,5 @@ describe('buildDeltaSync', () => {
 
     expect(columns.sort()).toEqual([...ACTIVITY_COLUMNS].sort())
     expect(build({ dbPath }).tables).toContain('sightings')
-  })
-
-  it('compacts and gzips the whole database for a snapshot', () => {
-    const dbPath = makeDb([100, 200])
-
-    const gzip = compactSnapshotSync({ kind: 'snapshot', path: dbPath })
-
-    const unzipped = tempPath('unzipped')
-    fs.writeFileSync(unzipped, zlib.gunzipSync(gzip))
-    const db = new Database(unzipped, { readonly: true })
-    const tables = db.prepare(`SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'`).get()
-    db.close()
-    expect(tables).toEqual({ n: 6 })
   })
 })
