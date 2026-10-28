@@ -1,4 +1,4 @@
-import type { Vendor } from './types'
+import type { SemanticPipelineMode, Vendor } from './types'
 
 export interface ModelPreset {
   id: string
@@ -13,19 +13,21 @@ export interface ModelPreset {
  * are authoritative — an upgrade replaces stale/retired ids rather than
  * stranding a seat on them.
  */
-export const MODEL_DEFAULTS_VERSION = 5
+export const MODEL_DEFAULTS_VERSION = 6
 
 export interface VendorPresets {
   /** Presets for each model slot. The first entry is the vendor's default. */
   semanticVideo: ModelPreset[]
   semanticSnapshot: ModelPreset[]
   patternDetection: ModelPreset[]
+  semanticPipelineMode: SemanticPipelineMode
 }
 
 interface VendorModelDefaults {
   semanticVideoModel: string
   semanticSnapshotModel: string
   patternDetectionModel: string
+  semanticPipelineMode: SemanticPipelineMode
 }
 
 /**
@@ -57,11 +59,13 @@ export const VENDOR_PRESETS: Record<Vendor, VendorPresets> = {
       { id: 'xiaomi/mimo-v2.6-flash', label: 'MiMo V2.6 Flash' },
       { id: 'minimax/minimax-m3', label: 'MiniMax M3' },
     ],
+    semanticPipelineMode: 'image',
   },
   google: {
     semanticVideo: [{ id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite' }],
     semanticSnapshot: [{ id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite' }],
     patternDetection: [{ id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite' }],
+    semanticPipelineMode: 'auto',
   },
   // Local OpenAI-compatible endpoints (Ollama, LM Studio, vLLM) ship no
   // defaults — the user's local catalog varies per machine, so any preset
@@ -70,6 +74,7 @@ export const VENDOR_PRESETS: Record<Vendor, VendorPresets> = {
     semanticVideo: [],
     semanticSnapshot: [],
     patternDetection: [],
+    semanticPipelineMode: 'image',
   },
 }
 
@@ -79,6 +84,7 @@ export function getPresetDefaults(p: VendorPresets): VendorModelDefaults {
     semanticVideoModel: p.semanticVideo[0]?.id ?? '',
     semanticSnapshotModel: p.semanticSnapshot[0]?.id ?? '',
     patternDetectionModel: p.patternDetection[0]?.id ?? '',
+    semanticPipelineMode: p.semanticPipelineMode,
   }
 }
 
