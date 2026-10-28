@@ -6,6 +6,46 @@ two baseline runs vs two candidate runs on the semantic-summary fixtures, free c
 judgment files live in the evals repo under `evals/semantic-summary/results/`. Model
 sweeps are in `summary-model-benchmark.md`.
 
+## 2026-10-28 — submit-keys
+
+**Hypothesis:** In enriched-timeline, Enter fixed every "drafted vs sent" case, but `typed text` and bare clicks were read as edits that never happened. Rendering only the submit-class key runs (Enter, Cmd/Ctrl+Enter, paste, save) on top of today's `typing session (N keys)` line should keep the send signal and cut `wrong-action` on message and form activities (spend-check, test-tenant, categorise-batch, smartwings, win-claude-to-email), without new invented edits.
+
+**Change:** `src/main/semantic/prompt.ts` — `describeInteraction` appends the submit-class runs to the keyboard line (`typing session (8 keys): submitted with Cmd/Ctrl+Enter`); everything else unchanged. Commit `a31effd`.
+
+**Baseline:** `2026-10-28T09-30-13-385Z-baseline-image-5356aac`, `2026-10-28T09-30-44-712Z-baseline-image-5356aac` · **Candidate:** `2026-10-28T09-57-58-202Z-submit-keys-image`, `2026-10-28T09-58-45-840Z-submit-keys-image` · **Judgment:** `compare-2026-10-28T09-30-13-385Z-baseline-image-5356aac-vs-2026-10-28T09-57-58-202Z-submit-keys-image.judgment.md`
+
+gpt-6-luna, image pipeline (6 snapshots), all 17 fixtures (80 golden-matched activities), no LLM judge. Judged on image because image is the ship candidate (see `summary-model-benchmark.md`, 2026-10-28).
+
+**Result:**
+
+| Metric (per run, 17 shared fixtures) | A baseline | B submit-keys |    Δ |
+| ------------------------------------ | ---------: | ------------: | ---: |
+| Must-mention recall                  |        70% |           70% | 0 pt |
+| Hard fails                           |        1.5 |           0.5 | −1.0 |
+| Det pass                             |        96% |           96% | 0 pt |
+| Segmentation                         |       100% |          100% | 0 pt |
+| Cost                                 |    $0.0830 |       $0.0835 |   +0 |
+
+| Pairwise judgment (80 activities) |   A |   B |
+| --------------------------------- | --: | --: |
+| Wins                              |  13 |  22 |
+| Ties                              |  45 |  45 |
+| `wrong-action`                    |  14 |  10 |
+| `missed-action`                   |  16 |  13 |
+| `wrong-detail`                    |   8 |   9 |
+| `vague`                           |   2 |   3 |
+| `over-long`                       |  16 |  13 |
+
+Net wins B − A = +9 (gate ≥ +8). `wrong-action` down, hard fails down, must-mention flat.
+
+The same prompt on the video pipeline (gemini-3.1-flash-lite, `2026-10-28T09-58-48-542Z-submit-keys-video`, `2026-10-28T09-59-00-191Z-submit-keys-video`) was flat to −2 pt on must-mention and not judged.
+
+**Verdict:** Passes the gates on image. Ship pending user sign-off.
+
+- All 13 B losses are a detail one B run dropped (a price, a command, a label), not a new invented action: run variance.
+- Every B `wrong-action` is shared with A (ties or B wins). The October failure mode (typed text promoted to edits) did not return.
+- Still unsolved in both arms: state changes with no key trace (category picked, stage set, DM sent in a busy thread).
+
 ## 2026-10-20 — enriched-timeline
 
 **Hypothesis:** The interaction timeline is the only non-visual evidence the summarizer gets, and it is lossy (`typing session (N keys)`, `mouse click`) while the rules forbid mentioning key counts. Rendering the already-captured `keySequence` / `clickSequence` classes (typed, Enter, paste, delete, save; click, double-click, right-click) and the page URL should raise must-mention recall on edit-heavy activities (lead-gen sheet cells, failed-invoice form, categorise-batch) and reduce wrong end-states, without touching the rules.
