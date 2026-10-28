@@ -10,15 +10,17 @@ sweeps are in `summary-model-benchmark.md`.
 
 Generic rewrites on top of submit-keys, gpt-6-luna image pipeline, 2 runs each, all 17 fixtures. No wording taken from goldens or fixtures.
 
-| Variant         | Change                                                                                                                            | Mention% | Hard fails | Det pass | Verdict                                  |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------- | -------: | ---------: | -------: | ---------------------------------------- |
-| submit-keys (A) | —                                                                                                                                 |     70.5 |        0.5 |    96.0% | incumbent                                |
-| P1 `1121112`    | Rules rewritten outcome-first: report visible state changes, submit key + content shown = done, skip passed-by UI, prefer short   |     66.4 |          0 |    94.9% | Lost on must-mention, not judged         |
-| P2 `eacd11e`    | P1 + each snapshot labelled "Snapshot i of n at t+Xs", timeline cap 16 → 40                                                       |     64.5 |        0.5 |    95.7% | Lost on must-mention, not judged         |
-| P3 `0761deb`    | submit-keys + one state-change rule; timeline says "text entry" / "pointer selection" instead of "typing session" / "mouse click" |     71.1 |        0.5 |    97.4% | Judged: A 16 · B 9 · tie 55 of 80 — lost |
+| Variant         | Change                                                                                                                            | Mention% | Hard fails | Det pass | Verdict                                   |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------- | -------: | ---------: | -------: | ----------------------------------------- |
+| submit-keys (A) | —                                                                                                                                 |     70.5 |        0.5 |    96.0% | incumbent                                 |
+| P1 `1121112`    | Rules rewritten outcome-first: report visible state changes, submit key + content shown = done, skip passed-by UI, prefer short   |     66.4 |          0 |    94.9% | Lost on must-mention, not judged          |
+| P2 `eacd11e`    | P1 + each snapshot labelled "Snapshot i of n at t+Xs", timeline cap 16 → 40                                                       |     64.5 |        0.5 |    95.7% | Lost on must-mention, not judged          |
+| P3 `0761deb`    | submit-keys + one state-change rule; timeline says "text entry" / "pointer selection" instead of "typing session" / "mouse click" |     71.1 |        0.5 |    97.4% | Judged: A 16 · B 9 · tie 55 of 80 — lost  |
+| P4 `b612f35`    | Same rules, no first person ("What was I working on?" gone), duplicates merged, Task section dropped; ~410 → 265 words            |     71.0 |          0 |        — | Judged: A 18 · B 16 · tie 47 of 81 — lost |
 
 - P1/P2 dropped product names and identifiers the old "be specific: name files, URLs, UI elements" rule produced (app names, ticket ids, a vendor). Removing a specificity rule costs recall even when the new rules are better written.
 - P3 judgment: `wrong-action` 9 / 9, `wrong-detail` A 6 / B 9. The extra rule added detail lost to padding, not new facts. File: `compare-2026-10-28T09-57-58-202Z-submit-keys-image-vs-2026-10-28T12-44-52-651Z-prompt-p3-image.judgment.md`.
+- P4 judgment: `wrong-action` A 7 / B 9, `wrong-detail` A 10 / B 17, `over-long` A 4 / B 7. Summaries were already third-person (only quoted titles contained "I"), so dropping the first-person framing changed nothing visible; merging the verb-intensity and submitted-vs-drafted rules into one sentence weakened both. File: `compare-2026-10-28T09-57-58-202Z-submit-keys-image-vs-2026-10-28T13-34-06-585Z-prompt-p4-image.judgment.md`.
 - First P1/P2 attempt lost 55/81 activities to a DNS outage (`ENOTFOUND openrouter.ai`); discarded and rerun.
 - This judgment scored submit-keys with 9 `wrong-action`, the earlier one with 10 for the same runs: cross-session judge noise is about ±1–4 per tag.
 
