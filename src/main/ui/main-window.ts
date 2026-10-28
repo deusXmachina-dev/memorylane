@@ -372,7 +372,7 @@ function logAppSettingsChanges(previous: AppSettings, updated: AppSettings): voi
     'semanticSnapshotModel',
     'patternDetectionModel',
     'patternDetectionEnabled',
-    'uploadDetailLevel',
+    'remoteSyncEnabled',
   ]
   for (const field of scalarFields) {
     if (previous[field] !== updated[field]) {

@@ -2,9 +2,10 @@ import type { AppSettings } from '../../shared/types'
 import { VENDOR_PRESETS } from '../../shared/vendor-defaults'
 
 export async function readFormFile(
-  body: BodyInit,
+  body: BodyInit | null,
   field = 'file',
 ): Promise<{ name: string; bytes: Buffer }> {
+  if (body === null) throw new Error('expected a request body')
   const file = (body as FormData).get(field) as File
   return { name: file.name, bytes: Buffer.from(await file.arrayBuffer()) }
 }
@@ -42,7 +43,7 @@ export function makeAppSettings(overrides: Partial<AppSettings> = {}): AppSettin
     semanticSnapshotModel: VENDOR_PRESETS.openrouter.semanticSnapshot[0].id,
     patternDetectionModel: VENDOR_PRESETS.openrouter.patternDetection[0].id,
     patternDetectionEnabled: true,
-    uploadDetailLevel: 'off',
+    remoteSyncEnabled: false,
     ...overrides,
   }
 }
