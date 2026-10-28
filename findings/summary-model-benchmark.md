@@ -4,7 +4,7 @@ Sections newest first.
 
 ## 2026-10-28 — 17 fixtures, pipeline × model × snapshots
 
-Eval: `npm run eval-summaries -- --vendor openrouter [--pipeline image] [--model <id>] [--max-snapshots N]`, all 17 fixtures (80–81 activities), no LLM judge. Pairwise judgment by claude-opus-5-5 under rubric v1 (`summary-prompt-experiments.md`). OpenRouter spend for the whole sweep: $2.73 (usage $1.18 + BYOK $1.55).
+Eval: `npm run eval-summaries -- --vendor openrouter [--pipeline image] [--model <id>] [--max-snapshots N]`, all 17 fixtures (80–81 activities), no LLM judge. Pairwise judgment by claude-opus-5-5 under rubric v1 (`summary-prompt-experiments.md`). OpenRouter spend: $2.73 for the first sweep, $4.28 cumulative after the new-model screen and prompt rewrites.
 
 ### Verdict
 
@@ -13,6 +13,26 @@ Eval: `npm run eval-summaries -- --vendor openrouter [--pipeline image] [--model
 - **`gemma-4-31b-it` on images is the cheap point**: judged B 36 · A 33 · tie 11 vs the video head at 1/5 the cost ($0.013), but more `missed-action` (27 vs 19) and `vague` (8 vs 1). Below the +10% gate.
 - **6 snapshots is the knee.** 3 loses about 6 pt mention on both Luna and Gemma; 10 and 16 add cost and nothing measurable.
 - GLM 5.3 Flash leads on mention (81–85) but still leaks raw interaction vocabulary (23–27 hard fails). Gemini 3.8 Flash is the ceiling (82.6) at 5× the cost.
+
+### New OpenRouter models (2026-10-28, image unless noted, 1 run each, submit-keys prompt `30d9f85`)
+
+Candidates: cheap (≤ $0.15/M in) ZDR vision models added since September, cross-checked with the Arena vision leaderboard (2026-10-19), whose top 40 is almost all premium models.
+
+| Model                                 | Mention% | Hard fails | Det pass | $/run |
+| ------------------------------------- | -------: | ---------: | -------: | ----: |
+| gpt-6-luna (incumbent, 2 runs)        |     70.5 |        0.5 |    96.0% | 0.083 |
+| claude-haiku-5.5                      |     76.0 |         27 |    93.5% | 0.092 |
+| claude-haiku-5.5, P3 timeline wording |     74.8 |         17 |    96.0% | 0.094 |
+| minimax-m3.1-flash                    |     73.0 |         25 |    94.3% | 0.132 |
+| minimax-m3.1-flash (video)            |     71.7 |         12 |    95.7% | 0.151 |
+| gpt-6-luna-pro                        |     70.9 |          0 |    96.7% | 0.209 |
+| nemotron-3.5-super-vl                 |     66.8 |          8 |    95.1% | 0.132 |
+| deepseek-v4.1-flash                   |     64.7 |         12 |    96.2% | 0.125 |
+| perceptron-mk1.5                      |     64.7 |         18 |    90.2% | 0.100 |
+| nemotron-3.5-super-vl (video)         |     44.6 |         26 |    92.2% | 0.093 |
+
+- None replaces gpt-6-luna. Haiku 5.5 has the best recall but writes "typed"/"typing" on its own (17 hard fails even with neutral timeline wording) and runs ~50% longer.
+- Luna Pro = Luna quality at 2.5× cost.
 
 ### Judged pairs (overall row, 17 shared fixtures, 2 runs per arm)
 
