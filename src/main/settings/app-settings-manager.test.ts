@@ -366,7 +366,7 @@ describe('AppSettingsManager', () => {
       expect(settings.modelDefaultsVersion).toBe(MODEL_DEFAULTS_VERSION)
     })
 
-    it('resets pipeline mode and visual threshold to defaults on a version bump', () => {
+    it('moves untouched pipeline mode and visual threshold to the new defaults on a version bump', () => {
       fs.writeFileSync(
         configPath,
         JSON.stringify({
@@ -384,7 +384,7 @@ describe('AppSettingsManager', () => {
               semanticVideoModel: 'gemini-3.5-flash-lite',
               semanticSnapshotModel: 'gemini-3.5-flash-lite',
               patternDetectionModel: 'gemini-3.5-flash-lite',
-              semanticPipelineMode: 'video',
+              semanticPipelineMode: 'auto',
             },
           },
           modelDefaultsVersion: MODEL_DEFAULTS_VERSION - 1,
@@ -395,6 +395,29 @@ describe('AppSettingsManager', () => {
       expect(settings.modelsByVendor.openrouter?.semanticPipelineMode).toBe('image')
       expect(settings.modelsByVendor.google?.semanticPipelineMode).toBe('auto')
       expect(settings.visualThreshold).toBe(VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT)
+    })
+
+    it('keeps an explicit pipeline pick and a tuned visual threshold on a version bump', () => {
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          activeVendor: 'openrouter',
+          semanticPipelineMode: 'video',
+          visualThreshold: 12,
+          modelsByVendor: {
+            openrouter: {
+              semanticVideoModel: 'google/gemini-3.1-flash-lite',
+              semanticSnapshotModel: 'openai/gpt-6-luna',
+              patternDetectionModel: 'z-ai/glm-5.3-flash',
+              semanticPipelineMode: 'video',
+            },
+          },
+          modelDefaultsVersion: MODEL_DEFAULTS_VERSION - 1,
+        }),
+      )
+      const settings = new AppSettingsManager(configPath).get()
+      expect(settings.semanticPipelineMode).toBe('video')
+      expect(settings.visualThreshold).toBe(12)
     })
 
     it('keeps pipeline mode and visual threshold when stored defaults version is current', () => {

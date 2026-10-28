@@ -43,6 +43,8 @@ function defaultUploadDetailLevel(edition: AppEdition): AppSettings['uploadDetai
 // their old "contains" behavior carries over as a wildcard.
 const URL_MATCH_SCHEMA_VERSION = 1
 
+const LEGACY_VISUAL_THRESHOLD_DEFAULT = 8
+
 const DEFAULTS: AppSettings = {
   autoStartEnabled: true,
   visualThreshold: VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT,
@@ -114,7 +116,7 @@ function normalizeVendorSelection(value: unknown): VendorModelSelection | undefi
 /**
  * Reset a vendor's remembered model slots to the current vendor defaults. Slots
  * whose vendor has no curated default (empty preset list, e.g. openai-compatible
- * local models) keep the user's local pick. Pipeline mode resets too.
+ * local models) keep the user's local pick. An `auto` pipeline mode takes the vendor default; an explicit video/image pick is kept.
  */
 function overrideWithVendorDefaults(
   selection: VendorModelSelection,
@@ -125,7 +127,10 @@ function overrideWithVendorDefaults(
     semanticVideoModel: d.semanticVideoModel || selection.semanticVideoModel,
     semanticSnapshotModel: d.semanticSnapshotModel || selection.semanticSnapshotModel,
     patternDetectionModel: d.patternDetectionModel || selection.patternDetectionModel,
-    semanticPipelineMode: d.semanticPipelineMode,
+    semanticPipelineMode:
+      selection.semanticPipelineMode === 'auto'
+        ? d.semanticPipelineMode
+        : selection.semanticPipelineMode,
   }
 }
 
@@ -247,7 +252,8 @@ export class AppSettingsManager {
             finalPatternModel = active.patternDetectionModel
             finalPipelineMode = active.semanticPipelineMode
           }
-          finalVisualThreshold = this.defaults.visualThreshold
+          if (finalVisualThreshold === LEGACY_VISUAL_THRESHOLD_DEFAULT)
+            finalVisualThreshold = this.defaults.visualThreshold
           this.modelDefaultsUpgraded = true
           log.info(
             `[AppSettings] Model defaults v${data.modelDefaultsVersion ?? 0} → v${MODEL_DEFAULTS_VERSION}: overriding stored model picks with vendor defaults`,
