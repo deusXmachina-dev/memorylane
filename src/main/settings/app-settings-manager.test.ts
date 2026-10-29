@@ -54,7 +54,7 @@ describe('AppSettingsManager', () => {
       expect(defaults.excludeLoginScreens).toBe(true)
       expect(defaults.excludedApps).toEqual([])
       expect(defaults.excludedUrlPatterns).toEqual([])
-      expect(defaults.uploadDetailLevel).toBe('off')
+      expect(defaults.remoteSyncEnabled).toBe(false)
     })
 
     it('get() returns a copy, not the internal reference', () => {
@@ -167,39 +167,44 @@ describe('AppSettingsManager', () => {
       expect(manager.get().excludeLoginScreens).toBe(true)
     })
 
-    it('persists uploadDetailLevel across reloads', () => {
-      for (const level of ['off', 'summary', 'detailed'] as const) {
+    it('persists remoteSyncEnabled across reloads', () => {
+      for (const enabled of [true, false]) {
         const manager = new AppSettingsManager(configPath)
-        manager.save({ uploadDetailLevel: level })
+        manager.save({ remoteSyncEnabled: enabled })
         const reloaded = new AppSettingsManager(configPath)
-        expect(reloaded.get().uploadDetailLevel).toBe(level)
+        expect(reloaded.get().remoteSyncEnabled).toBe(enabled)
       }
     })
 
-    it('preserves pre-existing summary/detailed values on load (backward compat)', () => {
-      for (const level of ['summary', 'detailed'] as const) {
+    it('maps a legacy uploadDetailLevel to remoteSyncEnabled', () => {
+      for (const [level, enabled] of [
+        ['off', false],
+        ['summary', true],
+        ['detailed', true],
+      ] as const) {
         fs.writeFileSync(configPath, JSON.stringify({ uploadDetailLevel: level }))
-        const manager = new AppSettingsManager(configPath)
-        expect(manager.get().uploadDetailLevel).toBe(level)
+        const manager = new AppSettingsManager({ configPath, edition: 'enterprise' })
+        expect(manager.get().remoteSyncEnabled).toBe(enabled)
+        expect(manager.get()).not.toHaveProperty('uploadDetailLevel')
       }
     })
 
-    it("fresh install (no config file) defaults uploadDetailLevel to 'off' for customer edition", () => {
+    it('fresh install (no config file) defaults remoteSyncEnabled to false for customer edition', () => {
       expect(fs.existsSync(configPath)).toBe(false)
       const manager = new AppSettingsManager({ configPath, edition: 'customer' })
-      expect(manager.get().uploadDetailLevel).toBe('off')
+      expect(manager.get().remoteSyncEnabled).toBe(false)
     })
 
-    it("fresh install (no config file) defaults uploadDetailLevel to 'detailed' for enterprise edition", () => {
+    it('fresh install (no config file) defaults remoteSyncEnabled to true for enterprise edition', () => {
       expect(fs.existsSync(configPath)).toBe(false)
       const manager = new AppSettingsManager({ configPath, edition: 'enterprise' })
-      expect(manager.get().uploadDetailLevel).toBe('detailed')
+      expect(manager.get().remoteSyncEnabled).toBe(true)
     })
 
-    it('respects a previously persisted off value on enterprise (does not reapply default)', () => {
-      fs.writeFileSync(configPath, JSON.stringify({ uploadDetailLevel: 'off' }))
+    it('respects a previously persisted false on enterprise (does not reapply default)', () => {
+      fs.writeFileSync(configPath, JSON.stringify({ remoteSyncEnabled: false }))
       const manager = new AppSettingsManager({ configPath, edition: 'enterprise' })
-      expect(manager.get().uploadDetailLevel).toBe('off')
+      expect(manager.get().remoteSyncEnabled).toBe(false)
     })
 
     it('unknown keys in saved file are ignored (partial merge uses defaults)', () => {

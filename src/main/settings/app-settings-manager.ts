@@ -30,11 +30,11 @@ function normalizeVendor(value: unknown): Vendor {
 
 const OPENROUTER_DEFAULTS = getVendorDefaults('openrouter')
 
-function defaultUploadDetailLevel(edition: AppEdition): AppSettings['uploadDetailLevel'] {
+function defaultRemoteSyncEnabled(edition: AppEdition): boolean {
   // Enterprise installs opt into syncing by default — the backend is the
   // whole reason the edition exists. Customer installs default to off so
   // nothing leaves the device until the user explicitly turns it on.
-  return edition === 'enterprise' ? 'detailed' : 'off'
+  return edition === 'enterprise'
 }
 
 // Bump when the meaning of stored URL exclusion entries changes. Entries are now
@@ -68,7 +68,7 @@ const DEFAULTS: AppSettings = {
   patternDetectionModel: OPENROUTER_DEFAULTS.patternDetectionModel,
   modelsByVendor: {},
   patternDetectionEnabled: true,
-  uploadDetailLevel: 'off',
+  remoteSyncEnabled: false,
 }
 
 const MIRRORED_KEYS = [
@@ -170,7 +170,7 @@ export class AppSettingsManager {
     }
     this.defaults = {
       ...DEFAULTS,
-      uploadDetailLevel: defaultUploadDetailLevel(opts.edition ?? 'customer'),
+      remoteSyncEnabled: defaultRemoteSyncEnabled(opts.edition ?? 'customer'),
     }
     this.settings = this.load()
     // Persist the version stamp once so the override runs a single time.
@@ -186,9 +186,12 @@ export class AppSettingsManager {
           pauseHotkeyAccelerator?: string
           semanticRequestTimeoutMs?: number
           remoteModelConfigVersion?: number
+          uploadDetailLevel?: 'off' | 'summary' | 'detailed'
         }
         const data = JSON.parse(fs.readFileSync(this.configPath, 'utf-8')) as StoredAppSettings
         delete data.remoteModelConfigVersion
+        const legacyUploadDetailLevel = data.uploadDetailLevel
+        delete data.uploadDetailLevel
         const activeVendor = normalizeVendor(data.activeVendor)
         const vendorDefaults = getVendorDefaults(activeVendor)
         // Backfill empty model fields from current vendor defaults — handles
@@ -286,6 +289,12 @@ export class AppSettingsManager {
           patternDetectionModel: finalPatternModel,
           semanticPipelineMode,
           modelsByVendor: finalModelsByVendor,
+          remoteSyncEnabled:
+            typeof data.remoteSyncEnabled === 'boolean'
+              ? data.remoteSyncEnabled
+              : legacyUploadDetailLevel !== undefined
+                ? legacyUploadDetailLevel !== 'off'
+                : this.defaults.remoteSyncEnabled,
         }
       }
     } catch (error) {

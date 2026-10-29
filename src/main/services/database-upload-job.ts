@@ -1,32 +1,55 @@
-import log from '@main/utils/logger'
 import { isSameDay } from '@main/utils/day'
-import type { StripOptions } from './strip-database-for-upload'
+import { BACKEND_REQUEST_TIMEOUT_MS } from '@/shared/constants'
+import type { BackendClient } from './backend-client'
+import type { DeltaRequest } from './upload-prep-worker'
 import { fileForm, type UploadJob } from './backend-upload'
 
-export type PrepareUpload = (tempPath: string, stripOptions: StripOptions) => Promise<Buffer>
+export const DELTA_OVERLAP_MS = 60 * 60 * 1000
 
-const defaultPrepareUpload: PrepareUpload = async (tempPath, stripOptions) => {
+export type PrepareUpload = (req: DeltaRequest) => Promise<Buffer>
+
+const defaultPrepareUpload: PrepareUpload = async (req) => {
   const { prepareUploadInWorker } = await import('./upload-prep')
-  return prepareUploadInWorker(tempPath, stripOptions)
-}
-
-export interface DatabaseUploadStorage {
-  backupToFile(destinationPath: string): Promise<void>
+  return prepareUploadInWorker(req)
 }
 
 export interface DatabaseUploadJobParams {
-  storage: DatabaseUploadStorage
-  getStripOptions: () => StripOptions
+  backend: Pick<BackendClient, 'request'>
+  getDbPath: () => string
   getLastUploadAt: () => number | null
   recordUploadAt: (ts: number) => void
   prepareUpload?: PrepareUpload
 }
 
+export async function deleteServerData(backend: Pick<BackendClient, 'request'>): Promise<void> {
+  const response = await backend.request('api/device/data', {
+    method: 'DELETE',
+    timeoutMs: BACKEND_REQUEST_TIMEOUT_MS,
+  })
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw new Error(`Server delete failed (${response.status}): ${text}`)
+  }
+}
+
 export function databaseUploadJob(params: DatabaseUploadJobParams): UploadJob {
   const prepareUpload = params.prepareUpload ?? defaultPrepareUpload
+
+  async function fetchLastEndTs(): Promise<number | null> {
+    const response = await params.backend.request('api/device/data/state', {
+      timeoutMs: BACKEND_REQUEST_TIMEOUT_MS,
+    })
+    if (!response.ok) {
+      const text = await response.text().catch(() => '')
+      throw new Error(`Sync state failed (${response.status}): ${text}`)
+    }
+    const data = (await response.json()) as { last_end_ts?: number | null }
+    return data.last_end_ts ?? null
+  }
+
   return {
     name: 'DatabaseUpload',
-    endpoint: 'api/device/upload',
+    endpoint: 'api/device/data',
     skipReason() {
       const lastUploadAt = params.getLastUploadAt()
       if (lastUploadAt !== null && isSameDay(lastUploadAt, Date.now())) {
@@ -35,13 +58,16 @@ export function databaseUploadJob(params: DatabaseUploadJobParams): UploadJob {
       return null
     },
     async produce(tempPath) {
-      await params.storage.backupToFile(tempPath)
-      return fileForm(await prepareUpload(tempPath, params.getStripOptions()), 'memorylane.db.gz')
+      const lastEndTs = await fetchLastEndTs()
+      const gzip = await prepareUpload({
+        dbPath: params.getDbPath(),
+        outPath: tempPath,
+        sinceTs: lastEndTs === null ? 0 : lastEndTs - DELTA_OVERLAP_MS,
+      })
+      return fileForm(gzip, 'delta.db.gz')
     },
-    async onSuccess(response) {
-      const data = (await response.json()) as { upload_id: string; checksum_sha256: string }
+    async onSuccess() {
       params.recordUploadAt(Date.now())
-      log.info(`[DatabaseUpload] upload_id=${data.upload_id} checksum=${data.checksum_sha256}`)
     },
   }
 }

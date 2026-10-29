@@ -23,6 +23,7 @@ import { migration as migration0021 } from './0021_drop_pattern_tables'
 import { migration as migration0022 } from './0022_bridge_sighting_active_time'
 import { migration as migration0023 } from './0023_union_sighting_active_time'
 import { migration as migration0024 } from './0024_reset_failed_mining_days_dark_wake'
+import { migration as migration0025 } from './0025_activities_end_timestamp_index'
 
 // Cluster tables hold state derived from the append-only `sightings` table and
 // are fully rebuildable (rebuildClustersIfEmpty repopulates after a wipe). A
@@ -53,4 +54,5 @@ export const migrations: Migration[] = [
   migration0022,
   migration0023,
   migration0024,
+  migration0025,
 ]

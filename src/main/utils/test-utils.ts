@@ -42,7 +42,7 @@ export function makeAppSettings(overrides: Partial<AppSettings> = {}): AppSettin
     semanticSnapshotModel: VENDOR_PRESETS.openrouter.semanticSnapshot[0].id,
     patternDetectionModel: VENDOR_PRESETS.openrouter.patternDetection[0].id,
     patternDetectionEnabled: true,
-    uploadDetailLevel: 'off',
+    remoteSyncEnabled: false,
     ...overrides,
   }
 }
