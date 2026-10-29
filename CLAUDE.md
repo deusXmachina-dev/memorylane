@@ -7,6 +7,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Keep user-facing text in repo files (release notes, README) and the application (React UI) brief and to the point.
 - Prefer the shortest complete wording; remove repeated context and optional detail unless it improves clarity.
 
+## Docs vs. Code
+
+When a repository's documentation and its existing code disagree, follow the
+conventions in the existing code. In your final reply, list each inconsistency
+you found between the documentation and the code.
+
 ## Contributor Guide
 
 - For local setup, test commands, permission checks, and endpoint/storage gotchas, see `docs/CONTRIBUTING.md`.
