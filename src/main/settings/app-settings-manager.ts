@@ -43,6 +43,8 @@ function defaultUploadDetailLevel(edition: AppEdition): AppSettings['uploadDetai
 // their old "contains" behavior carries over as a wildcard.
 const URL_MATCH_SCHEMA_VERSION = 1
 
+const LEGACY_VISUAL_THRESHOLD_DEFAULT = 8
+
 const DEFAULTS: AppSettings = {
   autoStartEnabled: true,
   visualThreshold: VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT,
@@ -54,7 +56,7 @@ const DEFAULTS: AppSettings = {
   maxScreenshotsForLlm: ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM,
   activityRequestTimeoutMs: ACTIVITY_CONFIG.SEMANTIC_REQUEST_TIMEOUT_MS,
   taskMiningRequestTimeoutMs: PATTERN_DETECTION_CONFIG.REQUEST_TIMEOUT_MS,
-  semanticPipelineMode: 'auto',
+  semanticPipelineMode: OPENROUTER_DEFAULTS.semanticPipelineMode,
   captureHotkeyAccelerator: DEFAULT_CAPTURE_HOTKEY_ACCELERATOR,
   excludePrivateBrowsing: true,
   excludeLoginScreens: true,
@@ -114,7 +116,7 @@ function normalizeVendorSelection(value: unknown): VendorModelSelection | undefi
 /**
  * Reset a vendor's remembered model slots to the current vendor defaults. Slots
  * whose vendor has no curated default (empty preset list, e.g. openai-compatible
- * local models) keep the user's local pick. Pipeline mode is preserved.
+ * local models) keep the user's local pick. An `auto` pipeline mode takes the vendor default; an explicit video/image pick is kept.
  */
 function overrideWithVendorDefaults(
   selection: VendorModelSelection,
@@ -125,7 +127,10 @@ function overrideWithVendorDefaults(
     semanticVideoModel: d.semanticVideoModel || selection.semanticVideoModel,
     semanticSnapshotModel: d.semanticSnapshotModel || selection.semanticSnapshotModel,
     patternDetectionModel: d.patternDetectionModel || selection.patternDetectionModel,
-    semanticPipelineMode: selection.semanticPipelineMode,
+    semanticPipelineMode:
+      selection.semanticPipelineMode === 'auto'
+        ? d.semanticPipelineMode
+        : selection.semanticPipelineMode,
   }
 }
 
@@ -228,6 +233,11 @@ export class AppSettingsManager {
         let finalVideoModel = semanticVideoModel
         let finalSnapshotModel = semanticSnapshotModel
         let finalPatternModel = patternDetectionModel
+        let finalPipelineMode = semanticPipelineMode
+        let finalVisualThreshold =
+          typeof data.visualThreshold === 'number'
+            ? data.visualThreshold
+            : this.defaults.visualThreshold
         let finalModelsByVendor = modelsByVendor
         if ((data.modelDefaultsVersion ?? 0) < MODEL_DEFAULTS_VERSION) {
           finalModelsByVendor = { ...modelsByVendor }
@@ -240,7 +250,10 @@ export class AppSettingsManager {
             finalVideoModel = active.semanticVideoModel
             finalSnapshotModel = active.semanticSnapshotModel
             finalPatternModel = active.patternDetectionModel
+            finalPipelineMode = active.semanticPipelineMode
           }
+          if (finalVisualThreshold === LEGACY_VISUAL_THRESHOLD_DEFAULT)
+            finalVisualThreshold = this.defaults.visualThreshold
           this.modelDefaultsUpgraded = true
           log.info(
             `[AppSettings] Model defaults v${data.modelDefaultsVersion ?? 0} → v${MODEL_DEFAULTS_VERSION}: overriding stored model picks with vendor defaults`,
@@ -284,7 +297,8 @@ export class AppSettingsManager {
           semanticVideoModel: finalVideoModel,
           semanticSnapshotModel: finalSnapshotModel,
           patternDetectionModel: finalPatternModel,
-          semanticPipelineMode,
+          semanticPipelineMode: finalPipelineMode,
+          visualThreshold: finalVisualThreshold,
           modelsByVendor: finalModelsByVendor,
         }
       }
@@ -375,7 +389,7 @@ export class AppSettingsManager {
         semanticVideoModel: defaults.semanticVideoModel,
         semanticSnapshotModel: defaults.semanticSnapshotModel,
         patternDetectionModel: defaults.patternDetectionModel,
-        semanticPipelineMode: defaults.semanticVideoModel.length > 0 ? 'auto' : 'image',
+        semanticPipelineMode: defaults.semanticPipelineMode,
       }
     }
     this.save({
