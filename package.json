@@ -50,6 +50,7 @@
     "compare-summaries": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/compare-summaries.ts",
     "eval-tasks": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/eval-tasks.ts",
     "eval-cluster-review": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/eval-cluster-review.ts",
+    "bench-embeddings": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/bench-embeddings.ts",
     "dump-review-input": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/dump-review-input.ts",
     "export-day": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/export-day.ts",
     "build-task-fixture": "node ./scripts/enode.js ./node_modules/tsx/dist/cli.mjs scripts/build-task-fixture.ts",
