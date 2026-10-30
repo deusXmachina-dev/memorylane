@@ -1,7 +1,7 @@
 /**
  * Claude Desktop MCP integration
  *
- * Reads and updates Claude Desktop's config to register MemoryLane
+ * Reads and updates Claude Desktop's config to register Memorylane
  * as an MCP server, so users can enable the integration with one click.
  *
  * Windows note: fresh MSIX-packaged Claude Desktop installs read their
@@ -118,7 +118,7 @@ function writeClaudeConfig(configPath: string, config: ClaudeDesktopConfig): voi
 }
 
 /**
- * Check whether MemoryLane is already registered in the Claude Desktop config.
+ * Check whether Memorylane is already registered in the Claude Desktop config.
  */
 function isRegistered(config: ClaudeDesktopConfig): boolean {
   return config.mcpServers !== undefined && MCP_SERVER_KEY in config.mcpServers
@@ -151,7 +151,7 @@ function classifyConfigPath(
 }
 
 /**
- * Report whether MemoryLane is registered in Claude Desktop's config, and
+ * Report whether Memorylane is registered in Claude Desktop's config, and
  * whether the entry matches the current app. Surfaces three states so the UI
  * can prompt the user to reconnect instead of rewriting silently.
  *
@@ -168,7 +168,7 @@ function classifyConfigPath(
  *   otherwise            → 'stale' (prompts reconnect)
  *
  * The "otherwise" case covers Windows users who registered under an older
- * MemoryLane that only wrote to `%APPDATA%\Claude\`: their classic path is
+ * Memorylane that only wrote to `%APPDATA%\Claude\`: their classic path is
  * current but the MSIX sandbox is still missing the entry. Reporting 'stale'
  * makes the Integrations UI surface a Reconnect button so they can propagate
  * to every destination in one click.

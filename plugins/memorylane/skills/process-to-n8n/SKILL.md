@@ -2,7 +2,7 @@
 name: process-to-n8n
 allowed-tools: AskUserQuestion, Read, Write, Glob, Bash, WebFetch, WebSearch, mcp__memorylane__search_context, mcp__memorylane__get_activity_details
 description: >
-  (BETA) Turn one process from a MemoryLane analysis, report or screen recording into a
+  (BETA) Turn one process from a Memorylane analysis, report or screen recording into a
   simple working n8n workflow, plus a short recipe to test and publish it. Builds the
   workflow in n8n when connected, else a file to paste in. One happy path, fewest steps.
   Use after process-analyst-new.
@@ -52,12 +52,12 @@ The user is not technical.
 Use what is there, in this order:
 
 1. `process-analysis.md` from `process-analyst-new`: `steps`, `decision_points`, `common_path`, `what_varies`, `automation`, `reconciliation`.
-2. A MemoryLane report the user points to.
+2. A Memorylane report the user points to.
 3. The user's description, a how-to doc, or a screen recording.
 
 Also:
 
-- **Captured data**, if MemoryLane tools are here: `get_activity_details` on the evidence IDs, `search_context` for more runs.
+- **Captured data**, if Memorylane tools are here: `get_activity_details` on the evidence IDs, `search_context` for more runs.
 - **Recordings:** save one picture every 3 to 5 seconds with ffmpeg and read them in order, skipping repeats (about 60 max). The transcript gives the rule and the why. If you cannot run code here, ask for screenshots of the key screens.
 - **n8n connection:** if n8n tools are connected, note whether they can create a workflow.
 

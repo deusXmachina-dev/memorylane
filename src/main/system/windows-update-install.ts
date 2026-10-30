@@ -22,7 +22,7 @@ function buildHostCloseButtonLabel(hostNames: string[]): string {
 
 function buildBlockingHostsDetail(hostNames: string[]): string {
   if (hostNames.length === 0) {
-    return 'Please close the app using MemoryLane, then click Try Again.'
+    return 'Please close the app using Memorylane, then click Try Again.'
   }
 
   const labels = hostNames.map(formatHostLabel)
@@ -61,12 +61,12 @@ export async function confirmWindowsUpdateInstall(execPath: string): Promise<boo
     const hostLabels = hostNames.map(formatHostLabel)
     const title =
       hostLabels.length === 1
-        ? `Close ${hostLabels[0]} to Update MemoryLane`
-        : 'Close Apps to Update MemoryLane'
+        ? `Close ${hostLabels[0]} to Update Memorylane`
+        : 'Close Apps to Update Memorylane'
     const message =
       hostLabels.length === 1
-        ? `MemoryLane needs ${hostLabels[0]} to be closed before the update can continue.`
-        : 'MemoryLane needs some apps to be closed before the update can continue.'
+        ? `Memorylane needs ${hostLabels[0]} to be closed before the update can continue.`
+        : 'Memorylane needs some apps to be closed before the update can continue.'
 
     const { response } = await dialog.showMessageBox({
       type: 'warning',
@@ -92,7 +92,7 @@ export async function confirmWindowsUpdateInstall(execPath: string): Promise<boo
           defaultId: 0,
           noLink: true,
           title: 'Could Not Close the App',
-          message: 'MemoryLane could not close the app automatically.',
+          message: 'Memorylane could not close the app automatically.',
           detail: 'Please close it yourself, then click Try Again.',
         })
       }

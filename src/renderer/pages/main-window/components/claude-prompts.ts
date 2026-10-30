@@ -40,7 +40,7 @@ export function buildClusterAnalyzePrompt(
     `## Path 1: Build a Claude Skill`,
     ``,
     `### Research`,
-    `Use the MemoryLane MCP tools to understand what this task really involves:`,
+    `Use the Memorylane MCP tools to understand what this task really involves:`,
     ...(hasIds
       ? [
           `1. Call get_activity_details on the activity IDs above to read the OCR evidence of what I actually did.`,
@@ -63,7 +63,7 @@ export function buildClusterAnalyzePrompt(
     `## Path 2: Analyze this pattern`,
     ``,
     `### Quick analysis`,
-    `Use the MemoryLane MCP tools:`,
+    `Use the Memorylane MCP tools:`,
     ...(hasIds
       ? [
           `1. Call get_activity_details on the activity IDs above.`,
@@ -84,7 +84,7 @@ export function buildClusterAnalyzePrompt(
     `3. **I'm done, thanks**`,
     ``,
     `If "Run deep ROI analysis": invoke /process-analyst-new focused on this pattern.`,
-    `If /process-analyst-new is not available, suggest I install the MemoryLane plugin for Claude (it includes the process analyst skill for deep workflow analysis and a reporting skill to generate shareable reports). Then offer to run a lighter analysis inline using the MCP tools instead (decompose steps, estimate time per step, flag what looks automatable).`,
+    `If /process-analyst-new is not available, suggest I install the Memorylane plugin for Claude (it includes the process analyst skill for deep workflow analysis and a reporting skill to generate shareable reports). Then offer to run a lighter analysis inline using the MCP tools instead (decompose steps, estimate time per step, flag what looks automatable).`,
   ]
   return lines.filter((l) => l !== null).join('\n')
 }

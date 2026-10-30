@@ -1,7 +1,7 @@
 /**
  * Cursor IDE MCP integration
  *
- * Reads and updates Cursor's MCP config to register MemoryLane
+ * Reads and updates Cursor's MCP config to register Memorylane
  * as an MCP server, so users can enable the integration with one click.
  */
 
@@ -67,7 +67,7 @@ function writeCursorConfig(configPath: string, config: CursorMCPConfig): void {
 }
 
 /**
- * Check whether MemoryLane is already registered in the Cursor MCP config.
+ * Check whether Memorylane is already registered in the Cursor MCP config.
  */
 function isRegistered(config: CursorMCPConfig): boolean {
   return config.mcpServers !== undefined && MCP_SERVER_KEY in config.mcpServers
@@ -84,7 +84,7 @@ function buildMCPEntry(preservedDbPath?: string): MCPServerEntry {
 }
 
 /**
- * Report whether MemoryLane is registered in Cursor's MCP config, and whether
+ * Report whether Memorylane is registered in Cursor's MCP config, and whether
  * the entry matches the current app. See getClaudeDesktopStatus for the
  * three-state semantics and the conservative stance on foreign entries.
  */

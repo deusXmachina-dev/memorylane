@@ -1,5 +1,5 @@
 /* =====================================================================
-   MemoryLane Process Report — Design System
+   Memorylane Process Report — Design System
    One stylesheet, inlined into the report HTML so the browser preview
    and the printed PDF render from the EXACT same rules (fidelity).
 
@@ -18,7 +18,7 @@
   --font-mono: 'Geist Mono', 'SF Mono', ui-monospace, 'JetBrains Mono', Menlo, Consolas, monospace;
   --font-serif: 'Playfair Display', 'Iowan Old Style', Georgia, serif;
 
-  /* ---- Brand palette (from MemoryLane landing tokens) ---- */
+  /* ---- Brand palette (from Memorylane landing tokens) ---- */
   --accent: #e0571c; /* warm amber/orange, brand primary */
   --accent-2: #f5a623; /* secondary amber for gradients/charts */
   --accent-soft: #fbeee6; /* tinted accent background */

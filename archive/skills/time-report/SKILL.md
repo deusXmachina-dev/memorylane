@@ -33,7 +33,7 @@ For a single-day report, one call is enough. For multi-day ranges, iterate day b
 
 ### Step 3 — Handle Empty or Sparse Results
 
-- **No activities returned for the entire range**: Report that MemoryLane may not have been running, or that no screen activity was captured. Stop here.
+- **No activities returned for the entire range**: Report that Memorylane may not have been running, or that no screen activity was captured. Stop here.
 - **Fewer than 5 activities for a given day**: Include the day but note the data is limited.
 - **No activities for some days in the range**: Mark those days as "No data" rather than omitting them.
 
@@ -112,6 +112,6 @@ If the user asks follow-up questions after the report:
 ## Notes
 
 - `"today"` resolves to midnight local time on the server.
-- **Gap detection is approximate.** MemoryLane captures are event-driven (triggered by user interaction and visual changes), not taken at fixed intervals. A 15-minute gap may mean the user was idle, or that the screen content didn't change enough to trigger a capture.
+- **Gap detection is approximate.** Memorylane captures are event-driven (triggered by user interaction and visual changes), not taken at fixed intervals. A 15-minute gap may mean the user was idle, or that the screen content didn't change enough to trigger a capture.
 - **Duration estimates are approximate** for the same reason — they are derived from capture timestamps, not from continuous time tracking.
 - **Client matching is best-effort.** It relies on app names, URLs, folder names, and summary text. If a user works on multiple clients in the same tool (e.g., same IDE), OCR details may be needed to distinguish them.

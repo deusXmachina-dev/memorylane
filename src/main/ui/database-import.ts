@@ -79,7 +79,7 @@ function extractDatabaseFromZip(zipPath: string, destPath: string): Promise<void
 }
 
 /**
- * Confirms the file is a usable MemoryLane database by opening it read-only and
+ * Confirms the file is a usable Memorylane database by opening it read-only and
  * checking for the core tables. Migrations run on next startup, so an older
  * schema is fine — we only require the essentials to be present. Throws with a
  * user-facing message when the file is missing tables or is not a SQLite DB.
@@ -102,7 +102,7 @@ function validateDatabaseFile(dbFilePath: string): void {
   }
 
   if (!names.has('activities') || !names.has('schema_migrations')) {
-    throw new Error('Selected file is not a MemoryLane database (missing required tables).')
+    throw new Error('Selected file is not a Memorylane database (missing required tables).')
   }
 }
 
@@ -128,7 +128,7 @@ export async function importDatabase({
       defaultPath: app.getPath('documents'),
       buttonLabel: 'Import',
       properties: ['openFile'],
-      filters: [{ name: 'MemoryLane Database', extensions: ['zip', 'db'] }],
+      filters: [{ name: 'Memorylane Database', extensions: ['zip', 'db'] }],
     })
 
     if (openResult.canceled || openResult.filePaths.length === 0) {

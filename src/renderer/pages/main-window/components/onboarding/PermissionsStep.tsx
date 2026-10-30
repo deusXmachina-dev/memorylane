@@ -23,12 +23,12 @@ const PERMISSIONS: PermissionInfo[] = [
   {
     kind: 'accessibility',
     title: 'Accessibility',
-    description: 'So MemoryLane can notice when you switch apps and type, to tell tasks apart.',
+    description: 'So Memorylane can notice when you switch apps and type, to tell tasks apart.',
   },
   {
     kind: 'screenRecording',
     title: 'Screen Recording',
-    description: 'So MemoryLane can capture screenshots to recognise what you were working on.',
+    description: 'So Memorylane can capture screenshots to recognise what you were working on.',
   },
 ]
 
@@ -120,7 +120,7 @@ export function PermissionsStep({
         title="Grant 2 permissions"
         subtitle={
           <>
-            MemoryLane needs both Accessibility and Screen Recording to capture your activity.{' '}
+            Memorylane needs both Accessibility and Screen Recording to capture your activity.{' '}
             <span className="text-foreground">{grantedCount} of 2 granted.</span>
           </>
         }
@@ -158,7 +158,7 @@ export function PermissionsStep({
         disabled={!allGranted}
         onClick={needsRestart ? handleRestart : onContinue}
       >
-        {needsRestart ? 'Restart MemoryLane' : 'Continue'}
+        {needsRestart ? 'Restart Memorylane' : 'Continue'}
       </OnboardingStep.Button>
     </OnboardingStep>
   )

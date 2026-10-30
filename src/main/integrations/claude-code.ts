@@ -1,7 +1,7 @@
 /**
  * Claude Code MCP integration
  *
- * Reads and updates Claude Code's global settings to register MemoryLane
+ * Reads and updates Claude Code's global settings to register Memorylane
  * as an MCP server, so users can enable the integration with one click.
  */
 
@@ -68,7 +68,7 @@ function writeSettings(settingsPath: string, settings: ClaudeCodeSettings): void
 }
 
 /**
- * Check whether MemoryLane is already registered in the Claude Code settings.
+ * Check whether Memorylane is already registered in the Claude Code settings.
  */
 function isRegistered(settings: ClaudeCodeSettings): boolean {
   return settings.mcpServers !== undefined && MCP_SERVER_KEY in settings.mcpServers
@@ -85,7 +85,7 @@ function buildMCPEntry(preservedDbPath?: string): MCPServerEntry {
 }
 
 /**
- * Report whether MemoryLane is registered in Claude Code's settings, and
+ * Report whether Memorylane is registered in Claude Code's settings, and
  * whether the entry matches the current app. See getClaudeDesktopStatus for
  * the three-state semantics and the conservative stance on foreign entries.
  */

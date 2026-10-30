@@ -12,7 +12,7 @@ Summarize the user's recent screen activity.
 
 If the `browse_timeline` tool is not available, stop and reply with exactly:
 
-> MemoryLane isn't connected to Claude yet. Open the MemoryLane app, go to **Integrations**, click **Add to Claude**, then restart Claude Desktop and run this again.
+> Memorylane isn't connected to Claude yet. Open the Memorylane app, go to **Integrations**, click **Add to Claude**, then restart Claude Desktop and run this again.
 
 Do not suggest plugin settings, Retry, or toggling the plugin.
 
@@ -25,7 +25,7 @@ Call `browse_timeline(startTime="30 minutes ago", endTime="now", limit=50, sampl
 ### Step 2 — Handle Empty Results
 
 - **If nothing returned**: Widen the window to `browse_timeline(startTime="2 hours ago", endTime="now", limit=50, sampling="recent_first")`.
-- **If the wider window also returns nothing**: Report that MemoryLane may not be capturing (the app might not be running, or there has been no screen activity). Stop here.
+- **If the wider window also returns nothing**: Report that Memorylane may not be capturing (the app might not be running, or there has been no screen activity). Stop here.
 - **If the wider window returns results but the 30-minute window didn't**: Note the gap to the user (e.g., "No activity in the last 30 minutes, but here's what you were doing earlier").
 
 ### Step 3 — Group and Summarize

@@ -1,5 +1,5 @@
 /**
- * MemoryLane MCP Server
+ * Memorylane MCP Server
  *
  * Exposes the context database to AI assistants via the Model Context Protocol.
  * Supports stdio transport for use with Claude Desktop, Cursor, and other MCP clients.
@@ -23,7 +23,7 @@ const SERVER_NAME = 'memorylane'
 const SERVER_VERSION = '1.0.0'
 
 const SERVER_INSTRUCTIONS = `\
-MemoryLane captures application sessions and stores one activity per session with \
+Memorylane captures application sessions and stores one activity per session with \
 an AI summary, OCR text, app metadata, and timestamp. Use it to recall past \
 screen activity.
 

@@ -15,7 +15,7 @@ export function HeadlineMetric({
   return (
     <div className="rounded-lg bg-primary/10 px-4 py-3 text-center">
       <p className="text-lg font-semibold text-primary">
-        MemoryLane found {display} of repetitive work
+        Memorylane found {display} of repetitive work
       </p>
     </div>
   )

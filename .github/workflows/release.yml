@@ -437,5 +437,5 @@ jobs:
 
           curl -fsSL \
             -H "Content-Type: application/json" \
-            -d "{\"content\":\"🚀 MemoryLane release ${RELEASE_TAG} is live: ${RELEASE_URL}\"}" \
+            -d "{\"content\":\"🚀 Memorylane release ${RELEASE_TAG} is live: ${RELEASE_URL}\"}" \
             "$DISCORD_WEBHOOK_URL"

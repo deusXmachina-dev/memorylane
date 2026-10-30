@@ -387,7 +387,7 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
   })
 }
 
-/** While on, focusing MemoryLane's own windows never produces an app change. */
+/** While on, focusing Memorylane's own windows never produces an app change. */
 export function setIgnoreSelfFocus(ignore: boolean): void {
   ignoreSelfFocus = ignore
 }

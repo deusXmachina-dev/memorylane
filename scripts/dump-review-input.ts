@@ -1,7 +1,7 @@
 #!/usr/bin/env npx tsx
 /**
  * Dumps the production ReviewInput serialization of real clusters from a
- * MemoryLane DB — the raw material for cluster-review eval fixtures. Copy the
+ * Memorylane DB — the raw material for cluster-review eval fixtures. Copy the
  * clusters you want into a fixture JSON, hand-author `expected`, done.
  *
  * Usage:

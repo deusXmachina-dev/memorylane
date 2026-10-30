@@ -7,7 +7,7 @@
 import { app, BrowserWindow, screen } from 'electron'
 import path from 'node:path'
 
-const TITLE = 'MemoryLane recording guide'
+const TITLE = 'Memorylane recording guide'
 const WIDTH = 340
 const MARGIN = 16
 

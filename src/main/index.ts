@@ -286,6 +286,6 @@ app.on('ready', async () => {
   })
 
   log.info(
-    `[Startup] MemoryLane v${app.getVersion()} (${edition} edition, ${app.isPackaged ? 'packaged' : 'dev'})`,
+    `[Startup] Memorylane v${app.getVersion()} (${edition} edition, ${app.isPackaged ? 'packaged' : 'dev'})`,
   )
 })

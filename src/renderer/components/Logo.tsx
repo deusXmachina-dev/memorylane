@@ -19,12 +19,12 @@ export function Logo({ size = 'default', iconOnly = false }: LogoProps): React.J
     <div className="inline-flex items-center gap-2.5">
       <img
         src={logoUrl}
-        alt="MemoryLane"
+        alt="Memorylane"
         width={s.img}
         height={s.img}
         className="invert dark:invert-0"
       />
-      {!iconOnly && <span className={`${s.text} font-semibold tracking-tight`}>MemoryLane</span>}
+      {!iconOnly && <span className={`${s.text} font-semibold tracking-tight`}>Memorylane</span>}
     </div>
   )
 }

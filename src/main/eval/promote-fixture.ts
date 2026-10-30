@@ -51,7 +51,7 @@ export interface PromoteCaptureOptions {
   script?: RecordingScript
   /** When the operator reached each step; the fixture is clipped to start at the first. */
   stepEnteredAt?: number[]
-  /** When the operator returned to MemoryLane after the last step; the fixture ends there. */
+  /** When the operator returned to Memorylane after the last step; the fixture ends there. */
   leftAt?: number
 }
 

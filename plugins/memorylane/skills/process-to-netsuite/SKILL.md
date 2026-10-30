@@ -2,7 +2,7 @@
 name: process-to-netsuite
 allowed-tools: AskUserQuestion, Read, Write, Glob, Bash, WebFetch, WebSearch, mcp__memorylane__search_context, mcp__memorylane__get_activity_details
 description: >
-  (BETA) Turn one process from a MemoryLane analysis, report or screen recording into a
+  (BETA) Turn one process from a Memorylane analysis, report or screen recording into a
   simple NetSuite automation (SuiteFlow, plus a script only where needed), with a
   short recipe to build, test and switch it on. One happy path, fewest steps.
   Use after process-analyst-new.
@@ -51,12 +51,12 @@ The user is not technical.
 Use what is there, in this order:
 
 1. `process-analysis.md` from `process-analyst-new`: `steps`, `decision_points`, `common_path`, `what_varies`, `automation`, `reconciliation`.
-2. A MemoryLane report the user points to.
+2. A Memorylane report the user points to.
 3. The user's description, a how-to doc, or a screen recording.
 
 Also:
 
-- **Captured data**, if MemoryLane tools are here: `get_activity_details` on the evidence IDs, `search_context` for more runs. NetSuite page addresses show the record type (`/app/accounting/transactions/vendbill.nl`).
+- **Captured data**, if Memorylane tools are here: `get_activity_details` on the evidence IDs, `search_context` for more runs. NetSuite page addresses show the record type (`/app/accounting/transactions/vendbill.nl`).
 - **Recordings:** save one picture every 3 to 5 seconds with ffmpeg and read them in order, skipping repeats (about 60 max). The transcript gives the rule and the why. If you cannot run code here, ask for screenshots of the key screens.
 - **NetSuite connection:** check this session's tools for NetSuite (`ns_` tools). If there, look up field IDs, the list the work starts from, and status values.
 

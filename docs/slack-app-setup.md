@@ -1,12 +1,12 @@
 # Slack App Setup
 
-Use this when you want MemoryLane to watch Slack channels and draft replies.
+Use this when you want Memorylane to watch Slack channels and draft replies.
 
 ## Before You Start
 
 - You need permission to install an app into your Slack workspace.
-- You need MemoryLane running locally.
-- You need an OpenRouter key configured in MemoryLane if you want semantic Slack replies. Without it, the Slack integration will start but skip reply generation. See [slack-semantic-layer.md](./slack-semantic-layer.md).
+- You need Memorylane running locally.
+- You need an OpenRouter key configured in Memorylane if you want semantic Slack replies. Without it, the Slack integration will start but skip reply generation. See [slack-semantic-layer.md](./slack-semantic-layer.md).
 
 ## 1. Create the Slack App
 
@@ -22,7 +22,7 @@ After install, copy the **Bot User OAuth Token**. It should start with `xoxb-`.
 
 ## 2. Prepare Slack
 
-1. Invite the bot to every channel you want MemoryLane to watch.
+1. Invite the bot to every channel you want Memorylane to watch.
 2. Copy the channel IDs for those channels.
 3. If you want manual approval, copy your Slack member ID too.
 
@@ -31,17 +31,17 @@ How to find IDs:
 - Channel ID: open the channel, open the channel details, then copy the channel ID.
 - Member ID: open your Slack profile, then copy your member ID.
 
-## 3. Fill the MemoryLane Settings
+## 3. Fill the Memorylane Settings
 
-Open MemoryLane settings and fill the Slack section like this:
+Open Memorylane settings and fill the Slack section like this:
 
 - `Bot Token`: the `xoxb-...` bot token from Slack
 - `Owner User ID`: your member ID. Required only when `Auto-approve replies` is off
 - `Watched Channels`: comma-separated channel IDs such as `C0123456789, C9876543210`
 - `Poll Interval (Seconds)`: start with `60`. Lower values are allowed, but are more likely to hit Slack API limits
 - `Auto-approve replies`:
-  - `On`: MemoryLane posts the drafted reply immediately
-  - `Off`: MemoryLane sends you a DM and waits for `:+1:` to approve or `:-1:` to reject
+  - `On`: Memorylane posts the drafted reply immediately
+  - `Off`: Memorylane sends you a DM and waits for `:+1:` to approve or `:-1:` to reject
 
 Then click **Save Slack Settings** and turn the integration on.
 
@@ -57,12 +57,12 @@ Once that works, add more channels carefully.
 
 - `Slack integration is enabled but incomplete`: one of bot token, watched channels, or owner user ID is missing.
 - `not_in_channel`: the bot has not been invited to the watched channel.
-- No replies are generated: verify MemoryLane has an OpenRouter key and recent activity to search.
+- No replies are generated: verify Memorylane has an OpenRouter key and recent activity to search.
 - Frequent Slack API errors: increase the poll interval and reduce the number of watched channels.
 
 ## Scope Reference
 
-The manifest template includes only the scopes MemoryLane currently uses:
+The manifest template includes only the scopes Memorylane currently uses:
 
 - `channels:history`
 - `groups:history`

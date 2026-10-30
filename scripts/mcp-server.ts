@@ -2,7 +2,7 @@
 /**
  * Standalone MCP server entry point.
  *
- * This script starts the MemoryLane MCP server with stdio transport,
+ * This script starts the Memorylane MCP server with stdio transport,
  * suitable for testing and integration with MCP clients like Claude Desktop.
  *
  * Usage:

@@ -1,4 +1,4 @@
-# MemoryLane License Server Contract
+# Memorylane License Server Contract
 
 The app expects exactly 3 endpoints.
 

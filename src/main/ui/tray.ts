@@ -1,5 +1,5 @@
 /**
- * System tray management for MemoryLane
+ * System tray management for Memorylane
  */
 
 import { app, Tray, Menu, nativeImage } from 'electron'
@@ -172,14 +172,14 @@ const updateTrayMenu = async (): Promise<void> => {
   const versionSuffix = ` (v${app.getVersion()})`
   tray.setToolTip(
     requiresActivation
-      ? `MemoryLane - Capture Paused (Device Not Activated)${versionSuffix}`
+      ? `Memorylane - Capture Paused (Device Not Activated)${versionSuffix}`
       : isUserPaused
-        ? `MemoryLane - Capture Paused (resumes ${formatRemaining(pausedUntilMs)})${versionSuffix}`
+        ? `Memorylane - Capture Paused (resumes ${formatRemaining(pausedUntilMs)})${versionSuffix}`
         : isPrivacyBlocked
-          ? `MemoryLane - Capture Paused (Privacy Rule)${versionSuffix}`
+          ? `Memorylane - Capture Paused (Privacy Rule)${versionSuffix}`
           : blockedRecently
-            ? `MemoryLane - Capture Recently Paused (Privacy Rule)${versionSuffix}`
-            : `MemoryLane - Screen Capture${versionSuffix}`,
+            ? `Memorylane - Capture Recently Paused (Privacy Rule)${versionSuffix}`
+            : `Memorylane - Screen Capture${versionSuffix}`,
   )
 
   const usageStatsSubmenu = await buildUsageStatsSubmenu()
@@ -226,9 +226,9 @@ const updateTrayMenu = async (): Promise<void> => {
       label: 'Usage Stats',
       submenu: usageStatsSubmenu,
     },
-    { label: `MemoryLane v${app.getVersion()}`, enabled: false },
+    { label: `Memorylane v${app.getVersion()}`, enabled: false },
     {
-      label: 'Open MemoryLane',
+      label: 'Open Memorylane',
       click: () => {
         openMainWindow()
       },

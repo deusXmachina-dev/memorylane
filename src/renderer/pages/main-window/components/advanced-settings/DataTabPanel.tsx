@@ -142,7 +142,7 @@ export function DataTabPanel({
           <SettingsRow
             layout="stacked"
             label="Purge database"
-            description="This will erase the entire MemoryLane database. This action cannot be undone."
+            description="This will erase the entire Memorylane database. This action cannot be undone."
             control={
               <div className="space-y-3">
                 <div className="space-y-1.5">

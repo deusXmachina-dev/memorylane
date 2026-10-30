@@ -98,7 +98,7 @@ invented** (per the rule above): label them missing/estimated or omit:
 - **Report title** (default "<role/team> Automation Map"); **client/company
   name**; **confidentiality line** (default "COMMERCIAL IN CONFIDENCE").
 - **Client logo** (file path or URL). See §4 — **always nudge if not given**.
-- **Branding** (MemoryLane default / neutral) and **orientation** (landscape
+- **Branding** (Memorylane default / neutral) and **orientation** (landscape
   default / portrait).
 - **Report language + locale** (default English; ask if the ledger's
   `meta.location`/market suggests Philippines, Malaysia, Czech Republic,

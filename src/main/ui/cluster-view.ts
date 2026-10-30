@@ -183,7 +183,7 @@ export function filterClusters(clusters: ClusterInfo[], query: string): ClusterI
 }
 
 export const MISSING_TABLES_TEXT =
-  'Task-mining tables not found in this database. Launch the MemoryLane app once ' +
+  'Task-mining tables not found in this database. Launch the Memorylane app once ' +
   '(it creates them on startup) and let task mining run, then retry.'
 
 /** The cluster tables are created by the app, not by consumers that open the DB read-only. */

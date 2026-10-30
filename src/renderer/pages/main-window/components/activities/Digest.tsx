@@ -55,7 +55,7 @@ export function Digest({
     <Card size="sm" className="px-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-sm font-medium">What MemoryLane has recorded</div>
+          <div className="text-sm font-medium">What Memorylane has recorded</div>
           <div className="text-xs text-muted-foreground mt-1">
             <DigestHeadline digest={digest} loading={loading} />
           </div>

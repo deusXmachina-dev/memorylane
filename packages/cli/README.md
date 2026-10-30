@@ -1,6 +1,6 @@
 # @deusxmachina-dev/memorylane-cli
 
-CLI for querying the [MemoryLane](https://github.com/deusXmachina-dev/memorylane) activity database. Designed for AI agents (Claude Code, Cursor, etc.) to access your screen activity history without the Electron app running.
+CLI for querying the [Memorylane](https://github.com/deusXmachina-dev/memorylane) activity database. Designed for AI agents (Claude Code, Cursor, etc.) to access your screen activity history without the Electron app running.
 
 ## Requirements
 
@@ -14,7 +14,7 @@ npm install -g @deusxmachina-dev/memorylane-cli
 
 ## Setup
 
-Point the CLI at your MemoryLane database:
+Point the CLI at your Memorylane database:
 
 ```bash
 memorylane set-db ~/Library/Application\ Support/MemoryLane/memorylane.db
@@ -57,7 +57,7 @@ npm install -g @huggingface/transformers
 
 ## Troubleshooting
 
-### `Could not locate the bindings file` / `MemoryLane CLI cannot load its SQLite native module`
+### `Could not locate the bindings file` / `Memorylane CLI cannot load its SQLite native module`
 
 The `better-sqlite3` native binary wasn't placed on disk during install. Usually one of:
 

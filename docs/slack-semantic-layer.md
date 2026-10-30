@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The Slack semantic layer decides whether MemoryLane has enough useful context to help answer a Slack message.
+The Slack semantic layer decides whether Memorylane has enough useful context to help answer a Slack message.
 
 It sits between:
 
@@ -10,13 +10,13 @@ It sits between:
 2. reply drafting
 3. the existing approval / auto-post flow
 
-The goal is simple: do not draft a reply unless recent or searchable MemoryLane activity is actually relevant.
+The goal is simple: do not draft a reply unless recent or searchable Memorylane activity is actually relevant.
 
 ## Current Flow
 
 1. A new Slack message is detected.
 2. If no OpenRouter key is available, the system logs that Slack semantic replies currently require an OpenRouter key and skips reply generation.
-3. A research step can search MemoryLane activity using:
+3. A research step can search Memorylane activity using:
    - semantic search
    - timeline browsing
    - activity detail lookup

@@ -26,7 +26,7 @@ function describe(entryStatus: McpEntryStatus, label: string): string | undefine
     case 'stale':
       return 'App path changed — reconnect to restore access.'
     case 'not-registered':
-      return `Add MemoryLane to ${label}'s MCP config.`
+      return `Add Memorylane to ${label}'s MCP config.`
     case 'current':
       return undefined
   }
@@ -82,7 +82,7 @@ export function IntegrationsSection({ api }: IntegrationsSectionProps): React.JS
       icon={<Plug className="h-4 w-4" />}
       description={
         <>
-          Register MemoryLane as an MCP server.{' '}
+          Register Memorylane as an MCP server.{' '}
           <span className="font-medium text-foreground">Quit and relaunch the assistant</span> after
           connecting.
         </>

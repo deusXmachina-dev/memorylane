@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 /**
- * CLI tool to display MemoryLane database statistics.
+ * CLI tool to display Memorylane database statistics.
  *
  * Usage:
  *   npm run db:stats
@@ -70,13 +70,13 @@ function formatDuration(ms: number): string {
 async function main() {
   const { dbPath } = parseArgs()
 
-  console.log('=== MemoryLane Database Statistics ===\n')
+  console.log('=== Memorylane Database Statistics ===\n')
   console.log(`Database path: ${dbPath}`)
 
   // Check if database exists
   if (!fs.existsSync(dbPath)) {
     console.log('\nDatabase not found.')
-    console.log('Make sure the MemoryLane app has run and captured some data.')
+    console.log('Make sure the Memorylane app has run and captured some data.')
     process.exit(1)
   }
 

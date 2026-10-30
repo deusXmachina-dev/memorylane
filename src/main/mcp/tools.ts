@@ -219,9 +219,9 @@ export function registerTools(
     {
       title: 'Set Database Path',
       description:
-        'Set the database path for the MCP server. Persists the path to config and reinitializes the connection. Does not affect the MemoryLane recorder, which always writes to the default DB. Use reset_db_path to revert to the default.',
+        'Set the database path for the MCP server. Persists the path to config and reinitializes the connection. Does not affect the Memorylane recorder, which always writes to the default DB. Use reset_db_path to revert to the default.',
       inputSchema: {
-        dbPath: z.string().describe('Absolute path to the MemoryLane .db file'),
+        dbPath: z.string().describe('Absolute path to the Memorylane .db file'),
       },
     },
     async ({ dbPath: newDbPath }) => {
@@ -275,7 +275,7 @@ export function registerTools(
     {
       title: 'Reset Database Path',
       description:
-        'Clear any custom DB path and revert the MCP server to the default database (the one the MemoryLane recorder writes to). Use after set_db_path when you are done inspecting a different DB.',
+        'Clear any custom DB path and revert the MCP server to the default database (the one the Memorylane recorder writes to). Use after set_db_path when you are done inspecting a different DB.',
       inputSchema: {},
     },
     async () => {
@@ -659,7 +659,7 @@ async function handleListPatterns(services: MCPServices | null) {
       const text =
         hiddenCount > 0
           ? `No recurring task patterns yet, but mining is working: ${hiddenCount} task${hiddenCount !== 1 ? 's have' : ' has'} been seen only once (hidden as one-off noise). Patterns appear once a task recurs.`
-          : 'No recurring task patterns found yet. Patterns are mined from captured screen activity over time (the task miner runs periodically inside the MemoryLane app).'
+          : 'No recurring task patterns found yet. Patterns are mined from captured screen activity over time (the task miner runs periodically inside the Memorylane app).'
       return {
         content: [{ type: 'text' as const, text }],
       }

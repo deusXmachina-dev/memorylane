@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 /**
- * CLI tool to search the MemoryLane database.
+ * CLI tool to search the Memorylane database.
  *
  * Usage:
  *   npm run db:search "your search query"
@@ -78,7 +78,7 @@ async function main() {
   if (!fs.existsSync(dbPath)) {
     console.error(`Database not found at: ${dbPath}`)
     console.error('')
-    console.error('Make sure the MemoryLane app has run and captured some data.')
+    console.error('Make sure the Memorylane app has run and captured some data.')
     console.error('Or specify a custom path with --db-path')
     process.exit(1)
   }

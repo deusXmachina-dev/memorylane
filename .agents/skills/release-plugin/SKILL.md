@@ -1,11 +1,11 @@
 ---
 name: release-plugin
-description: Deploy the MemoryLane Claude Code plugin by verifying only plugin/marketplace files changed, bumping the plugin version, then committing and pushing.
+description: Deploy the Memorylane Claude Code plugin by verifying only plugin/marketplace files changed, bumping the plugin version, then committing and pushing.
 ---
 
 # Deploy Plugin
 
-Ship a new version of the MemoryLane Claude Code plugin.
+Ship a new version of the Memorylane Claude Code plugin.
 
 ## Allowed paths
 

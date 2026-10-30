@@ -2,7 +2,7 @@
   "name": "memorylane",
   "productName": "MemoryLane",
   "version": "1.5.14-alpha.1",
-  "description": "MemoryLane is a system tray application that captures screenshots at regular intervals.",
+  "description": "Memorylane is a system tray application that captures screenshots at regular intervals.",
   "main": "./out/main/index.js",
   "private": true,
   "scripts": {

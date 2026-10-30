@@ -132,7 +132,7 @@ export function ClustersSection({
     return (
       <div className="space-y-3 max-w-xl">
         <p className="text-sm text-muted-foreground">
-          MemoryLane can analyze your daily activity to find recurring tasks you could automate.
+          Memorylane can analyze your daily activity to find recurring tasks you could automate.
         </p>
         <Button
           size="sm"
@@ -182,7 +182,7 @@ export function ClustersSection({
         <div className="text-sm text-muted-foreground py-12 text-center">
           {hiddenCount > 0
             ? `No recurring patterns yet. ${hiddenCount} one-off group${hiddenCount === 1 ? '' : 's'} will appear here if seen again.`
-            : 'No patterns yet. Keep using your computer — MemoryLane surfaces recurring tasks once it has enough history.'}
+            : 'No patterns yet. Keep using your computer — Memorylane surfaces recurring tasks once it has enough history.'}
         </div>
       ) : (
         <div className="grid grid-cols-[360px_1fr] gap-4 flex-1 min-h-0">

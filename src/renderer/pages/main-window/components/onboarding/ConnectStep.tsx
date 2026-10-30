@@ -67,7 +67,7 @@ export function ConnectStep({
     <OnboardingStep>
       <OnboardingStep.Header
         title="Pick your AI assistant"
-        subtitle="Connect MemoryLane so your assistant can see patterns and help you act on them."
+        subtitle="Connect Memorylane so your assistant can see patterns and help you act on them."
       />
 
       <div className="space-y-2">

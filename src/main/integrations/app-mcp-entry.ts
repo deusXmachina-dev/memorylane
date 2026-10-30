@@ -1,5 +1,5 @@
 /**
- * Build the MCP server entry that points at the MemoryLane Electron app
+ * Build the MCP server entry that points at the Memorylane Electron app
  * running under ELECTRON_RUN_AS_NODE=1. Used by all three integrations
  * (Claude Desktop, Claude Code, Cursor) so they never drift.
  */

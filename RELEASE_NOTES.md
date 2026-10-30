@@ -1,4 +1,4 @@
-# MemoryLane v1.5.14-alpha.1
+# Memorylane v1.5.14-alpha.1
 
 Windows capture fixes: no more freeze on pause, fewer capture gaps.
 

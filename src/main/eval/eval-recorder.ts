@@ -93,7 +93,7 @@ export class EvalRecorder {
     }
     if (this.leftAt === null) {
       this.leftAt = event.timestamp
-      log.info('[EvalRecorder] Returned to MemoryLane after the last step')
+      log.info('[EvalRecorder] Returned to Memorylane after the last step')
     }
   }
 

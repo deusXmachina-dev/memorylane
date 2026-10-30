@@ -12,7 +12,7 @@ Generate a shareable process briefing from a detected pattern or user-described 
 
 If the `browse_timeline` tool is not available, stop and reply with exactly:
 
-> MemoryLane isn't connected to Claude yet. Open the MemoryLane app, go to **Integrations**, click **Add to Claude**, then restart Claude Desktop and run this again.
+> Memorylane isn't connected to Claude yet. Open the Memorylane app, go to **Integrations**, click **Add to Claude**, then restart Claude Desktop and run this again.
 
 Do not suggest plugin settings, Retry, or toggling the plugin.
 
@@ -89,7 +89,7 @@ browse_timeline(startTime="<known_date> - 2 hours", endTime="<known_date> + 2 ho
 ```
 
 3. Reconstruct the process sequence from surrounding context.
-4. If still fewer than 2 clear instances after fallback, tell the user there isn't enough data to produce a reliable document. Suggest they try again after performing the process a few more times with MemoryLane running.
+4. If still fewer than 2 clear instances after fallback, tell the user there isn't enough data to produce a reliable document. Suggest they try again after performing the process a few more times with Memorylane running.
 
 ### Step 6 — Synthesize
 

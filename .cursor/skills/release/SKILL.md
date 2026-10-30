@@ -1,9 +1,9 @@
 ---
 name: release
-description: Prepare a MemoryLane release by updating the version and release notes, then creating and pushing the tagged release commit that triggers CI. Use when the user asks to release, ship, publish, bump version, or cut a stable or prerelease version.
+description: Prepare a Memorylane release by updating the version and release notes, then creating and pushing the tagged release commit that triggers CI. Use when the user asks to release, ship, publish, bump version, or cut a stable or prerelease version.
 ---
 
-# MemoryLane Release Workflow
+# Memorylane Release Workflow
 
 Use this skill for both normal releases and prereleases. The GitHub Actions release pipeline builds macOS and Windows artifacts after the tagged commit is pushed. Tags without a suffix publish regular releases. Tags with a semver suffix such as `-beta.1` publish GitHub prereleases.
 
@@ -49,7 +49,7 @@ Update the `"version"` field to the new version.
 
 Follow the existing format in the file. Keep the wording brief and current.
 
-- **Title**: `# MemoryLane vX.Y.Z`
+- **Title**: `# Memorylane vX.Y.Z`
 - **What's Changed**: Summarize the commits into user-facing bullet points. Reference GitHub issues where applicable (for example `closes #4`).
 - **Features**: Update the feature list if new capabilities were added.
 - **Known Issues & Limitations**: Remove any issues that have been resolved. Add new ones if applicable.

@@ -1,6 +1,6 @@
 # Using Your Own Models
 
-Point MemoryLane at your own LLM instead of the built-in managed one — a local model (Ollama, vLLM, LM Studio) or your OpenRouter account. No rebuild needed; it's all in Settings.
+Point Memorylane at your own LLM instead of the built-in managed one — a local model (Ollama, vLLM, LM Studio) or your OpenRouter account. No rebuild needed; it's all in Settings.
 
 Everything else stays on your machine regardless: screen capture, OCR, text search, and embeddings all run locally. Only the LLM summarization/analysis calls go out, and only to the endpoint you pick.
 
@@ -50,7 +50,7 @@ ollama pull llama2:70b-chat   # use the full tag, not just "llama2"
 
 ## Connecting your own AI client (MCP)
 
-MemoryLane can serve your captured history to an AI assistant over MCP (read-only — it never touches recording). Claude Desktop and Cursor are registered automatically when you install the app; in those clients you'll find a **memorylane** server with tools to search your timeline and activity.
+Memorylane can serve your captured history to an AI assistant over MCP (read-only — it never touches recording). Claude Desktop and Cursor are registered automatically when you install the app; in those clients you'll find a **memorylane** server with tools to search your timeline and activity.
 
 ## Local processing — nothing to configure
 

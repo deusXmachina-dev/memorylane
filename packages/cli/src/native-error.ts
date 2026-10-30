@@ -24,7 +24,7 @@ export function isNativeBindingError(err: unknown): boolean {
  * Single-line summary suitable for embedding in JSON `error` fields.
  */
 export const NATIVE_BINDING_ERROR_SHORT =
-  'MemoryLane CLI cannot load its SQLite native module (better-sqlite3). ' +
+  'Memorylane CLI cannot load its SQLite native module (better-sqlite3). ' +
   'Reinstall with install scripts enabled (`npm install -g @deusxmachina-dev/memorylane-cli --foreground-scripts`), ' +
   'or rebuild in place (`npm rebuild better-sqlite3 --foreground-scripts` inside the install dir).'
 
@@ -46,7 +46,7 @@ export function formatNativeBindingHint(err: unknown): string {
     : '       cd "$(npm root -g)/@deusxmachina-dev/memorylane-cli"'
 
   return [
-    'MemoryLane CLI cannot load its SQLite native module (better-sqlite3).',
+    'Memorylane CLI cannot load its SQLite native module (better-sqlite3).',
     '',
     'This usually means npm install scripts were skipped or the prebuilt',
     'binary was not downloaded during install.',

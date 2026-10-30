@@ -1,12 +1,12 @@
 # Permissions
 
-MemoryLane needs two macOS permissions to capture activity. Both are gated by macOS TCC (Transparency, Consent, and Control) and must be granted by the user in System Settings → Privacy & Security. The renderer drives the grant flow during onboarding (`PermissionsStep`); the main process does **not** block startup on permissions.
+Memorylane needs two macOS permissions to capture activity. Both are gated by macOS TCC (Transparency, Consent, and Control) and must be granted by the user in System Settings → Privacy & Security. The renderer drives the grant flow during onboarding (`PermissionsStep`); the main process does **not** block startup on permissions.
 
 This document is the source of truth for permission behaviour. Update it whenever the permission flow changes.
 
 ## Required permissions
 
-| Permission           | Why MemoryLane needs it                                                                                                              | macOS API queried                                       |
+| Permission           | Why Memorylane needs it                                                                                                              | macOS API queried                                       |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------- |
 | **Accessibility**    | Detect app/window focus changes and typing activity (typing _duration_, not content) so captures can be grouped into distinct tasks. | `systemPreferences.isTrustedAccessibilityClient(false)` |
 | **Screen Recording** | Capture screenshots of the active display(s) so on-device OCR + embeddings can recognise what was on screen.                         | `systemPreferences.getMediaAccessStatus('screen')`      |
@@ -34,7 +34,7 @@ Several Electron / native APIs are TCC-gated. Calling any of them on macOS while
 | `globalShortcut.register(...)`                         | Accessibility    | Registering a global hotkey requires Accessibility on macOS. We register the capture hotkey at startup; if Accessibility is missing the registration silently fails but does not crash. |
 | `desktopCapturer.getSources({ types: ['screen'] })`    | Screen Recording | Required for capture. Calling it before the permission is granted will not yield usable thumbnails.                                                                                     |
 
-In **dev**, all of these prompts are attributed to the _responsible process_ (the IDE that launched Electron — e.g. "Cursor", "VS Code", "Terminal"), not "MemoryLane". This is a macOS signing/attribution artifact and only goes away in packaged, signed builds.
+In **dev**, all of these prompts are attributed to the _responsible process_ (the IDE that launched Electron — e.g. "Cursor", "VS Code", "Terminal"), not "Memorylane". This is a macOS signing/attribution artifact and only goes away in packaged, signed builds.
 
 ## Onboarding flow
 
@@ -45,7 +45,7 @@ The renderer's `PermissionsStep` is the single canonical surface for the grant f
 3. `requestPermission` opens the matching System Settings pane via `open(1)` (see [URL handler caveat](#system-settings-url-handler)) and starts a 2-second polling loop in `main-window.ts`.
 4. The poll calls `getPermissionStatus()` and pushes any delta via `main-window:permissionStatusChanged`. The renderer updates the per-permission card status in real time.
 5. Polling self-stops once both permissions are `granted`.
-6. The "Already granted? **Restart MemoryLane**" link in the UI calls `restartApp` (`app.relaunch()` + `app.quit()`) for users who grant out-of-band and want to make sure everything re-initialises.
+6. The "Already granted? **Restart Memorylane**" link in the UI calls `restartApp` (`app.relaunch()` + `app.quit()`) for users who grant out-of-band and want to make sure everything re-initialises.
 
 Onboarding progress is persisted in `localStorage`:
 
@@ -82,13 +82,13 @@ Privacy usage strings (`NS*UsageDescription`) are **not** required for Accessibi
 
 `extendInfo` currently only sets:
 
-- `LSUIElement: true` — hides the dock icon so MemoryLane runs as a pure tray/menubar app.
+- `LSUIElement: true` — hides the dock icon so Memorylane runs as a pure tray/menubar app.
 
 ## Restart-on-grant
 
 There is no auto-relaunch when a permission is granted. The legacy `ensurePermissions()` flow used to call `app.relaunch()` after Screen Recording was granted, because macOS used to force-quit apps on grant — that is no longer reliable nor needed. Capture machinery picks up new permissions on demand: `desktopCapturer` and `uIOhook` are initialised when capture starts, not at startup, so the user can grant mid-session and start capturing without restarting.
 
-The "Restart MemoryLane" link in the UI exists only as an escape hatch for edge cases (e.g. dev sessions where state is stale).
+The "Restart Memorylane" link in the UI exists only as an escape hatch for edge cases (e.g. dev sessions where state is stale).
 
 ## Capture lifecycle and permissions
 

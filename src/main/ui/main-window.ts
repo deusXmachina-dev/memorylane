@@ -1,5 +1,5 @@
 /**
- * Main application window for MemoryLane
+ * Main application window for Memorylane
  *
  * Provides a visible control surface alongside the system tray.
  * Singleton window that hides on close instead of destroying.
@@ -201,7 +201,7 @@ export function openMainWindow(): void {
     minimizable: true,
     maximizable: true,
     fullscreenable: false,
-    title: 'MemoryLane',
+    title: 'Memorylane',
     webPreferences: {
       preload: path.join(appRoot, 'out', 'preload', 'index.js'),
       contextIsolation: true,

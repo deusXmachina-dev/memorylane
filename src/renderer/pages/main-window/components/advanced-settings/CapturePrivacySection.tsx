@@ -99,7 +99,7 @@ export function CapturePrivacySection({
         {showAutoStart && (
           <SettingsRow
             label="Launch at login"
-            description="Start MemoryLane quietly when your Mac boots."
+            description="Start Memorylane quietly when your Mac boots."
             control={
               <Switch
                 checked={form.autoStartEnabled}

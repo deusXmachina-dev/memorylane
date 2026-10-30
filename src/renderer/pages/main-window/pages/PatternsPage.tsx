@@ -22,7 +22,7 @@ export function PatternsPage({
       fillHeight
       subtitle={
         <p className="text-xs text-muted-foreground">
-          Recurring tasks MemoryLane has spotted. Ranked by how often they recur.
+          Recurring tasks Memorylane has spotted. Ranked by how often they recur.
         </p>
       }
     >

@@ -1,6 +1,6 @@
 ---
 name: makemigrations
-description: Create SQLite migrations for MemoryLane storage schema changes. Use when interfaces or persisted fields change in src/main/storage/index.ts, when a new column/index/table/trigger is needed, or when the user asks to add a migration similar to 0001_initial_schema.ts.
+description: Create SQLite migrations for Memorylane storage schema changes. Use when interfaces or persisted fields change in src/main/storage/index.ts, when a new column/index/table/trigger is needed, or when the user asks to add a migration similar to 0001_initial_schema.ts.
 ---
 
 # Create Storage Migration

@@ -8,7 +8,7 @@ interface WelcomeStepProps {
 const POINTS = [
   {
     title: 'Spots the busywork',
-    body: 'MemoryLane watches what you do and surfaces tasks worth automating — without you having to write anything down.',
+    body: 'Memorylane watches what you do and surfaces tasks worth automating — without you having to write anything down.',
   },
   {
     title: 'Stays on your device',
@@ -24,7 +24,7 @@ export function WelcomeStep({ onContinue }: WelcomeStepProps): React.JSX.Element
   return (
     <OnboardingStep>
       <OnboardingStep.Header
-        title="Welcome to MemoryLane"
+        title="Welcome to Memorylane"
         subtitle="A quick setup before you start capturing."
       />
 

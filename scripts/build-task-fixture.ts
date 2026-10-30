@@ -72,7 +72,7 @@ const FIXTURES_ROOT = path.resolve('evals/task-mining/fixtures')
 const DEFAULT_FROM = 'jaro-2026-06-19-09-43'
 const DEFAULT_TITLE = 'Set up a new customer in Drive (folder + Services Agreement + DPA)'
 const DEFAULT_DESCRIPTION =
-  'Created a "new customer - test" folder in Google Drive, copied the MemoryLane Services ' +
+  'Created a "new customer - test" folder in Google Drive, copied the Memorylane Services ' +
   'Agreement and DPA templates into it, filled in the customer party names and engagement terms ' +
   '(party, Pilot type, term, fees, deployment schedule), and shared both documents with Petr.'
 

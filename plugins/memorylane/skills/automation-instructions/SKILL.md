@@ -14,7 +14,7 @@ their output as the source and does NOT re-mine the timeline unless nothing is s
 
 If the `browse_timeline` tool is not available, stop and reply with exactly:
 
-> MemoryLane isn't connected to Claude yet. Open the MemoryLane app, go to **Integrations**, click **Add to Claude**, then restart Claude Desktop and run this again.
+> Memorylane isn't connected to Claude yet. Open the Memorylane app, go to **Integrations**, click **Add to Claude**, then restart Claude Desktop and run this again.
 
 Do not suggest plugin settings, Retry, or toggling the plugin.
 

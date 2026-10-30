@@ -1,4 +1,4 @@
-# Contributing to MemoryLane
+# Contributing to Memorylane
 
 This guide is intentionally lightweight. Prefer stable patterns over exhaustive checklists so the doc stays useful as the code evolves.
 

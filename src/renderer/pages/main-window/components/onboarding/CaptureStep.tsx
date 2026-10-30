@@ -30,8 +30,8 @@ export function CaptureStep({
         title={capturing ? 'Analyzing your activity...' : 'Start capturing'}
         subtitle={
           capturing
-            ? 'Keep MemoryLane running. First patterns appear in about a day.'
-            : 'MemoryLane captures your screen activity to find repetitive patterns. First results appear in about a day.'
+            ? 'Keep Memorylane running. First patterns appear in about a day.'
+            : 'Memorylane captures your screen activity to find repetitive patterns. First results appear in about a day.'
         }
       />
 

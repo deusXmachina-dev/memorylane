@@ -128,7 +128,7 @@ export function ExclusionsManager({
           <div className="flex items-center gap-1.5">
             <p className="text-sm font-medium text-foreground">Block apps &amp; websites</p>
             <HelpTooltip label="What blocking covers" width="w-72">
-              Blocking follows the window you&apos;re in. MemoryLane sees the whole screen, so a
+              Blocking follows the window you&apos;re in. Memorylane sees the whole screen, so a
               blocked app or site can still show up in the background, or for a moment while you
               switch windows.
             </HelpTooltip>
