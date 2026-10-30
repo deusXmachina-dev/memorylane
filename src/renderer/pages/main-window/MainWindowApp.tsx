@@ -463,7 +463,7 @@ export function MainWindowApp(): React.JSX.Element {
   const renderStep = (id: OnboardingStepId): React.JSX.Element => {
     switch (id) {
       case 'welcome':
-        return <WelcomeStep onContinue={advance('welcome')} />
+        return <WelcomeStep isEnterprise={isEnterprise} onContinue={advance('welcome')} />
       case 'permissions':
         return permissionStatus === null ? (
           <p className="text-sm text-muted-foreground">Checking permissions…</p>

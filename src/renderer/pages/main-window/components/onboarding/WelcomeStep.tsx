@@ -2,25 +2,31 @@ import * as React from 'react'
 import { OnboardingStep } from './OnboardingStep'
 
 interface WelcomeStepProps {
+  isEnterprise: boolean
   onContinue: () => void
 }
 
-const POINTS = [
+const pointsFor = (isEnterprise: boolean) => [
   {
     title: 'Spots the busywork',
-    body: 'MemoryLane watches what you do and surfaces tasks worth automating — without you having to write anything down.',
+    body: 'MemoryLane watches what you do and surfaces tasks worth automating, without you having to write anything down.',
   },
-  {
-    title: 'Stays on your device',
-    body: 'Captures and patterns live locally. Nothing leaves your machine unless you ship it somewhere yourself.',
-  },
+  isEnterprise
+    ? {
+        title: 'Shared with your organization',
+        body: 'Your history and patterns are stored on your device and uploaded daily to your organization. Screenshots are summarized by AI, then deleted.',
+      }
+    : {
+        title: 'Stored on your device',
+        body: 'Your history and patterns live locally. Screenshots are summarized by AI (zero data retention on our plan), then deleted.',
+      },
   {
     title: 'Works with your AI assistant',
     body: 'Hand the patterns to Claude or any MCP-compatible assistant and let it do the boring parts for you.',
   },
 ]
 
-export function WelcomeStep({ onContinue }: WelcomeStepProps): React.JSX.Element {
+export function WelcomeStep({ isEnterprise, onContinue }: WelcomeStepProps): React.JSX.Element {
   return (
     <OnboardingStep>
       <OnboardingStep.Header
@@ -29,7 +35,7 @@ export function WelcomeStep({ onContinue }: WelcomeStepProps): React.JSX.Element
       />
 
       <ul className="space-y-4">
-        {POINTS.map((p) => (
+        {pointsFor(isEnterprise).map((p) => (
           <li key={p.title} className="flex gap-3">
             <span aria-hidden className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
             <div className="space-y-0.5">

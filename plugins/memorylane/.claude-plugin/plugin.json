@@ -1,9 +1,12 @@
 {
   "name": "memorylane",
-  "version": "0.9.0",
-  "description": "Search and reason over your screen activity history — what you worked on, when, and in which apps.",
+  "version": "0.10.0",
+  "description": "Search and reason over your screen activity history: what you worked on, when, and in which apps.",
   "author": {
     "name": "MemoryLane Team",
     "email": "hello@trymemorylane.com"
-  }
+  },
+  "homepage": "https://trymemorylane.com",
+  "repository": "https://github.com/deusXmachina-dev/memorylane",
+  "license": "GPL-3.0"
 }
