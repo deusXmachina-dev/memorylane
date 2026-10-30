@@ -5,7 +5,7 @@ See what you actually work on and which tasks are worth automating. These skills
 ## Requirements
 
 - A MemoryLane account (the plugin includes the connector), or the [MemoryLane desktop app](https://trymemorylane.com) on macOS or Windows with your data on this computer.
-- Install: add the `deusxmachina-dev/memorylane` marketplace in Claude, then install **MemoryLane**.
+- Install: add the `deusxmachina-dev/memorylane` marketplace in Claude, then install **MemoryLane**. In Claude Code: `/plugin install memorylane --marketplace deusxmachina-dev/memorylane`
 - Setup steps: [INSTALL.md](INSTALL.md).
 
 ## Skills
