@@ -96,7 +96,7 @@ export function ConnectStep({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        You may need to restart Claude Code / Cowork after connecting for the MCP to appear.
+        You may need to restart Cowork or Claude Code after connecting for the MCP to appear.
       </p>
 
       <OnboardingStep.Button onClick={onContinue}>Continue</OnboardingStep.Button>

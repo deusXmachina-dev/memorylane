@@ -8,6 +8,7 @@
     "email": "hello@trymemorylane.com"
   },
   "homepage": "https://trymemorylane.com",
+  "privacyPolicyUrl": "https://trymemorylane.com/privacy",
   "repository": "https://github.com/deusXmachina-dev/memorylane",
   "license": "GPL-3.0"
 }
