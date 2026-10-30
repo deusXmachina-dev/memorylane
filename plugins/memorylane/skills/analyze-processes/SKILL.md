@@ -1,6 +1,6 @@
 ---
 name: analyze-processes
-allowed-tools: mcp__memorylane__browse_timeline, mcp__memorylane__search_context, mcp__memorylane__get_activity_details, mcp__memorylane__get_user_context, mcp__memorylane__list_patterns, mcp__memorylane__get_pattern_details, Read, Write(./process-analysis*.md), Task, Bash(sqlite3 *), Bash(cp *), AskUserQuestion
+allowed-tools: mcp__memorylane__browse_timeline, mcp__memorylane__search_context, mcp__memorylane__get_activity_details, mcp__memorylane__get_user_context, mcp__memorylane__list_patterns, mcp__memorylane__get_pattern_details, Read, Write(./process-analysis*.md), Task, Bash(sqlite3 *), Bash(cp *), AskUserQuestion, mcp__plugin_memorylane_memorylane__browse_timeline, mcp__plugin_memorylane_memorylane__search_activity, mcp__plugin_memorylane_memorylane__get_activity_details, mcp__plugin_memorylane_memorylane__get_work_profile, mcp__plugin_memorylane_memorylane__list_patterns, mcp__plugin_memorylane_memorylane__get_pattern_details, mcp__plugin_memorylane_memorylane__list_organizations, mcp__plugin_memorylane_memorylane__list_teams, mcp__plugin_memorylane_memorylane__list_devices
 description: >
   Find a person's repeated tasks from their screen activity, and what each one is
   worth automating, with the time and money saved. Outputs the numbers and data a report
@@ -18,7 +18,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/references/data-sources.md`. It says whether to use 
 
 If neither the local tools (`search_context`) nor the remote tools (`search_activity`) are available, stop and reply with exactly:
 
-> MemoryLane isn't connected to Claude yet. In Claude, open **Settings > Connectors**, add **MemoryLane** and sign in, then run this again.
+> MemoryLane isn't connected yet. Sign in to the **MemoryLane** connector (`/mcp` in Claude Code, **Settings > Connectors** in Claude), then run this again.
 
 Do not suggest plugin settings, Retry, or toggling the plugin.
 

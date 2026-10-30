@@ -1,6 +1,6 @@
 ---
 name: build-n8n-workflow
-allowed-tools: AskUserQuestion, Read, Write(./workflow.json), Write(./n8n-recipe.md), Glob, Bash(ffmpeg *), WebFetch(domain:docs.n8n.io), mcp__memorylane__search_context, mcp__memorylane__get_activity_details
+allowed-tools: AskUserQuestion, Read, Write(./workflow.json), Write(./n8n-recipe.md), Glob, Bash(ffmpeg *), WebFetch(domain:docs.n8n.io), mcp__memorylane__search_context, mcp__memorylane__get_activity_details, mcp__plugin_memorylane_memorylane__search_activity, mcp__plugin_memorylane_memorylane__get_activity_details, mcp__plugin_memorylane_memorylane__list_organizations, mcp__plugin_memorylane_memorylane__list_teams, mcp__plugin_memorylane_memorylane__list_devices
 description: >
   (BETA) Turn one process from a MemoryLane analysis, report or screen recording into a
   simple working n8n workflow, plus a short recipe to test and publish it. Builds the

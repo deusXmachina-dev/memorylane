@@ -1,6 +1,6 @@
 ---
 name: build-netsuite-automation
-allowed-tools: AskUserQuestion, Read, Write(./netsuite-recipe.md), Write(./*.js), Glob, Bash(ffmpeg *), Bash(node --check *), WebFetch(domain:docs.oracle.com), mcp__memorylane__search_context, mcp__memorylane__get_activity_details
+allowed-tools: AskUserQuestion, Read, Write(./netsuite-recipe.md), Write(./*.js), Glob, Bash(ffmpeg *), Bash(node --check *), WebFetch(domain:docs.oracle.com), mcp__memorylane__search_context, mcp__memorylane__get_activity_details, mcp__plugin_memorylane_memorylane__search_activity, mcp__plugin_memorylane_memorylane__get_activity_details, mcp__plugin_memorylane_memorylane__list_organizations, mcp__plugin_memorylane_memorylane__list_teams, mcp__plugin_memorylane_memorylane__list_devices
 description: >
   (BETA) Turn one process from a MemoryLane analysis, report or screen recording into a
   simple NetSuite automation (SuiteFlow, plus a script only where needed), with a

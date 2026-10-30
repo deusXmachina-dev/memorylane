@@ -1,6 +1,6 @@
 ---
 name: recent-activity
-allowed-tools: mcp__memorylane__browse_timeline, mcp__memorylane__search_context, mcp__memorylane__get_activity_details
+allowed-tools: mcp__memorylane__browse_timeline, mcp__memorylane__search_context, mcp__memorylane__get_activity_details, mcp__plugin_memorylane_memorylane__browse_timeline, mcp__plugin_memorylane_memorylane__search_activity, mcp__plugin_memorylane_memorylane__get_activity_details, mcp__plugin_memorylane_memorylane__list_organizations, mcp__plugin_memorylane_memorylane__list_teams, mcp__plugin_memorylane_memorylane__list_devices
 description: Summarize what you've been doing in the last 30 minutes.
 ---
 
@@ -14,7 +14,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/references/data-sources.md`. It says whether to use 
 
 If neither the local tools (`search_context`) nor the remote tools (`search_activity`) are available, stop and reply with exactly:
 
-> MemoryLane isn't connected to Claude yet. In Claude, open **Settings > Connectors**, add **MemoryLane** and sign in, then run this again.
+> MemoryLane isn't connected yet. Sign in to the **MemoryLane** connector (`/mcp` in Claude Code, **Settings > Connectors** in Claude), then run this again.
 
 Do not suggest plugin settings, Retry, or toggling the plugin.
 

@@ -4,7 +4,7 @@ See what you actually work on and which tasks are worth automating. These skills
 
 ## Requirements
 
-- The MemoryLane connector in Claude, or the [MemoryLane desktop app](https://trymemorylane.com) on macOS or Windows with your data on this computer.
+- A MemoryLane account (the plugin includes the connector), or the [MemoryLane desktop app](https://trymemorylane.com) on macOS or Windows with your data on this computer.
 - Install: `/plugin install memorylane --marketplace deusxmachina-dev/memorylane`
 - Setup steps: [INSTALL.md](INSTALL.md).
 
@@ -23,7 +23,7 @@ See what you actually work on and which tasks are worth automating. These skills
 
 **What it reads.** App names, window titles, website domains, times, AI-written activity summaries, text read from your screen (OCR), and detected task patterns. It does not return screenshots.
 
-- With the MemoryLane connector: your organization's MemoryLane data, as far as your account permits. This includes people's emails, nicknames, teams and devices, plus the organization's timezone, currency and hourly rate. It is read-only.
+- With the MemoryLane connector (enterprise.trymemorylane.com): your organization's MemoryLane data, as far as your account permits. This includes people's emails, nicknames, teams and devices, plus the organization's timezone, currency and hourly rate. It is read-only.
 - With the desktop app: the activity database on this computer.
 
 **Where it goes.** Into your Claude conversation, only when a skill asks for it. Some skills also send details of your work elsewhere, as listed below.

@@ -10,11 +10,11 @@ Install from the GitHub Marketplace:
 deusxmachina-dev/memorylane
 ```
 
-The plugin has no MCP server of its own. Its skills use a MemoryLane connector set up in step 2.
+The plugin includes the MemoryLane connector.
 
-## 2. Connect MemoryLane
+## 2. Sign in
 
-In Claude, open **Settings > Connectors**, add **MemoryLane** and sign in. Skills then read your organization's data, as far as your account permits.
+Sign in to the **MemoryLane** connector: `/mcp` in Claude Code, **Settings > Connectors** in Claude. Skills then read your organization's data, as far as your account permits.
 
 <details>
 <summary><h2>2a. Data on this computer (MemoryLane desktop app installed)</h2></summary>
