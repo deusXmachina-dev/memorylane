@@ -1,6 +1,6 @@
 ---
 name: write-automation-guide
-allowed-tools: AskUserQuestion, Read, Glob, mcp__memorylane__browse_timeline, mcp__memorylane__search_context, mcp__memorylane__get_activity_details, mcp__memorylane__get_db_path, mcp__plugin_memorylane_memorylane__browse_timeline, mcp__plugin_memorylane_memorylane__search_activity, mcp__plugin_memorylane_memorylane__get_activity_details, mcp__plugin_memorylane_memorylane__list_organizations, mcp__plugin_memorylane_memorylane__list_teams, mcp__plugin_memorylane_memorylane__list_devices
+allowed-tools: AskUserQuestion, Read, Glob, Write(./automation/*), mcp__memorylane__browse_timeline, mcp__memorylane__search_context, mcp__memorylane__get_activity_details, mcp__memorylane__get_db_path, mcp__plugin_memorylane_memorylane__browse_timeline, mcp__plugin_memorylane_memorylane__search_activity, mcp__plugin_memorylane_memorylane__get_activity_details, mcp__plugin_memorylane_memorylane__list_organizations, mcp__plugin_memorylane_memorylane__list_teams, mcp__plugin_memorylane_memorylane__list_devices
 description: Write step-by-step automation instructions for a workflow, tailored to your tool (Claude, n8n or Zapier). Best run right after analyze-processes.
 ---
 
@@ -14,9 +14,9 @@ their output as the source and does NOT re-mine the timeline unless nothing is s
 
 Read `${CLAUDE_PLUGIN_ROOT}/references/data-sources.md`. It says whether to use the local or remote tools, and how the remote ones differ. Tool names below are the local ones.
 
-If neither the local tools (`search_context`) nor the remote tools (`search_activity`) are available, stop and reply with exactly:
+Tools can load on demand, so search for them first. If neither the local tools (`search_context`) nor the remote tools (`search_activity`) turn up, stop and reply with exactly:
 
-> MemoryLane isn't connected yet. Sign in to the **MemoryLane** connector (`/mcp` in Claude Code, **Settings > Connectors** in Claude). With the desktop app, open **Integrations** and click **Add to Claude** or **Reconnect** instead. Then run this again.
+> MemoryLane isn't connected yet. In Claude, open **Settings > Connectors** and sign in to **MemoryLane**. If you use the MemoryLane desktop app, open **Settings > Integrations** there and click **Connect** or **Reconnect** next to **Claude Cowork**. Then run this again.
 
 Do not suggest plugin settings, Retry, or toggling the plugin.
 
@@ -93,7 +93,7 @@ Markdown skeleton (keep it tight, drop empty sections):
 
 ## Step 4. Save and present
 
-Ask where to save (default `~/Desktop/automation/[workflow-slug].md`, or `.txt` / `.json`
+Ask where to save (default `./automation/[workflow-slug].md` in the working folder, or `.txt` / `.json`
 to match the format). Create the folder if needed. Then show the path and a 2-line summary
 (tool, step count, key apps). Offer to do another workflow.
 

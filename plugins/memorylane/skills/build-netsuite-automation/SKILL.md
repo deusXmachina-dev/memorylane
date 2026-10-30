@@ -1,6 +1,6 @@
 ---
 name: build-netsuite-automation
-allowed-tools: AskUserQuestion, Read, Write(./netsuite-recipe.md), Write(./*.js), Glob, Bash(node --check *), WebFetch(domain:docs.oracle.com), mcp__memorylane__search_context, mcp__memorylane__get_activity_details, mcp__memorylane__get_db_path, mcp__plugin_memorylane_memorylane__search_activity, mcp__plugin_memorylane_memorylane__get_activity_details, mcp__plugin_memorylane_memorylane__list_organizations, mcp__plugin_memorylane_memorylane__list_teams, mcp__plugin_memorylane_memorylane__list_devices
+allowed-tools: AskUserQuestion, Read, Write(./netsuite-recipe.md), Write(./*.js), Glob, WebFetch(domain:docs.oracle.com), mcp__memorylane__search_context, mcp__memorylane__get_activity_details, mcp__memorylane__get_db_path, mcp__plugin_memorylane_memorylane__search_activity, mcp__plugin_memorylane_memorylane__get_activity_details, mcp__plugin_memorylane_memorylane__list_organizations, mcp__plugin_memorylane_memorylane__list_teams, mcp__plugin_memorylane_memorylane__list_devices
 description: >
   (BETA) Turn one process from a MemoryLane analysis, report or screen recording into a
   simple NetSuite automation (SuiteFlow, plus a script only where needed), with a
@@ -114,7 +114,7 @@ If a built-in feature covers the whole path, build nothing. The recipe just list
 
 - Automation and any script deployment set to **Testing**. **Enable Logging** on, so runs show in workflow history.
 - Name every state, action and script after what it does, in plain words.
-- Any script: one short `.js` file, comment at the top saying what it does. Check it parses (`node --check`) and holds no keys.
+- Any script: one short `.js` file, comment at the top saying what it does. Check it parses (`node --check`, which asks for approval) and holds no keys.
 
 ## Step 6. Hand over
 

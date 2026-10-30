@@ -255,8 +255,8 @@ The report carries the client's identity, like a consulting deliverable.
 - **Get it:** from the intake answer. **If no logo was given, nudge once**
   ("Send the logo file or a link and I'll place it on the cover + every page;
   otherwise I'll use the company name as a text wordmark.") Proceed either way.
-- **Embed, never link** (PDF portability): a **URL** → download via
-  `curl -L -o /tmp/logo.<ext> "<url>"`; then encode to a data URI
+- **Embed, never link** (PDF portability): a **URL** → download it to
+  `/tmp/logo.<ext>`; then encode to a data URI
   (`base64 -i /tmp/logo.png` → `data:image/png;base64,…`). SVG can be inlined or
   data-URI'd. Use `<img src="data:…">` so it survives into the PDF. The download
   asks for approval; if refused, use the text wordmark.
@@ -279,7 +279,7 @@ hit shipping:**
   `width:20px;height:20px;border-radius:4px;object-fit:contain`. Downloads ask
   for approval; if refused, leave the icons out.
 - A site's `favicon.ico` is sometimes actually a PNG (one client's was a 231×231
-  PNG named `.ico`). Detect with `file`, convert/rename with `sips` before use.
+  PNG named `.ico`). Detect the real type and convert or rename it before use.
 - Never use a sprite sheet as a single logo (a 456×76 multi-logo strip is not one
   icon); fetch the individual brand SVG instead.
 - `cdn.simpleicons.org` can return 0 bytes; fall back to jsdelivr
@@ -442,7 +442,7 @@ auth|session|sid|apikey|api_key|password)=...`, a JWT, an AWS/API key
    deck. A hit on a kept file/filter/URL-path/formula name is not a match;
    don't strip those.
 6. **⛔ Review gate (HARD STOP).** Show the user the HTML deck: Cowork renders
-   `report.html` live in-workspace; on this Mac, `open ./report.html` and/or show
+   `report.html` live in-workspace; elsewhere, `open ./report.html` and/or show
    the stage-5 page PNGs inline. Then **stop and wait** for explicit approval.
    Collect changes, edit, re-verify (5), show again, repeat until the user
    approves. **Surgical edits: when the user asks to change one thing, change ONLY

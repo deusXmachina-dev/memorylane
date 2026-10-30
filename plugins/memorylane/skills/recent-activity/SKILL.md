@@ -12,9 +12,9 @@ Summarize the user's recent screen activity.
 
 This skill reads live data from the desktop app, so it uses only the local tools (`search_context`). Never use the remote tools here, even if local returns nothing: remote data syncs daily, so it can't show the last 30 minutes.
 
-If the local tools aren't available, stop and reply with exactly:
+Tools can load on demand, so search for them first. If the local tools don't turn up, stop and reply with exactly:
 
-> Recent activity needs the MemoryLane desktop app on this computer. Open **Integrations** and click **Add to Claude** or **Reconnect**, then run this again. Connector data syncs daily, so it can't show the last 30 minutes.
+> Recent activity needs the MemoryLane desktop app on this computer. In the app, open **Settings > Integrations** and click **Connect** or **Reconnect** next to **Claude Cowork**, then run this again. Connector data syncs daily, so it can't show the last 30 minutes.
 
 Do not suggest plugin settings, Retry, or toggling the plugin.
 

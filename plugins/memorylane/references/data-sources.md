@@ -6,7 +6,7 @@ Skills read activity through one of two connectors. Tool names in the skills are
 
 - **Local** tools include `search_context`. Use them when the user has the MemoryLane desktop app installed and the data downloaded locally (SQLite). Open a downloaded database with `set_db_path`; `get_db_path` shows which one is active.
 - **Remote** tools include `search_activity` and `list_devices`. Use them otherwise, including when local is connected but has no data for this request. `recent-activity` is the exception: it is local only.
-- **Neither connected:** stop and reply with the message in the skill's "Before you start" section.
+- **Neither connected:** search for the tools first, since they can load on demand. If they still don't turn up, stop and reply with the message in the skill's "Before you start" section.
 
 On remote, find the person first: `list_organizations`, then `list_teams` / `list_devices` (pass the chosen `organization_id` when there are several), then use the device ID in the activity tools. If it's unclear who to analyze, ask.
 

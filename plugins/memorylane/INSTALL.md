@@ -14,20 +14,18 @@ The plugin includes the MemoryLane connector.
 
 ## 2. Sign in
 
-Sign in to the **MemoryLane** connector: `/mcp` in Claude Code, **Settings > Connectors** in Claude. Skills then read your organization's data, as far as your account permits.
+Sign in to the **MemoryLane** connector: **Settings > Connectors** in Claude, `/mcp` in Claude Code. Skills then read your organization's data, as far as your account permits.
 
 <details>
 <summary><h2>2a. Data on this computer (MemoryLane desktop app installed)</h2></summary>
 
 Use this instead if you have the desktop app and your data, or a downloaded database, is on this computer.
 
-1. Go to **Integrations** and click **Add to Claude**.
-
-![Integrations settings](../../assets/readme/integrations-add-to-claude.png)
+1. In MemoryLane, open **Settings > Integrations** and click **Connect** next to **Claude Cowork**.
 
 2. Restart Claude Desktop.
 
-If a skill reports the MemoryLane tools are unavailable, open **Integrations** and click **Reconnect**.
+If a skill reports the MemoryLane tools are unavailable, open **Settings > Integrations** and click **Reconnect**.
 
 </details>
 

@@ -5,7 +5,7 @@ See what you actually work on and which tasks are worth automating. These skills
 ## Requirements
 
 - A MemoryLane account (the plugin includes the connector), or the [MemoryLane desktop app](https://trymemorylane.com) on macOS or Windows with your data on this computer.
-- Install: `/plugin install memorylane --marketplace deusxmachina-dev/memorylane`
+- Install: add the `deusxmachina-dev/memorylane` marketplace in Claude, then install **MemoryLane**.
 - Setup steps: [INSTALL.md](INSTALL.md).
 
 ## Skills
@@ -35,7 +35,7 @@ See what you actually work on and which tasks are worth automating. These skills
 - `analyze-processes` checks vendor documentation on the web before recommending a connector, so those lookups can include the names of your tools.
 - `build-n8n-workflow` and `build-netsuite-automation` search the web for documentation, and those searches can include details of your process. If you've added an n8n or NetSuite connection to Claude, they use it: `build-n8n-workflow` creates the workflow, built from your activity, in your n8n (unpublished); NetSuite is read-only.
 
-**What it saves.** Only files you ask for (reports, PDFs, workflow files) in your working folder, `~/Desktop/automation/`, or a temp folder. `analyze-processes` may copy the database to a temp folder to query it. If you choose a different database with the npx data reader, its path is saved in `~/.config/memorylane/cli.json`.
+**What it saves.** Only files you ask for (reports, PDFs, workflow files) in your working folder or a temp folder. `analyze-processes` may copy the database to a temp folder to query it. If you choose a different database with the npx data reader, its path is saved in `~/.config/memorylane/cli.json`.
 
 **How long.** The plugin keeps nothing on its own. Desktop activity history stays in the app's database until you delete it there. Connector data is held on enterprise.trymemorylane.com under your organization's terms, and the plugin can't delete it.
 

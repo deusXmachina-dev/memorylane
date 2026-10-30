@@ -16,9 +16,9 @@ Turns raw screen-activity rows into a defensible breakdown of a person's repeate
 
 Read `${CLAUDE_PLUGIN_ROOT}/references/data-sources.md`. It says whether to use the local or remote tools, and how the remote ones differ. Tool names below are the local ones.
 
-If neither the local tools (`search_context`) nor the remote tools (`search_activity`) are available, stop and reply with exactly:
+Tools can load on demand, so search for them first. If neither the local tools (`search_context`) nor the remote tools (`search_activity`) turn up, stop and reply with exactly:
 
-> MemoryLane isn't connected yet. Sign in to the **MemoryLane** connector (`/mcp` in Claude Code, **Settings > Connectors** in Claude). With the desktop app, open **Integrations** and click **Add to Claude** or **Reconnect** instead. Then run this again.
+> MemoryLane isn't connected yet. In Claude, open **Settings > Connectors** and sign in to **MemoryLane**. If you use the MemoryLane desktop app, open **Settings > Integrations** there and click **Connect** or **Reconnect** next to **Claude Cowork**. Then run this again.
 
 Do not suggest plugin settings, Retry, or toggling the plugin.
 
@@ -67,7 +67,7 @@ Verified against the MemoryLane MCP + storage code; everything below references 
 - **Automation owner + tooling:** does the org have someone to own/run automations, and which automation tools (n8n, Zapier, etc.) do they already have? Drives the Stage 5 route. If none, default to Cowork.
 - **User:** role, responsibilities, location (for the rate). Missing -> infer role (reasoned), location/cost (estimated).
 - **Cost basis:** prefer the real loaded rate (on remote, the hourly rate and currency from `list_organizations`); else estimate from role+location. `derivation` = base rate + source + loading multiplier (e.g. x1.3). Never show a $ figure without source + multiplier.
-- **Data source (quality ladder, best first):** (1) **SQLite DB (best)** = real durations + exact counts + `tld`/OCR; durations here are **seen**, not reasoned. Read via SQL (Bash, `sqlite3 -readonly -safe`); the upload mount is read-only, so copy the file to `/tmp/memorylane-analysis.db` before querying. If sqlite3 isn't installed (usual on Windows), use a script, which asks for approval, or drop to the next source. (2) **Export (CSV/JSON) with end times + url/tld**. (3) **Remote MCP** = real durations + exact totals, raw app names. (4) **Local MCP** = start-only (durations reasoned), samples (counts lower-bound). More direct data = more "seen" + tighter numbers. State source + tier in `meta`.
+- **Data source (quality ladder, best first):** (1) **SQLite DB (best)** = real durations + exact counts + `tld`/OCR; durations here are **seen**, not reasoned. Read via SQL (Bash, `sqlite3 -readonly -safe`); the upload mount is read-only, so copy the file to `/tmp/memorylane-analysis.db` before querying. If the database isn't reachable (Cowork runs in a sandbox, so ask the user to add the file) or sqlite3 isn't installed, use a script, which asks for approval, or drop to the next source. (2) **Export (CSV/JSON) with end times + url/tld**. (3) **Remote MCP** = real durations + exact totals, raw app names. (4) **Local MCP** = start-only (durations reasoned), samples (counts lower-bound). More direct data = more "seen" + tighter numbers. State source + tier in `meta`.
 - **Window:** **21 to 30 days default.** Cadence and frequency need weeks to see; a 7-day pull cannot observe weekly recurrence (let alone monthly) and structurally forces Low confidence, so do not default to it. Pull the full available history when you can; widen to 30 to 60 days for weekly/monthly candidates (Stage 3). Fall back to a shorter window only when that is all the data there is, and say so in `meta`. State the window used.
 
 ## 2. Pipeline
