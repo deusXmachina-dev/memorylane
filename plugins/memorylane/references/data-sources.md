@@ -5,22 +5,22 @@ Skills read activity through one of two connectors. Tool names in the skills are
 ## Pick the source
 
 - **Local** tools include `search_context`. Use them when the user has the MemoryLane desktop app installed and the data downloaded locally (SQLite). Open a downloaded database with `set_db_path`; `get_db_path` shows which one is active.
-- **Remote** tools include `search_activity` and `list_devices`. Use them otherwise, including when local is connected but has no data for this request.
+- **Remote** tools include `search_activity` and `list_devices`. Use them otherwise, including when local is connected but has no data for this request. `recent-activity` is the exception: it is local only.
 - **Neither connected:** stop and reply with the message in the skill's "Before you start" section.
 
-On remote, find the person first: `list_organizations`, then `list_teams` / `list_devices`, then use the device ID in the activity tools. If it's unclear who to analyze, ask.
+On remote, find the person first: `list_organizations`, then `list_teams` / `list_devices` (pass the chosen `organization_id` when there are several), then use the device ID in the activity tools. If it's unclear who to analyze, ask.
 
 ## Tool map
 
-| Purpose     | Local                                                           | Remote                                                                                |
-| ----------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Search      | `search_context(query?, startTime, endTime, appName, limit)`    | `search_activity(query, device_id, start_time, end_time, app_name, limit)`            |
-| Timeline    | `browse_timeline(startTime, endTime, appName, limit, sampling)` | `browse_timeline(start_time, end_time, device_id, app_name, limit, sampling)`         |
-| Details     | `get_activity_details(ids)`                                     | `get_activity_details(ids)`, returns `ocr_text` and `not_found`                       |
-| Profile     | `get_user_context()`                                            | `get_work_profile(device_id)`                                                         |
-| Patterns    | `list_patterns()`, `search_patterns(query)`                     | `list_patterns(device_id, team_id, organization_id, query, limit)`                    |
-| One pattern | `get_pattern_details(patternId, limit)`                         | `get_pattern_details(pattern_id, limit)`                                              |
-| People      | none                                                            | `list_organizations()`, `list_teams(organization_id)`, `list_devices(team_id, query)` |
+| Purpose     | Local                                                           | Remote                                                                                                        |
+| ----------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Search      | `search_context(query?, startTime, endTime, appName, limit)`    | `search_activity(query, device_id, start_time, end_time, app_name, limit)`                                    |
+| Timeline    | `browse_timeline(startTime, endTime, appName, limit, sampling)` | `browse_timeline(start_time, end_time, device_id, app_name, limit, sampling)`                                 |
+| Details     | `get_activity_details(ids)`                                     | `get_activity_details(ids)`, returns `ocr_text` and `not_found`                                               |
+| Profile     | `get_user_context()`                                            | `get_work_profile(device_id)`                                                                                 |
+| Patterns    | `list_patterns()`, `search_patterns(query)`                     | `list_patterns(device_id, team_id, organization_id, query, limit)`                                            |
+| One pattern | `get_pattern_details(patternId, limit)`                         | `get_pattern_details(pattern_id, limit)`                                                                      |
+| People      | none                                                            | `list_organizations()`, `list_teams(organization_id)`, `list_devices(organization_id, team_id, query, limit)` |
 
 ## How remote differs
 

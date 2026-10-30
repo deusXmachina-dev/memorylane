@@ -12,7 +12,7 @@ See what you actually work on and which tasks are worth automating. These skills
 
 | Skill                              | What it does                                               |
 | ---------------------------------- | ---------------------------------------------------------- |
-| `recent-activity`                  | Summarize your last 30 minutes                             |
+| `recent-activity`                  | Summarize your last 30 minutes (desktop app only)          |
 | `analyze-processes`                | Measure repeated tasks and what automating them would save |
 | `build-report`                     | Turn an analysis into an HTML report and PDF               |
 | `write-automation-guide`           | Step-by-step build guide for Claude, n8n, or Zapier        |
@@ -35,9 +35,9 @@ See what you actually work on and which tasks are worth automating. These skills
 - `analyze-processes` checks vendor documentation on the web before recommending a connector, so those lookups can include the names of your tools.
 - `build-n8n-workflow` and `build-netsuite-automation` search the web for documentation, and those searches can include details of your process. If you've added an n8n or NetSuite connection to Claude, they use it: `build-n8n-workflow` creates the workflow, built from your activity, in your n8n (unpublished); NetSuite is read-only.
 
-**What it saves.** Only files you ask for (reports, PDFs, workflow files) in your working folder, `~/Desktop/automation/`, or a temp folder. `analyze-processes` may copy the database to a temp folder to query it. If you choose a different database, its path is saved in `~/.config/memorylane/cli.json`.
+**What it saves.** Only files you ask for (reports, PDFs, workflow files) in your working folder, `~/Desktop/automation/`, or a temp folder. `analyze-processes` may copy the database to a temp folder to query it. If you choose a different database with the npx data reader, its path is saved in `~/.config/memorylane/cli.json`.
 
-**How long.** The plugin keeps nothing on its own. Your activity history stays in the desktop app's database until you delete it in the app.
+**How long.** The plugin keeps nothing on its own. Desktop activity history stays in the app's database until you delete it there. Connector data is held on enterprise.trymemorylane.com under your organization's terms, and the plugin can't delete it.
 
 **The desktop app (separate install).** It captures your screen and sends screenshots and activity text to an AI model to write summaries and find patterns. With the built-in plan, requests go through OpenRouter only to providers with [Zero Data Retention](https://openrouter.ai/docs/guides/features/zdr): they don't store your data or train on it. With your own key or endpoint (such as a local Ollama), that provider's policy applies. Screenshots are deleted from your computer after processing. Full details: [Privacy & Permissions](https://github.com/deusXmachina-dev/memorylane/blob/main/docs/privacy-and-permissions.md).
 

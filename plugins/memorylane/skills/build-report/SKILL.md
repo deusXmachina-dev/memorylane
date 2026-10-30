@@ -1,6 +1,6 @@
 ---
 name: build-report
-allowed-tools: Read, Write(./report*.html), Edit(./report*.html), Bash(bash ${CLAUDE_SKILL_DIR}/assets/make-pdf.sh *), Glob, Grep, Task, AskUserQuestion
+allowed-tools: Read, Write(./report*.html), Edit(./report*.html), Bash(bash ${CLAUDE_SKILL_DIR}/assets/make-pdf.sh *), Bash(base64 -i /tmp/logo.*), Bash(open ./report*.html), Glob, Grep, Task, AskUserQuestion
 description: >
   Turn a process analysis into a polished, client-ready report, first an HTML
   deck you review, then a matching PDF. Use to package an analysis into an exec report
@@ -258,7 +258,8 @@ The report carries the client's identity, like a consulting deliverable.
 - **Embed, never link** (PDF portability): a **URL** → download via
   `curl -L -o /tmp/logo.<ext> "<url>"`; then encode to a data URI
   (`base64 -i /tmp/logo.png` → `data:image/png;base64,…`). SVG can be inlined or
-  data-URI'd. Use `<img src="data:…">` so it survives into the PDF.
+  data-URI'd. Use `<img src="data:…">` so it survives into the PDF. The download
+  asks for approval; if refused, use the text wordmark.
 - **Cover (page 1):** the `.cover__client` lockup ("Prepared for" + logo),
   logo `max-height:44px`, aspect preserved.
 - **Every page footer:** `<img class="foot-logo">` (`height:14px`) + the company
@@ -275,7 +276,8 @@ hit shipping:**
 
 - Inline every icon as a data URI: PNG → `data:image/png;base64,…`, brand SVG →
   `data:image/svg+xml;base64,…`. Size each at
-  `width:20px;height:20px;border-radius:4px;object-fit:contain`.
+  `width:20px;height:20px;border-radius:4px;object-fit:contain`. Downloads ask
+  for approval; if refused, leave the icons out.
 - A site's `favicon.ico` is sometimes actually a PNG (one client's was a 231×231
   PNG named `.ico`). Detect with `file`, convert/rename with `sips` before use.
 - Never use a sprite sheet as a single logo (a 456×76 multi-logo strip is not one
@@ -412,8 +414,9 @@ per process for detail pages), then assemble; else do them in order.
    hand-edited HTML, so a shared number cannot drift between pages.
 5. **Self-verify (internal QA, not the deliverable).** Run:
    `bash ${CLAUDE_SKILL_DIR}/assets/make-pdf.sh report.html /tmp/report-preview.pdf --shots /tmp/report-shots`
-   → per-page PNGs + overflow report (exit 2 = a page overflows; split it and
-   re-run) + a page-count check. The `/tmp` PDF is a throwaway overflow probe;
+   → overflow report (exit 2 = a page overflows; split it and re-run) + a
+   page-count check + per-page PNGs (Playwright only; otherwise Read the PDF's
+   pages). The `/tmp` PDF is a throwaway overflow probe;
    **never present it as the deliverable**. Self-review vs `components.html`:
    alignment, hierarchy, every number chipped, no clipping, and every figure
    reconciles across pages (per-process → function subtotal → exec headline; any
@@ -439,7 +442,7 @@ auth|session|sid|apikey|api_key|password)=...`, a JWT, an AWS/API key
    deck. A hit on a kept file/filter/URL-path/formula name is not a match;
    don't strip those.
 6. **⛔ Review gate (HARD STOP).** Show the user the HTML deck: Cowork renders
-   `report.html` live in-workspace; on this Mac, `open report.html` and/or show
+   `report.html` live in-workspace; on this Mac, `open ./report.html` and/or show
    the stage-5 page PNGs inline. Then **stop and wait** for explicit approval.
    Collect changes, edit, re-verify (5), show again, repeat until the user
    approves. **Surgical edits: when the user asks to change one thing, change ONLY
@@ -460,17 +463,18 @@ auth|session|sid|apikey|api_key|password)=...`, a JWT, an AWS/API key
 
 ## 8. PDF engine
 
-**Playwright Chromium, if already installed**, auto-checks overflow on every render
-(`render-pdf.mjs` measures content vs sheet height and flags clipping). Never install
-it. `make-pdf.sh` also cross-checks expected `.page` count vs the PDF's actual page
-count and warns on mismatch (any engine).
+**Playwright Chromium, if already installed** in the working folder or on `NODE_PATH`,
+renders the PDF and writes page PNGs (`render-pdf.mjs`). Never install it. `make-pdf.sh`
+measures overflow on Playwright and system browsers, and cross-checks expected `.page`
+count vs the PDF's actual page count and warns on mismatch (any engine).
 
 Fallbacks when Playwright isn't there, best-first:
 
-1. **System Chrome** `--headless=new --print-to-pdf` — good fidelity (CSS forces
-   `print-color-adjust: exact`); overflow NOT measured, so **say so and eyeball
-   every page**.
-2. **WeasyPrint** — layout may differ; last automated resort.
+1. **System Chrome or Edge** `--headless=new --print-to-pdf` — good fidelity (CSS
+   forces `print-color-adjust: exact`); no PNGs, so **Read the PDF's pages** to
+   check them.
+2. **WeasyPrint** — layout may differ; last automated resort; overflow NOT
+   measured, so **say so and eyeball every page**.
 3. **Manual** — HTML is print-ready; user prints to PDF (Landscape, margins None,
    Background graphics ON). Reproduces exactly.
    Always state which engine ran and whether overflow was auto-verified.

@@ -15,7 +15,8 @@
  *
  * Requires Playwright. If absent, the caller (make-pdf.sh) falls back.
  */
-import { writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { mkdirSync, existsSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { resolve } from 'node:path'
 
@@ -31,16 +32,18 @@ if (!input || !existsSync(input)) {
   process.exit(1)
 }
 
+// Resolve from the working folder: this script runs from the plugin cache.
+const require = createRequire(`${process.cwd()}/`)
 let chromium
-try {
-  ;({ chromium } = await import('playwright'))
-} catch {
+for (const name of ['playwright', 'playwright-core']) {
   try {
-    ;({ chromium } = await import('playwright-core'))
-  } catch {
-    console.error('render-pdf: playwright not installed')
-    process.exit(3) // distinct code so the wrapper can fall back
-  }
+    ;({ chromium } = require(name))
+    break
+  } catch {}
+}
+if (!chromium) {
+  console.error('render-pdf: playwright not installed')
+  process.exit(3) // distinct code so the wrapper can fall back
 }
 
 // Try bundled Chromium first; fall back to an installed Chrome channel.

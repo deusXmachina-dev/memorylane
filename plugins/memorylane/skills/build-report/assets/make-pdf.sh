@@ -7,7 +7,7 @@
 # Usage: bash make-pdf.sh <input.html> [output.pdf] [--portrait] [--shots DIR]
 # Engine ladder:
 #   1. Playwright Chromium (render-pdf.mjs)   — best fidelity + verification
-#   2. System Chrome/Chromium --print-to-pdf  — good fidelity, no verify
+#   2. System Chrome/Edge --print-to-pdf      — good fidelity, overflow check, no PNGs
 #   3. WeasyPrint                             — layout may differ, last resort
 #   4. Manual instructions                    — open + Cmd/Ctrl-P -> Save as PDF
 set -uo pipefail
@@ -38,13 +38,19 @@ contentcheck() {
 contentcheck "$IN"
 
 # Universal guard: expected .page blocks vs actual PDF pages (catches a page that
-# spilled onto an extra sheet). Clipping is caught only by Playwright (§8).
+# spilled onto an extra sheet). Falls back to counting page objects without pdfinfo.
 pagecheck() {
-  command -v pdfinfo >/dev/null 2>&1 || return 0
   local want got
   want=$(grep -oE 'class="page([ "]|--)' "$1" | wc -l | tr -d ' ')
-  got=$(pdfinfo "$2" 2>/dev/null | awk '/^Pages:/{print $2}')
-  [[ -z "$want" || -z "$got" ]] && return 0
+  if command -v pdfinfo >/dev/null 2>&1; then
+    got=$(pdfinfo "$2" 2>/dev/null | awk '/^Pages:/{print $2}')
+  else
+    got=$(LC_ALL=C grep -aoE '/Type */Pages?' "$2" | grep -c '/Page$')
+  fi
+  if [[ -z "$want" || -z "$got" || "$got" == 0 ]]; then
+    echo "make-pdf: WARNING page count not checked; compare it by hand." >&2
+    return 0
+  fi
   if [[ "$got" == "$want" ]]; then echo "make-pdf: page-count OK ($got == $want .page blocks)." >&2
   else echo "make-pdf: WARNING page-count mismatch — $want .page blocks but $got PDF pages; a page may have overflowed. Check it." >&2; fi
 }
@@ -57,6 +63,7 @@ if command -v node >/dev/null 2>&1; then
   if [[ $rc -eq 0 || $rc -eq 2 ]]; then
     [[ $rc -eq 2 ]] && echo "make-pdf: PDF written but some pages overflow — fix content and re-run." >&2
     echo "make-pdf: wrote $OUT via Playwright." >&2
+    pagecheck "$IN" "$OUT"
     exit $rc
   fi
   echo "make-pdf: Playwright unavailable (rc=$rc), falling back…" >&2
@@ -69,23 +76,54 @@ for c in \
   "/Applications/Chromium.app/Contents/MacOS/Chromium" \
   "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge" \
   "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser" \
-  google-chrome google-chrome-stable chromium chromium-browser microsoft-edge; do
+  "/c/Program Files/Google/Chrome/Application/chrome.exe" \
+  "/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" \
+  "${LOCALAPPDATA:-}/Google/Chrome/Application/chrome.exe" \
+  "/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" \
+  "/c/Program Files/Microsoft/Edge/Application/msedge.exe" \
+  google-chrome google-chrome-stable chromium chromium-browser microsoft-edge chrome msedge; do
   if [[ -x "$c" ]] || command -v "$c" >/dev/null 2>&1; then CHROME="$c"; break; fi
 done
 
+# Same measurement as render-pdf.mjs, on a throwaway copy with a probe script.
+overflowcheck() {
+  local dir probe found
+  dir="$(cd "$(dirname "$IN")" && { pwd -W 2>/dev/null || pwd; })"
+  probe=".overflow-probe-$$.html"
+  { cat "$IN"; printf '%s' "<script>addEventListener('load',()=>{document.documentElement.setAttribute('data-overflow',[...document.querySelectorAll('.page:not(.page--flow)')].map((e,i)=>[i+1,e.scrollHeight-e.clientHeight]).filter(x=>x[1]>2).map(x=>'#'+x[0]+' (+'+x[1]+'px)').join(', ')||'none')})</script>"; } > "$(dirname "$IN")/$probe"
+  found=$("$CHROME" --headless=new --disable-gpu --no-sandbox --virtual-time-budget=5000 \
+    --dump-dom "file:///${dir#/}/$probe" 2>/dev/null | grep -oE 'data-overflow="[^"]*"')
+  rm -f "$(dirname "$IN")/$probe"
+  found="${found#data-overflow=\"}"; found="${found%\"}"
+  if [[ -z "$found" ]]; then
+    echo "make-pdf: WARNING overflow not checked; eyeball every page." >&2
+  elif [[ "$found" == none ]]; then
+    echo "make-pdf: overflow check OK." >&2
+  else
+    echo "make-pdf: page(s) overflow the sheet: $found. Split them across more .page blocks." >&2
+    return 2
+  fi
+}
+
 if [[ -n "$CHROME" ]]; then
-  echo "make-pdf: using system Chrome: $CHROME" >&2
+  echo "make-pdf: using system browser: $CHROME" >&2
   # file:// needs an absolute path
-  ABS="$(cd "$(dirname "$IN")" && pwd)/$(basename "$IN")"
+  ABS="$(cd "$(dirname "$IN")" && { pwd -W 2>/dev/null || pwd; })/$(basename "$IN")"
+  TMP="$OUT.tmp"
+  rm -f "$TMP"
   "$CHROME" --headless=new --disable-gpu --no-sandbox \
     --no-pdf-header-footer --print-to-pdf-no-header \
-    --print-to-pdf="$OUT" "file://$ABS" >/dev/null 2>&1
-  if [[ -f "$OUT" ]]; then
-    echo "make-pdf: wrote $OUT via system Chrome. Overflow/clipping NOT auto-verified (Playwright does that) — eyeball pages." >&2
+    --print-to-pdf="$TMP" "file:///${ABS#/}" >/dev/null 2>&1
+  if [[ -s "$TMP" ]]; then
+    mv -f "$TMP" "$OUT"
+    echo "make-pdf: wrote $OUT via system browser. No page PNGs; Read the PDF's pages to check them." >&2
+    overflowcheck
+    rc=$?
     pagecheck "$IN" "$OUT"
-    exit 0
+    exit $rc
   fi
-  echo "make-pdf: system Chrome failed, falling back…" >&2
+  rm -f "$TMP"
+  echo "make-pdf: system browser failed, falling back…" >&2
 fi
 
 # ---- 3. WeasyPrint -------------------------------------------------------
