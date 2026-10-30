@@ -6,7 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { registerTools, type EditionContext, type MCPServices } from './tools'
 import { StorageService, type Cluster, type Sighting } from '../storage'
 import { applyMigrations } from '../storage/migrator'
-import { createStoredActivity, deleteDbFiles } from '../storage/test-utils'
+import { createStoredActivity, deleteDbFiles, v } from '../storage/test-utils'
 import type { EmbeddingService } from '../processor/embedding'
 import { CLUSTER_VIEW_CONFIG } from '@/shared/constants'
 
@@ -74,6 +74,45 @@ describe('get_db_path tool', () => {
     expect(payload.path).toBe('/tmp/custom.db')
     expect(payload.defaultForEdition).not.toMatch(/Enterprise/)
     expect(payload.defaultForEdition).toMatch(/MemoryLane(-dev)?[\\/]memorylane(?:-dev)?\.db$/)
+  })
+})
+
+describe('search_context tool', () => {
+  const TEST_DB_PATH = path.join(os.tmpdir(), 'temp_mcp_search_test.db')
+  const ctx: EditionContext = {
+    edition: 'customer',
+    source: 'default',
+    currentDbPath: TEST_DB_PATH,
+  }
+  let storage: StorageService
+  let handlers: Map<string, Handler>
+
+  beforeEach(() => {
+    deleteDbFiles(TEST_DB_PATH)
+    storage = new StorageService(TEST_DB_PATH)
+    applyMigrations(storage.getDatabase())
+    const embeddingService = { generateEmbedding: async () => v(1) }
+    handlers = registerWithMockServer(ctx, () => ({ storage, embeddingService }))
+  })
+
+  afterEach(() => {
+    storage.close()
+    deleteDbFiles(TEST_DB_PATH)
+  })
+
+  it('surfaces a keyword-only hit when vector hits fill the limit', async () => {
+    for (let i = 0; i < 10; i++) {
+      storage.activities.add(
+        createStoredActivity({ id: `near-${i}`, summary: `Browsing ${i}`, vector: v(1, i / 100) }),
+      )
+    }
+    storage.activities.add(
+      createStoredActivity({ id: 'keyword', summary: 'Paid the Alza invoice', vector: v(0, 1) }),
+    )
+
+    const result = await handlers.get('search_context')!({ query: 'alza faktura', limit: 5 })
+
+    expect(result.content[0].text).toContain('Paid the Alza invoice')
   })
 })
 

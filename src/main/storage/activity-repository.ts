@@ -1,7 +1,13 @@
 import type Database from 'better-sqlite3'
 import type { SearchFilters } from '../../shared/types'
 import type { StoredActivity, ActivitySummary, ActivityDetail } from './types'
-import { vectorToBlob, blobToVector, sanitizeFtsQuery, SQLITE_VEC_KNN_MAX } from './utils'
+import {
+  vectorToBlob,
+  blobToVector,
+  sanitizeFtsQuery,
+  anyWordFtsQuery,
+  SQLITE_VEC_KNN_MAX,
+} from './utils'
 import { NON_WEBSITE_HOSTS, activityAppIdentity } from '../../shared/app-utils'
 import log from '@main/utils/logger'
 
@@ -49,10 +55,15 @@ export class ActivityRepository {
     insert()
   }
 
-  searchFTS(query: string, limit = 5, filters?: SearchFilters): ActivitySummary[] {
+  searchFTS(
+    query: string,
+    limit = 5,
+    filters?: SearchFilters,
+    match: 'all' | 'any' = 'all',
+  ): ActivitySummary[] {
     if (this.getRowCount() === 0) return []
 
-    const safeQuery = sanitizeFtsQuery(query)
+    const safeQuery = match === 'any' ? anyWordFtsQuery(query) : sanitizeFtsQuery(query)
     const { conditions, params } = this.buildFilterConditions(filters)
     const filterClause = conditions.length > 0 ? `AND ${conditions.join(' AND ')}` : ''
 
@@ -92,7 +103,8 @@ export class ActivityRepository {
            WHERE embedding MATCH ?
            AND k = ?
          ) vec
-         JOIN activities a ON a.id = vec.id`,
+         JOIN activities a ON a.id = vec.id
+         ORDER BY vec.distance`,
         )
         .all(blob, effectiveLimit) as Record<string, unknown>[]
 

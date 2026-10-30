@@ -11,6 +11,23 @@ export function sanitizeFtsQuery(query: string): string {
   return tokens.map((t) => `"${t.replace(/"/g, '""')}"`).join(' ')
 }
 
+export function anyWordFtsQuery(query: string): string {
+  return sanitizeFtsQuery(query).split(' ').join(' OR ')
+}
+
+/** Reciprocal Rank Fusion: merges ranked lists, keeping the first copy of each id. */
+export function rrf<T extends { id: string }>(lists: T[][], k = 60): T[] {
+  const scored = new Map<string, { item: T; score: number }>()
+  for (const list of lists) {
+    list.forEach((item, rank) => {
+      const entry = scored.get(item.id) ?? { item, score: 0 }
+      entry.score += 1 / (k + rank + 1)
+      scored.set(item.id, entry)
+    })
+  }
+  return [...scored.values()].sort((a, b) => b.score - a.score).map((e) => e.item)
+}
+
 /** Parse a JSON string-array column, tolerating null/legacy/corrupt values. */
 export function parseJsonStringArray(value: unknown): string[] {
   if (typeof value !== 'string' || value.length === 0) return []
