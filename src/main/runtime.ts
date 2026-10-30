@@ -33,6 +33,8 @@ import { EvalFixtureStore } from '@main/eval/eval-fixture-store'
 import { TaskFixtureStore } from '@main/eval/task-fixture-store'
 import { registerEvalMediaProtocol } from '@main/eval/eval-media-protocol'
 import { MlWorkerClient } from '@main/services/ml-worker-client'
+import { ActivityReembedder } from '@main/activity/activity-reembedder'
+import { EMBEDDING_MODEL } from '@main/processor/embedding-model'
 import { listenerSet } from '@main/utils/listeners'
 
 const SHUTDOWN_DRAIN_MS = 3_000
@@ -141,6 +143,7 @@ export async function createMainRuntime(params: {
     log.error('[Runtime] Failed to initialize embedding model; aborting startup.', error)
     throw error
   }
+  const reembedder = new ActivityReembedder(storage, mlWorker, EMBEDDING_MODEL)
 
   const transformer = new DefaultActivityTransformer(
     new FfmpegVideoStitcher(),
@@ -273,6 +276,7 @@ export async function createMainRuntime(params: {
     onPrivacyBlockingChanged: privacyBlockingChanged.add,
     start(): void {
       taskMiner.startup()
+      reembedder.start()
       host.onAwake(() => taskMiner.kick())
     },
     async purgeAll(): Promise<void> {
@@ -294,6 +298,7 @@ export async function createMainRuntime(params: {
         let drained = false
         const drain = Promise.all([
           taskMiner.stop(),
+          reembedder.stop(),
           harness.flushEvents().then(() => harness.stop()),
         ])
           .catch((error) => log.warn('[Runtime] Error while draining during dispose:', error))

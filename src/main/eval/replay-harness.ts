@@ -45,7 +45,7 @@ export class CollectingActivitySink implements ActivitySink {
   }
 }
 
-/** Constant-vector embedder; skips the MiniLM load when embeddings don't matter. */
+/** Constant-vector embedder; skips the model load when embeddings don't matter. */
 export class StubEmbeddingService implements ActivityEmbeddingService {
   async embed(): Promise<number[]> {
     const vector = new Array(384).fill(0)

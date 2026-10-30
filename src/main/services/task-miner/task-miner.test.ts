@@ -13,6 +13,7 @@ import {
   TASK_BACKFILL,
 } from '../../../shared/constants'
 import { TaskMiner } from '.'
+import { EMBEDDING_MODEL } from '@main/processor/embedding-model'
 import { runDetection } from './run-detection'
 import { runClustering } from './clustering'
 import type { MinerEmbedder } from './types'
@@ -926,5 +927,67 @@ describe('TaskMiner lifecycle', () => {
     miner.scheduleRun()
 
     expect(miner.isBusy()).toBe(false)
+  })
+})
+
+describe('TaskMiner.resignIfModelChanged', () => {
+  const TEST_DB_PATH = path.join(os.tmpdir(), 'temp_task_miner_resign_test.db')
+  let storage: StorageService
+
+  beforeEach(() => {
+    deleteDbFiles(TEST_DB_PATH)
+    storage = new StorageService(TEST_DB_PATH)
+    applyMigrations(storage.getDatabase())
+    storage.sightings.add({
+      id: 's1',
+      title: 'Send invoice',
+      subject: '',
+      description: 'Emailed the monthly invoice',
+      steps: [],
+      apps: ['Mail'],
+      activityIds: ['act-1'],
+      startedAt: 1000,
+      endedAt: 2000,
+      interactionMin: 5,
+      runId: 'run-1',
+      detectedAt: 2000,
+    })
+    storage.clusters.upsertSignature('s1', v(1))
+    storage.clusters.create({
+      id: 'c1',
+      label: 'Invoicing',
+      description: '',
+      centroid: v(1),
+      mechanism: '',
+      steps: [],
+      variables: [],
+      labeledSize: 1,
+      createdAt: 1000,
+    })
+    storage.clusters.addMembership('c1', 's1')
+  })
+
+  afterEach(() => {
+    storage.close()
+    deleteDbFiles(TEST_DB_PATH)
+  })
+
+  it('re-embeds signatures and centroids, keeping labels and memberships', async () => {
+    const texts: string[] = []
+    const miner = new TaskMiner(storage, configuredProvider, {
+      embed: async () => v(0, 1),
+      embedBatch: async (batch) => {
+        texts.push(...batch)
+        return batch.map(() => v(0, 1))
+      },
+    })
+
+    await miner.resignIfModelChanged()
+    await miner.resignIfModelChanged()
+
+    expect(texts).toEqual(['Send invoice. Emailed the monthly invoice'])
+    expect(storage.clusters.getSignaturesByClusterId('c1').get('s1')).toEqual(v(0, 1))
+    expect(storage.clusters.getById('c1')).toMatchObject({ label: 'Invoicing', centroid: v(0, 1) })
+    expect(storage.embeddingState.get()?.signatureModel).toBe(EMBEDDING_MODEL)
   })
 })

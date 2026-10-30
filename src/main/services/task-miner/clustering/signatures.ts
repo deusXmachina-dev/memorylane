@@ -20,8 +20,8 @@ const EMBED_CHUNK_SIZE = 32
  * chain together. Sightings whose text embeds to nothing (zero vector) get a
  * NULL signature row — processed, but permanently unclusterable.
  *
- * Signatures are persisted so later runs never re-embed or depend on the
- * miner prompt that wrote the text.
+ * Signatures are persisted so later runs never re-embed (short of an
+ * embedding model change) or depend on the miner prompt that wrote the text.
  */
 export async function computeAndStoreSignatures(
   storage: StorageService,

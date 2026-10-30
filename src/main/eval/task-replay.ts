@@ -13,6 +13,7 @@ import type { EmbeddingService } from '@main/processor/embedding'
 import type { InferenceProvider } from '@main/llm'
 import { readJsonl } from './jsonl'
 import { loadTaskGoldenMd } from './task-golden-md'
+import { embeddingText } from '@main/activity/embedding-text'
 import type {
   DetectedSighting,
   TaskFixture,
@@ -92,7 +93,9 @@ export async function seedFixtureDb(
     restoreId.set(servedId, a.id)
     const startTimestamp = start + a.offsetMin * 60_000
     const endTimestamp = startTimestamp + a.durationMin * 60_000
-    const vector = await embedder.generateEmbedding(`${a.summary} ${a.ocrText}`.trim())
+    const vector = await embedder.generateEmbedding(
+      embeddingText({ summary: a.summary, summaryModel: 'fixture', ocrText: a.ocrText }),
+    )
     storage.activities.add({
       id: servedId,
       startTimestamp,

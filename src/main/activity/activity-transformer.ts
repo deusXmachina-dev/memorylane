@@ -10,6 +10,7 @@ import type {
 import type { SemanticPipelinePreference } from '@main/semantic/activity-semantic-service'
 import type { SummaryModeTrackerLike } from '@main/semantic/types'
 import { isPassiveView } from './passive-view'
+import { HEURISTIC_VIEWED_MODEL, embeddingText } from './embedding-text'
 import { ACTIVITY_CONFIG } from '@constants'
 import log from '@main/utils/logger'
 
@@ -20,10 +21,6 @@ export interface DefaultActivityTransformerConfig {
 }
 
 const OCR_FRAME_POSITION_FROM_END = 5
-
-// summaryModel value stamped on activities summarized by the no-LLM heuristic
-// path, so they're distinguishable from LLM output ('') and real models.
-const HEURISTIC_VIEWED_MODEL = 'heuristic:viewed'
 
 export class DefaultActivityTransformer implements ActivityTransformer {
   constructor(
@@ -56,16 +53,14 @@ export class DefaultActivityTransformer implements ActivityTransformer {
 
     // A short passive view (no clicks/keystrokes/scrolls — only app focus, or
     // nothing) carries little narrative for an LLM to summarize, so skip the
-    // expensive inference and label it from its on-screen context. We embed its
-    // OCR'd contents rather than the "Viewed X" label so it stays findable by
-    // what was actually on screen.
-    const { summary, summaryModel, textToEmbed } = useHeuristic
-      ? this.buildPassiveSummary(activity, ocrText)
-      : await this.buildSemanticSummary(activity, videoAsset?.videoPath, ocrText)
+    // expensive inference and label it from its on-screen context.
+    const { summary, summaryModel } = useHeuristic
+      ? this.buildPassiveSummary(activity)
+      : await this.buildSemanticSummary(activity, videoAsset?.videoPath)
 
     let vector: number[]
     try {
-      vector = await this.embedder.embed(textToEmbed)
+      vector = await this.embedder.embed(embeddingText({ summary, summaryModel, ocrText }))
     } catch (error) {
       log.error(`[ActivityTransformer] Embedding failed for activity ${activity.id}:`, error)
       throw error
@@ -103,16 +98,12 @@ export class DefaultActivityTransformer implements ActivityTransformer {
   private async buildSemanticSummary(
     activity: Activity,
     videoPath: string | undefined,
-    ocrText: string,
-  ): Promise<{ summary: string; summaryModel: string; textToEmbed: string }> {
+  ): Promise<{ summary: string; summaryModel: string }> {
     const { summary, model } = await this.semantic.summarizeFromVideo({ activity, videoPath })
-    return { summary, summaryModel: model, textToEmbed: summary || ocrText }
+    return { summary, summaryModel: model }
   }
 
-  private buildPassiveSummary(
-    activity: Activity,
-    ocrText: string,
-  ): { summary: string; summaryModel: string; textToEmbed: string } {
+  private buildPassiveSummary(activity: Activity): { summary: string; summaryModel: string } {
     const { windowTitle, tld, appName } = activity.context
     const label = windowTitle?.trim() || tld || appName
     this.config.summaryModeTracker?.record({
@@ -123,7 +114,6 @@ export class DefaultActivityTransformer implements ActivityTransformer {
     return {
       summary: `Viewed ${label}`,
       summaryModel: HEURISTIC_VIEWED_MODEL,
-      textToEmbed: ocrText || `Viewed ${label}`,
     }
   }
 }

@@ -2,13 +2,18 @@
 const fs = require('fs')
 const path = require('path')
 
-const MODEL_ID = 'Xenova/all-MiniLM-L6-v2'
+const MODEL_ID = 'onnx-community/granite-embedding-97m-multilingual-r2-ONNX'
 const BASE_URL = `https://huggingface.co/${MODEL_ID}/resolve/main`
 
 const repoRoot = path.resolve(__dirname, '..')
 const outputDir = path.join(repoRoot, 'build', 'models', MODEL_ID)
 
-const FILES = ['config.json', 'tokenizer.json', 'tokenizer_config.json', 'onnx/model.onnx']
+const FILES = [
+  'config.json',
+  'tokenizer.json',
+  'tokenizer_config.json',
+  'onnx/model_quantized.onnx',
+]
 
 async function downloadFile(file) {
   const dest = path.join(outputDir, file)

@@ -205,6 +205,40 @@ export class ActivityRepository {
     return result
   }
 
+  getEmbeddingSources(
+    afterRowid: number,
+    limit: number,
+  ): { rowid: number; id: string; summary: string; summaryModel: string; ocrText: string }[] {
+    const rows = this.db
+      .prepare(
+        `SELECT rowid, id, summary, summary_model, ocr_text FROM activities
+         WHERE rowid > ? ORDER BY rowid LIMIT ?`,
+      )
+      .all(afterRowid, limit) as {
+      rowid: number
+      id: string
+      summary: string | null
+      summary_model: string | null
+      ocr_text: string | null
+    }[]
+    return rows.map((r) => ({
+      rowid: r.rowid,
+      id: r.id,
+      summary: r.summary ?? '',
+      summaryModel: r.summary_model ?? '',
+      ocrText: r.ocr_text ?? '',
+    }))
+  }
+
+  replaceVectors(vectors: readonly { id: string; vector: number[] }[]): void {
+    const remove = this.db.prepare('DELETE FROM activities_vec WHERE id = ?')
+    const insert = this.db.prepare('INSERT INTO activities_vec (id, embedding) VALUES (?, ?)')
+    for (const { id, vector } of vectors) {
+      remove.run(id)
+      insert.run(id, vectorToBlob(vector))
+    }
+  }
+
   /**
    * Get all activities for a calendar day with window context (windowTitle, tld).
    * Excludes heavy ocrText and vector fields.

@@ -10,6 +10,7 @@ import { ClusterRepository } from './cluster-repository'
 import { MiningDayRepository } from './mining-day-repository'
 import { UploadRunRepository } from './upload-run-repository'
 import { UserContextRepository } from './user-context-repository'
+import { EmbeddingStateRepository } from './embedding-state-repository'
 
 export { ActivityRepository } from './activity-repository'
 export { SightingRepository } from './sighting-repository'
@@ -17,6 +18,7 @@ export { ClusterRepository } from './cluster-repository'
 export { MiningDayRepository } from './mining-day-repository'
 export { UploadRunRepository } from './upload-run-repository'
 export { UserContextRepository } from './user-context-repository'
+export { EmbeddingStateRepository } from './embedding-state-repository'
 export type { Sighting } from './sighting-repository'
 export type { Cluster } from './cluster-repository'
 export type { MiningDay, MiningDayStatus } from './mining-day-repository'
@@ -74,6 +76,7 @@ export class StorageService {
   readonly miningDays: MiningDayRepository
   readonly uploadRuns: UploadRunRepository
   readonly userContext: UserContextRepository
+  readonly embeddingState: EmbeddingStateRepository
 
   constructor(dbPath?: string) {
     // The fallback is edition-agnostic (customer default). The Electron main
@@ -102,6 +105,7 @@ export class StorageService {
       this.miningDays = new MiningDayRepository(db)
       this.uploadRuns = new UploadRunRepository(db)
       this.userContext = new UserContextRepository(db)
+      this.embeddingState = new EmbeddingStateRepository(db)
       log.info('SQLite database initialized successfully')
     } catch (error) {
       db.close()

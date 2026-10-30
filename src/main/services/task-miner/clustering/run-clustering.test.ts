@@ -493,7 +493,7 @@ describe('runClustering', () => {
     storage.clusters.upsertSignature('st', v(1))
     storage.clusters.addMembership('target', 'st')
     for (let i = 0; i < 16; i++) {
-      const x = 0.56 + i * 0.005
+      const x = 0.845 + i * 0.0015
       const centroid = normalize(v(x, Math.sqrt(1 - x * x)))!
       const sid = `so${i}`
       storage.sightings.add(createSighting({ id: sid, title: 'other task' }))
@@ -527,7 +527,7 @@ describe('runClustering', () => {
 
     const pairs = seenInput!.mergeCandidates
     expect(pairs).toHaveLength(15)
-    // Sorted highest-cosine first; the 0.56 pair (c0) fell off the cap.
+    // Sorted highest-cosine first; the 0.845 pair (c0) fell off the cap.
     expect(pairs[0]).toContain('c15')
     expect(pairs.flat()).not.toContain('c0')
   })
@@ -589,9 +589,9 @@ describe('runClustering', () => {
   })
 
   it('offers a low-coherence cluster as splittable with its full member list', async () => {
-    // Four members, two directions at cos 0.4 — every member clears the
-    // eviction floor but the mean member→centroid coherence is ≈ 0.837 < 0.85.
-    const other = normalize(v(0.4, Math.sqrt(1 - 0.16)))!
+    // Four members, two directions at cos 0.7 — every member clears the
+    // eviction floor but the mean member→centroid coherence is ≈ 0.922 < 0.94.
+    const other = normalize(v(0.7, Math.sqrt(1 - 0.49)))!
     for (const [id, title] of [
       ['s1', 'alpha one'],
       ['s2', 'alpha two'],
@@ -663,7 +663,7 @@ describe('runClustering', () => {
     // Same geometry as the low-coherence test above, with the ml-worker path
     // injected: all linkage must go through clusterVectors, and the re-split
     // groups precomputed from it must produce the same partition.
-    const other = normalize(v(0.4, Math.sqrt(1 - 0.16)))!
+    const other = normalize(v(0.7, Math.sqrt(1 - 0.49)))!
     for (const [id, title] of [
       ['s1', 'alpha one'],
       ['s2', 'alpha two'],
