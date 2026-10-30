@@ -2,26 +2,28 @@
 // share apps, so meaning (title+description embeddings) is the only grouping
 // signal. Thresholds err tight: over-splitting is cheap (the LLM merge phase
 // heals it), over-merging is expensive to unwind. All cosine constants are
-// calibrated for title+description signature geometry against real data
-// (coherent clusters: mean member→centroid ≥ 0.87; two-topic unions ≤ 0.83;
-// same-task pairs median 0.73, cross-task median 0.37).
+// calibrated for granite-97m title+description signature geometry against real
+// data (coherent clusters: mean member→centroid ≥ 0.96; two-topic unions ≤ 0.93;
+// same-task pairs median 0.90, cross-task median 0.78). Granite packs unrelated
+// text far higher than MiniLM did, so margins are narrow. Re-derive them with
+// `npm run bench-embeddings -- run --skip-search` before changing the model.
 export const CLUSTERING_CONFIG = {
   /** Cosine floor for average-linkage grouping and centroid attachment. */
-  SIMILARITY_THRESHOLD: 0.65,
+  SIMILARITY_THRESHOLD: 0.87,
   /** Cosine floor for proposing a cluster pair to the LLM as a merge. */
-  MERGE_CANDIDATE_THRESHOLD: 0.55,
+  MERGE_CANDIDATE_THRESHOLD: 0.84,
   /**
    * Mean member→centroid cosine below which a multi-member cluster is offered
    * to the LLM as splittable (with its full member list).
    */
-  SPLIT_COHERENCE_FLOOR: 0.85,
+  SPLIT_COHERENCE_FLOOR: 0.94,
   /**
    * Member→centroid cosine below which a member is evicted into its own
    * cluster after a centroid refresh. Kept below SIMILARITY_THRESHOLD so a
    * fresh attach can never bounce straight back out — eviction only repairs
    * drift introduced by merges and pruning.
    */
-  EVICTION_THRESHOLD: 0.6,
+  EVICTION_THRESHOLD: 0.85,
   MAX_EVICTIONS_PER_RUN: 10,
   /** Worst-coherence-first cap on coherence-picked splittable clusters per run. */
   MAX_SPLITTABLE_PER_RUN: 5,

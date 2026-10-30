@@ -3,16 +3,12 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import * as fs from 'fs'
 import { parseTimeString } from './parse-time'
-import {
-  formatTimelineEntry,
-  sampleEntries,
-  activityToTimelineEntry,
-  TimelineEntry,
-} from './formatting'
+import { formatTimelineEntry, sampleEntries, activityToTimelineEntry } from './formatting'
 import { setDbPath, clearDbPath, type DbPathSource } from './config'
 import { getDefaultDbPath } from '@main/utils/paths'
 import type { AppEdition } from '../../shared/edition'
-import type { StorageService, Sighting } from '../storage'
+import type { StorageService, Sighting, ActivitySummary } from '../storage'
+import { rrf } from '../storage/utils'
 import type { EmbeddingService } from '../processor/embedding'
 import {
   buildClusterInfo,
@@ -28,9 +24,11 @@ import type { ClusterInfo } from '../../shared/types'
 import log from '@main/utils/logger'
 import { scrubPII } from '@/shared/sanitize'
 
+const HYBRID_SEARCH_DEPTH = 50
+
 export interface MCPServices {
   storage: StorageService
-  embeddingService: EmbeddingService
+  embeddingService: Pick<EmbeddingService, 'generateEmbedding'>
 }
 
 export interface EditionContext {
@@ -429,33 +427,27 @@ async function handleSearchContext(
       appName,
     }
 
-    // Run embedding generation and FTS in parallel
-    let ftsResults: ReturnType<typeof storage.activities.searchFTS> = []
+    const depth = Math.max(effectiveLimit, HYBRID_SEARCH_DEPTH)
+
+    let ftsResults: ActivitySummary[] = []
     try {
-      ftsResults = storage.activities.searchFTS(query, effectiveLimit, filters)
+      ftsResults = storage.activities.searchFTS(query, depth, filters, 'any')
     } catch (err) {
       log.warn('FTS search failed, falling back to vector-only:', err)
     }
-    const embedding = await services.embeddingService.generateEmbedding(query)
-    const vectorResults = storage.activities.searchVectors(embedding, effectiveLimit, filters)
 
-    // Deduplicate: vector results first (preserves relevance order), then FTS extras
-    const seen = new Set<string>()
-    const allResults: TimelineEntry[] = []
-
-    for (const a of vectorResults) {
-      seen.add(a.id)
-      allResults.push(activityToTimelineEntry(a))
-    }
-    for (const a of ftsResults) {
-      if (!seen.has(a.id)) {
-        seen.add(a.id)
-        allResults.push(activityToTimelineEntry(a))
-      }
+    let vectorResults: ActivitySummary[] = []
+    try {
+      const embedding = await services.embeddingService.generateEmbedding(query)
+      vectorResults = storage.activities.searchVectors(embedding, depth, filters)
+    } catch (err) {
+      if (ftsResults.length === 0) throw err
+      log.warn('Vector search failed, falling back to FTS-only:', err)
     }
 
-    // Truncate to requested limit
-    const truncated = allResults.slice(0, effectiveLimit)
+    const truncated = rrf([vectorResults, ftsResults])
+      .slice(0, effectiveLimit)
+      .map(activityToTimelineEntry)
 
     if (truncated.length === 0) {
       return {

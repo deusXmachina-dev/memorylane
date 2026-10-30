@@ -76,6 +76,17 @@ export class ClusterRepository {
     return rows.map((r) => rowToSighting(r))
   }
 
+  getSignedSightings(): Sighting[] {
+    const rows = this.db
+      .prepare(
+        `SELECT s.* FROM sightings s
+         JOIN sighting_signatures ss ON ss.sighting_id = s.id
+         ORDER BY s.started_at ASC`,
+      )
+      .all() as Record<string, unknown>[]
+    return rows.map((r) => rowToSighting(r))
+  }
+
   /** Non-null signatures of a cluster's members, keyed by sighting id. */
   getSignaturesByClusterId(clusterId: string): Map<string, number[]> {
     const rows = this.db

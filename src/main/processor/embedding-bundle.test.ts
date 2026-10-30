@@ -1,13 +1,19 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { describe, it, expect, afterEach } from 'vitest'
-import { pipeline, env } from '@huggingface/transformers'
+import { env } from '@huggingface/transformers'
+import { EmbeddingService } from './embedding'
+import { EMBEDDING_MODEL as MODEL_ID } from './embedding-model'
 
-const MODEL_ID = 'Xenova/all-MiniLM-L6-v2'
 const BUNDLE_DIR = path.resolve(__dirname, '..', '..', '..', 'build', 'models')
 const MODEL_DIR = path.join(BUNDLE_DIR, MODEL_ID)
 
-const REQUIRED_FILES = ['config.json', 'tokenizer.json', 'tokenizer_config.json', 'onnx/model.onnx']
+const REQUIRED_FILES = [
+  'config.json',
+  'tokenizer.json',
+  'tokenizer_config.json',
+  'onnx/model_quantized.onnx',
+]
 
 describe('bundled embedding model', () => {
   it('download script produced all required files', () => {
@@ -32,9 +38,7 @@ describe('bundled embedding model', () => {
     env.localModelPath = BUNDLE_DIR
     env.allowRemoteModels = false
 
-    const pipe = await pipeline('feature-extraction', MODEL_ID, { dtype: 'fp32' })
-    const result = await pipe('test sentence', { pooling: 'mean', normalize: true })
-    const vector = Array.from(result.data as Float32Array)
+    const vector = await new EmbeddingService().generateEmbedding('test sentence')
 
     expect(vector.length).toBe(384)
     expect(typeof vector[0]).toBe('number')

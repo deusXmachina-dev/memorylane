@@ -47,6 +47,8 @@ import type {
 import { DEFAULT_MINER_CONFIG } from './types'
 import { runDetection } from './run-detection'
 import { runClustering } from './clustering'
+import { computeAndStoreSignatures, recomputeCentroid } from './clustering/signatures'
+import { EMBEDDING_MODEL } from '@main/processor/embedding-model'
 import type { ClusteringRunSummary } from './clustering'
 
 export type { TaskMinerConfig, MiningRunResult, ProgressCallback }
@@ -130,7 +132,7 @@ export class TaskMiner {
     if (this.stopped) return
     const recovered = this.storage.miningDays.resetStaleRunning(TASK_BACKFILL.MAX_DAY_ATTEMPTS)
     if (recovered) log.info(`[TaskMiner] Recovered ${recovered} interrupted mining day(s)`)
-    this.inFlight = this.rebuildClustersIfEmpty()
+    this.inFlight = this.resignIfModelChanged().then(() => this.rebuildClustersIfEmpty())
     if (!this.pollTimer) {
       this.pollTimer = setInterval(() => this.scheduleRun(), TASK_BACKFILL.POLL_INTERVAL_MS)
     }
@@ -528,6 +530,29 @@ export class TaskMiner {
       return { daysMined: 0, daysSkipped: 0, daysFailed: 0, skipped: 'cooling-down' }
     }
     return this.sweep(provider)
+  }
+
+  /** Re-embeds signatures and centroids in place after an embedding model change. */
+  async resignIfModelChanged(): Promise<void> {
+    const state = this.storage.embeddingState.get()
+    if (this.running || !state || state.signatureModel === EMBEDDING_MODEL) return
+    const sightings = this.storage.clusters.getSignedSightings()
+    if (sightings.length === 0) {
+      this.storage.embeddingState.setSignatureModel(EMBEDDING_MODEL)
+      return
+    }
+    this.running = true
+    try {
+      await computeAndStoreSignatures(this.storage, sightings, this.embedder)
+      const clusters = this.storage.clusters.getAll()
+      for (const cluster of clusters) recomputeCentroid(this.storage, cluster.id)
+      this.storage.embeddingState.setSignatureModel(EMBEDDING_MODEL)
+      log.info(`[TaskMiner] Re-signed ${sightings.length} sightings, ${clusters.length} clusters`)
+    } catch (error) {
+      log.error('[TaskMiner] Re-signing failed:', formatApiError(error))
+    } finally {
+      this.running = false
+    }
   }
 
   /**

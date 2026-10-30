@@ -1,7 +1,13 @@
 import type Database from 'better-sqlite3'
 import type { SearchFilters } from '../../shared/types'
 import type { StoredActivity, ActivitySummary, ActivityDetail } from './types'
-import { vectorToBlob, blobToVector, sanitizeFtsQuery, SQLITE_VEC_KNN_MAX } from './utils'
+import {
+  vectorToBlob,
+  blobToVector,
+  sanitizeFtsQuery,
+  anyWordFtsQuery,
+  SQLITE_VEC_KNN_MAX,
+} from './utils'
 import { NON_WEBSITE_HOSTS, activityAppIdentity } from '../../shared/app-utils'
 import log from '@main/utils/logger'
 
@@ -49,10 +55,15 @@ export class ActivityRepository {
     insert()
   }
 
-  searchFTS(query: string, limit = 5, filters?: SearchFilters): ActivitySummary[] {
+  searchFTS(
+    query: string,
+    limit = 5,
+    filters?: SearchFilters,
+    match: 'all' | 'any' = 'all',
+  ): ActivitySummary[] {
     if (this.getRowCount() === 0) return []
 
-    const safeQuery = sanitizeFtsQuery(query)
+    const safeQuery = match === 'any' ? anyWordFtsQuery(query) : sanitizeFtsQuery(query)
     const { conditions, params } = this.buildFilterConditions(filters)
     const filterClause = conditions.length > 0 ? `AND ${conditions.join(' AND ')}` : ''
 
@@ -92,7 +103,8 @@ export class ActivityRepository {
            WHERE embedding MATCH ?
            AND k = ?
          ) vec
-         JOIN activities a ON a.id = vec.id`,
+         JOIN activities a ON a.id = vec.id
+         ORDER BY vec.distance`,
         )
         .all(blob, effectiveLimit) as Record<string, unknown>[]
 
@@ -191,6 +203,40 @@ export class ActivityRepository {
       result.set(row.id, blobToVector(row.embedding))
     }
     return result
+  }
+
+  getEmbeddingSources(
+    afterRowid: number,
+    limit: number,
+  ): { rowid: number; id: string; summary: string; summaryModel: string; ocrText: string }[] {
+    const rows = this.db
+      .prepare(
+        `SELECT rowid, id, summary, summary_model, ocr_text FROM activities
+         WHERE rowid > ? ORDER BY rowid LIMIT ?`,
+      )
+      .all(afterRowid, limit) as {
+      rowid: number
+      id: string
+      summary: string | null
+      summary_model: string | null
+      ocr_text: string | null
+    }[]
+    return rows.map((r) => ({
+      rowid: r.rowid,
+      id: r.id,
+      summary: r.summary ?? '',
+      summaryModel: r.summary_model ?? '',
+      ocrText: r.ocr_text ?? '',
+    }))
+  }
+
+  replaceVectors(vectors: readonly { id: string; vector: number[] }[]): void {
+    const remove = this.db.prepare('DELETE FROM activities_vec WHERE id = ?')
+    const insert = this.db.prepare('INSERT INTO activities_vec (id, embedding) VALUES (?, ?)')
+    for (const { id, vector } of vectors) {
+      remove.run(id)
+      insert.run(id, vectorToBlob(vector))
+    }
   }
 
   /**

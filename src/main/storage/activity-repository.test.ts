@@ -92,6 +92,17 @@ describe('ActivityRepository', () => {
       expect(results).toEqual([])
     })
 
+    it('matches any word in any mode', () => {
+      storage.activities.add(createStoredActivity({ id: 'fts-a', summary: 'Paid invoice' }))
+      storage.activities.add(createStoredActivity({ id: 'fts-b', summary: 'Booked flight' }))
+
+      expect(storage.activities.searchFTS('invoice flight', 10)).toEqual([])
+      const ids = storage.activities
+        .searchFTS('invoice flight', 10, undefined, 'any')
+        .map((r) => r.id)
+      expect(ids.sort()).toEqual(['fts-a', 'fts-b'])
+    })
+
     it('should handle special characters in query without throwing', () => {
       storage.activities.add(
         createStoredActivity({ id: 'fts-special', summary: 'Testing quotes "hello"' }),

@@ -74,3 +74,38 @@ Prefixing app + window title (`context`) is not a general win: +0.02 for Harrier
 A swap needs: re-embed `activities_vec` and sighting signatures in the ml-worker backlog (54k × ~10 ms ≈ 9 min), clustering threshold ~0.85, and a recorded model id so mixed-model vectors are never compared.
 
 OCR-embedded passive views stay weak for every model (MRR ≤ 0.31): screen text is noisy and includes background windows. Separate problem.
+
+## Granite clustering calibration (2026-10-30)
+
+`npm run bench-embeddings -- run --db <copy> --models minilm-l6-fp32,granite-97m-q8 --skip-search` (results `2026-10-30T17-…`). Same cluster sets as above.
+
+Geometry (prod clusters; eval goldens in parentheses):
+
+| Model | Same-task median | Cross-task median | Coherence | Two-topic union |
+|---|---|---|---|---|
+| MiniLM-L6 | 0.69 (0.60) | 0.33 (0.10) | 0.88 (0.80) | 0.75 (0.63) |
+| granite-97m | 0.90 (0.86) | 0.78 (0.72) | 0.96 (0.93) | 0.93 (0.90) |
+
+Each MiniLM constant was mapped to the granite cosine that cuts the same share of sighting pairs. Both sets agree within 0.015:
+
+| Constant | MiniLM | granite |
+|---|---|---|
+| `SIMILARITY_THRESHOLD` | 0.65 | 0.87 |
+| `MERGE_CANDIDATE_THRESHOLD` | 0.55 | 0.84 |
+| `SPLIT_COHERENCE_FLOOR` | 0.85 | 0.94 |
+| `EVICTION_THRESHOLD` | 0.60 | 0.85 |
+
+The production average-linkage partition was scored pairwise against the golden groups:
+
+| | Groups | Precision | Recall | F1 |
+|---|---|---|---|---|
+| MiniLM @0.65, eval | 155 | 0.401 | 0.356 | 0.377 |
+| granite @0.87, eval | 152 | 0.418 | 0.353 | 0.383 |
+| MiniLM @0.65, prod | 12 | 0.990 | 0.627 | 0.767 |
+| granite @0.87, prod | 9 | 0.993 | 0.848 | 0.915 |
+
+Granite at 0.87 is at least as precise as today on both sets and splits about as finely, so the "err tight" posture holds. At 0.85 it has more recall but less precision on eval (0.390).
+
+The margins are narrow: cross-task median 0.78 vs same-task 0.90. A ±0.02 threshold change moves the partition visibly.
+
+q8 granite embeds a text differently when padded inside a batch (cosine about 0.988 vs embedding it alone). The app therefore embeds one text per model call. That costs no speed on CPU: 9.8 vs 10.2 ms/doc.

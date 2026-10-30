@@ -22,6 +22,8 @@ import { loadCliInferenceProvider } from './cli-inference-provider'
 import { DEFAULT_REQUEST_TIMEOUT_MS } from '../src/main/llm'
 import { extractJsonObject } from '../src/main/services/task-miner/helpers'
 import { sanitizeFtsQuery } from '../src/main/storage/utils'
+import { CLUSTERING_CONFIG } from '../src/main/services/task-miner/clustering/types'
+import { averageLinkageGroupIndices } from '../src/main/services/task-miner/clustering/attach'
 
 const BENCH_DIR = path.join('evals', 'embedding-bench')
 const QUERIES_PATH = path.join(BENCH_DIR, 'queries.json')
@@ -33,6 +35,13 @@ const NEAR_DUP_MS = 10 * 60 * 1000
 const TOP_K = 10
 const RRF_K = 60
 const CLUSTER_THRESHOLD = 0.65
+const CALIBRATION_REFERENCE = 'minilm-l6-fp32'
+const CALIBRATED_KEYS = [
+  'SIMILARITY_THRESHOLD',
+  'MERGE_CANDIDATE_THRESHOLD',
+  'SPLIT_COHERENCE_FLOOR',
+  'EVICTION_THRESHOLD',
+] as const
 const GROUP_CAP = 25
 let batchSize = 16
 
@@ -630,6 +639,50 @@ interface ClusterScores {
   f1AtCurrent: number
   posMean: number
   negMean: number
+  posMedian: number
+  negMedian: number
+  /** Mean member→centroid cosine over real groups, and over random two-group unions. */
+  coherence: number
+  unionCoherence: number
+}
+
+function quantile(sortedAsc: number[], q: number): number {
+  if (sortedAsc.length === 0) return NaN
+  return sortedAsc[
+    Math.min(sortedAsc.length - 1, Math.max(0, Math.round(q * (sortedAsc.length - 1))))
+  ]
+}
+
+function meanCoherence(vectors: Float32Array[], memberSets: number[][]): number {
+  const values = memberSets.map((members) => {
+    const dim = vectors[members[0]].length
+    const centroid = new Float32Array(dim)
+    for (const m of members) for (let d = 0; d < dim; d++) centroid[d] += vectors[m][d]
+    const unit = normalize(centroid, dim)
+    return members.reduce((sum, m) => sum + dot(vectors[m], unit), 0) / members.length
+  })
+  return values.reduce((a, b) => a + b, 0) / Math.max(values.length, 1)
+}
+
+function groupMembers(groups: number[]): number[][] {
+  const byGroup = new Map<number, number[]>()
+  groups.forEach((g, i) => byGroup.set(g, [...(byGroup.get(g) ?? []), i]))
+  return [...byGroup.values()].filter((m) => m.length >= 2)
+}
+
+/** Pairwise cosines, ascending — the basis for mapping thresholds between models. */
+function pairSims(vectors: Float32Array[]): number[] {
+  const sims: number[] = []
+  for (let i = 0; i < vectors.length; i++) {
+    for (let j = i + 1; j < vectors.length; j++) sims.push(dot(vectors[i], vectors[j]))
+  }
+  return sims.sort((a, b) => a - b)
+}
+
+/** Threshold on `target` cutting off the same fraction of pairs `t` cuts on `reference`. */
+function mapThreshold(reference: number[], target: number[], t: number): number {
+  const below = reference.findIndex((x) => x >= t)
+  return quantile(target, (below === -1 ? reference.length : below) / reference.length)
 }
 
 function scoreClusters(vectors: Float32Array[], groups: number[]): ClusterScores {
@@ -669,6 +722,16 @@ function scoreClusters(vectors: Float32Array[], groups: number[]): ClusterScores
     const list = sims.filter((e) => e.pos === pos)
     return list.reduce((s, e) => s + e.s, 0) / Math.max(list.length, 1)
   }
+  const median = (pos: boolean): number =>
+    quantile(
+      sims
+        .filter((e) => e.pos === pos)
+        .map((e) => e.s)
+        .sort((a, b) => a - b),
+      0.5,
+    )
+  const members = groupMembers(groups)
+  const unions = members.flatMap((a, i) => members.slice(i + 1).map((b) => [...a, ...b]))
   return {
     pairs: sims.length,
     positives: P,
@@ -678,6 +741,10 @@ function scoreClusters(vectors: Float32Array[], groups: number[]): ClusterScores
     f1AtCurrent,
     posMean: mean(true),
     negMean: mean(false),
+    posMedian: median(true),
+    negMedian: median(false),
+    coherence: meanCoherence(vectors, members),
+    unionCoherence: meanCoherence(vectors, unions),
   }
 }
 
@@ -695,6 +762,54 @@ interface CostResult {
   diskMb: number
   msPerDoc: number
   bytesPerVector: number[]
+}
+
+const LINKAGE_THRESHOLDS = [0.6, 0.65, 0.7, 0.8, 0.83, 0.85, 0.87, 0.89]
+
+interface LinkageResult {
+  candidate: string
+  set: string
+  threshold: number
+  groups: number
+  precision: number
+  recall: number
+  f1: number
+}
+
+/** Pairwise precision/recall of the production average-linkage partition against golden groups. */
+function scoreLinkage(vectors: Float32Array[], groups: number[], threshold: number) {
+  const predicted = averageLinkageGroupIndices(
+    vectors.map((v) => Array.from(v)),
+    threshold,
+  )
+  const label = new Array<number>(vectors.length)
+  predicted.forEach((members, g) => members.forEach((m) => (label[m] = g)))
+  let tp = 0
+  let fp = 0
+  let fn = 0
+  for (let i = 0; i < vectors.length; i++) {
+    for (let j = i + 1; j < vectors.length; j++) {
+      const same = label[i] === label[j]
+      const gold = groups[i] === groups[j]
+      if (same && gold) tp++
+      else if (same) fp++
+      else if (gold) fn++
+    }
+  }
+  const precision = tp / Math.max(tp + fp, 1)
+  const recall = tp / Math.max(tp + fn, 1)
+  return {
+    groups: predicted.length,
+    precision,
+    recall,
+    f1: (2 * precision * recall) / Math.max(precision + recall, 1e-9),
+  }
+}
+
+interface CalibrationResult {
+  candidate: string
+  set: string
+  thresholds: Record<(typeof CALIBRATED_KEYS)[number], number>
 }
 
 interface ClusterResult {
@@ -767,6 +882,9 @@ async function run(flags: Map<string, string>): Promise<void> {
   const search: SearchResult[] = []
   const costs: CostResult[] = []
   const clusters: ClusterResult[] = []
+  const calibrations: CalibrationResult[] = []
+  const linkage: LinkageResult[] = []
+  const referenceSims = new Map<string, number[]>()
 
   if (ftsSearch) {
     for (const mode of ['and', 'or', 'or-weighted'] as const) {
@@ -841,6 +959,26 @@ async function run(flags: Map<string, string>): Promise<void> {
           s.groups,
         )
         clusters.push({ candidate: c.id, dim, set: s.name, scores })
+        if (dim === c.dims[0]) {
+          const unit = out.vectors.map((v) => normalize(v, dim))
+          for (const threshold of LINKAGE_THRESHOLDS) {
+            linkage.push({
+              candidate: c.id,
+              set: s.name,
+              threshold,
+              ...scoreLinkage(unit, s.groups, threshold),
+            })
+          }
+          const sims = pairSims(unit)
+          if (c.id === CALIBRATION_REFERENCE) referenceSims.set(s.name, sims)
+          const reference = referenceSims.get(s.name)
+          if (reference && c.id !== CALIBRATION_REFERENCE) {
+            const thresholds = Object.fromEntries(
+              CALIBRATED_KEYS.map((k) => [k, mapThreshold(reference, sims, CLUSTERING_CONFIG[k])]),
+            ) as CalibrationResult['thresholds']
+            calibrations.push({ candidate: c.id, set: s.name, thresholds })
+          }
+        }
         console.log(
           `  ${s.name} d${dim}: AUC ${scores.auc.toFixed(3)} bestF1 ${scores.bestF1.toFixed(3)} @${scores.bestThreshold.toFixed(2)} F1@0.65 ${scores.f1AtCurrent.toFixed(3)}`,
         )
@@ -870,9 +1008,9 @@ async function run(flags: Map<string, string>): Promise<void> {
   }
   fs.writeFileSync(
     path.join(RESULTS_DIR, `${stamp}.json`),
-    JSON.stringify({ meta, search, clusters, costs }, null, 2),
+    JSON.stringify({ meta, search, clusters, calibrations, linkage, costs }, null, 2),
   )
-  const md = renderMarkdown(meta, search, clusters, costs)
+  const md = renderMarkdown(meta, search, clusters, calibrations, linkage, costs)
   fs.writeFileSync(path.join(RESULTS_DIR, `${stamp}.md`), md)
   console.log(`\n${md}\nWrote ${path.join(RESULTS_DIR, stamp)}.{json,md}`)
 }
@@ -881,6 +1019,8 @@ function renderMarkdown(
   meta: Record<string, unknown>,
   search: SearchResult[],
   clusters: ClusterResult[],
+  calibrations: CalibrationResult[],
+  linkage: LinkageResult[],
   costs: CostResult[],
 ): string {
   const f = (x: number): string => (Number.isFinite(x) ? x.toFixed(3) : '—')
@@ -903,13 +1043,41 @@ function renderMarkdown(
     lines.push(
       '### Clustering (sighting pairs)',
       '',
-      '| model | dim | set | AUC | best F1 | best threshold | F1 @0.65 | pos mean | neg mean |',
-      '|---|---|---|---|---|---|---|---|---|',
+      '| model | dim | set | AUC | best F1 | best threshold | F1 @0.65 | pos median | neg median | coherence | union coherence |',
+      '|---|---|---|---|---|---|---|---|---|---|---|',
     )
     for (const r of clusters) {
       const s = r.scores
       lines.push(
-        `| ${r.candidate} | ${r.dim} | ${r.set} | ${f(s.auc)} | ${f(s.bestF1)} | ${s.bestThreshold.toFixed(2)} | ${f(s.f1AtCurrent)} | ${f(s.posMean)} | ${f(s.negMean)} |`,
+        `| ${r.candidate} | ${r.dim} | ${r.set} | ${f(s.auc)} | ${f(s.bestF1)} | ${s.bestThreshold.toFixed(2)} | ${f(s.f1AtCurrent)} | ${f(s.posMedian)} | ${f(s.negMedian)} | ${f(s.coherence)} | ${f(s.unionCoherence)} |`,
+      )
+    }
+    lines.push('')
+  }
+  if (calibrations.length > 0) {
+    lines.push(
+      `### Clustering thresholds mapped from ${CALIBRATION_REFERENCE} (pair-quantile)`,
+      '',
+      `| model | set | ${CALIBRATED_KEYS.map((k) => `${k} (${CLUSTERING_CONFIG[k]})`).join(' | ')} |`,
+      `|---|---|${CALIBRATED_KEYS.map(() => '---').join('|')}|`,
+    )
+    for (const c of calibrations) {
+      lines.push(
+        `| ${c.candidate} | ${c.set} | ${CALIBRATED_KEYS.map((k) => f(c.thresholds[k])).join(' | ')} |`,
+      )
+    }
+    lines.push('')
+  }
+  if (linkage.length > 0) {
+    lines.push(
+      '### Average-linkage partition vs golden groups (pairwise)',
+      '',
+      '| model | set | threshold | groups | precision | recall | F1 |',
+      '|---|---|---|---|---|---|---|',
+    )
+    for (const r of linkage) {
+      lines.push(
+        `| ${r.candidate} | ${r.set} | ${r.threshold} | ${r.groups} | ${f(r.precision)} | ${f(r.recall)} | ${f(r.f1)} |`,
       )
     }
     lines.push('')

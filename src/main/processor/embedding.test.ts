@@ -10,7 +10,6 @@ describe('EmbeddingService', () => {
     const vector = await service.generateEmbedding(text)
 
     expect(vector).toBeDefined()
-    // all-MiniLM-L6-v2 outputs 384 dimensions
     expect(vector.length).toBe(384)
 
     // Check if values are numbers and not NaN

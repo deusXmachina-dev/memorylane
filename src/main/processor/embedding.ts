@@ -1,11 +1,11 @@
-import { pipeline, env } from '@huggingface/transformers'
+import { AutoModel, AutoTokenizer, env } from '@huggingface/transformers'
 import log from '@main/utils/logger'
 import type { ActivityEmbeddingService } from '@main/activity/activity-transformer-types'
 import { getBundledModelPath, getModelCacheDir } from '@main/utils/paths'
+import { EMBEDDING_MODEL } from './embedding-model'
 
-// 'all-MiniLM-L6-v2' is a good balance of speed and quality for local embeddings.
-const MODEL_NAME = 'Xenova/all-MiniLM-L6-v2'
 const MODEL_DIM = 384
+const MAX_TOKENS = 512
 
 let resolvedBundledPath: string | null = null
 let maxInferenceThreads: number | null = null
@@ -38,14 +38,16 @@ export function configureModelEnv(opts?: {
 
 export class EmbeddingService implements ActivityEmbeddingService {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private pipe: any = null
+  private tokenizer: any = null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private model: any = null
 
   /**
    * Initializes the embedding model.
    * Downloads the model if not cached.
    */
   public async init(): Promise<void> {
-    if (this.pipe) return
+    if (this.model) return
 
     configureModelEnv()
     if (resolvedBundledPath) {
@@ -53,10 +55,11 @@ export class EmbeddingService implements ActivityEmbeddingService {
     } else {
       log.debug(`Using remote embedding model from ${env.cacheDir}`)
     }
-    log.debug(`Loading embedding model: ${MODEL_NAME}`)
+    log.debug(`Loading embedding model: ${EMBEDDING_MODEL}`)
     try {
-      this.pipe = await pipeline('feature-extraction', MODEL_NAME, {
-        dtype: 'fp32',
+      this.tokenizer = await AutoTokenizer.from_pretrained(EMBEDDING_MODEL)
+      this.model = await AutoModel.from_pretrained(EMBEDDING_MODEL, {
+        dtype: 'q8',
         ...(maxInferenceThreads !== null && {
           session_options: { intraOpNumThreads: maxInferenceThreads, interOpNumThreads: 1 },
         }),
@@ -65,7 +68,7 @@ export class EmbeddingService implements ActivityEmbeddingService {
     } catch (error) {
       const modelRoot = resolvedBundledPath ?? env.cacheDir ?? '(unknown cache dir)'
       log.error(
-        `[EmbeddingService] Failed to load model ${MODEL_NAME} from ${modelRoot}. ` +
+        `[EmbeddingService] Failed to load model ${EMBEDDING_MODEL} from ${modelRoot}. ` +
           'Embedding generation will fail until the model cache is fixed.',
         error,
       )
@@ -76,7 +79,7 @@ export class EmbeddingService implements ActivityEmbeddingService {
   /**
    * Generates a vector embedding for the given text.
    * @param text The text to embed.
-   * @returns A 384-dimensional vector (for all-MiniLM-L6-v2).
+   * @returns A 384-dimensional, L2-normalized vector.
    */
   public async generateEmbedding(text: string): Promise<number[]> {
     const [vector] = await this.embedBatch([text])
@@ -88,36 +91,24 @@ export class EmbeddingService implements ActivityEmbeddingService {
   }
 
   /**
-   * Embeds many texts in one model call. Blank texts get a zero vector
-   * (same contract as generateEmbedding) without touching the model.
+   * Blank texts get a zero vector. One text per model call: padding shifts q8
+   * activations, so batched vectors would depend on their neighbours.
    */
   public async embedBatch(texts: string[]): Promise<number[][]> {
-    if (texts.length === 0) return []
-
-    const vectors: number[][] = new Array(texts.length)
-    const nonEmpty: { index: number; text: string }[] = []
-    for (let i = 0; i < texts.length; i++) {
-      if (!texts[i] || texts[i].trim().length === 0) {
-        vectors[i] = new Array<number>(MODEL_DIM).fill(0)
-      } else {
-        nonEmpty.push({ index: i, text: texts[i] })
+    const vectors: number[][] = []
+    for (const text of texts) {
+      if (!text || text.trim().length === 0) {
+        vectors.push(new Array<number>(MODEL_DIM).fill(0))
+        continue
       }
+      if (!this.model) await this.init()
+      const inputs = this.tokenizer(text, { truncation: true, max_length: MAX_TOKENS })
+      const { last_hidden_state: hidden } = await this.model(inputs)
+      const dim = hidden.dims[2] as number
+      const cls = (hidden.data as Float32Array).subarray(0, dim)
+      const norm = Math.hypot(...cls) || 1
+      vectors.push(Array.from(cls, (x) => x / norm))
     }
-
-    if (nonEmpty.length > 0) {
-      if (!this.pipe) await this.init()
-      const result = await this.pipe(
-        nonEmpty.map((e) => e.text),
-        { pooling: 'mean', normalize: true },
-      )
-      // result.data is one flat Float32Array; result.dims is [batch, dim].
-      const dims = result.dims[result.dims.length - 1] as number
-      const data = result.data as Float32Array
-      nonEmpty.forEach((e, row) => {
-        vectors[e.index] = Array.from(data.subarray(row * dims, (row + 1) * dims))
-      })
-    }
-
     return vectors
   }
 }
