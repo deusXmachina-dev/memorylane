@@ -1,11 +1,11 @@
 ---
-name: process-to-netsuite
-allowed-tools: AskUserQuestion, Read, Write, Glob, Bash, WebFetch, WebSearch, mcp__memorylane__search_context, mcp__memorylane__get_activity_details
+name: build-netsuite-automation
+allowed-tools: AskUserQuestion, Read, Write(./netsuite-recipe.md), Write(./*.js), Glob, Bash(node --check *), WebFetch(domain:docs.oracle.com), mcp__memorylane__search_context, mcp__memorylane__get_activity_details, mcp__memorylane__get_db_path, mcp__plugin_memorylane_memorylane__search_activity, mcp__plugin_memorylane_memorylane__get_activity_details, mcp__plugin_memorylane_memorylane__list_organizations, mcp__plugin_memorylane_memorylane__list_teams, mcp__plugin_memorylane_memorylane__list_devices
 description: >
   (BETA) Turn one process from a MemoryLane analysis, report or screen recording into a
   simple NetSuite automation (SuiteFlow, plus a script only where needed), with a
   short recipe to build, test and switch it on. One happy path, fewest steps.
-  Use after process-analyst-new.
+  Use after analyze-processes.
 ---
 
 # Process to NetSuite (BETA)
@@ -42,7 +42,7 @@ The user is not technical.
 ## Rules
 
 1. **Material first, then ask.** Ask questions only at Step 2 and Step 4, up to four per ask. Waiting for an upload or a connection is fine.
-2. **No personal data in any output.** Use record types, field IDs and list names. Never copy names, emails or values from real records. Same strip and keep lists as `process-analyst-new` principle 9.
+2. **No personal data in any output.** Use record types, field IDs and list names. Never copy names, emails or values from real records. Same strip and keep lists as `analyze-processes` principle 9.
 3. **Never ask for passwords, tokens or keys in chat.**
 4. **The NetSuite connection only reads** (field IDs, lists, record shapes). Never create or change records with it. It cannot build the automation; the user copies it into NetSuite from the recipe.
 
@@ -50,14 +50,14 @@ The user is not technical.
 
 Use what is there, in this order:
 
-1. `process-analysis.md` from `process-analyst-new`: `steps`, `decision_points`, `common_path`, `what_varies`, `automation`, `reconciliation`.
+1. A `process-analysis*.md` file from `analyze-processes` (glob for it; on multi-person runs there is one per role, so use the one with this process): `steps`, `decision_points`, `common_path`, `what_varies`, `automation`, `reconciliation`.
 2. A MemoryLane report the user points to.
 3. The user's description, a how-to doc, or a screen recording.
 
 Also:
 
-- **Captured data**, if MemoryLane tools are here: `get_activity_details` on the evidence IDs, `search_context` for more runs. NetSuite page addresses show the record type (`/app/accounting/transactions/vendbill.nl`).
-- **Recordings:** save one picture every 3 to 5 seconds with ffmpeg and read them in order, skipping repeats (about 60 max). The transcript gives the rule and the why. If you cannot run code here, ask for screenshots of the key screens.
+- **Captured data**, if MemoryLane tools are here (`${CLAUDE_PLUGIN_ROOT}/references/data-sources.md` has the local and remote tool names): `get_activity_details` on the evidence IDs, `search_context` for more runs. NetSuite page addresses show the record type (`/app/accounting/transactions/vendbill.nl`).
+- **Recordings:** save one picture every 3 to 5 seconds with ffmpeg (it asks for approval) and read them in order, skipping repeats (about 60 max). The transcript gives the rule and the why. If you cannot run code here, ask for screenshots of the key screens.
 - **NetSuite connection:** check this session's tools for NetSuite (`ns_` tools). If there, look up field IDs, the list the work starts from, and status values.
 
 For each step note: record type, fields read, fields changed (with IDs), and what "finished" looks like on the record.
@@ -93,7 +93,7 @@ Check the official Oracle docs today, not memory. For each step, take the first 
 3. **Script** (SuiteScript 2.1), only if SuiteFlow cannot. Prefer a small action script called from the automation.
 4. **Otherwise it stays with a person.**
 
-Sources: Oracle NetSuite Help Center (docs.oracle.com/en/cloud/saas/netsuite/) and the SuiteScript Records Browser for field IDs. Use the Help Center search if a page moved. If you cannot confirm a step, mark it "not confirmed" and leave it with a person.
+Sources: Oracle NetSuite Help Center (docs.oracle.com/en/cloud/saas/netsuite/) and the SuiteScript Records Browser for field IDs. Use WebSearch if a page moved or a fetch is refused. If you still cannot confirm a step, mark it "not confirmed" and leave it with a person.
 
 ## Step 4. Stop two. Agree the plan
 

@@ -1,5 +1,5 @@
 ---
-name: last-30-minutes
+name: recent-activity
 allowed-tools: mcp__memorylane__browse_timeline, mcp__memorylane__search_context, mcp__memorylane__get_activity_details
 description: Summarize what you've been doing in the last 30 minutes.
 ---
@@ -10,9 +10,11 @@ Summarize the user's recent screen activity.
 
 ## Before you start
 
-If the `browse_timeline` tool is not available, stop and reply with exactly:
+This skill reads live data from the desktop app, so it uses only the local tools (`search_context`). Never use the remote tools here, even if local returns nothing: remote data syncs daily, so it can't show the last 30 minutes.
 
-> MemoryLane isn't connected to Claude yet. Open the MemoryLane app, go to **Integrations**, click **Add to Claude**, then restart Claude Desktop and run this again.
+If the local tools aren't available, stop and reply with exactly:
+
+> Recent activity needs the MemoryLane desktop app on this computer. Open **Integrations** and click **Add to Claude** or **Reconnect**, then run this again. Connector data syncs daily, so it can't show the last 30 minutes.
 
 Do not suggest plugin settings, Retry, or toggling the plugin.
 

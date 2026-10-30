@@ -1,8 +1,8 @@
 ---
-name: report-new
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task, AskUserQuestion
+name: build-report
+allowed-tools: Read, Write(./report*.html), Edit(./report*.html), Bash(bash ${CLAUDE_SKILL_DIR}/assets/make-pdf.sh *), Bash(base64 -i /tmp/logo.*), Bash(open ./report*.html), Glob, Grep, Task, AskUserQuestion
 description: >
-  (new) Turn a process analysis into a polished, client-ready report, first an HTML
+  Turn a process analysis into a polished, client-ready report, first an HTML
   deck you review, then a matching PDF. Use to package an analysis into an exec report
   or PDF. Shows the deck for approval before making the PDF, and never makes up numbers.
 ---
@@ -131,7 +131,7 @@ The ledger labels every exec number `seen` / `reasoned` / `estimated` with a
   frequency x automatable% = hours freed; hours freed x the role's loaded rate =
   annual savings; per-process savings sum to the function subtotal; function
   subtotals sum to the combined total; the headline restates the combined total.
-  _Worked example (shipped):_ Product (slide deck ~A$3,500 + sprint ~A$500) = A$4k;
+  _Worked example:_ Product (slide deck ~A$3,500 + sprint ~A$500) = A$4k;
   Marketing (~A$6,200 + ~A$2,800 + ~A$2,000) = A$11k; Measured (2 users) = A$15k;
   capacity 1h + 3h = 4h/week (5%); 2 + 3 = 5 processes.
 - **One rounding grain.** Round money to a clean grain with "~" (nearest $100/$1k
@@ -146,7 +146,7 @@ The ledger labels every exec number `seen` / `reasoned` / `estimated` with a
 - **Render only what the ledger contains.** Missing field → omit the element.
   Anti-slop is the product.
 
-**Number + money formatting (house style, from shipped reports; currency follows
+**Number + money formatting (house style; currency follows
 the ledger, A$ shown as the example).**
 
 **Locale first, before applying the house style below.** The comma-thousands /
@@ -182,7 +182,7 @@ Ask which language the deck should ship in during intake (§1) if the client's
 market suggests it is not English; default to English if unstated.
 
 - Capacity + time reads `1h/week (2%)` (no space inside `1h`, one space before the
-  parenthesis). Shipped: `1h/week (2%)`, `3h/week (8%)`, `4h/week (5%)`, `~1 FTE (5%)`.
+  parenthesis). For example: `1h/week (2%)`, `3h/week (8%)`, `4h/week (5%)`, `~1 FTE (5%)`.
 - Per-process figures and the in-scope table carry `~` and full digits with a comma
   (`~A$6,200`, `~A$3,500`, `~A$500`, total `~A$15,000`); exec KPI tiles and the
   measured/total rows are the rounded grain with NO `~` (`A$4k`, `A$11k`, `A$15k`,
@@ -258,7 +258,8 @@ The report carries the client's identity, like a consulting deliverable.
 - **Embed, never link** (PDF portability): a **URL** → download via
   `curl -L -o /tmp/logo.<ext> "<url>"`; then encode to a data URI
   (`base64 -i /tmp/logo.png` → `data:image/png;base64,…`). SVG can be inlined or
-  data-URI'd. Use `<img src="data:…">` so it survives into the PDF.
+  data-URI'd. Use `<img src="data:…">` so it survives into the PDF. The download
+  asks for approval; if refused, use the text wordmark.
 - **Cover (page 1):** the `.cover__client` lockup ("Prepared for" + logo),
   logo `max-height:44px`, aspect preserved.
 - **Every page footer:** `<img class="foot-logo">` (`height:14px`) + the company
@@ -275,7 +276,8 @@ hit shipping:**
 
 - Inline every icon as a data URI: PNG → `data:image/png;base64,…`, brand SVG →
   `data:image/svg+xml;base64,…`. Size each at
-  `width:20px;height:20px;border-radius:4px;object-fit:contain`.
+  `width:20px;height:20px;border-radius:4px;object-fit:contain`. Downloads ask
+  for approval; if refused, leave the icons out.
 - A site's `favicon.ico` is sometimes actually a PNG (one client's was a 231×231
   PNG named `.ico`). Detect with `file`, convert/rename with `sips` before use.
 - Never use a sprite sheet as a single logo (a 456×76 multi-logo strip is not one
@@ -410,11 +412,11 @@ per process for detail pages), then assemble; else do them in order.
    the logo (§4). Tight copy: label, number, basis, done. When many near-identical
    pages repeat (one per process), generate them from a single data array, not
    hand-edited HTML, so a shared number cannot drift between pages.
-5. **Self-verify (internal QA, not the deliverable).** Ensure Playwright is
-   installed (install once if missing, §8) so overflow is auto-checked, then:
-   `bash assets/make-pdf.sh report.html /tmp/report-preview.pdf --shots /tmp/report-shots`
-   → per-page PNGs + overflow report (exit 2 = a page overflows; split it and
-   re-run) + a page-count check. The `/tmp` PDF is a throwaway overflow probe;
+5. **Self-verify (internal QA, not the deliverable).** Run:
+   `bash ${CLAUDE_SKILL_DIR}/assets/make-pdf.sh report.html /tmp/report-preview.pdf --shots /tmp/report-shots`
+   → overflow report (exit 2 = a page overflows; split it and re-run) + a
+   page-count check + per-page PNGs (Playwright only; otherwise Read the PDF's
+   pages). The `/tmp` PDF is a throwaway overflow probe;
    **never present it as the deliverable**. Self-review vs `components.html`:
    alignment, hierarchy, every number chipped, no clipping, and every figure
    reconciles across pages (per-process → function subtotal → exec headline; any
@@ -440,7 +442,7 @@ auth|session|sid|apikey|api_key|password)=...`, a JWT, an AWS/API key
    deck. A hit on a kept file/filter/URL-path/formula name is not a match;
    don't strip those.
 6. **⛔ Review gate (HARD STOP).** Show the user the HTML deck: Cowork renders
-   `report.html` live in-workspace; on this Mac, `open report.html` and/or show
+   `report.html` live in-workspace; on this Mac, `open ./report.html` and/or show
    the stage-5 page PNGs inline. Then **stop and wait** for explicit approval.
    Collect changes, edit, re-verify (5), show again, repeat until the user
    approves. **Surgical edits: when the user asks to change one thing, change ONLY
@@ -450,7 +452,7 @@ auth|session|sid|apikey|api_key|password)=...`, a JWT, an AWS/API key
    "yes / approved / ship it" in this conversation.**
 7. **Finalize, only after stage-6 approval.** If the user has not approved this
    turn, do NOT run this step. On approval: copy to `report-final.html`;
-   `bash assets/make-pdf.sh report-final.html report-final.pdf`. Verify: page
+   `bash ${CLAUDE_SKILL_DIR}/assets/make-pdf.sh report-final.html report-final.pdf`. Verify: page
    count == `.page` count, no overflow, backgrounds/chips intact. Report file
    paths, page count, PDF engine used, and any caveat. Write the deliverable to
    ONE canonical, human-named file and, on any regeneration, overwrite that same
@@ -459,20 +461,20 @@ auth|session|sid|apikey|api_key|password)=...`, a JWT, an AWS/API key
 
 ---
 
-## 8. PDF engine (default Playwright → overflow always verified)
+## 8. PDF engine
 
-**Default to Playwright Chromium** so every render auto-checks overflow
-(`render-pdf.mjs` measures content vs sheet height and flags clipping). If absent,
-the verify/finalize steps install it once: `npm i -D playwright && npx playwright
-install chromium`. `make-pdf.sh` also cross-checks expected `.page` count vs the
-PDF's actual page count and warns on mismatch (any engine).
+**Playwright Chromium, if already installed** in the working folder or on `NODE_PATH`,
+renders the PDF and writes page PNGs (`render-pdf.mjs`). Never install it. `make-pdf.sh`
+measures overflow on Playwright and system browsers, and cross-checks expected `.page`
+count vs the PDF's actual page count and warns on mismatch (any engine).
 
-Fallbacks, only if install is impossible (offline/locked sandbox), best-first:
+Fallbacks when Playwright isn't there, best-first:
 
-1. **System Chrome** `--headless=new --print-to-pdf` — good fidelity (CSS forces
-   `print-color-adjust: exact`); overflow NOT measured, so **say so and eyeball
-   every page**.
-2. **WeasyPrint** — layout may differ; last automated resort.
+1. **System Chrome or Edge** `--headless=new --print-to-pdf` — good fidelity (CSS
+   forces `print-color-adjust: exact`); no PNGs, so **Read the PDF's pages** to
+   check them.
+2. **WeasyPrint** — layout may differ; last automated resort; overflow NOT
+   measured, so **say so and eyeball every page**.
 3. **Manual** — HTML is print-ready; user prints to PDF (Landscape, margins None,
    Background graphics ON). Reproduces exactly.
    Always state which engine ran and whether overflow was auto-verified.

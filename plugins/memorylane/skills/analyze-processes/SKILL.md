@@ -1,28 +1,30 @@
 ---
-name: process-analyst-new
-allowed-tools: mcp__memorylane__browse_timeline, mcp__memorylane__search_context, mcp__memorylane__get_activity_details, mcp__memorylane__get_user_context, mcp__memorylane__list_patterns, mcp__memorylane__get_pattern_details, Read, Write, Task, Bash, AskUserQuestion
+name: analyze-processes
+allowed-tools: mcp__memorylane__browse_timeline, mcp__memorylane__search_context, mcp__memorylane__get_activity_details, mcp__memorylane__get_user_context, mcp__memorylane__list_patterns, mcp__memorylane__get_pattern_details, mcp__memorylane__search_patterns, mcp__memorylane__get_db_path, Read, Grep, Write(./process-analysis*.md), Task, Bash(sqlite3 -readonly -safe *), Bash(cp * /tmp/memorylane-analysis.db), AskUserQuestion, mcp__plugin_memorylane_memorylane__browse_timeline, mcp__plugin_memorylane_memorylane__search_activity, mcp__plugin_memorylane_memorylane__get_activity_details, mcp__plugin_memorylane_memorylane__get_work_profile, mcp__plugin_memorylane_memorylane__list_patterns, mcp__plugin_memorylane_memorylane__get_pattern_details, mcp__plugin_memorylane_memorylane__list_organizations, mcp__plugin_memorylane_memorylane__list_teams, mcp__plugin_memorylane_memorylane__list_devices
 description: >
-  (new) Find a person's repeated tasks from their screen activity, and what each one is
+  Find a person's repeated tasks from their screen activity, and what each one is
   worth automating, with the time and money saved. Outputs the numbers and data a report
   is built from, not the visual. Use to analyze processes, mine workflows, or see what is
   automatable and what it saves. Every figure is labelled and grounded, never made up.
 ---
 
-# Process Analyst (Core Engine)
+# Analyze Processes
 
 Turns raw screen-activity rows into a defensible breakdown of a person's repeated work, what it costs, and what to automate. A separate packaging skill renders the visual. **Your job is truth and numbers, not persuasion.** Bar = **80/20**: directionally accurate, grounded, never fabricated. Can't ground a claim? Weaken its label or drop it.
 
 ## Before you start
 
-If the `browse_timeline` tool is not available, stop and reply with exactly:
+Read `${CLAUDE_PLUGIN_ROOT}/references/data-sources.md`. It says whether to use the local or remote tools, and how the remote ones differ. Tool names below are the local ones.
 
-> MemoryLane isn't connected to Claude yet. Open the MemoryLane app, go to **Integrations**, click **Add to Claude**, then restart Claude Desktop and run this again.
+If neither the local tools (`search_context`) nor the remote tools (`search_activity`) are available, stop and reply with exactly:
+
+> MemoryLane isn't connected yet. Sign in to the **MemoryLane** connector (`/mcp` in Claude Code, **Settings > Connectors** in Claude). With the desktop app, open **Integrations** and click **Add to Claude** or **Reconnect** instead. Then run this again.
 
 Do not suggest plugin settings, Retry, or toggling the plugin.
 
 ## Data limits (single source of truth for basis labels)
 
-Verified against the MemoryLane MCP + storage code; everything below references these:
+Verified against the MemoryLane MCP + storage code; everything below references these. These describe the local tools; `${CLAUDE_PLUGIN_ROOT}/references/data-sources.md` lists what differs on remote (real end times, exact totals, raw app names, no scrubbing):
 
 - **Duration:** bulk tools (`browse_timeline`/`search_context`) return **start only**; end is stripped. Only `get_activity_details` gives a real `[start -> end]`. Timeline duration = gap approximation (next start minus this, mixes idle) = **reasoned**, never seen.
 - **Sampling:** `browse_timeline` defaults to `sampling="uniform"` + a row cap; header reads `Showing X of Y` when sampled, else `N activities`. Sampled counts = lower bound. `search_context` no-query = `recent_first` (drops oldest). Never count/sum from a sampled pull.
@@ -31,9 +33,9 @@ Verified against the MemoryLane MCP + storage code; everything below references 
 - **No interaction data:** clicks/keystrokes never stored, so pain (re-keying) = **reasoned** from summaries/OCR.
 - **No pairwise embeddings:** judge topic continuity from **summary text**; `search_context` only ranks a query vs the corpus.
 - **Row != step:** a row is an event window (closed ~5s idle, force-split 5 min, split on app change; sub-3s dropped). One task spans many rows.
-- **`tld`/OCR not in the timeline** (`tld` only via `get_activity_details`).
-- **Single-user DB.**
-- _Non-blocking code follow-ups that turn reasoned into seen:_ add `endTimestamp`+`durationMs` to the timeline, a `get_activity_stats` aggregate tool, and `tld` to the timeline (primitives already exist).
+- **Site names:** the timeline app name is already the site for browser rows. OCR is only in `get_activity_details`.
+- **One person per pull:** a local DB or a remote device.
+- _Non-blocking code follow-ups that turn reasoned into seen:_ add `endTimestamp`+`durationMs` to the timeline and a `get_activity_stats` aggregate tool (primitives already exist).
 
 ## 0. Operating Principles
 
@@ -51,10 +53,10 @@ Verified against the MemoryLane MCP + storage code; everything below references 
    - **Credentials in URLs are secrets, not "keep exact."** A URL's path/structure stays, but strip any query param or fragment that carries a token/session/credential (`token=`, `key=`, `secret=`, `sig=`/`signature=`, `auth=`, `sid=`/`session=`, `apikey=`/`api_key=`, `password=`, a JWT `eyJ...`, an AWS key `AKIA...`, an API secret like `sk-...`/`ghp_...`/`xox[bp]-...`, or an `X-Amz-Signature` presigned-link parameter), the same way a personal token like `?user=jane.doe` gets stripped while the rest of the path stays, just for credentials instead of person tokens. This is the one place the keep-list must not be read as "URLs are always fully verbatim."
    - So: never quote a window title or OCR excerpt **verbatim** if it carries a strip-list item (a name/email/subject-with-a-person's-name, a card/ID number, health content); paraphrase that part and cite the activity ID; but a title/excerpt that is just a filename, filter name, or URL path (minus any credential param) stays verbatim, it's the target, not a person.
    - "Customer identifier" (strip) means the client's individual customer/contact names surfaced in OCR (e.g. a person's name on a CRM record); generalize those to "a customer contact" unless the user opts into naming them. A customer **account/company** name (e.g. CRM account "Acme Corp") is operational context needed to describe the workflow; keep it unless the user asks otherwise.
-10. **Code for mechanics, AI for judgment.** Counts, sums, %, URL parsing, denylist, gap splits, ID regex, savings math, dedup, validation = code (file) or exact enumeration, never AI eyeballing. AI only for: session topic, clustering, interruption relevance, naming unknown domains, the common path, how to automate.
+10. **Code for mechanics, AI for judgment.** Counts, sums, %, URL parsing, denylist, gap splits, ID regex, savings math, dedup, validation = code (file) or exact enumeration, never AI eyeballing. AI only for: session topic, clustering, interruption relevance, naming unknown domains, the common path, how to automate. Run it with `sqlite3 -readonly -safe <db> "..."` for queries, `sqlite3 -readonly -safe :memory: "SELECT ..."` for arithmetic, and Grep for regex. Other scripts (python, node) ask for approval. If none of these can run, list the unchecked figures in `data_coverage_notes` and label them reasoned.
 11. **Reproducible, zero slop.** Every name/app/tool/step/number traces to data or a labelled assumption; nothing decorative. Deterministic outputs reproduce **exactly**; judgment calls may vary slightly (mark which). Thin evidence -> demote or drop, never invent.
 12. **Plain English in all output.** Every reader-facing word (names, summaries, recommendations, assumptions, the wrap) is short, clear, active, no jargon/filler. Fewest words that stay accurate.
-13. **Verify connectors against live docs before recommending.** Before naming any API integration or connector in a route, fetch the target tool's latest official API/MCP docs and confirm the specific read/write it needs; record how and when you verified. Verify the **exact product/edition** the user runs (e.g. enterprise Looker has an MCP server; Looker Studio has no clean API/MCP), and if the presentation/dashboard tool cannot connect, route to the underlying data source it reads from. Never assert a connector capability from training memory, connectors change fast.
+13. **Verify connectors against live docs before recommending.** Before naming any API integration or connector in a route, fetch the target tool's latest official API/MCP docs and confirm the specific read/write it needs; record how and when you verified. Verify the **exact product/edition** the user runs (e.g. enterprise Looker has an MCP server; Looker Studio has no clean API/MCP), and if the presentation/dashboard tool cannot connect, route to the underlying data source it reads from. If a docs fetch is refused, use WebSearch. Never assert a connector capability from training memory, connectors change fast.
 14. **Own and re-verify wrong claims.** If a capability turns out wrong, correct it openly and re-check against the source, never defend it.
 
 ## 1. Inputs (dynamic, never baked in)
@@ -64,8 +66,8 @@ Verified against the MemoryLane MCP + storage code; everything below references 
 - **Company:** what it does, industry, the **tools/systems they use** (automation targets these).
 - **Automation owner + tooling:** does the org have someone to own/run automations, and which automation tools (n8n, Zapier, etc.) do they already have? Drives the Stage 5 route. If none, default to Cowork.
 - **User:** role, responsibilities, location (for the rate). Missing -> infer role (reasoned), location/cost (estimated).
-- **Cost basis:** prefer the real loaded rate; else estimate from role+location. `derivation` = base rate + source + loading multiplier (e.g. x1.3). Never show a $ figure without source + multiplier.
-- **Data source (quality ladder, best first):** (1) **SQLite DB (best)** = real durations + exact counts + `tld`/OCR; durations here are **seen**, not reasoned. Read via SQL (Bash); the upload mount is read-only, so copy the file to a writable folder before querying. (2) **Export (CSV/JSON) with end times + url/tld**. (3) **Live MCP** = start-only (durations reasoned), samples (counts lower-bound), no `tld`. More direct data = more "seen" + tighter numbers. State source + tier in `meta`.
+- **Cost basis:** prefer the real loaded rate (on remote, the hourly rate and currency from `list_organizations`); else estimate from role+location. `derivation` = base rate + source + loading multiplier (e.g. x1.3). Never show a $ figure without source + multiplier.
+- **Data source (quality ladder, best first):** (1) **SQLite DB (best)** = real durations + exact counts + `tld`/OCR; durations here are **seen**, not reasoned. Read via SQL (Bash, `sqlite3 -readonly -safe`); the upload mount is read-only, so copy the file to `/tmp/memorylane-analysis.db` before querying. If sqlite3 isn't installed (usual on Windows), use a script, which asks for approval, or drop to the next source. (2) **Export (CSV/JSON) with end times + url/tld**. (3) **Remote MCP** = real durations + exact totals, raw app names. (4) **Local MCP** = start-only (durations reasoned), samples (counts lower-bound). More direct data = more "seen" + tighter numbers. State source + tier in `meta`.
 - **Window:** **21 to 30 days default.** Cadence and frequency need weeks to see; a 7-day pull cannot observe weekly recurrence (let alone monthly) and structurally forces Low confidence, so do not default to it. Pull the full available history when you can; widen to 30 to 60 days for weekly/monthly candidates (Stage 3). Fall back to a shorter window only when that is all the data there is, and say so in `meta`. State the window used.
 
 ## 2. Pipeline
@@ -130,7 +132,7 @@ The last column marks each row **process** or **candidate (low confidence)** wit
 **Stage 6 — Quantify savings + net ROI (ranges).** All arithmetic in code.
 
 - Per process: `annual_hours = time_per_instance x frequency_per_year`; `automatable_hours = annual_hours x automatable_fraction`; `gross_$ = automatable_hours x rate`. Show inputs + labels.
-- **Reconciliation invariant (displayed % == realized fraction).** The automatable % you publish MUST be the exact fraction that reproduces the reported (rounded, conservative) savings, i.e. `hours_freed = time_per_instance x frequency_per_year x automatable_fraction` and `annual_savings = hours_freed x loaded_rate`. Never display one automatable % while deriving the dollars from a different effective fraction. A skeptic multiplies the printed inputs and must land on the printed savings; per-process savings must sum to the role/function subtotal and then to the combined total. Carry the exact inputs so a downstream page reconciles without re-deriving (see `reconciliation` in §5). _Worked example (real build):_ slide-deck 3h/run x 2/month x 46% x A$105/hr -> ~A$3,500/yr; sprint-estimation 45m x 2/month x 28% x A$105/hr -> ~A$500/yr; Product subtotal A$4k. Marketing perf-reporting 27m daily x 90% -> ~A$6,200, SEM 35m x 8/month x 71% -> ~A$2,800, optimisation-logging 60m x 4/month x 60% -> ~A$2,000, all x A$70/hr; subtotal A$11k. Measured total A$15k; capacity 1h + 3h = 4h/week (5%); 2 + 3 = 5 processes.
+- **Reconciliation invariant (displayed % == realized fraction).** The automatable % you publish MUST be the exact fraction that reproduces the reported (rounded, conservative) savings, i.e. `hours_freed = time_per_instance x frequency_per_year x automatable_fraction` and `annual_savings = hours_freed x loaded_rate`. Never display one automatable % while deriving the dollars from a different effective fraction. A skeptic multiplies the printed inputs and must land on the printed savings; per-process savings must sum to the role/function subtotal and then to the combined total. Carry the exact inputs so a downstream page reconciles without re-deriving (see `reconciliation` in §5). _Worked example:_ slide-deck 3h/run x 2/month x 46% x A$105/hr -> ~A$3,500/yr; sprint-estimation 45m x 2/month x 28% x A$105/hr -> ~A$500/yr; Product subtotal A$4k. Marketing perf-reporting 27m daily x 90% -> ~A$6,200, SEM 35m x 8/month x 71% -> ~A$2,800, optimisation-logging 60m x 4/month x 60% -> ~A$2,000, all x A$70/hr; subtotal A$11k. Measured total A$15k; capacity 1h + 3h = 4h/week (5%); 2 + 3 = 5 processes.
 - **Ranges** low/base/high on every figure; name the dominant uncertainty.
 - **Annualization as a plain sentence** a non-expert can override: "Saw it [N] times in [window]; assume it runs [cadence]; so about [X]/year." Flag a yearly figure from a single observation as low-confidence. Carry the observed run-frequency through to the output and, by default, name recurrence (run-frequency) as the dominant uncertainty on annualized figures. In **sample mode** (low coverage), annual figures are still given but as estimates: sample-based, wide low/base/high range, coverage caveat, low-confidence; frame them as capacity unlocked + savings, basing the capacity % on observed work before projecting to the full role/team.
 - **Net ROI (worth-it gate):** `net_annual = gross_annual - annual_automation_cost`; `payback_months = build_cost / monthly_net`. If payback > ~6 to 12 months, tool cost > savings, or high effort for a tiny saving, the verdict is **leave as-is** or **redesign**, not automate. Net, not gross, drives the verdict + ranking.
@@ -146,15 +148,15 @@ The last column marks each row **process** or **candidate (low confidence)** wit
 
 **Final Review — adversarial.** Mechanical checks as code (aggregate = sum of parts; no duplicate IDs; % per app ~100; every headline has a range + label). Then break it: any number without label/evidence/range? sampled count? weak reasoning log? duplicate ID? team/FTE without headcount? `automatable=true` on judgment the data can't show is mechanical? tool not in context? aggregate above ceiling? click-level/fabricated detail? overall future-state label inconsistent with its steps (an AI-augmented or human-in-the-loop process with no human/judgment step, or an all-automate step list under an augmented label)? **Slop sweep:** every name/app/tool/step/number traces to a row or labelled assumption, else strip; deterministic numbers re-run identically. **Threshold-sensitivity:** re-segment one day at 3-min and 10-min gaps; if process count or total time shifts >25%, flag it. Write `what_would_sharpen` (2 to 4 cheap next steps that most raise confidence). Only survivors ship; record verdict + demoted/stripped.
 
-**Privacy scrub (mandatory, before ship).** A stated ban on identifiers is not enough; verify it: (a) **code-run a regex scan** of the full `process-analysis.md` for:
+**Privacy scrub (mandatory, before ship).** A stated ban on identifiers is not enough; verify it: (a) **code-run a regex scan** of the full ledger file, using Grep, for:
 
 - emails `[\w.+-]+@[\w-]+\.\w`, phone numbers, `@handles`;
 - credential/token params (`(token|key|secret|sig|signature|auth|session|sid|apikey|api_key|password)=[A-Za-z0-9%._~+/-]{16,}`), a JWT `eyJ[A-Za-z0-9_-]{10,}\.eyJ`, an AWS key `AKIA[0-9A-Z]{16}`, an API secret `sk-[A-Za-z0-9]{20,}`/`ghp_[A-Za-z0-9]{36}`/`xox[bp]-`, or an `X-Amz-Signature` param;
-- card/bank numbers: 13-16 contiguous digits **gated by a Luhn check** (do not flag every long digit run, that catches invoice/order IDs you must keep) plus IBAN `[A-Z]{2}\d{2}[A-Z0-9]{11,30}`;
+- card/bank numbers: 13-16 contiguous digits **gated by a Luhn check** in a script (do not flag every long digit run, that catches invoice/order IDs you must keep; if no script can run, treat each hit as a card number unless it is a known invoice/order ID) plus IBAN `[A-Z]{2}\d{2}[A-Z0-9]{11,30}`;
 - dashed US SSN `\d{3}-\d{2}-\d{4}` (bare 9-digit runs collide with kept IDs, skip those).
 - **market-specific national IDs** (this pipeline runs in the Philippines, Malaysia, Czech Republic, Slovakia, German-speaking markets, Australia, and New Zealand, not just the US: a US-only regex misses all of these): Philippines SSS `\d{2}-\d{7}-\d`, TIN `\d{3}-\d{3}-\d{3}(-\d{3})?`, PhilHealth `\d{2}-\d{9}-\d`; Malaysia NRIC/MyKad `\d{6}-\d{2}-\d{4}`; Czech Republic + Slovakia rodné číslo `\d{6}/\d{3,4}`; Germany Steuer-ID `\d{2} ?\d{3} ?\d{3} ?\d{3}` or Sozialversicherungsnummer `\d{8}[A-Z]\d{3}`; Austria Sozialversicherungsnummer `\d{4} ?\d{6}`; Switzerland AHV/AVS `756\.\d{4}\.\d{4}\.\d{2}`; Australia TFN `\d{3} ?\d{3} ?\d{3}` or Medicare `\d{4} ?\d{5} ?\d`; New Zealand IRD `\d{2,3}-?\d{3}-?\d{3}`. Same rule as the US SSN: any of these is high-severity, strip on match, but a plain digit run without the market's separator pattern is more likely a kept invoice/order/case ID, don't strip on digits alone.
   Any hit -> redact to a role/generic label (or, for a credential param, drop just that param and keep the URL path) and fix the source field.
-  (b) **Re-read these high-risk free-text fields** specifically against Principle 9's strip-list (person names, emails, phones, handles, customer contact names, home addresses, card/ID/DOB values, health/medical content), they carry window-title/OCR text furthest from the numeric pipeline: `steps[].input/output/note`, `what_varies`/`what_constant`, `reasoning_log[].why`, `assumptions[].plain`, `common_path.description`, `cowork_skills[]` (all text), `data_coverage_notes`, `blind_spots`, `tier_note`, `narrative_summary`. Also scan for keyword triggers ("DOB", "Date of Birth", "Passport No", "SSN", "diagnosis", "MRN", "patient") that flag content needing generic paraphrase even without a clean regex hit. **Do not strip Principle 9's keep-list** (file/sheet/tab names, filter/view names, URL paths, formulas, folder paths) out of these same fields: that detail is what makes `steps[].input/output` and the automation `mechanism` reproducible; scrub people (and the PII/PHI classes above) out, leave the artifacts in. A keyword-trigger false-positive on a kept column header is the correct failure direction; when unsure, route to review rather than silently stripping or silently keeping. (c) Record `review.privacy_scrub: "passed"` (or the fields fixed) in the schema. Regex alone misses bare names; the field re-read is what catches those.
+  (b) **Re-read these high-risk free-text fields** specifically against Principle 9's strip-list (person names, emails, phones, handles, customer contact names, home addresses, card/ID/DOB values, health/medical content), they carry window-title/OCR text furthest from the numeric pipeline: `steps[].input/output/note`, `what_varies`/`what_constant`, `reasoning_log[].why`, `assumptions[].plain`, `common_path.description`, `cowork_skills[]` (all text), `data_coverage_notes`, `blind_spots`, `tier_note`, `narrative_summary`. Also scan for keyword triggers ("DOB", "Date of Birth", "Passport No", "SSN", "diagnosis", "MRN", "patient") that flag content needing generic paraphrase even without a clean regex hit. **Do not strip Principle 9's keep-list** (file/sheet/tab names, filter/view names, URL paths, formulas, folder paths) out of these same fields: that detail is what makes `steps[].input/output` and the automation `mechanism` reproducible; scrub people (and the PII/PHI classes above) out, leave the artifacts in. A keyword-trigger false-positive on a kept column header is the correct failure direction; when unsure, route to review rather than silently stripping or silently keeping. (c) Record `review.privacy_scrub: "passed"` (or the fields fixed) in the schema. If the scan could not run, record `"not run"` and tell the user; never do it by eye. Regex alone misses bare names; the field re-read is what catches those.
 
 ## 3. Process Categories
 
@@ -169,7 +171,7 @@ AI-era (LLMs automate what RPA discarded): **Content Generation** (draft docs/em
 
 ## 5. Output: the Analysis Ledger
 
-Write **one file**, `process-analysis.md`, then a 5-line chat summary (don't dump raw output). **No separate JSON file.** Put the readable narrative first, then embed the full structured ledger as a single fenced ` ```json ` code block at the end of the same file (schema below) so the file is both the human-readable report and the machine-readable ledger. This filename + the embedded block is the hand-off contract the packaging (`report-new`) skill reads; keep both.
+Write **one file per person**: `process-analysis.md`, or `process-analysis-<role>.md` per device on a multi-person remote run. Then a 5-line chat summary (don't dump raw output). **No separate JSON file.** Put the readable narrative first, then embed the full structured ledger as a single fenced ` ```json ` code block at the end of the same file (schema below) so the file is both the human-readable report and the machine-readable ledger. The `process-analysis*.md` name + the embedded block is the hand-off contract the `build-report`, `build-n8n-workflow` and `build-netsuite-automation` skills read; keep both.
 
 ```json
 {
@@ -403,7 +405,7 @@ The narrative portion of `process-analysis.md` (everything before the trailing e
 **⛔ Stop at the ledger. Do NOT package.** Your deliverable ENDS at
 `process-analysis.md` (with the embedded json block) + the 5-line chat summary
 (+ optional `cowork_skills` specs). Do not render HTML, do not create a PDF, do
-not invoke or hand straight into the `report-new`/packaging skill. Packaging is
+not invoke or hand straight into the `build-report`/packaging skill. Packaging is
 a separate, **user-initiated** step, and that skill shows the HTML deck for
 review before any PDF exists. After writing the file, give the short summary
 and stop; if the user wants the visual deck, they start packaging next. Never
@@ -416,4 +418,4 @@ chain analysis → PDF in one run.
 - Reserve `get_activity_details` (OCR) for high-value confirmations (case IDs, true durations on 2 to 3 sample instances per top process, automation specifics). Keep it bounded.
 - Never present estimated as seen/reasoned; when unsure, pick the weaker label; never a bare point value for a headline.
 - Extrapolation is expected: reasonable, traceable, labelled, and ranged.
-- **No auto-packaging.** Finish at the ledger files + chat summary. Never render HTML or a PDF, never chain into the `report-new` skill; the user starts packaging, and HTML review precedes any PDF (see "Stop at the ledger" in §5).
+- **No auto-packaging.** Finish at the ledger files + chat summary. Never render HTML or a PDF, never chain into the `build-report` skill; the user starts packaging, and HTML review precedes any PDF (see "Stop at the ledger" in §5).
