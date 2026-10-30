@@ -2,13 +2,14 @@
   "name": "memorylane",
   "displayName": "MemoryLane",
   "icon": "./.claude-plugin/icon.png",
-  "version": "0.11.3",
+  "version": "0.11.4",
   "description": "Get the most out of your MemoryLane data. See how work really gets done and find what to automate.",
   "author": {
-    "name": "MemoryLane Team",
+    "name": "SenseFlow, Inc.",
     "email": "hello@trymemorylane.com"
   },
   "homepage": "https://trymemorylane.com",
+  "documentationUrl": "https://trymemorylane.com/security",
   "supportUrl": "mailto:support@trymemorylane.com",
   "privacyPolicyUrl": "https://trymemorylane.com/privacy",
   "termsOfServiceUrl": "https://trymemorylane.com/terms",

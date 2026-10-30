@@ -11,7 +11,7 @@
       "name": "memorylane",
       "description": "Get the most out of your MemoryLane data. See how work really gets done and find what to automate.",
       "author": {
-        "name": "MemoryLane Team"
+        "name": "SenseFlow, Inc."
       },
       "source": "./plugins/memorylane",
       "category": "productivity",
