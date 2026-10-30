@@ -3,7 +3,7 @@
   "displayName": "MemoryLane",
   "icon": "./.claude-plugin/icon.png",
   "version": "0.11.2",
-  "description": "See how your organization really works. Explore how work gets done across teams and find automation opportunities.",
+  "description": "Get the most out of your MemoryLane data. See how work really gets done and find what to automate.",
   "author": {
     "name": "MemoryLane Team",
     "email": "hello@trymemorylane.com"
