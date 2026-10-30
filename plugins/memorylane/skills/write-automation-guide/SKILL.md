@@ -1,20 +1,22 @@
 ---
-name: automation-instructions
+name: write-automation-guide
 allowed-tools: AskUserQuestion, mcp__memorylane__browse_timeline, mcp__memorylane__search_context, mcp__memorylane__get_activity_details
-description: Write step-by-step automation instructions for a workflow, tailored to your tool (Claude, n8n or Zapier). Best run right after discover-patterns or process-analyst.
+description: Write step-by-step automation instructions for a workflow, tailored to your tool (Claude, n8n or Zapier). Best run right after analyze-processes.
 ---
 
 # Automation Instructions
 
 Turn one workflow into clear, build-ready instructions for a specific automation tool.
-Assumes it runs **after** `/discover-patterns` or `/process-analyst-new`, so it reuses
+Assumes it runs **after** `/analyze-processes`, so it reuses
 their output as the source and does NOT re-mine the timeline unless nothing is supplied.
 
 ## Before you start
 
-If the `browse_timeline` tool is not available, stop and reply with exactly:
+Read `${CLAUDE_PLUGIN_ROOT}/references/data-sources.md`. It says whether to use the local or remote tools, and how the remote ones differ. Tool names below are the local ones.
 
-> MemoryLane isn't connected to Claude yet. Open the MemoryLane app, go to **Integrations**, click **Add to Claude**, then restart Claude Desktop and run this again.
+If neither the local tools (`search_context`) nor the remote tools (`search_activity`) are available, stop and reply with exactly:
+
+> MemoryLane isn't connected to Claude yet. In Claude, open **Settings > Connectors**, add **MemoryLane** and sign in, then run this again.
 
 Do not suggest plugin settings, Retry, or toggling the plugin.
 
@@ -22,11 +24,10 @@ Do not suggest plugin settings, Retry, or toggling the plugin.
 
 In priority order, do NOT re-derive what you already have:
 
-1. **A pattern from `/discover-patterns`** (a selected pattern + its details) -> use it as-is.
-2. **A process from `/process-analyst-new`** (a `process-analysis*.json` ledger, or a process
+1. **A process from `/analyze-processes`** (a `process-analysis*.md` ledger, or a process
    the user points to) -> read that process's steps, apps, frequency, and automatable split.
-   Glob `process-analysis*.json` in the working dir; if found, use it.
-3. **A workflow the user describes in chat** -> use the description as-is.
+   Glob `process-analysis*.md` in the working dir; if found, use the last fenced json block.
+2. **A workflow the user describes in chat** -> use the description as-is.
 
 Only if NONE of the above is available, fall back to mining: `search_context(query)` across
 ~30 days for instances, `browse_timeline` around the strongest matches for the full sequence,

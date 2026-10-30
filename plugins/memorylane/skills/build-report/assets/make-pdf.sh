@@ -103,6 +103,5 @@ To produce a faithful PDF manually:
   2. Cmd/Ctrl-P -> Destination: Save as PDF.
   3. Layout: Landscape · Margins: None · "Background graphics": ON.
 This reproduces the report exactly because it uses the same print stylesheet.
-Optional one-time setup for automation:  npm i -D playwright && npx playwright install chromium
 EOF
 exit 4

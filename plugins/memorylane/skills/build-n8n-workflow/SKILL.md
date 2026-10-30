@@ -1,11 +1,11 @@
 ---
-name: process-to-n8n
-allowed-tools: AskUserQuestion, Read, Write, Glob, Bash, WebFetch, WebSearch, mcp__memorylane__search_context, mcp__memorylane__get_activity_details
+name: build-n8n-workflow
+allowed-tools: AskUserQuestion, Read, Write(./workflow.json), Write(./n8n-recipe.md), Glob, Bash(ffmpeg *), WebFetch(domain:docs.n8n.io), mcp__memorylane__search_context, mcp__memorylane__get_activity_details
 description: >
   (BETA) Turn one process from a MemoryLane analysis, report or screen recording into a
   simple working n8n workflow, plus a short recipe to test and publish it. Builds the
   workflow in n8n when connected, else a file to paste in. One happy path, fewest steps.
-  Use after process-analyst-new.
+  Use after analyze-processes.
 ---
 
 # Process to n8n (BETA)
@@ -43,7 +43,7 @@ The user is not technical.
 ## Rules
 
 1. **Material first, then ask.** Ask questions only at Step 2 and Step 4, up to four per ask. Waiting for an upload or a connection is fine.
-2. **No personal data in any output.** Use field names, view names and page addresses. Never copy names, emails, health details or values from real records. Same strip and keep lists as `process-analyst-new` principle 9.
+2. **No personal data in any output.** Use field names, view names and page addresses. Never copy names, emails, health details or values from real records. Same strip and keep lists as `analyze-processes` principle 9.
 3. **Never ask for passwords or keys in chat.** The user connects each system inside n8n.
 4. **Never publish the workflow yourself.** The user does that after the test.
 
@@ -51,13 +51,13 @@ The user is not technical.
 
 Use what is there, in this order:
 
-1. `process-analysis.md` from `process-analyst-new`: `steps`, `decision_points`, `common_path`, `what_varies`, `automation`, `reconciliation`.
+1. `process-analysis.md` from `analyze-processes`: `steps`, `decision_points`, `common_path`, `what_varies`, `automation`, `reconciliation`.
 2. A MemoryLane report the user points to.
 3. The user's description, a how-to doc, or a screen recording.
 
 Also:
 
-- **Captured data**, if MemoryLane tools are here: `get_activity_details` on the evidence IDs, `search_context` for more runs.
+- **Captured data**, if MemoryLane tools are here (`${CLAUDE_PLUGIN_ROOT}/references/data-sources.md` has the local and remote tool names): `get_activity_details` on the evidence IDs, `search_context` for more runs.
 - **Recordings:** save one picture every 3 to 5 seconds with ffmpeg and read them in order, skipping repeats (about 60 max). The transcript gives the rule and the why. If you cannot run code here, ask for screenshots of the key screens.
 - **n8n connection:** if n8n tools are connected, note whether they can create a workflow.
 

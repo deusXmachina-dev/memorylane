@@ -1,8 +1,8 @@
 ---
-name: report-new
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task, AskUserQuestion
+name: build-report
+allowed-tools: Read, Write(./report*.html), Edit(./report*.html), Bash(bash ${CLAUDE_SKILL_DIR}/assets/make-pdf.sh *), Glob, Grep, Task, AskUserQuestion
 description: >
-  (new) Turn a process analysis into a polished, client-ready report, first an HTML
+  Turn a process analysis into a polished, client-ready report, first an HTML
   deck you review, then a matching PDF. Use to package an analysis into an exec report
   or PDF. Shows the deck for approval before making the PDF, and never makes up numbers.
 ---
@@ -131,7 +131,7 @@ The ledger labels every exec number `seen` / `reasoned` / `estimated` with a
   frequency x automatable% = hours freed; hours freed x the role's loaded rate =
   annual savings; per-process savings sum to the function subtotal; function
   subtotals sum to the combined total; the headline restates the combined total.
-  _Worked example (shipped):_ Product (slide deck ~A$3,500 + sprint ~A$500) = A$4k;
+  _Worked example:_ Product (slide deck ~A$3,500 + sprint ~A$500) = A$4k;
   Marketing (~A$6,200 + ~A$2,800 + ~A$2,000) = A$11k; Measured (2 users) = A$15k;
   capacity 1h + 3h = 4h/week (5%); 2 + 3 = 5 processes.
 - **One rounding grain.** Round money to a clean grain with "~" (nearest $100/$1k
@@ -146,7 +146,7 @@ The ledger labels every exec number `seen` / `reasoned` / `estimated` with a
 - **Render only what the ledger contains.** Missing field → omit the element.
   Anti-slop is the product.
 
-**Number + money formatting (house style, from shipped reports; currency follows
+**Number + money formatting (house style; currency follows
 the ledger, A$ shown as the example).**
 
 **Locale first, before applying the house style below.** The comma-thousands /
@@ -182,7 +182,7 @@ Ask which language the deck should ship in during intake (§1) if the client's
 market suggests it is not English; default to English if unstated.
 
 - Capacity + time reads `1h/week (2%)` (no space inside `1h`, one space before the
-  parenthesis). Shipped: `1h/week (2%)`, `3h/week (8%)`, `4h/week (5%)`, `~1 FTE (5%)`.
+  parenthesis). For example: `1h/week (2%)`, `3h/week (8%)`, `4h/week (5%)`, `~1 FTE (5%)`.
 - Per-process figures and the in-scope table carry `~` and full digits with a comma
   (`~A$6,200`, `~A$3,500`, `~A$500`, total `~A$15,000`); exec KPI tiles and the
   measured/total rows are the rounded grain with NO `~` (`A$4k`, `A$11k`, `A$15k`,
@@ -410,9 +410,8 @@ per process for detail pages), then assemble; else do them in order.
    the logo (§4). Tight copy: label, number, basis, done. When many near-identical
    pages repeat (one per process), generate them from a single data array, not
    hand-edited HTML, so a shared number cannot drift between pages.
-5. **Self-verify (internal QA, not the deliverable).** Ensure Playwright is
-   installed (install once if missing, §8) so overflow is auto-checked, then:
-   `bash assets/make-pdf.sh report.html /tmp/report-preview.pdf --shots /tmp/report-shots`
+5. **Self-verify (internal QA, not the deliverable).** Run:
+   `bash ${CLAUDE_SKILL_DIR}/assets/make-pdf.sh report.html /tmp/report-preview.pdf --shots /tmp/report-shots`
    → per-page PNGs + overflow report (exit 2 = a page overflows; split it and
    re-run) + a page-count check. The `/tmp` PDF is a throwaway overflow probe;
    **never present it as the deliverable**. Self-review vs `components.html`:
@@ -450,7 +449,7 @@ auth|session|sid|apikey|api_key|password)=...`, a JWT, an AWS/API key
    "yes / approved / ship it" in this conversation.**
 7. **Finalize, only after stage-6 approval.** If the user has not approved this
    turn, do NOT run this step. On approval: copy to `report-final.html`;
-   `bash assets/make-pdf.sh report-final.html report-final.pdf`. Verify: page
+   `bash ${CLAUDE_SKILL_DIR}/assets/make-pdf.sh report-final.html report-final.pdf`. Verify: page
    count == `.page` count, no overflow, backgrounds/chips intact. Report file
    paths, page count, PDF engine used, and any caveat. Write the deliverable to
    ONE canonical, human-named file and, on any regeneration, overwrite that same
@@ -459,15 +458,14 @@ auth|session|sid|apikey|api_key|password)=...`, a JWT, an AWS/API key
 
 ---
 
-## 8. PDF engine (default Playwright → overflow always verified)
+## 8. PDF engine
 
-**Default to Playwright Chromium** so every render auto-checks overflow
-(`render-pdf.mjs` measures content vs sheet height and flags clipping). If absent,
-the verify/finalize steps install it once: `npm i -D playwright && npx playwright
-install chromium`. `make-pdf.sh` also cross-checks expected `.page` count vs the
-PDF's actual page count and warns on mismatch (any engine).
+**Playwright Chromium, if already installed**, auto-checks overflow on every render
+(`render-pdf.mjs` measures content vs sheet height and flags clipping). Never install
+it. `make-pdf.sh` also cross-checks expected `.page` count vs the PDF's actual page
+count and warns on mismatch (any engine).
 
-Fallbacks, only if install is impossible (offline/locked sandbox), best-first:
+Fallbacks when Playwright isn't there, best-first:
 
 1. **System Chrome** `--headless=new --print-to-pdf` — good fidelity (CSS forces
    `print-color-adjust: exact`); overflow NOT measured, so **say so and eyeball
