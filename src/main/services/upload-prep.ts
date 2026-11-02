@@ -1,8 +1,7 @@
 import { app, utilityProcess } from 'electron'
 import * as path from 'path'
 import { isWorkerLogEvent, logWorkerEvent, type WorkerLogEvent } from '@main/utils/worker-log'
-import type { StripOptions } from './strip-database-for-upload'
-import type { UploadPrepRequest, UploadPrepResponse } from './upload-prep-worker'
+import type { DeltaRequest, UploadPrepResponse } from './upload-prep-worker'
 
 // Built alongside index.js (see electron.vite.config.ts rollup input).
 // app.getAppPath() resolves to the asar root when packaged and to the project
@@ -11,20 +10,11 @@ function workerScriptPath(): string {
   return path.join(app.getAppPath(), 'out', 'main', 'upload-prep-worker.js')
 }
 
-// Generous upper bound for strip + VACUUM + gzip. If the worker exceeds this it
-// is almost certainly hung; we kill it and reject so a stuck child can't leave
-// the upload `inFlight` promise unresolved (which would wedge every later run).
+// If the worker exceeds this it is almost certainly hung; we kill it and reject
+// so a stuck child can't leave the upload `inFlight` promise unresolved.
 const WORKER_TIMEOUT_MS = 2 * 60 * 1000
 
-/**
- * Run the upload prep (strip + VACUUM + gzip) in a short-lived utilityProcess
- * so the heavy synchronous SQLite work never blocks the main thread. The child
- * is killed once it returns the compressed buffer (or fails).
- */
-export function prepareUploadInWorker(
-  tempPath: string,
-  stripOptions: StripOptions,
-): Promise<Buffer> {
+export function prepareUploadInWorker(req: DeltaRequest): Promise<Buffer> {
   return new Promise<Buffer>((resolve, reject) => {
     const child = utilityProcess.fork(workerScriptPath(), [], { serviceName: 'upload-prep' })
     let settled = false
@@ -52,9 +42,7 @@ export function prepareUploadInWorker(
       settle(() => reject(new Error(`upload-prep worker exited before responding (code ${code})`)))
     })
 
-    // Send the task once the child is ready to receive messages.
     child.once('spawn', () => {
-      const req: UploadPrepRequest = { tempPath, stripOptions }
       child.postMessage(req)
     })
   })

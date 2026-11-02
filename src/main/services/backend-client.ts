@@ -7,7 +7,7 @@ export interface BackendClientParams {
 }
 
 export interface BackendRequest {
-  method?: 'GET' | 'POST'
+  method?: 'GET' | 'POST' | 'DELETE'
   body?: BodyInit
   timeoutMs: number
 }

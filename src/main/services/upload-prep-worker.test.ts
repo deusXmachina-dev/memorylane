@@ -4,9 +4,11 @@ import * as os from 'os'
 import * as path from 'path'
 import * as zlib from 'zlib'
 import { afterEach, describe, expect, it } from 'vitest'
-import { prepareUploadSync } from './upload-prep-worker'
+import { StorageService } from '@main/storage'
+import { applyMigrations } from '@main/storage/migrator'
+import { ACTIVITY_COLUMNS, buildDeltaSync, type DeltaRequest } from './upload-prep-worker'
 
-describe('prepareUploadSync', () => {
+describe('buildDeltaSync', () => {
   const tempFiles: string[] = []
 
   afterEach(() => {
@@ -14,42 +16,99 @@ describe('prepareUploadSync', () => {
     tempFiles.length = 0
   })
 
-  function makeDb(): string {
-    const p = path.join(os.tmpdir(), `.prep-test-${process.pid}.${Math.random()}.db`)
+  function tempPath(tag: string): string {
+    const p = path.join(os.tmpdir(), `.delta-${tag}-${process.pid}.${Math.random()}.db`)
     tempFiles.push(p)
+    return p
+  }
+
+  function makeDb(endTimestamps: number[]): string {
+    const p = tempPath('src')
     const db = new Database(p)
-    db.exec('CREATE TABLE activities (id TEXT PRIMARY KEY, title TEXT, ocr_text TEXT)')
-    db.prepare('INSERT INTO activities VALUES (?, ?, ?)').run('a1', 'one', 'ocr one')
-    db.prepare('INSERT INTO activities VALUES (?, ?, ?)').run('a2', 'two', 'ocr two')
+    db.exec(`
+      CREATE TABLE activities (
+        id TEXT PRIMARY KEY, start_timestamp INTEGER, end_timestamp INTEGER, app_name TEXT,
+        window_title TEXT, tld TEXT, summary TEXT, summary_model TEXT, ocr_text TEXT, extra TEXT
+      );
+      CREATE TABLE clusters (id TEXT PRIMARY KEY, label TEXT);
+      CREATE TABLE cluster_sightings (sighting_id TEXT PRIMARY KEY, cluster_id TEXT);
+      CREATE TABLE sightings (id TEXT PRIMARY KEY, title TEXT);
+      CREATE TABLE user_context (id INTEGER PRIMARY KEY, short_summary TEXT);
+      CREATE TABLE mining_days (day TEXT PRIMARY KEY);
+      INSERT INTO clusters VALUES ('c1', 'Invoices');
+      INSERT INTO cluster_sightings VALUES ('s1', 'c1');
+      INSERT INTO sightings VALUES ('s1', 'Pay invoice');
+      INSERT INTO user_context VALUES (1, 'Accountant');
+    `)
+    const insert = db.prepare(
+      `INSERT INTO activities VALUES (?, ?, ?, 'App', 'Title', NULL, 'sum', 'm', 'ocr', 'x')`,
+    )
+    endTimestamps.forEach((end, i) => insert.run(`a${i}`, end - 10, end))
     db.close()
     return p
   }
 
-  it('strips sensitive tables/columns and returns gzip bytes that round-trip', () => {
-    const dbPath = makeDb()
+  function build(req: Partial<DeltaRequest> & { dbPath: string }) {
+    const outPath = tempPath('out')
+    const gzip = buildDeltaSync({
+      outPath,
+      sinceTs: 0,
+      ...req,
+    })
+    const unzipped = tempPath('unzipped')
+    fs.writeFileSync(unzipped, zlib.gunzipSync(gzip))
+    const db = new Database(unzipped, { readonly: true })
+    const tables = (
+      db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name`).all() as {
+        name: string
+      }[]
+    ).map((t) => t.name)
+    const activities = db
+      .prepare('SELECT * FROM activities ORDER BY end_timestamp')
+      .all() as Record<string, unknown>[]
+    db.close()
+    return { tables, activities }
+  }
 
-    const gz = prepareUploadSync(dbPath, { detailLevel: 'summary' })
+  it('includes activities ending at or after sinceTs, with a fixed column list', () => {
+    const { activities } = build({ dbPath: makeDb([100, 200, 300]), sinceTs: 200 })
 
-    // Output is real gzip…
-    expect(gz[0]).toBe(0x1f)
-    expect(gz[1]).toBe(0x8b)
+    expect(activities.map((a) => a.end_timestamp)).toEqual([200, 300])
+    expect(Object.keys(activities[0])).toEqual([
+      'id',
+      'start_timestamp',
+      'end_timestamp',
+      'app_name',
+      'window_title',
+      'tld',
+      'summary',
+      'summary_model',
+      'ocr_text',
+    ])
+  })
 
-    // …and inflates to a valid SQLite DB with the sensitive bits removed.
-    const outPath = path.join(os.tmpdir(), `.prep-out-${process.pid}.${Math.random()}.db`)
-    tempFiles.push(outPath)
-    fs.writeFileSync(outPath, zlib.gunzipSync(gz))
+  it('adds the full snapshot tables', () => {
+    const { tables } = build({ dbPath: makeDb([100]) })
 
-    const db = new Database(outPath, { readonly: true })
-    try {
-      const cols = (db.prepare('PRAGMA table_info(activities)').all() as { name: string }[]).map(
-        (c) => c.name,
-      )
-      expect(cols).not.toContain('ocr_text')
+    expect(tables).toEqual([
+      'activities',
+      'cluster_sightings',
+      'clusters',
+      'sightings',
+      'user_context',
+    ])
+  })
 
-      // Activity rows themselves are preserved.
-      expect((db.prepare('SELECT COUNT(*) AS n FROM activities').get() as { n: number }).n).toBe(2)
-    } finally {
-      db.close()
-    }
+  it('uploads every activities column of the migrated schema', () => {
+    const dbPath = tempPath('migrated')
+    const storage = new StorageService(dbPath)
+    applyMigrations(storage.getDatabase())
+    const columns = (
+      storage.getDatabase().prepare('PRAGMA table_info(activities)').all() as { name: string }[]
+    ).map((c) => c.name)
+    storage.close()
+
+    expect(columns.sort()).toEqual([...ACTIVITY_COLUMNS].sort())
+    expect(build({ dbPath }).tables).toContain('sightings')
   })
 })

@@ -11,7 +11,7 @@ import type { HostEnvironment } from '@main/monitoring/host-environment'
 import { BackendClient } from '@main/services/backend-client'
 import { backendUrlFor } from '@main/system/edition'
 import { BackendUpload } from '@main/services/backend-upload'
-import { databaseUploadJob } from '@main/services/database-upload-job'
+import { databaseUploadJob, deleteServerData } from '@main/services/database-upload-job'
 import { logUploadJob } from '@main/services/log-upload-job'
 import { readLogUploadState, writeLogUploadState } from '@main/services/log-upload-store'
 import { RemoteBlacklistService } from '@main/services/remote-blacklist-service'
@@ -49,6 +49,7 @@ export interface AppSync {
   remoteModels: RemoteModelConfigService
   databaseUpload: BackendUpload | null
   logUpload: BackendUpload | null
+  deleteServerData(): Promise<void>
   getManagedExclusions(): ManagedExclusions
   onManagedExclusionsChanged(listener: () => void): () => void
   kick(reason: string): void
@@ -96,16 +97,14 @@ export function createSync(deps: SyncDeps): AppSync {
   const uploads = {
     backend,
     isActivated: isEnterpriseActivated,
-    isSyncEnabled: () => settings.get().uploadDetailLevel !== 'off',
+    isSyncEnabled: () => settings.get().remoteSyncEnabled,
   }
   const databaseUpload = enterprise
     ? new BackendUpload({
         ...uploads,
         job: databaseUploadJob({
-          storage,
-          getStripOptions: () => ({
-            detailLevel: settings.get().uploadDetailLevel === 'detailed' ? 'detailed' : 'summary',
-          }),
+          backend,
+          getDbPath: () => storage.getDbPath(),
           getLastUploadAt: () => storage.uploadRuns.getLastRunTimestamp(),
           recordUploadAt: (ts) => storage.uploadRuns.record(ts),
         }),
@@ -146,6 +145,10 @@ export function createSync(deps: SyncDeps): AppSync {
     remoteModels,
     databaseUpload,
     logUpload,
+    async deleteServerData(): Promise<void> {
+      if (!enterprise || !isEnterpriseActivated()) return
+      await deleteServerData(backend)
+    },
     getManagedExclusions: () => remoteBlacklist?.getBlacklist() ?? { apps: [], urlPatterns: [] },
     onManagedExclusionsChanged: managedExclusionsChanged.add,
     kick,
@@ -166,7 +169,7 @@ export function createSync(deps: SyncDeps): AppSync {
       })
       host.onAwake(() => kick('resume'))
       unsubscribeSettings = settings.onChange((next, previous) => {
-        if (previous.uploadDetailLevel === 'off' && next.uploadDetailLevel !== 'off') {
+        if (!previous.remoteSyncEnabled && next.remoteSyncEnabled) {
           kick('sharing enabled')
         }
       })

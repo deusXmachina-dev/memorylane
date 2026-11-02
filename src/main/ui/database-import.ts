@@ -12,6 +12,7 @@ interface ImportDatabaseOptions {
   /** Active database path, resolved by the caller (the open StorageService). */
   dbPath: string
   parentWindow?: BrowserWindow | null
+  deleteServerData: () => Promise<void>
 }
 
 function pad2(v: number): string {
@@ -115,6 +116,7 @@ function validateDatabaseFile(dbFilePath: string): void {
 export async function importDatabase({
   dbPath,
   parentWindow = null,
+  deleteServerData,
 }: ImportDatabaseOptions): Promise<DatabaseImportResult> {
   const pendingPath = pendingImportPath(dbPath)
   // Stage onto the same filesystem as the live DB so the final move is an atomic
@@ -158,6 +160,7 @@ export async function importDatabase({
     }
 
     validateDatabaseFile(stagingPath)
+    await deleteServerData()
     await fsPromises.rename(stagingPath, pendingPath)
 
     return { success: true }
@@ -181,10 +184,10 @@ export async function importDatabase({
  * replaces it (and its WAL/SHM sidecars) with the staged file. On any failure
  * the existing database is left untouched so the app still boots.
  */
-export function applyPendingDatabaseImport(dbPath: string): void {
+export function applyPendingDatabaseImport(dbPath: string): boolean {
   const pendingPath = pendingImportPath(dbPath)
   if (!fs.existsSync(pendingPath)) {
-    return
+    return false
   }
 
   log.info('[DatabaseImport] Pending database import detected, applying...')
@@ -205,6 +208,7 @@ export function applyPendingDatabaseImport(dbPath: string): void {
 
     fs.renameSync(pendingPath, dbPath)
     log.info('[DatabaseImport] Database import applied successfully')
+    return true
   } catch (error) {
     log.error('[DatabaseImport] Failed to apply pending database import:', error)
     // Leave the existing DB intact and drop the partial staging file so the app boots.
@@ -215,5 +219,6 @@ export function applyPendingDatabaseImport(dbPath: string): void {
     } catch (cleanupError) {
       log.warn('[DatabaseImport] Failed to remove pending import file:', cleanupError)
     }
+    return false
   }
 }

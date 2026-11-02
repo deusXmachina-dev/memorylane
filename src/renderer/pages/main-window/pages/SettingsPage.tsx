@@ -169,15 +169,10 @@ export function SettingsPage({
     setForm((prev) => (prev ? { ...prev, captureHotkeyAccelerator: value } : prev))
   }, [])
 
-  const setUploadDetailLevel = useCallback(
-    (level: 'off' | 'summary' | 'detailed'): void => {
-      setForm((prev) => (prev ? { ...prev, uploadDetailLevel: level } : prev))
-      const toastByLevel = {
-        off: 'Sharing disabled',
-        summary: 'Sharing summary only',
-        detailed: 'Sharing detailed activities',
-      } as const
-      save({ uploadDetailLevel: level }, toastByLevel[level])
+  const commitRemoteSyncEnabled = useCallback(
+    (enabled: boolean): void => {
+      setForm((prev) => (prev ? { ...prev, remoteSyncEnabled: enabled } : prev))
+      save({ remoteSyncEnabled: enabled }, enabled ? 'Remote sync on' : 'Remote sync off')
     },
     [save],
   )
@@ -295,8 +290,8 @@ export function SettingsPage({
             <DataTabPanel
               api={api}
               editionConfig={editionConfig}
-              uploadDetailLevel={form.uploadDetailLevel}
-              onUploadDetailLevelChange={setUploadDetailLevel}
+              remoteSyncEnabled={form.remoteSyncEnabled}
+              onRemoteSyncEnabledChange={commitRemoteSyncEnabled}
             />
           </TabsContent>
 

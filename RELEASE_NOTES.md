@@ -1,15 +1,18 @@
-# MemoryLane v1.5.14-alpha.1
+# MemoryLane v1.5.14-alpha.3
 
-Windows capture fixes: no more freeze on pause, fewer capture gaps.
+Smaller daily database uploads, a simpler remote sync setting, and Windows capture fixes.
 
 ## What's Changed
 
+- **Daily upload sends only new data**: the database upload now sends only what changed since the last upload, not the whole database.
+- **Remote sync is on/off**: the Off/Summary/Detailed level becomes one switch. Users who had Summary are moved to on, which also sends OCR text.
+- **Purge and import clear server data**: purging or importing a database also deletes this device's data on the server.
+- **Task-mining failures shown on the Patterns page** (#317).
 - **Pause no longer freezes the window on Windows**: frame cleanup no longer blocks the app when a file is briefly locked (#319).
 - **Faster resume**: capture no longer waits for frames that can't arrive while paused (#319).
 - **Current app is picked up right away**: capture and observation mode see the window already in front when they start, on the right monitor (#319).
 - **Google Maps URLs captured on Windows** (#319).
 - **Notepad typing stays one activity**: Windows 11 Notepad retitling an unsaved tab as you type no longer splits it per keystroke (#319).
-- **Eval recordings keep the first app** (#319).
 
 ## Known Issues & Limitations
 
@@ -27,4 +30,4 @@ Windows capture fixes: no more freeze on pause, fewer capture gaps.
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.13...v1.5.14-alpha.1
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.13...v1.5.14-alpha.3
