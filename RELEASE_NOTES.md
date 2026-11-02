@@ -1,4 +1,4 @@
-# MemoryLane v1.5.14-alpha.3
+# MemoryLane v1.5.14
 
 Smaller daily database uploads, a simpler remote sync setting, and Windows capture fixes.
 
@@ -7,6 +7,7 @@ Smaller daily database uploads, a simpler remote sync setting, and Windows captu
 - **Daily upload sends only new data**: the database upload now sends only what changed since the last upload, not the whole database.
 - **Remote sync is on/off**: the Off/Summary/Detailed level becomes one switch. Users who had Summary are moved to on, which also sends OCR text.
 - **Purge and import clear server data**: purging or importing a database also deletes this device's data on the server.
+- **Clearer onboarding on data handling**: the welcome step now says where data is stored and that screenshots are summarized by AI, then deleted. Enterprise installs also say data is uploaded daily to the organization.
 - **Task-mining failures shown on the Patterns page** (#317).
 - **Pause no longer freezes the window on Windows**: frame cleanup no longer blocks the app when a file is briefly locked (#319).
 - **Faster resume**: capture no longer waits for frames that can't arrive while paused (#319).
@@ -30,4 +31,4 @@ Smaller daily database uploads, a simpler remote sync setting, and Windows captu
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.13...v1.5.14-alpha.3
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.13...v1.5.14
