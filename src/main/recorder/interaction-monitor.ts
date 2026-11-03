@@ -25,6 +25,7 @@ let cachedWindowTitle: string | null = null
 let appWatcherUnsubscribe: (() => void) | null = null
 
 let ignoreSelfFocus = false
+let suppressedSelfFocus: AppWatcherEvent | null = null
 
 /**
  * Resolve which Electron Display contains the given global coordinate.
@@ -314,7 +315,13 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
     log.warn(`[Interaction Monitor] AppWatcher error: ${event.error}`)
     return
   }
-  if (ignoreSelfFocus && isSelfApp(event)) return
+  if (ignoreSelfFocus) {
+    if (isSelfApp(event)) {
+      suppressedSelfFocus = event
+      return
+    }
+    suppressedSelfFocus = null
+  }
 
   // Both app_change and window_change map to the same InteractionContext type
   const current: NonNullable<InteractionContext['activeWindow']> = {
@@ -390,6 +397,9 @@ function handleAppWatcherEvent(event: AppWatcherEvent): void {
 /** While on, focusing MemoryLane's own windows never produces an app change. */
 export function setIgnoreSelfFocus(ignore: boolean): void {
   ignoreSelfFocus = ignore
+  const pending = suppressedSelfFocus
+  suppressedSelfFocus = null
+  if (!ignore && pending && isRunning) handleAppWatcherEvent({ ...pending, timestamp: Date.now() })
 }
 
 /**
@@ -459,6 +469,7 @@ export function stopInteractionMonitoring(): void {
     scrollSession.reset()
     previousWindow = null
     previousWindowDisplayId = null
+    suppressedSelfFocus = null
     cachedDisplayId = null
     cachedWindowTitle = null
 

@@ -1,4 +1,5 @@
 import type { InteractionContext } from '@/shared/types'
+import { SELF_APP_TOKENS } from '@/shared/app-utils'
 import log from '@main/utils/logger'
 import {
   getExcludedAppMatch,
@@ -53,7 +54,7 @@ export function createCaptureBlacklistCoordinator(params: {
   let excludedApps = new Set<string>()
   let excludedUrlPatterns: string[] = []
   const recomputeEffective = (): void => {
-    excludedApps = new Set([...userExcludedApps, ...managedExcludedApps])
+    excludedApps = new Set([...SELF_APP_TOKENS, ...userExcludedApps, ...managedExcludedApps])
     excludedUrlPatterns = [...new Set([...userExcludedUrlPatterns, ...managedExcludedUrlPatterns])]
   }
   recomputeEffective()

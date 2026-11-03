@@ -1,8 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo } from 'react'
 import { AppWindow } from 'lucide-react'
 import type { InstalledApp } from '@types'
+import { isSelfAppToken } from '@/shared/app-utils'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
+import { createListCache, useCachedList } from '@/renderer/hooks/use-cached-list'
 import { ExclusionPicker, type ExclusionPickerItem } from './ExclusionPicker'
+
+const BUILT_IN = [{ key: 'self', label: 'MemoryLane', matches: isSelfAppToken }]
+
+const appsCache = createListCache<InstalledApp>()
 
 interface AppExclusionListProps {
   excludedApps: string[]
@@ -20,24 +26,8 @@ export function AppExclusionList({
   managed,
 }: AppExclusionListProps): React.JSX.Element {
   const api = useMainWindowAPI()
-  const [apps, setApps] = useState<InstalledApp[] | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    api
-      .listInstalledApps()
-      .then((result) => {
-        if (cancelled) return
-        setApps(result)
-      })
-      .catch(() => {
-        if (cancelled) return
-        setApps([])
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [api])
+  const listInstalledApps = useCallback(() => api.listInstalledApps(), [api])
+  const apps = useCachedList(appsCache, listInstalledApps)
 
   // Pool = installed apps ∪ excluded tokens not in installed list (so manually-added
   // entries render as regular toggle rows alongside installed apps).
@@ -86,6 +76,7 @@ export function AppExclusionList({
       onDismissFound={onDismissFound}
       managed={managed}
       resolveManagedLabel={resolveManagedLabel}
+      builtIn={BUILT_IN}
       title="Apps"
       icon={AppWindow}
       placeholder="Search or type an app name (e.g. signal)"

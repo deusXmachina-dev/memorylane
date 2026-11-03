@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ManagedExclusions, ObservationState } from '@types'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { AppExclusionList } from './AppExclusionList'
@@ -10,6 +10,8 @@ import { HelpTooltip } from './HelpTooltip'
 const DEFAULT_DURATION_MS = 120_000
 const DISMISSED_APPS_KEY = 'exclusions.dismissedAppsAt'
 const DISMISSED_URLS_KEY = 'exclusions.dismissedUrlsAt'
+
+let notifiedRunAt: number | null = null
 
 function readDismissedAt(key: string): number {
   try {
@@ -52,11 +54,16 @@ export function ExclusionsManager({
 
   useEffect(() => {
     let cancelled = false
+    let updated = false
     void api.getObservationState().then((initial) => {
       if (cancelled) return
-      setObservation(initial)
+      if (notifiedRunAt === null) notifiedRunAt = initial.lastRun?.at ?? 0
+      if (!updated) setObservation(initial)
     })
-    const unsubscribe = api.onObservationUpdate((next) => setObservation(next))
+    const unsubscribe = api.onObservationUpdate((next) => {
+      updated = true
+      setObservation(next)
+    })
     return () => {
       cancelled = true
       unsubscribe()
@@ -83,11 +90,10 @@ export function ExclusionsManager({
   const showFoundUrls = lastRun !== undefined && lastRun.at > dismissedUrlsAt
 
   // Notify the page once per run so settings reload.
-  const notifiedAtRef = useRef(0)
   useEffect(() => {
     if (!lastRun) return
-    if (lastRun.at === notifiedAtRef.current) return
-    notifiedAtRef.current = lastRun.at
+    if (lastRun.at === notifiedRunAt) return
+    notifiedRunAt = lastRun.at
     onObserved()
   }, [lastRun, onObserved])
 
