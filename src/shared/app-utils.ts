@@ -137,6 +137,7 @@ export const SELF_APP_TOKENS: readonly string[] = [
   'dev.deusxmachina.memorylane',
   'com.memorylane.app',
   'com.memorylane.enterprise',
+  'com.github.electron',
 ]
 
 const SELF_APP_TOKEN_SET = new Set(SELF_APP_TOKENS)

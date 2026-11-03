@@ -14,7 +14,7 @@ describe('isSelfApp', () => {
     expect(isSelfApp({ app: 'Electron', bundleId: 'DEV.DEUSXMACHINA.MEMORYLANE' })).toBe(true)
     expect(isSelfApp({ app: 'MemoryLane Enterprise' })).toBe(true)
     expect(isSelfApp({ app: 'MemoryLane.exe' })).toBe(true)
-    expect(isSelfApp({ app: 'Electron', bundleId: 'com.github.Electron' })).toBe(false)
+    expect(isSelfApp({ app: 'Electron', bundleId: 'com.github.Electron' })).toBe(true)
     expect(isSelfApp({ app: 'Google Chrome', bundleId: 'com.google.Chrome' })).toBe(false)
     expect(isSelfApp({})).toBe(false)
   })
@@ -35,12 +35,6 @@ describe('capture exclusions', () => {
         'Microsoft Edge',
       ]),
     ).toEqual(['keepassxc', 'signal', 'chrome', 'msedge'])
-  })
-
-  it('drops MemoryLane itself from excluded apps', () => {
-    expect(
-      normalizeExcludedApps(['MemoryLane.exe', 'com.memorylane.enterprise', 'signal']),
-    ).toEqual(['signal'])
   })
 
   it('keeps a `.app` bundle-id tail but strips it from a bare app name', () => {

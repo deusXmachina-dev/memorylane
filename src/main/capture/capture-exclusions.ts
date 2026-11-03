@@ -38,7 +38,7 @@ export function normalizeExcludedApps(values: readonly string[] | undefined): st
   for (const value of values) {
     if (typeof value !== 'string') continue
     const token = normalizeAppToken(value)
-    if (token.length === 0 || seen.has(token) || isSelfAppToken(token)) continue
+    if (token.length === 0 || seen.has(token)) continue
     seen.add(token)
     normalized.push(token)
   }

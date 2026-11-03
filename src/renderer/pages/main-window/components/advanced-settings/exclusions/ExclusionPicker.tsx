@@ -100,12 +100,12 @@ export function ExclusionPicker({
     const rows: ExclusionPickerItem[] = []
     for (const e of excluded) {
       const token = e.toLowerCase()
-      if (managedTokens.has(token) || seen.has(token) || isBuiltIn(token)) continue
+      if (managedTokens.has(token) || seen.has(token)) continue
       seen.add(token)
       rows.push(itemsByToken.get(token) ?? { key: token, matchToken: token, label: e })
     }
     return rows
-  }, [excluded, itemsByToken, managedTokens, isBuiltIn])
+  }, [excluded, itemsByToken, managedTokens])
 
   // Search results = pool entries matching the query that aren't already blocked.
   const suggestions = useMemo<ExclusionPickerItem[]>(() => {
