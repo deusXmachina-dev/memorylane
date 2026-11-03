@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo } from 'react'
 import { Globe } from 'lucide-react'
 import type { SeenDomain } from '@types'
 import { normalizeUrlPattern } from '@/shared/url-utils'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
+import { createListCache, useCachedList } from '@/renderer/hooks/use-cached-list'
 import { ExclusionPicker, type ExclusionPickerItem } from './ExclusionPicker'
 
-let cachedDomains: SeenDomain[] | null = null
+const domainsCache = createListCache<SeenDomain>()
 
 interface WebsiteExclusionListProps {
   excludedUrlPatterns: string[]
@@ -23,25 +24,8 @@ export function WebsiteExclusionList({
   managed,
 }: WebsiteExclusionListProps): React.JSX.Element {
   const api = useMainWindowAPI()
-  const [domains, setDomains] = useState<SeenDomain[] | null>(cachedDomains)
-
-  useEffect(() => {
-    let cancelled = false
-    api
-      .listSeenDomains()
-      .then((result) => {
-        cachedDomains = result
-        if (cancelled) return
-        setDomains(result)
-      })
-      .catch(() => {
-        if (cancelled) return
-        setDomains((prev) => prev ?? [])
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [api])
+  const listSeenDomains = useCallback(() => api.listSeenDomains(), [api])
+  const domains = useCachedList(domainsCache, listSeenDomains)
 
   // Search pool = already-blocked entries ∪ seen domains. Each entry is a domain
   // (matched by host, subdomain-inclusive) or a `*…*` wildcard; normalizeUrlPattern

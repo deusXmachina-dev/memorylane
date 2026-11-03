@@ -90,15 +90,57 @@ export function isTransientApp(app: { bundleId?: string; processName: string }):
   return TRANSIENT_PROCESS_NAMES.has(app.processName)
 }
 
-const SELF_APP_TOKENS = new Set([
+export function normalizeAppToken(value: string): string {
+  const trimmed = value.trim().toLowerCase()
+  if (trimmed.length === 0) return ''
+
+  const unquoted =
+    trimmed.startsWith('"') && trimmed.endsWith('"') ? trimmed.slice(1, -1).trim() : trimmed
+  const pathNormalized = unquoted.replace(/\\/g, '/')
+  const basename = pathNormalized.includes('/') ? (pathNormalized.split('/').pop() ?? '') : unquoted
+  let token = basename
+
+  if (token.endsWith('.exe')) {
+    token = token.slice(0, -4)
+  }
+
+  // `.app` is stripped from a bare app name (`Signal.app` → `signal`) but kept on
+  // a reverse-DNS bundle id whose tail happens to be `.app` (`com.memorylane.app`),
+  // so the id stays unique instead of collapsing to `com.memorylane`.
+  if (token.endsWith('.app') && !token.slice(0, -4).includes('.')) {
+    token = token.slice(0, -4)
+  }
+
+  const aliasLookup = token.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
+  const alias = APP_TOKEN_ALIASES[aliasLookup]
+  return alias ?? token
+}
+
+const APP_TOKEN_ALIASES: Record<string, string> = {
+  edge: 'msedge',
+  'microsoft edge': 'msedge',
+  chrome: 'chrome',
+  'google chrome': 'chrome',
+  firefox: 'firefox',
+  'mozilla firefox': 'firefox',
+  brave: 'brave',
+  'brave browser': 'brave',
+  'whatsapp.root': 'whatsapp',
+  code: 'code',
+  vscode: 'code',
+  'visual studio code': 'code',
+}
+
+export const SELF_APP_TOKENS: readonly string[] = [
   'memorylane',
   'memorylane enterprise',
   'dev.deusxmachina.memorylane',
   'com.memorylane.app',
   'com.memorylane.enterprise',
-  'com.github.electron',
-])
+]
+
+const SELF_APP_TOKEN_SET = new Set(SELF_APP_TOKENS)
 
 export function isSelfAppToken(token: string): boolean {
-  return SELF_APP_TOKENS.has(token.toLowerCase())
+  return SELF_APP_TOKEN_SET.has(normalizeAppToken(token))
 }

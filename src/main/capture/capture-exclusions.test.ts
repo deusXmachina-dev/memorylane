@@ -4,17 +4,18 @@ import {
   getExcludedUrlMatch,
   isSelfApp,
   normalizeExcludedApps,
-  normalizeToken,
   normalizeWildcardPatterns,
   tokenFromBundleId,
 } from './capture-exclusions'
+import { normalizeAppToken } from '@/shared/app-utils'
 
 describe('isSelfApp', () => {
   it('recognizes MemoryLane by bundle id or name', () => {
     expect(isSelfApp({ app: 'MemoryLane', bundleId: 'com.memorylane.app' })).toBe(true)
     expect(isSelfApp({ app: 'Electron', bundleId: 'DEV.DEUSXMACHINA.MEMORYLANE' })).toBe(true)
     expect(isSelfApp({ app: 'MemoryLane Enterprise' })).toBe(true)
-    expect(isSelfApp({ app: 'Electron', bundleId: 'com.github.Electron' })).toBe(true)
+    expect(isSelfApp({ app: 'MemoryLane.exe' })).toBe(true)
+    expect(isSelfApp({ app: 'Electron', bundleId: 'com.github.Electron' })).toBe(false)
     expect(isSelfApp({ app: 'Google Chrome', bundleId: 'com.google.Chrome' })).toBe(false)
     expect(isSelfApp({})).toBe(false)
   })
@@ -37,9 +38,15 @@ describe('capture exclusions', () => {
     ).toEqual(['keepassxc', 'signal', 'chrome', 'msedge'])
   })
 
+  it('drops MemoryLane itself from excluded apps', () => {
+    expect(
+      normalizeExcludedApps(['MemoryLane.exe', 'com.memorylane.enterprise', 'signal']),
+    ).toEqual(['signal'])
+  })
+
   it('keeps a `.app` bundle-id tail but strips it from a bare app name', () => {
-    expect(normalizeToken('com.memorylane.app')).toBe('com.memorylane.app')
-    expect(normalizeToken('Signal.app')).toBe('signal')
+    expect(normalizeAppToken('com.memorylane.app')).toBe('com.memorylane.app')
+    expect(normalizeAppToken('Signal.app')).toBe('signal')
   })
 
   it('derives the full bundle id as the match token', () => {

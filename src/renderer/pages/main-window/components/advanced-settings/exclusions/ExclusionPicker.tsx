@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Plus, Search, type LucideIcon } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
@@ -33,7 +33,7 @@ interface ExclusionPickerProps {
   /** Maps a managed entry token to a friendly display name (e.g. bundle id →
    * app name). Defaults to showing the raw entry. */
   resolveManagedLabel?: (entry: string) => string
-  builtIn?: { key: string; label: string }[]
+  builtIn?: { key: string; label: string; matches: (token: string) => boolean }[]
 }
 
 export function ExclusionPicker({
@@ -56,16 +56,24 @@ export function ExclusionPicker({
   const normalizedQuery = query.trim().toLowerCase()
 
   const excludedTokens = useMemo(() => new Set(excluded.map((e) => e.toLowerCase())), [excluded])
+  const isBuiltIn = useCallback(
+    (token: string) => (builtIn ?? []).some((b) => b.matches(token)),
+    [builtIn],
+  )
+  const managedEntries = useMemo(
+    () => (managed ?? []).filter((m) => !isBuiltIn(m)),
+    [managed, isBuiltIn],
+  )
   const managedTokens = useMemo(
-    () => new Set((managed ?? []).map((m) => m.toLowerCase())),
-    [managed],
+    () => new Set(managedEntries.map((m) => m.toLowerCase())),
+    [managedEntries],
   )
 
   // Editable pool = everything except the org-managed entries (those only ever
   // render as read-only rows).
   const editableItems = useMemo(
-    () => (items ?? []).filter((i) => !managedTokens.has(i.matchToken)),
-    [items, managedTokens],
+    () => (items ?? []).filter((i) => !managedTokens.has(i.matchToken) && !isBuiltIn(i.matchToken)),
+    [items, managedTokens, isBuiltIn],
   )
   const itemsByToken = useMemo(
     () => new Map(editableItems.map((i) => [i.matchToken, i])),
@@ -75,7 +83,7 @@ export function ExclusionPicker({
   const foundItems = useMemo<ExclusionPickerItem[]>(() => {
     if (!found?.length) return []
     return found
-      .filter((token) => !managedTokens.has(token.toLowerCase()))
+      .filter((token) => !managedTokens.has(token.toLowerCase()) && !isBuiltIn(token))
       .map((token) => {
         const normalized = token.toLowerCase()
         return {
@@ -84,7 +92,7 @@ export function ExclusionPicker({
           label: itemsByToken.get(normalized)?.label ?? token,
         }
       })
-  }, [found, itemsByToken, managedTokens])
+  }, [found, itemsByToken, managedTokens, isBuiltIn])
 
   // Rows already blocked by the user (managed entries render separately above).
   const userItems = useMemo<ExclusionPickerItem[]>(() => {
@@ -92,12 +100,12 @@ export function ExclusionPicker({
     const rows: ExclusionPickerItem[] = []
     for (const e of excluded) {
       const token = e.toLowerCase()
-      if (managedTokens.has(token) || seen.has(token)) continue
+      if (managedTokens.has(token) || seen.has(token) || isBuiltIn(token)) continue
       seen.add(token)
       rows.push(itemsByToken.get(token) ?? { key: token, matchToken: token, label: e })
     }
     return rows
-  }, [excluded, itemsByToken, managedTokens])
+  }, [excluded, itemsByToken, managedTokens, isBuiltIn])
 
   // Search results = pool entries matching the query that aren't already blocked.
   const suggestions = useMemo<ExclusionPickerItem[]>(() => {
@@ -116,6 +124,7 @@ export function ExclusionPicker({
     normalizedQuery.length > 0 &&
     !excludedTokens.has(normalizedQuery) &&
     !managedTokens.has(normalizedQuery) &&
+    !isBuiltIn(normalizedQuery) &&
     !itemsByToken.has(normalizedQuery)
 
   const toggle = (token: string, checked: boolean): void => {
@@ -141,12 +150,26 @@ export function ExclusionPicker({
 
   const add = (token: string): void => {
     const normalized = token.trim().toLowerCase()
-    if (!normalized || excludedTokens.has(normalized) || managedTokens.has(normalized)) return
+    if (
+      !normalized ||
+      excludedTokens.has(normalized) ||
+      managedTokens.has(normalized) ||
+      isBuiltIn(normalized)
+    ) {
+      return
+    }
     onChange([...excluded, normalized])
     setQuery('')
   }
 
-  const hasRows = userItems.length > 0 || (managed?.length ?? 0) > 0 || (builtIn?.length ?? 0) > 0
+  const hasRows = userItems.length > 0 || managedEntries.length > 0
+  const builtInRows = builtIn ?? []
+  const emptyState = (
+    <>
+      <p>{emptyPrimary}</p>
+      <p>{emptySecondary}</p>
+    </>
+  )
 
   return (
     <div className="flex flex-col gap-2">
@@ -233,10 +256,10 @@ export function ExclusionPicker({
             <div className="flex h-42 items-center justify-center rounded-lg border border-dashed border-border px-3 text-center text-xs text-muted-foreground">
               Loading…
             </div>
-          ) : hasRows ? (
+          ) : hasRows || builtInRows.length > 0 ? (
             <ScrollArea className="h-42">
               <ul className="space-y-2">
-                {(builtIn ?? []).map((entry) => (
+                {builtInRows.map((entry) => (
                   <ManagedRow
                     key={`builtin:${entry.key}`}
                     entry={entry.label}
@@ -244,7 +267,7 @@ export function ExclusionPicker({
                     note="Always blocked"
                   />
                 ))}
-                {(managed ?? []).map((entry) => (
+                {managedEntries.map((entry) => (
                   <ManagedRow
                     key={`managed:${entry}`}
                     entry={entry}
@@ -260,12 +283,16 @@ export function ExclusionPicker({
                     icon={Icon}
                   />
                 ))}
+                {!hasRows && (
+                  <li className="flex flex-col items-center gap-0.5 rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+                    {emptyState}
+                  </li>
+                )}
               </ul>
             </ScrollArea>
           ) : (
             <div className="flex h-42 flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-border px-3 text-center text-xs text-muted-foreground">
-              <p>{emptyPrimary}</p>
-              <p>{emptySecondary}</p>
+              {emptyState}
             </div>
           )}
         </>

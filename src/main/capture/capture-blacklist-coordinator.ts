@@ -1,9 +1,9 @@
 import type { InteractionContext } from '@/shared/types'
+import { SELF_APP_TOKENS } from '@/shared/app-utils'
 import log from '@main/utils/logger'
 import {
   getExcludedAppMatch,
   getExcludedUrlMatch,
-  isSelfApp,
   normalizeExcludedApps,
   normalizeWildcardPatterns,
 } from './capture-exclusions'
@@ -54,7 +54,7 @@ export function createCaptureBlacklistCoordinator(params: {
   let excludedApps = new Set<string>()
   let excludedUrlPatterns: string[] = []
   const recomputeEffective = (): void => {
-    excludedApps = new Set([...userExcludedApps, ...managedExcludedApps])
+    excludedApps = new Set([...SELF_APP_TOKENS, ...userExcludedApps, ...managedExcludedApps])
     excludedUrlPatterns = [...new Set([...userExcludedUrlPatterns, ...managedExcludedUrlPatterns])]
   }
   recomputeEffective()
@@ -146,10 +146,7 @@ export function createCaptureBlacklistCoordinator(params: {
     activeWindow: InteractionContext['activeWindow'],
     boundaryTimestamp?: number,
   ): boolean => {
-    const excludedAppMatch =
-      activeWindow && isSelfApp({ app: activeWindow.processName, bundleId: activeWindow.bundleId })
-        ? 'memorylane'
-        : getExcludedAppMatch(activeWindow, excludedApps)
+    const excludedAppMatch = getExcludedAppMatch(activeWindow, excludedApps)
     const excludedUrlMatch = getExcludedUrlMatch(activeWindow, excludedUrlPatterns)
     const detectedAnonymousModeMatch = excludePrivateBrowsing
       ? getAnonymousModeBrowserMatch(activeWindow)

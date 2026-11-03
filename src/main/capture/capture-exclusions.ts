@@ -1,4 +1,4 @@
-import { isSelfAppToken } from '@/shared/app-utils'
+import { isSelfAppToken, normalizeAppToken } from '@/shared/app-utils'
 import { domainOf } from '@/shared/url-utils'
 
 export interface ExclusionWindowContext {
@@ -8,37 +8,11 @@ export interface ExclusionWindowContext {
   url?: string
 }
 
-export function normalizeToken(value: string): string {
-  const trimmed = value.trim().toLowerCase()
-  if (trimmed.length === 0) return ''
-
-  const unquoted =
-    trimmed.startsWith('"') && trimmed.endsWith('"') ? trimmed.slice(1, -1).trim() : trimmed
-  const pathNormalized = unquoted.replace(/\\/g, '/')
-  const basename = pathNormalized.includes('/') ? (pathNormalized.split('/').pop() ?? '') : unquoted
-  let token = basename
-
-  if (token.endsWith('.exe')) {
-    token = token.slice(0, -4)
-  }
-
-  // `.app` is stripped from a bare app name (`Signal.app` → `signal`) but kept on
-  // a reverse-DNS bundle id whose tail happens to be `.app` (`com.memorylane.app`),
-  // so the id stays unique instead of collapsing to `com.memorylane`.
-  if (token.endsWith('.app') && !token.slice(0, -4).includes('.')) {
-    token = token.slice(0, -4)
-  }
-
-  const aliasLookup = token.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
-  const alias = APP_TOKEN_ALIASES[aliasLookup]
-  return alias ?? token
-}
-
 // An app's match token is its full bundle id (macOS), normalized. The whole id —
 // not just the last segment — keeps it unique, so `com.microsoft.excel` blocks
 // only Excel, never a sibling like `com.microsoft.word`.
 export function tokenFromBundleId(bundleId: string): string {
-  return normalizeToken(bundleId)
+  return normalizeAppToken(bundleId)
 }
 
 export function appToken(window: { app?: string; bundleId?: string }): string | null {
@@ -47,31 +21,15 @@ export function appToken(window: { app?: string; bundleId?: string }): string | 
     if (token) return token
   }
   if (window.app) {
-    const token = normalizeToken(window.app)
+    const token = normalizeAppToken(window.app)
     if (token) return token
   }
   return null
 }
 
 export function isSelfApp(window: { app?: string; bundleId?: string }): boolean {
-  if (window.bundleId && isSelfAppToken(window.bundleId)) return true
   const token = appToken(window)
   return token !== null && isSelfAppToken(token)
-}
-
-const APP_TOKEN_ALIASES: Record<string, string> = {
-  edge: 'msedge',
-  'microsoft edge': 'msedge',
-  chrome: 'chrome',
-  'google chrome': 'chrome',
-  firefox: 'firefox',
-  'mozilla firefox': 'firefox',
-  brave: 'brave',
-  'brave browser': 'brave',
-  'whatsapp.root': 'whatsapp',
-  code: 'code',
-  vscode: 'code',
-  'visual studio code': 'code',
 }
 
 function normalizePatternToken(value: string): string {
@@ -86,8 +44,8 @@ export function normalizeExcludedApps(values: readonly string[] | undefined): st
 
   for (const value of values) {
     if (typeof value !== 'string') continue
-    const token = normalizeToken(value)
-    if (token.length === 0 || seen.has(token)) continue
+    const token = normalizeAppToken(value)
+    if (token.length === 0 || seen.has(token) || isSelfAppToken(token)) continue
     seen.add(token)
     normalized.push(token)
   }
@@ -141,9 +99,9 @@ function collectCandidates(window: ExclusionWindowContext | undefined): string[]
   if (!window) return []
 
   const identity = window.bundleId
-    ? normalizeToken(window.bundleId)
+    ? normalizeAppToken(window.bundleId)
     : window.processName
-      ? normalizeToken(window.processName)
+      ? normalizeAppToken(window.processName)
       : ''
 
   return identity.length > 0 ? [identity] : []

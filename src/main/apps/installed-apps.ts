@@ -4,7 +4,8 @@ import * as path from 'path'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import log from '@main/utils/logger'
-import { normalizeToken, tokenFromBundleId } from '@main/capture/capture-exclusions'
+import { normalizeAppToken } from '@/shared/app-utils'
+import { tokenFromBundleId } from '@main/capture/capture-exclusions'
 import type { InstalledApp } from '../../shared/types'
 
 const execFileAsync = promisify(execFile)
@@ -190,7 +191,7 @@ async function loadWindowsApps(): Promise<InstalledApp[]> {
     if (!target) continue
     if (!target.toLowerCase().endsWith('.exe')) continue
     const stem = path.basename(target, path.extname(target))
-    const matchToken = normalizeToken(stem)
+    const matchToken = normalizeAppToken(stem)
     if (!matchToken) continue
     apps.push({ displayName: shortcut.displayName, matchToken })
   }

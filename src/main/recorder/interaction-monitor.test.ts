@@ -264,6 +264,15 @@ describe('interaction-monitor session emission', () => {
     expect(emitted.map((c) => c.activeWindow?.processName)).toEqual(['Google Chrome', 'MemoryLane'])
   })
 
+  it('replays MemoryLane focus when self focus stops being ignored while it is focused', () => {
+    monitor.setIgnoreSelfFocus(true)
+    appChange('Google Chrome', 'HeyReach', 0)
+    appChange('MemoryLane', '', 1000)
+    monitor.setIgnoreSelfFocus(false)
+
+    expect(emitted.map((c) => c.activeWindow?.processName)).toEqual(['Google Chrome', 'MemoryLane'])
+  })
+
   it('ignores title changes that only differ in symbol glyphs (progress spinners)', () => {
     appChange('Ghostty', '◐ Broken link', 0)
     appChange('Ghostty', '◑ Broken link', 1000)
