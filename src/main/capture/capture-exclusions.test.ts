@@ -5,7 +5,6 @@ import {
   isSelfApp,
   normalizeExcludedApps,
   normalizeWildcardPatterns,
-  tokenFromBundleId,
 } from './capture-exclusions'
 import { normalizeAppToken } from '@/shared/app-utils'
 
@@ -50,8 +49,8 @@ describe('capture exclusions', () => {
   })
 
   it('derives the full bundle id as the match token', () => {
-    expect(tokenFromBundleId('com.memorylane.app')).toBe('com.memorylane.app')
-    expect(tokenFromBundleId('com.microsoft.Excel')).toBe('com.microsoft.excel')
+    expect(normalizeAppToken('com.memorylane.app')).toBe('com.memorylane.app')
+    expect(normalizeAppToken('com.microsoft.Excel')).toBe('com.microsoft.excel')
   })
 
   it('matches a Windows app by its exe name (no bundle id)', () => {

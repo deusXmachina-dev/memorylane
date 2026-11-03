@@ -5,7 +5,6 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import log from '@main/utils/logger'
 import { normalizeAppToken } from '@/shared/app-utils'
-import { tokenFromBundleId } from '@main/capture/capture-exclusions'
 import type { InstalledApp } from '../../shared/types'
 
 const execFileAsync = promisify(execFile)
@@ -98,7 +97,7 @@ async function readMacAppBundle(bundlePath: string): Promise<InstalledApp | null
       extractPlistString(xml, 'CFBundleName') ??
       path.basename(bundlePath, '.app')
 
-    return { displayName, matchToken: tokenFromBundleId(bundleId) }
+    return { displayName, matchToken: normalizeAppToken(bundleId) }
   } catch (error) {
     log.debug(`Failed to read app bundle ${bundlePath}: ${error}`)
     return null

@@ -8,16 +8,9 @@ export interface ExclusionWindowContext {
   url?: string
 }
 
-// An app's match token is its full bundle id (macOS), normalized. The whole id —
-// not just the last segment — keeps it unique, so `com.microsoft.excel` blocks
-// only Excel, never a sibling like `com.microsoft.word`.
-export function tokenFromBundleId(bundleId: string): string {
-  return normalizeAppToken(bundleId)
-}
-
 export function appToken(window: { app?: string; bundleId?: string }): string | null {
   if (window.bundleId) {
-    const token = tokenFromBundleId(window.bundleId)
+    const token = normalizeAppToken(window.bundleId)
     if (token) return token
   }
   if (window.app) {
