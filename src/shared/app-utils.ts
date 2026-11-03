@@ -89,3 +89,16 @@ export function isTransientApp(app: { bundleId?: string; processName: string }):
   if (app.bundleId && TRANSIENT_APP_BUNDLE_IDS.has(app.bundleId)) return true
   return TRANSIENT_PROCESS_NAMES.has(app.processName)
 }
+
+const SELF_APP_TOKENS = new Set([
+  'memorylane',
+  'memorylane enterprise',
+  'dev.deusxmachina.memorylane',
+  'com.memorylane.app',
+  'com.memorylane.enterprise',
+  'com.github.electron',
+])
+
+export function isSelfAppToken(token: string): boolean {
+  return SELF_APP_TOKENS.has(token.toLowerCase())
+}

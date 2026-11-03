@@ -5,6 +5,8 @@ import { normalizeUrlPattern } from '@/shared/url-utils'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { ExclusionPicker, type ExclusionPickerItem } from './ExclusionPicker'
 
+let cachedDomains: SeenDomain[] | null = null
+
 interface WebsiteExclusionListProps {
   excludedUrlPatterns: string[]
   onChange: (next: string[]) => void
@@ -21,19 +23,20 @@ export function WebsiteExclusionList({
   managed,
 }: WebsiteExclusionListProps): React.JSX.Element {
   const api = useMainWindowAPI()
-  const [domains, setDomains] = useState<SeenDomain[] | null>(null)
+  const [domains, setDomains] = useState<SeenDomain[] | null>(cachedDomains)
 
   useEffect(() => {
     let cancelled = false
     api
       .listSeenDomains()
       .then((result) => {
+        cachedDomains = result
         if (cancelled) return
         setDomains(result)
       })
       .catch(() => {
         if (cancelled) return
-        setDomains([])
+        setDomains((prev) => prev ?? [])
       })
     return () => {
       cancelled = true

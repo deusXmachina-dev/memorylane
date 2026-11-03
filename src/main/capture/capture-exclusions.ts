@@ -1,3 +1,4 @@
+import { isSelfAppToken } from '@/shared/app-utils'
 import { domainOf } from '@/shared/url-utils'
 
 export interface ExclusionWindowContext {
@@ -40,14 +41,6 @@ export function tokenFromBundleId(bundleId: string): string {
   return normalizeToken(bundleId)
 }
 
-const SELF_TOKENS = new Set(['memorylane', 'memorylane enterprise'])
-const SELF_BUNDLE_IDS = new Set([
-  'dev.deusxmachina.memorylane',
-  'com.memorylane.app',
-  'com.memorylane.enterprise',
-  'com.github.electron',
-])
-
 export function appToken(window: { app?: string; bundleId?: string }): string | null {
   if (window.bundleId) {
     const token = tokenFromBundleId(window.bundleId)
@@ -61,9 +54,9 @@ export function appToken(window: { app?: string; bundleId?: string }): string | 
 }
 
 export function isSelfApp(window: { app?: string; bundleId?: string }): boolean {
-  if (window.bundleId && SELF_BUNDLE_IDS.has(window.bundleId.toLowerCase())) return true
+  if (window.bundleId && isSelfAppToken(window.bundleId)) return true
   const token = appToken(window)
-  return token !== null && SELF_TOKENS.has(token)
+  return token !== null && isSelfAppToken(token)
 }
 
 const APP_TOKEN_ALIASES: Record<string, string> = {

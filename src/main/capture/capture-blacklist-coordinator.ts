@@ -3,6 +3,7 @@ import log from '@main/utils/logger'
 import {
   getExcludedAppMatch,
   getExcludedUrlMatch,
+  isSelfApp,
   normalizeExcludedApps,
   normalizeWildcardPatterns,
 } from './capture-exclusions'
@@ -145,7 +146,10 @@ export function createCaptureBlacklistCoordinator(params: {
     activeWindow: InteractionContext['activeWindow'],
     boundaryTimestamp?: number,
   ): boolean => {
-    const excludedAppMatch = getExcludedAppMatch(activeWindow, excludedApps)
+    const excludedAppMatch =
+      activeWindow && isSelfApp({ app: activeWindow.processName, bundleId: activeWindow.bundleId })
+        ? 'memorylane'
+        : getExcludedAppMatch(activeWindow, excludedApps)
     const excludedUrlMatch = getExcludedUrlMatch(activeWindow, excludedUrlPatterns)
     const detectedAnonymousModeMatch = excludePrivateBrowsing
       ? getAnonymousModeBrowserMatch(activeWindow)

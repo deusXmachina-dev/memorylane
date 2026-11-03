@@ -37,22 +37,27 @@ interface ManagedRowProps {
   /** Friendly display name resolved from the entry token; falls back to entry. */
   label?: string
   icon?: LucideIcon
+  note?: string
 }
 
 /**
- * Read-only row for an org-provided (centrally-synced) exclusion. These are
- * enforced regardless of the user's own list and can't be removed here, so the
- * row shows a locked "Set by your organization" label instead of a remove button.
+ * Read-only row for an exclusion the user can't remove here (org-provided or
+ * built-in), so it shows a locked note instead of a remove button.
  */
-export function ManagedRow({ entry, label, icon: Icon }: ManagedRowProps): React.JSX.Element {
+export function ManagedRow({
+  entry,
+  label,
+  icon: Icon,
+  note = 'Set by your organization',
+}: ManagedRowProps): React.JSX.Element {
   return (
     <li
       className="flex h-9 items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-1"
-      title="Set by your organization"
+      title={note}
     >
       {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" />}
       <span className="flex-1 truncate text-xs">{label ?? entry}</span>
-      <span className="shrink-0 text-xs text-muted-foreground">Set by your organization</span>
+      <span className="shrink-0 text-xs text-muted-foreground">{note}</span>
     </li>
   )
 }

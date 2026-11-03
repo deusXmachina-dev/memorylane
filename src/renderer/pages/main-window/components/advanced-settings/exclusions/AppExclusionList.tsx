@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AppWindow } from 'lucide-react'
 import type { InstalledApp } from '@types'
+import { isSelfAppToken } from '@/shared/app-utils'
 import { useMainWindowAPI } from '@/renderer/hooks/use-main-window-api'
 import { ExclusionPicker, type ExclusionPickerItem } from './ExclusionPicker'
+
+const BUILT_IN = [{ key: 'self', label: 'MemoryLane' }]
+
+let cachedApps: InstalledApp[] | null = null
 
 interface AppExclusionListProps {
   excludedApps: string[]
@@ -20,24 +25,27 @@ export function AppExclusionList({
   managed,
 }: AppExclusionListProps): React.JSX.Element {
   const api = useMainWindowAPI()
-  const [apps, setApps] = useState<InstalledApp[] | null>(null)
+  const [apps, setApps] = useState<InstalledApp[] | null>(cachedApps)
 
   useEffect(() => {
     let cancelled = false
     api
       .listInstalledApps()
       .then((result) => {
+        cachedApps = result
         if (cancelled) return
         setApps(result)
       })
       .catch(() => {
         if (cancelled) return
-        setApps([])
+        setApps((prev) => prev ?? [])
       })
     return () => {
       cancelled = true
     }
   }, [api])
+
+  const userApps = useMemo(() => excludedApps.filter((t) => !isSelfAppToken(t)), [excludedApps])
 
   // Pool = installed apps ∪ excluded tokens not in installed list (so manually-added
   // entries render as regular toggle rows alongside installed apps).
@@ -45,18 +53,19 @@ export function AppExclusionList({
     if (apps === null) return null
     const byToken = new Map<string, ExclusionPickerItem>()
     for (const a of apps) {
+      if (isSelfAppToken(a.matchToken)) continue
       byToken.set(a.matchToken, {
         key: a.matchToken,
         matchToken: a.matchToken,
         label: a.displayName,
       })
     }
-    for (const e of excludedApps) {
+    for (const e of userApps) {
       const t = e.toLowerCase()
       if (!byToken.has(t)) byToken.set(t, { key: t, matchToken: t, label: t })
     }
     return [...byToken.values()]
-  }, [apps, excludedApps])
+  }, [apps, userApps])
 
   // Managed entries arrive as raw tokens (often full bundle ids like
   // `com.google.chrome`). Resolve them to an installed app's display name,
@@ -79,13 +88,14 @@ export function AppExclusionList({
 
   return (
     <ExclusionPicker
-      excluded={excludedApps}
+      excluded={userApps}
       onChange={onChange}
       items={items}
       found={found}
       onDismissFound={onDismissFound}
       managed={managed}
       resolveManagedLabel={resolveManagedLabel}
+      builtIn={BUILT_IN}
       title="Apps"
       icon={AppWindow}
       placeholder="Search or type an app name (e.g. signal)"

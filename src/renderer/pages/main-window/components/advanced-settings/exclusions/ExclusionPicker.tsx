@@ -33,6 +33,7 @@ interface ExclusionPickerProps {
   /** Maps a managed entry token to a friendly display name (e.g. bundle id →
    * app name). Defaults to showing the raw entry. */
   resolveManagedLabel?: (entry: string) => string
+  builtIn?: { key: string; label: string }[]
 }
 
 export function ExclusionPicker({
@@ -49,6 +50,7 @@ export function ExclusionPicker({
   emptySecondary,
   managed,
   resolveManagedLabel,
+  builtIn,
 }: ExclusionPickerProps): React.JSX.Element {
   const [query, setQuery] = useState('')
   const normalizedQuery = query.trim().toLowerCase()
@@ -144,7 +146,7 @@ export function ExclusionPicker({
     setQuery('')
   }
 
-  const hasRows = userItems.length > 0 || (managed?.length ?? 0) > 0
+  const hasRows = userItems.length > 0 || (managed?.length ?? 0) > 0 || (builtIn?.length ?? 0) > 0
 
   return (
     <div className="flex flex-col gap-2">
@@ -234,6 +236,14 @@ export function ExclusionPicker({
           ) : hasRows ? (
             <ScrollArea className="h-42">
               <ul className="space-y-2">
+                {(builtIn ?? []).map((entry) => (
+                  <ManagedRow
+                    key={`builtin:${entry.key}`}
+                    entry={entry.label}
+                    icon={Icon}
+                    note="Always blocked"
+                  />
+                ))}
                 {(managed ?? []).map((entry) => (
                   <ManagedRow
                     key={`managed:${entry}`}

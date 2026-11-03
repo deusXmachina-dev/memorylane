@@ -50,6 +50,34 @@ describe('capture blacklist coordinator', () => {
     expect(forwarded).toHaveLength(0)
   })
 
+  it('always blocks MemoryLane itself, by bundle id or exe name, with no exclusions set', () => {
+    const forwarded: InteractionContext[] = []
+    const suppressionTransitions: boolean[] = []
+    const privacyTransitions: boolean[] = []
+    const flushBoundaries: (number | undefined)[] = []
+
+    const coordinator = createCaptureBlacklistCoordinator({
+      onPrivacyBlockingChanged: (blocked) => privacyTransitions.push(blocked),
+      forwardInteraction: (event) => forwarded.push(event),
+      flushEvents: (boundaryTimestamp) => flushBoundaries.push(boundaryTimestamp),
+      setScreenshotsSuppressed: (suppressed) => suppressionTransitions.push(suppressed),
+    })
+
+    const switchToSelf = appChangeEvent('MemoryLane Enterprise', {
+      bundleId: 'com.memorylane.enterprise',
+    })
+    coordinator.handleInteraction(switchToSelf)
+    coordinator.handleInteraction({ type: 'keyboard', timestamp: Date.now(), keyCount: 3 })
+    const terminalEvent = appChangeEvent('Terminal')
+    coordinator.handleInteraction(terminalEvent)
+    coordinator.handleInteraction(appChangeEvent('MemoryLane.exe'))
+
+    expect(flushBoundaries[0]).toBe(switchToSelf.timestamp)
+    expect(suppressionTransitions).toEqual([true, false, true])
+    expect(privacyTransitions).toEqual([true, false, true])
+    expect(forwarded).toEqual([terminalEvent])
+  })
+
   it('emits privacy blocking transitions when entering and leaving blocked state', () => {
     const privacyTransitions: boolean[] = []
 

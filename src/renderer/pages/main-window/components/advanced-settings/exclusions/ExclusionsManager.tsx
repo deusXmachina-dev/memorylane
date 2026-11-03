@@ -46,6 +46,7 @@ export function ExclusionsManager({
 }: ExclusionsManagerProps): React.JSX.Element {
   const api = useMainWindowAPI()
   const [observation, setObservation] = useState<ObservationState | null>(null)
+  const notifiedAtRef = useRef(0)
   const [managed, setManaged] = useState<ManagedExclusions>({ apps: [], urlPatterns: [] })
   const [dismissedAppsAt, setDismissedAppsAt] = useState(() => readDismissedAt(DISMISSED_APPS_KEY))
   const [dismissedUrlsAt, setDismissedUrlsAt] = useState(() => readDismissedAt(DISMISSED_URLS_KEY))
@@ -54,6 +55,7 @@ export function ExclusionsManager({
     let cancelled = false
     void api.getObservationState().then((initial) => {
       if (cancelled) return
+      notifiedAtRef.current = initial.lastRun?.at ?? 0
       setObservation(initial)
     })
     const unsubscribe = api.onObservationUpdate((next) => setObservation(next))
@@ -83,7 +85,6 @@ export function ExclusionsManager({
   const showFoundUrls = lastRun !== undefined && lastRun.at > dismissedUrlsAt
 
   // Notify the page once per run so settings reload.
-  const notifiedAtRef = useRef(0)
   useEffect(() => {
     if (!lastRun) return
     if (lastRun.at === notifiedAtRef.current) return
