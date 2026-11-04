@@ -1,113 +1,101 @@
 # MemoryLane License Server Contract
 
-The app expects exactly 3 endpoints.
+What the enterprise app calls on the license server.
 
 ## General rules
 
-- All bodies are JSON.
-- All JSON responses use `Content-Type: application/json`.
-- `device_id` is the stable device identifier from the app.
-- Activation state comes only from `/license/status`.
-- API key delivery comes only from `/license/key`.
+- All bodies are JSON, and all JSON responses use `Content-Type: application/json`.
+- Every call authenticates with `Authorization: Bearer <token>`:
+  - before activation, the token is the tenant token from the invite link;
+  - after activation, the token is the `device_id`.
+- Errors are any non-2xx status with `{ "error": "Human-readable message" }`.
+- An unknown or deactivated `device_id` gets `401`.
 
-## 1. POST /license/activate
+## 1. GET /api/license/consent-document
 
-Request body:
+Auth: tenant token.
+
+```json
+{ "state": "already_approved" }
+```
+
+or
+
+```json
+{
+  "state": "required",
+  "url": "https://…/api/license/consent-document/<sha256>",
+  "version": 3,
+  "sha256": "…",
+  "title": "Monitoring notice",
+  "content_type": "application/pdf"
+}
+```
+
+The app downloads `url` (no auth), checks the `sha256`, and shows the document.
+
+## 2. POST /api/license/activate
+
+Auth: tenant token.
 
 ```json
 {
   "device_id": "string",
-  "activation_key": "string"
+  "email": "string",
+  "document_version": 3,
+  "outcome": "accepted"
 }
 ```
 
-Success:
+- `outcome` is `accepted` or `declined`.
+- `document_version` is omitted when consent is handled outside the app (the descriptor said `already_approved`).
+- The app also sends `tenant_token` in the body. The server ignores it and uses the header.
 
-- Status `200`
+Response: `200` with `{ "ok": true, "declined": false }`. A `502` means the device was bound but provisioning failed; the app keeps polling `/status`.
 
-```json
-{
-  "ok": true
-}
-```
+## 3. GET /api/license/status
 
-Failure:
+Auth: `device_id`.
 
-- Any non-2xx status
+- `200` with `{ "activated": true }` (the boolean is required).
+- `401` means not activated. The app treats it as inactive and drops its stored managed config.
 
-```json
-{
-  "error": "Human-readable error message"
-}
-```
+## 4. GET /api/license/inference-config
 
-## 2. GET /license/status
-
-Query:
-
-- `device_id`
-
-Success response:
-
-- Status `200`
+Auth: `device_id`.
 
 ```json
-{
-  "activated": true
-}
+{ "provider": "openrouter", "apiKey": "sk-or-…" }
 ```
 
 or
 
 ```json
 {
-  "activated": false
+  "provider": "vertex",
+  "apiKey": "<access token>",
+  "project": "…",
+  "location": "…",
+  "expiresAt": 1767225600
 }
 ```
 
-Rules:
+- `provider: null` or `apiKey: null` means no key yet; the app keeps waiting.
+- `expiresAt` is unix seconds. The app refetches before it passes.
 
-- `activated` must exist.
-- `activated` must be a boolean.
-- No alternative fields are supported.
+## 5. GET /api/license/blacklist?platform=macos|windows
 
-## 3. GET /license/key
-
-Query:
-
-- `device_id`
-
-Success response:
-
-- Status `200`
+Auth: `device_id`.
 
 ```json
-{
-  "key": "sk-or-..."
-}
+{ "excludedApps": ["com.example.app"], "excludedUrlPatterns": ["*.bank.com"] }
 ```
 
-or
+## Device data endpoints
 
-```json
-{
-  "key": null
-}
-```
+Auth: `device_id`.
 
-Rules:
-
-- `key` must exist.
-- `key` must be either a string or `null`.
-- No alternative fields are supported.
-
-## App behavior
-
-- `POST /license/activate`:
-  - non-2xx = activation failed immediately
-- `GET /license/status`:
-  - `activated: false` = app becomes inactive and deletes stored managed key
-  - `activated: true` = app continues to `/license/key`
-- `GET /license/key`:
-  - string key = app stores key and becomes usable
-  - `null` = app keeps waiting, up to 20 seconds during activation flow
+- `GET /api/device/data/state` returns `{ "last_end_ts": <ms> | null }`.
+- `POST /api/device/data` is multipart `file`: a gzipped SQLite delta.
+- `POST /api/device/report` sends `{ "app_version": "…", "platform": "macos" }`.
+- `POST /api/device/logs` is multipart `file`: a zip of log files.
