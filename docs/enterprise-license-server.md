@@ -8,8 +8,7 @@ What the enterprise app calls on the license server.
 - Every call authenticates with `Authorization: Bearer <token>`:
   - before activation, the token is the tenant token from the invite link;
   - after activation, the token is the `device_id`.
-- Errors are any non-2xx status with `{ "error": "Human-readable message" }`.
-- An unknown or deactivated `device_id` gets `401`.
+- On a non-2xx status the app shows the body's `error` string if there is one.
 
 ## 1. GET /api/license/consent-document
 
@@ -24,7 +23,7 @@ or
 ```json
 {
   "state": "required",
-  "url": "https://…/api/license/consent-document/<sha256>",
+  "url": "…",
   "version": 3,
   "sha256": "…",
   "title": "Monitoring notice",
@@ -32,7 +31,7 @@ or
 }
 ```
 
-The app downloads `url` (no auth), checks the `sha256`, and shows the document.
+The app downloads `url` with the same tenant-token header, refuses a URL on another origin, checks the `sha256`, and shows the document. Only `application/pdf` is accepted.
 
 ## 2. POST /api/license/activate
 
@@ -40,6 +39,7 @@ Auth: tenant token.
 
 ```json
 {
+  "tenant_token": "string",
   "device_id": "string",
   "email": "string",
   "document_version": 3,
@@ -48,17 +48,16 @@ Auth: tenant token.
 ```
 
 - `outcome` is `accepted` or `declined`.
-- `document_version` is omitted when consent is handled outside the app (the descriptor said `already_approved`).
-- The app also sends `tenant_token` in the body. The server ignores it and uses the header.
+- `document_version` is omitted when the descriptor said `already_approved`.
 
-Response: `200` with `{ "ok": true, "declined": false }`. A `502` means the device was bound but provisioning failed; the app keeps polling `/status`.
+Response: `200` with `{ "ok": true, "declined": false }`. On `502` the app treats provisioning as pending and keeps polling `/status`.
 
 ## 3. GET /api/license/status
 
 Auth: `device_id`.
 
 - `200` with `{ "activated": true }` (the boolean is required).
-- `401` means not activated. The app treats it as inactive and drops its stored managed config.
+- `401` means not activated. The app becomes inactive.
 
 ## 4. GET /api/license/inference-config
 
@@ -81,7 +80,7 @@ or
 ```
 
 - `provider: null` or `apiKey: null` means no key yet; the app keeps waiting.
-- `expiresAt` is unix seconds. The app refetches before it passes.
+- `expiresAt` (Vertex only) is unix seconds. The app refetches shortly before it.
 
 ## 5. GET /api/license/blacklist?platform=macos|windows
 
@@ -95,7 +94,7 @@ Auth: `device_id`.
 
 Auth: `device_id`.
 
-- `GET /api/device/data/state` returns `{ "last_end_ts": <ms> | null }`.
+- `GET /api/device/data/state` returns `{ "last_end_ts": <number> | null }`.
 - `POST /api/device/data` is multipart `file`: a gzipped SQLite delta.
 - `POST /api/device/report` sends `{ "app_version": "…", "platform": "macos" }`.
 - `POST /api/device/logs` is multipart `file`: a zip of log files.
