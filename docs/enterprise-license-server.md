@@ -4,7 +4,7 @@ What the enterprise app calls on the license server.
 
 ## General rules
 
-- All bodies are JSON, and all JSON responses use `Content-Type: application/json`.
+- Bodies are JSON except the multipart file uploads.
 - Every call authenticates with `Authorization: Bearer <token>`:
   - before activation, the token is the tenant token from the invite link;
   - after activation, the token is the `device_id`.
