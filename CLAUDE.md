@@ -32,39 +32,6 @@ MemoryLane is a system tray Electron application that captures screenshots at re
 
 `native/` contains first-party native sidecar binaries (different from native Node.js addons in `node_modules`). Example is app-watcher module for windows.
 
-### Main Components
-
-1. **Main Process** (`src/main/index.ts`): Entry point and tray management
-   - Creates system tray with menu (Start/Stop Capture, Capture Now, Quit)
-   - Handles app lifecycle as a tray app (doesn't quit when windows close)
-   - Hides dock icon on macOS while the main window is closed
-   - Integrates with recorder and processor modules
-
-2. **Recorder Module** (`src/main/recorder/`): Screenshot capture
-   - Uses Electron's `desktopCapturer` API to capture screens
-   - Saves screenshots as PNG files to `{userData}/screenshots/`
-   - Event-driven capture based on user interaction and visual changes
-   - Exposes API for downstream consumers via callback system
-
-3. **Processor Module** (`src/main/processor/`): Screenshot processing
-   - OCR using macOS Vision framework (Swift)
-   - Vector embeddings using Transformers.js
-   - Storage using SQLite (better-sqlite3 + sqlite-vec) for persistence, FTS, and vector search
-
-### Build System
-
-The project uses electron-vite for development and electron-builder for packaging:
-
-- **electron.vite.config.ts**: Unified Vite configuration
-  - Configures main, preload, and renderer builds
-  - Handles native module externalization
-  - Source maps enabled for debugging
-
-- **electron-builder.config.js**: Packaging configuration
-  - Defines targets for macOS and Windows
-  - Configures ASAR unpacking for native modules
-  - Handles asset copying to resources
-
 ### Editions
 
 The app currently supports two editions:
@@ -78,33 +45,17 @@ At runtime, the app loads the edition config once during startup in `src/main/ed
 
 ### Native Modules
 
-This project uses several native Node.js modules that require special handling:
-
-- `uiohook-napi` - Keyboard/mouse monitoring
-- `sharp` - Image processing
-- `better-sqlite3` - SQLite database
-- `onnxruntime-node` - ML inference
-
-These are:
-
-1. Externalized in Vite (not bundled)
-2. Rebuilt for Electron via `postinstall` script
-3. Unpacked from ASAR via electron-builder config
+Native Node.js modules (`uiohook-napi`, `sharp`, `better-sqlite3`, `onnxruntime-node`, …) must be externalized in Vite, rebuilt for Electron via `postinstall`, and unpacked from ASAR in electron-builder config. Keep all three in sync when adding one.
 
 ### Single-Runtime Environment
 
-All scripts run under Electron's Node.js via `scripts/enode.sh`. Native modules are compiled once for Electron during `npm install` (via postinstall) and never need rebuilding. This eliminates ABI mismatch errors when switching between tests and dev.
+All scripts run under Electron's Node.js via `scripts/enode.js` (npm scripts) / `scripts/enode.sh`. Native modules are compiled once for Electron during `npm install` (via postinstall) and never need rebuilding. This eliminates ABI mismatch errors when switching between tests and dev.
 
-The `enode.sh` wrapper sets `ELECTRON_RUN_AS_NODE=1` and executes the command through Electron's bundled Node.js binary. This ensures tests (`npm test`), utility scripts (`npm run db:stats`, etc.), and the Electron app itself all use the same ABI.
+The wrapper sets `ELECTRON_RUN_AS_NODE=1` and executes the command through Electron's bundled Node.js binary. This ensures tests (`npm test`), utility scripts (`npm run db:stats`, etc.), and the Electron app itself all use the same ABI.
 
 ### TypeScript Configuration
 
-- Path aliases (configured in both Vite and TypeScript):
-  - `@/` maps to `src/`
-  - `@main/` maps to `src/main/`
-  - `@components/` maps to `src/renderer/components/`
-  - `@types` maps to `src/shared/types`
-  - Use these aliases instead of deep relative paths. `src/main` modules import siblings via `@main/<dir>/...` so files stay movable between subdirectories.
+- Path aliases are defined in `tsconfig*.json` and `electron.vite.config.ts`. Use them instead of deep relative paths. `src/main` modules import siblings via `@main/<dir>/...` so files stay movable between subdirectories.
 
 ## Database Migrations
 
@@ -119,15 +70,6 @@ The `enode.sh` wrapper sets `ELECTRON_RUN_AS_NODE=1` and executes the command th
 ## Findings
 
 The `findings/` directory contains benchmark results, prompt experiments, and other research artifacts. When working on prompts or LLM-related features, check this folder first and reuse or update existing results rather than starting from scratch.
-
-## Key Patterns
-
-### Tray App Behavior
-
-- No main window created by default (pure tray app)
-- Dock icon hidden on macOS except while the main window is open
-- App doesn't quit when all windows close
-- Tray menu dynamically updates based on capture state
 
 ## Multi-Agent Workflow
 
