@@ -1,7 +1,7 @@
 // Visual Change Detection Configuration (Event-driven baseline model)
 export const VISUAL_DETECTOR_CONFIG = {
   ENABLED: true,
-  DHASH_THRESHOLD_PERCENT: 8, // Threshold for baseline comparison (1-20%)
+  DHASH_THRESHOLD_PERCENT: 2, // Threshold for baseline comparison (1-20%)
 }
 
 // Trailing-frame leak trimming at activity boundaries (ActivityProducer).
