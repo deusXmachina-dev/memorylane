@@ -199,7 +199,7 @@ jobs:
           cache: npm
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
         with:
           toolchain: stable
           # Preserve previous behaviour: this action defaults to `-D warnings`
@@ -284,7 +284,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           target_commitish: ${{ needs.validate.outputs.commit_sha }}
