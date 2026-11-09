@@ -33,7 +33,6 @@ vi.mock('node:os', async () => {
 
 import { getClaudeDesktopStatus, registerWithClaudeDesktop } from './claude-desktop'
 import { getClaudeCodeStatus } from './claude-code'
-import { getCursorStatus } from './cursor'
 
 afterAll(() => {
   vi.unstubAllEnvs()
@@ -88,12 +87,6 @@ function writeClaudeCodeSettings(entry: unknown): void {
   const settingsPath = path.join(TMP_HOME, '.claude', 'settings.json')
   fs.mkdirSync(path.dirname(settingsPath), { recursive: true })
   fs.writeFileSync(settingsPath, JSON.stringify({ mcpServers: { memorylane: entry } }, null, 2))
-}
-
-function writeCursorConfig(entry: unknown): void {
-  const configPath = path.join(TMP_HOME, '.cursor', 'mcp.json')
-  fs.mkdirSync(path.dirname(configPath), { recursive: true })
-  fs.writeFileSync(configPath, JSON.stringify({ mcpServers: { memorylane: entry } }, null, 2))
 }
 
 function clearClaudeDesktopConfig(): void {
@@ -315,22 +308,5 @@ describe('getClaudeCodeStatus', () => {
   it('stale when entry is the npx CLI shape', () => {
     writeClaudeCodeSettings(STALE_NPX_ENTRY)
     expect(getClaudeCodeStatus()).toBe('stale')
-  })
-})
-
-describe('getCursorStatus', () => {
-  it('not-registered when config file is missing', () => {
-    fs.rmSync(path.join(TMP_HOME, '.cursor', 'mcp.json'), { force: true })
-    expect(getCursorStatus()).toBe('not-registered')
-  })
-
-  it('current when entry matches the running app', () => {
-    writeCursorConfig(CURRENT_ENTRY)
-    expect(getCursorStatus()).toBe('current')
-  })
-
-  it('stale when entry points at a moved .app', () => {
-    writeCursorConfig(STALE_MOVED_APP_ENTRY)
-    expect(getCursorStatus()).toBe('stale')
   })
 })

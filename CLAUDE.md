@@ -21,11 +21,6 @@ you found between the documentation and the code.
 
 MemoryLane is a system tray Electron application that captures screenshots at regular intervals. Built with TypeScript using electron-vite for development and electron-builder for packaging. The application runs as a tray-only app (no main window) and captures screenshots based on user interaction and visual changes.
 
-## E2E Tests
-
-- Standalone E2E runners live in `e2e-tests/`.
-- they will usually contain helpers in packge.json
-
 ## Architecture
 
 ### Native Sidecars (`native/`)
@@ -41,7 +36,7 @@ The app currently supports two editions:
 
 Build selection is done with the `EDITION` environment variable in packaging scripts. The edition-specific build commands set it explicitly and `electron-builder.config.js` uses it to choose packaging metadata and bundle the matching `config/editions/<edition>.json` file.
 
-At runtime, the app loads the edition config once during startup in `src/main/edition.ts`, validates it, and exposes the resolved config object to the rest of the app. In development, `EDITION` selects which config file to load; in packaged builds, the bundled `resources/config/edition.json` file is loaded.
+At runtime, the app loads the edition config once during startup in `src/main/system/edition.ts`, validates it, and exposes the resolved config object to the rest of the app. In development, `EDITION` selects which config file to load; in packaged builds, the bundled `resources/config/edition.json` file is loaded.
 
 ### Native Modules
 
@@ -49,7 +44,7 @@ Native Node.js modules (`uiohook-napi`, `sharp`, `better-sqlite3`, `onnxruntime-
 
 ### Single-Runtime Environment
 
-All scripts run under Electron's Node.js via `scripts/enode.js` (npm scripts) / `scripts/enode.sh`. Native modules are compiled once for Electron during `npm install` (via postinstall) and never need rebuilding. This eliminates ABI mismatch errors when switching between tests and dev.
+All scripts run under Electron's Node.js via `scripts/enode.js`. Native modules are compiled once for Electron during `npm install` (via postinstall) and never need rebuilding. This eliminates ABI mismatch errors when switching between tests and dev.
 
 The wrapper sets `ELECTRON_RUN_AS_NODE=1` and executes the command through Electron's bundled Node.js binary. This ensures tests (`npm test`), utility scripts (`npm run db:stats`, etc.), and the Electron app itself all use the same ABI.
 

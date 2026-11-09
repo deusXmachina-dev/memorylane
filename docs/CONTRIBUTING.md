@@ -34,7 +34,7 @@ npm run dev:debug-pipeline
 - Enterprise builds bake the backend URL in at build time. Override the default with `MEMORYLANE_BACKEND_URL` for per-customer builds, e.g.
   `MEMORYLANE_BACKEND_URL=https://acme.trymemorylane.com/ npm run make:enterprise:mac`.
 - Treat local builds as developer artifacts unless signing/notarization is configured.
-- Release CI in [`.github/workflows/release.yml`](C:\Users\fkubi\Documents\dxm\memorylane-1.github\workflows\release.yml) expects signing secrets and fails early when they are missing.
+- Release CI in [`.github/workflows/release.yml`](../.github/workflows/release.yml) expects signing secrets and fails early when they are missing.
 
 ## Signing and Notarization Tradeoffs
 
@@ -80,7 +80,7 @@ Ideally individual modules of the pipeline will include integration tests which 
 
 Reference integration test:
 
-- `src/main/activity-semantic-service.ollama.integration.test.ts`
+- `src/main/semantic/activity-semantic-service.ollama.integration.test.ts`
 
 ## Storage and Cleanup Model
 

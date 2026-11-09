@@ -2,22 +2,6 @@ import { ActivitySummary } from '../storage'
 import { scrubPII } from '@/shared/sanitize'
 
 /**
- * Formats a single activity as a compact summary line with duration and screenshot count.
- */
-export function formatActivityLine(activity: {
-  id: string
-  startTimestamp: number
-  endTimestamp: number
-  appName?: string | null
-  summary?: string | null
-}): string {
-  const timeStr = new Date(activity.startTimestamp).toLocaleString()
-  const appInfo = activity.appName ? ` [${activity.appName}]` : ''
-  const summary = activity.summary ? scrubPII(activity.summary) : '(no summary)'
-  return `- ${activity.id} | ${timeStr}${appInfo} | ${summary}`
-}
-
-/**
  * Unified result type for timeline entries.
  */
 export interface TimelineEntry {

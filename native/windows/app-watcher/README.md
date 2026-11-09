@@ -48,7 +48,7 @@ Optional override in development:
 From repo root:
 
 ```bash
-npm run test:e2e:app-watcher-win
+npm run debug:app-watcher
 ```
 
-Artifacts are written to `.debug-app-watcher-win/<timestamp>/`.
+Events are written to `.debug-app-watcher/`.

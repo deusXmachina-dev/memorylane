@@ -9,7 +9,6 @@ console.log('[Preload] Script loading...')
 // Expose main window API to renderer (consolidated API)
 contextBridge.exposeInMainWorld('mainWindowAPI', {
   getEditionConfig: () => ipcRenderer.invoke('main-window:getEditionConfig'),
-  getAccessState: () => ipcRenderer.invoke('main-window:getAccessState'),
   refreshAccessState: () => ipcRenderer.invoke('main-window:refreshAccessState'),
   onAccessStateChanged: (callback: (state: unknown) => void) => {
     const handler = (_event: unknown, state: unknown): void => callback(state)
@@ -44,7 +43,6 @@ contextBridge.exposeInMainWorld('mainWindowAPI', {
   setActiveVendor: (vendor: Vendor) => ipcRenderer.invoke('main-window:setActiveVendor', vendor),
   // Integrations
   addToClaude: () => ipcRenderer.invoke('main-window:addToClaude'),
-  addToCursor: () => ipcRenderer.invoke('main-window:addToCursor'),
   addToClaudeCode: () => ipcRenderer.invoke('main-window:addToClaudeCode'),
   getMcpStatus: () => ipcRenderer.invoke('main-window:getMcpStatus'),
   getLlmHealth: () => ipcRenderer.invoke('main-window:getLlmHealth'),

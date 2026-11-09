@@ -1,6 +1,6 @@
 /**
  * Shared helpers for detecting stale vs current MemoryLane MCP entries
- * across Claude Desktop, Claude Code, and Cursor configs.
+ * across Claude Desktop and Claude Code configs.
  *
  * Timeline of entry shapes:
  *   v0 (pre-v0.18) — Electron app-as-node: command=MemoryLane binary,

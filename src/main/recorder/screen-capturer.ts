@@ -48,10 +48,6 @@ export class ScreenCapturer {
     this.backend.send({ displayId: normalized })
   }
 
-  setIntervalMs(ms: number): void {
-    this.backend.send({ intervalMs: ms })
-  }
-
   async start(): Promise<void> {
     if (this._capturing) return
     this._capturing = true

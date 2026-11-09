@@ -80,20 +80,11 @@ export interface EventWindow {
   closedBy: 'gap' | 'app_change' | 'max_duration' | 'flush'
 }
 
-export interface ClassificationResult {
-  summary: string
-  timestamp: number
-}
-
 export interface SearchFilters {
   startTime?: number | undefined // Unix ms
   endTime?: number | undefined // Unix ms
   /** Case-insensitive substring over app name or website host — "notion" matches the Notion app and notion.so. */
   appName?: string | undefined
-}
-
-export interface SearchOptions extends SearchFilters {
-  limit?: number | undefined
 }
 
 export type Vendor = 'openrouter' | 'google' | 'openai-compatible'
@@ -177,18 +168,6 @@ export interface DatabaseImportResult {
   success: boolean
   cancelled?: boolean | undefined
   error?: string | undefined
-}
-
-export interface SettingsAPI {
-  getCredentialStatuses: () => Promise<Record<Vendor, VendorStatus>>
-  saveCredentials: (vendor: Vendor, creds: VendorCredentials) => Promise<SaveResult>
-  deleteCredentials: (vendor: Vendor) => Promise<SaveResult>
-  setActiveVendor: (vendor: Vendor) => Promise<SaveResult>
-  close: () => void
-  openExternal: (url: string) => Promise<void>
-  addToClaude: () => Promise<boolean>
-  addToCursor: () => Promise<boolean>
-  addToClaudeCode: () => Promise<boolean>
 }
 
 export interface MainWindowStatus {
@@ -324,7 +303,7 @@ export interface ClusterInfo {
   timesPerWeek: number
   /** Distinct local days with captured activity in the stats window (frequency denominator). */
   observedDays: number
-  /** Mean per-run active time (gap-bridged union of cited-activity intervals), in minutes. */
+  /** Mean per-run active time (union of cited-activity intervals), in minutes. */
   avgActiveMin: number
   /**
    * Consolidated "Replace with" recommendation. '' on a labeled cluster means
@@ -351,7 +330,7 @@ export interface ClusterSightingInfo {
   subject: string
   apps: string[]
   startedAt: number
-  /** Active time (gap-bridged union of cited-activity intervals), in minutes. */
+  /** Active time (union of cited-activity intervals), in minutes. */
   activeMin: number
   /** Underlying activity ids — handle for the "Copy prompt for Claude" flow. */
   activityIds: string[]
@@ -407,7 +386,6 @@ export interface WipeAndRemineResult {
 
 export interface MainWindowAPI {
   getEditionConfig: () => Promise<AppEditionConfig>
-  getAccessState: () => Promise<AccessState>
   refreshAccessState: () => Promise<AccessState>
   onAccessStateChanged: (callback: (state: AccessState) => void) => () => void
   activateEnterpriseLicense: (activationCode: string) => Promise<SaveResult>
@@ -424,7 +402,6 @@ export interface MainWindowAPI {
   deleteCredentials: (vendor: Vendor) => Promise<SaveResult>
   setActiveVendor: (vendor: Vendor) => Promise<SaveResult>
   addToClaude: () => Promise<boolean>
-  addToCursor: () => Promise<boolean>
   addToClaudeCode: () => Promise<boolean>
   getMcpStatus: () => Promise<McpRegistrationStatus>
   getLlmHealth: () => Promise<LlmHealthStatus>
