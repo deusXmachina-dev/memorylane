@@ -1,7 +1,7 @@
 /**
  * Electron MCP entry point.
  *
- * Invoked by integration clients (Claude Desktop, Claude Code, Cursor) via:
+ * Invoked by integration clients (Claude Desktop, Claude Code) via:
  *   command: /Applications/MemoryLane.app/Contents/MacOS/MemoryLane
  *   args:    [<path to this file>]
  *   env:     { ELECTRON_RUN_AS_NODE: "1" }

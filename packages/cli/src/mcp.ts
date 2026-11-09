@@ -1,7 +1,7 @@
 /**
  * Standalone MCP server entry point for the CLI package.
  *
- * Uses stdio transport for use with Claude Desktop, Cursor, and other MCP clients.
+ * Uses stdio transport for use with Claude Desktop and other MCP clients.
  */
 
 // ---------------------------------------------------------------------------

@@ -127,6 +127,7 @@ export interface ReviewInput {
  * just the mechanism (procedure ⟺ mechanism non-empty).
  */
 export const REVIEW_KINDS = ['procedure', 'monitoring', 'ambient', 'dev-loop', 'judgment'] as const
+export type ReviewKind = (typeof REVIEW_KINDS)[number]
 
 export interface ReviewSplitGroup {
   sighting_ids: string[]

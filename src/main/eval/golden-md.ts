@@ -57,8 +57,7 @@ export function formatOffset(ms: number): string {
 
 /**
  * The single source of truth for a golden block's time line:
- * `mm:ss → mm:ss · App[ · tld]`. Shared by the scaffold renderer and the
- * tld backfill so both emit byte-identical lines.
+ * `mm:ss → mm:ss · App[ · tld]`.
  */
 function formatTimeLine(
   startOffsetMs: number,

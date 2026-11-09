@@ -2,7 +2,7 @@
  * MemoryLane MCP Server
  *
  * Exposes the context database to AI assistants via the Model Context Protocol.
- * Supports stdio transport for use with Claude Desktop, Cursor, and other MCP clients.
+ * Supports stdio transport for use with Claude Desktop and other MCP clients.
  */
 
 // eslint-disable-next-line import/no-unresolved
@@ -101,7 +101,6 @@ export class MemoryLaneMCPServer {
         instructions: SERVER_INSTRUCTIONS,
         capabilities: {
           tools: {},
-          prompts: {},
         },
       },
     )
@@ -189,10 +188,6 @@ export class MemoryLaneMCPServer {
     }
     await this.initializeServices(dbPath)
   }
-
-  /**
-   * Get the underlying McpServer instance for testing or advanced usage.
-   */
 }
 
 export default MemoryLaneMCPServer
