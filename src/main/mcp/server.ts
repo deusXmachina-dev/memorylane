@@ -116,10 +116,8 @@ export class MemoryLaneMCPServer {
   /**
    * Initializes services if they haven't been injected.
    *
-   * Throws if storage or embedding init fails. Callers (the standalone CLI MCP
-   * entry) are expected to catch and present a
-   * useful error — silently starting a half-alive server where every tool call
-   * fails is more confusing than an outright startup failure.
+   * Throws if storage or embedding init fails; the standalone CLI MCP entry
+   * catches and reports it rather than starting a half-alive server.
    */
   private async initializeServices(dbPath?: string): Promise<void> {
     if (this.services) return

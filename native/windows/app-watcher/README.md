@@ -51,4 +51,4 @@ From repo root:
 npm run debug:app-watcher
 ```
 
-Events are written to `.debug-app-watcher/`.
+Events are written to `.debug-app-watcher/<timestamp>/`.

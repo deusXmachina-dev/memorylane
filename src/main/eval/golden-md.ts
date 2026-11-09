@@ -55,10 +55,7 @@ export function formatOffset(ms: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-/**
- * The single source of truth for a golden block's time line:
- * `mm:ss → mm:ss · App[ · tld]`.
- */
+/** `mm:ss → mm:ss · App[ · tld]` */
 function formatTimeLine(
   startOffsetMs: number,
   endOffsetMs: number,

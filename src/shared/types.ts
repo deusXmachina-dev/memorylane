@@ -396,7 +396,6 @@ export interface MainWindowAPI {
   pauseCapture: (durationMs: number) => Promise<MainWindowStatus>
   resumeCapture: () => Promise<MainWindowStatus>
   onStatusChanged: (callback: (status: MainWindowStatus) => void) => () => void
-  // Settings methods (merged from settingsAPI)
   getCredentialStatuses: () => Promise<Record<Vendor, VendorStatus>>
   saveCredentials: (vendor: Vendor, creds: VendorCredentials) => Promise<SaveResult>
   deleteCredentials: (vendor: Vendor) => Promise<SaveResult>

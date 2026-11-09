@@ -1,6 +1,6 @@
 # @deusxmachina-dev/memorylane-cli
 
-CLI for querying the [MemoryLane](https://github.com/deusXmachina-dev/memorylane) activity database. Designed for AI agents (Claude Code, Cursor, etc.) to access your screen activity history without the Electron app running.
+CLI for querying the [MemoryLane](https://github.com/deusXmachina-dev/memorylane) activity database. Designed for AI agents to access your screen activity history without the Electron app running.
 
 ## Requirements
 
