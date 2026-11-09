@@ -1,4 +1,4 @@
-# MemoryLane v1.5.15-alpha.1
+# MemoryLane v1.5.15-alpha.2
 
 Better activity summaries, and MemoryLane never records itself.
 
@@ -9,6 +9,7 @@ Better activity summaries, and MemoryLane never records itself.
 - **Submitted input is recognized**: Enter, Cmd/Ctrl+Enter, paste and save during typing are passed to the summarizer, so sent messages and saved work read as done (#322).
 - **MemoryLane is always blocked**: the app's own windows are never captured. The blocklist shows it as a locked row (#334).
 - **Settings no longer reload on open**, and app/website lists stop showing "Loading…" when you return to the tab (#334).
+- **Cleanup**: unused code, scripts and dependencies removed (#339).
 
 ## Known Issues & Limitations
 
@@ -26,4 +27,4 @@ Better activity summaries, and MemoryLane never records itself.
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.14...v1.5.15-alpha.1
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.14...v1.5.15-alpha.2
