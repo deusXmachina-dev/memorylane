@@ -1,19 +1,15 @@
-# MemoryLane v1.5.14
+# MemoryLane v1.5.15-alpha.2
 
-Smaller daily database uploads, a simpler remote sync setting, and Windows capture fixes.
+Better activity summaries, and MemoryLane never records itself.
 
 ## What's Changed
 
-- **Daily upload sends only new data**: the database upload now sends only what changed since the last upload, not the whole database.
-- **Remote sync is on/off**: the Off/Summary/Detailed level becomes one switch. Users who had Summary are moved to on, which also sends OCR text.
-- **Purge and import clear server data**: purging or importing a database also deletes this device's data on the server.
-- **Clearer onboarding on data handling**: the welcome step now says where data is stored and that screenshots are summarized by AI, then deleted. Enterprise installs also say data is uploaded daily to the organization.
-- **Task-mining failures shown on the Patterns page** (#317).
-- **Pause no longer freezes the window on Windows**: frame cleanup no longer blocks the app when a file is briefly locked (#319).
-- **Faster resume**: capture no longer waits for frames that can't arrive while paused (#319).
-- **Current app is picked up right away**: capture and observation mode see the window already in front when they start, on the right monitor (#319).
-- **Google Maps URLs captured on Windows** (#319).
-- **Notepad typing stays one activity**: Windows 11 Notepad retitling an unsaved tab as you type no longer splits it per keystroke (#319).
+- **Better activity summaries on OpenRouter**: summaries are built from screenshots instead of video, which keeps more on-screen detail (#322).
+- **Fewer near-duplicate screenshots dropped**: the change threshold for summary screenshots goes from 8% to 2%. An explicitly picked pipeline or a threshold you tuned is kept on upgrade (#322).
+- **Submitted input is recognized**: Enter, Cmd/Ctrl+Enter, paste and save during typing are passed to the summarizer, so sent messages and saved work read as done (#322).
+- **MemoryLane is always blocked**: the app's own windows are never captured. The blocklist shows it as a locked row (#334).
+- **Settings no longer reload on open**, and app/website lists stop showing "Loading…" when you return to the tab (#334).
+- **Cleanup**: unused code, scripts and dependencies removed (#339).
 
 ## Known Issues & Limitations
 
@@ -31,4 +27,4 @@ Smaller daily database uploads, a simpler remote sync setting, and Windows captu
 
 ## Full Changelog
 
-https://github.com/deusXmachina-dev/memorylane/compare/v1.5.13...v1.5.14
+https://github.com/deusXmachina-dev/memorylane/compare/v1.5.14...v1.5.15-alpha.2

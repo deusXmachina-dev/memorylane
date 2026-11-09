@@ -208,6 +208,7 @@ export interface EvalReport {
   label: string | null
   vendor: string
   pipeline: SemanticPipelinePreference | null
+  maxSnapshots?: number
   judgeModel: string | null
   gitSha: string | null
   gitDirty: boolean | null

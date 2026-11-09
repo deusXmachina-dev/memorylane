@@ -25,6 +25,7 @@
  *   npm run eval-summaries -- --judge-model moonshotai/kimi-k3   (implies --judge)
  *   npm run eval-summaries -- --pipeline image              (benchmark snapshot models)
  *   npm run eval-summaries -- --vendor openrouter           (ignore the dev profile's active vendor)
+ *   npm run eval-summaries -- --pipeline image --max-snapshots 10
  *
  * Run from the repo root: fixture/result paths and the recorded git sha resolve
  * against the cwd. Compare two runs with `npm run compare-summaries`.
@@ -37,6 +38,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { execFileSync } from 'child_process'
 import { VENDOR_PRESETS } from '../src/shared/vendor-defaults'
+import { ACTIVITY_CONFIG, VISUAL_DETECTOR_CONFIG } from '../src/shared/constants'
 import type { SemanticPipelinePreference } from '../src/main/semantic/activity-semantic-service'
 import {
   mustMentionRecall,
@@ -73,6 +75,8 @@ interface CliArgs {
   judgeModel: string | null
   label: string | null
   vendor: string | null
+  maxSnapshots: number | null
+  visualThreshold: number | null
 }
 
 function parseArgs(): CliArgs {
@@ -86,6 +90,8 @@ function parseArgs(): CliArgs {
     judgeModel: null,
     label: null,
     vendor: null,
+    maxSnapshots: null,
+    visualThreshold: null,
   }
   const list = (s: string): string[] =>
     s
@@ -129,6 +135,22 @@ function parseArgs(): CliArgs {
         break
       case '--vendor':
         i = take((v) => (a.vendor = v), i)
+        break
+      case '--max-snapshots':
+        i = take((v) => {
+          const n = Number(v)
+          if (!Number.isInteger(n) || n < 1)
+            throw new Error(`--max-snapshots needs a positive integer`)
+          a.maxSnapshots = n
+        }, i)
+        break
+      case '--visual-threshold':
+        i = take((v) => {
+          const n = Number(v)
+          if (!(n > 0 && n <= 100))
+            throw new Error(`--visual-threshold needs a percent in (0, 100]`)
+          a.visualThreshold = n
+        }, i)
         break
     }
   }
@@ -202,6 +224,8 @@ const mean = (xs: number[]): number => xs.reduce((x, y) => x + y, 0) / xs.length
 
 async function main() {
   const a = parseArgs()
+  if (a.maxSnapshots !== null) ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM = a.maxSnapshots
+  if (a.visualThreshold !== null) VISUAL_DETECTOR_CONFIG.DHASH_THRESHOLD_PERCENT = a.visualThreshold
   const gitSha = git('rev-parse', 'HEAD')
   const dirty = git('status', '--porcelain', '--', 'src', 'scripts')
   const fixtureDirs = resolveFixtureDirs(a)
@@ -290,6 +314,7 @@ async function main() {
     label: a.label,
     vendor: handle.vendor,
     pipeline: a.pipeline,
+    maxSnapshots: ACTIVITY_CONFIG.MAX_SCREENSHOTS_FOR_LLM,
     judgeModel,
     gitSha,
     gitDirty: dirty === null ? null : dirty.length > 0,
