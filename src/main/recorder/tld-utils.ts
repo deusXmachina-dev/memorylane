@@ -19,21 +19,3 @@ export function extractTld(url: string | undefined | null): string | null {
     return null
   }
 }
-
-/**
- * Check if two URLs have different effective domains.
- * Returns true if the TLDs differ, indicating an activity boundary.
- * Returns false if either URL is missing or they share the same domain.
- */
-export function isTldChange(
-  url1: string | undefined | null,
-  url2: string | undefined | null,
-): boolean {
-  const tld1 = extractTld(url1)
-  const tld2 = extractTld(url2)
-
-  // If either is missing, don't treat as a TLD change
-  if (!tld1 || !tld2) return false
-
-  return tld1 !== tld2
-}

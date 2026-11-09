@@ -2,7 +2,7 @@
  * MemoryLane MCP Server
  *
  * Exposes the context database to AI assistants via the Model Context Protocol.
- * Supports stdio transport for use with Claude Desktop, Cursor, and other MCP clients.
+ * Supports stdio transport for use with Claude Desktop and other MCP clients.
  */
 
 // eslint-disable-next-line import/no-unresolved
@@ -17,7 +17,6 @@ import type { AppEdition } from '../../shared/edition'
 import log from '@main/utils/logger'
 import { registerTools, type EditionContext, type MCPServices } from './tools'
 import type { DbPathSource } from './config'
-/* import { registerPrompts } from './prompts' */
 
 const SERVER_NAME = 'memorylane'
 const SERVER_VERSION = '1.0.0'
@@ -102,7 +101,6 @@ export class MemoryLaneMCPServer {
         instructions: SERVER_INSTRUCTIONS,
         capabilities: {
           tools: {},
-          prompts: {},
         },
       },
     )
@@ -113,16 +111,13 @@ export class MemoryLaneMCPServer {
       (dbPath, source) => this.reinitializeWithDb(dbPath, source),
       () => this.editionContext,
     )
-    /* registerPrompts(this.server) */ // this is not handled by claude plugin
   }
 
   /**
    * Initializes services if they haven't been injected.
    *
-   * Throws if storage or embedding init fails. Callers (the standalone CLI MCP
-   * entry and `scripts/mcp-server.ts`) are expected to catch and present a
-   * useful error — silently starting a half-alive server where every tool call
-   * fails is more confusing than an outright startup failure.
+   * Throws if storage or embedding init fails; the standalone CLI MCP entry
+   * catches and reports it rather than starting a half-alive server.
    */
   private async initializeServices(dbPath?: string): Promise<void> {
     if (this.services) return
@@ -190,13 +185,6 @@ export class MemoryLaneMCPServer {
       this.editionContext = { ...this.editionContext, source }
     }
     await this.initializeServices(dbPath)
-  }
-
-  /**
-   * Get the underlying McpServer instance for testing or advanced usage.
-   */
-  public getServer(): McpServer {
-    return this.server
   }
 }
 

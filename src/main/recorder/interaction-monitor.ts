@@ -510,10 +510,3 @@ export function clearInteractionCallback(callback: OnInteractionCallback): void 
   interactionCallbacks.splice(interactionCallbacks.indexOf(callback), 1)
   log.debug(`[Interaction Monitor] Callback removed (total: ${interactionCallbacks.length})`)
 }
-
-/**
- * Check if interaction monitoring is currently running
- */
-export function isMonitoring(): boolean {
-  return isRunning
-}

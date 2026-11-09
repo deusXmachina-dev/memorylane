@@ -432,18 +432,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
     'main-window:getEditionConfig',
     () => deps?.editionConfig ?? { edition: DEFAULT_EDITION },
   )
-  ipcMain.handle('main-window:getAccessState', () => {
-    if (!deps) {
-      return {
-        edition: DEFAULT_EDITION,
-        isEnterpriseActivated: false,
-        customerSubscriptionStatus: 'idle',
-        enterpriseActivationStatus: null,
-        error: null,
-      } satisfies AccessState
-    }
-    return deps.sync.access.getAccessState()
-  })
   handle('main-window:refreshAccessState', async () => {
     if (!deps) {
       return {
@@ -630,7 +618,6 @@ export function initMainWindowIPC(dependencies: MainWindowDependencies): void {
   // Integrations
   const byName = Object.fromEntries(integrations.map((i) => [i.name, i]))
   ipcMain.handle('main-window:addToClaude', () => byName.claudeDesktop.register())
-  ipcMain.handle('main-window:addToCursor', () => byName.cursor.register())
   ipcMain.handle('main-window:addToClaudeCode', () => byName.claudeCode.register())
   ipcMain.handle('main-window:getMcpStatus', () => {
     const status: McpRegistrationStatus = {}

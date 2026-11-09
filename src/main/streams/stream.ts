@@ -12,11 +12,6 @@ export interface StreamSubscription {
   unsubscribe(): void
 }
 
-export interface StreamConsumerAck {
-  consumerId: string
-  offset: Offset | null
-}
-
 /**
  * Append-only stream contract with stable offsets.
  *

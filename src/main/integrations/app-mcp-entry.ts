@@ -1,7 +1,7 @@
 /**
  * Build the MCP server entry that points at the MemoryLane Electron app
- * running under ELECTRON_RUN_AS_NODE=1. Used by all three integrations
- * (Claude Desktop, Claude Code, Cursor) so they never drift.
+ * running under ELECTRON_RUN_AS_NODE=1. Used by both integrations
+ * (Claude Desktop, Claude Code) so they never drift.
  */
 
 import { app } from 'electron'

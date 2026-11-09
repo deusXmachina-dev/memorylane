@@ -38,11 +38,6 @@ export const APP_WATCHER_CONFIG = {
   RESTART_BACKOFF_MS: 1000, // Base delay between restarts (multiplied by attempt number)
 }
 
-// Context Capture Configuration
-export const CONTEXT_CAPTURE_CONFIG = {
-  ENABLED: false, // Disabled by default (requires permissions)
-}
-
 // Screenshot Cleanup Configuration
 export const SCREENSHOT_CLEANUP_CONFIG = {
   MAX_AGE_MS: 60 * 60 * 1000, // Delete screenshot files older than 1 hour
@@ -98,8 +93,6 @@ export const EVENT_CAPTURER_CONFIG = {
 // OCR Pipeline Configuration
 export const OCR_CONFIG = {
   ENABLED: true, // Toggle OCR extraction during activity processing
-  MAX_CONCURRENT_ACTIVITIES: 1, // Max activities processing through the pipeline at once
-  MAX_CONCURRENT_OCR: 2, // Max parallel OCR subprocesses per activity
   RECOGNITION_MODE: 'accurate' as 'fast' | 'accurate', // macOS Vision recognition level
 }
 

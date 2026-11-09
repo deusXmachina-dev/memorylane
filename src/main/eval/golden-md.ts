@@ -45,7 +45,7 @@ export const HEADER_RE = /^##\s+(?:(\d+)\.\s*)?(.+?)(?:\s+—\s+(.+))?\s*$/
 // The optional trailing group is the `· App · tld` scanning label (or a bare
 // `· App`); older goldens have none. It's captured but appName is taken from the
 // header, so the label is advisory.
-export const TIME_RE = /^\s*(\d+):(\d{2})\s*(?:->|→)\s*(\d+):(\d{2})\s*(?:·(.*))?$/
+const TIME_RE = /^\s*(\d+):(\d{2})\s*(?:->|→)\s*(\d+):(\d{2})\s*(?:·(.*))?$/
 const MUST_MENTION_RE = /^\s*Must mention:\s*(.*)$/i
 
 export function formatOffset(ms: number): string {
@@ -55,12 +55,8 @@ export function formatOffset(ms: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-/**
- * The single source of truth for a golden block's time line:
- * `mm:ss → mm:ss · App[ · tld]`. Shared by the scaffold renderer and the
- * tld backfill so both emit byte-identical lines.
- */
-export function formatTimeLine(
+/** `mm:ss → mm:ss · App[ · tld]` */
+function formatTimeLine(
   startOffsetMs: number,
   endOffsetMs: number,
   appName: string,
