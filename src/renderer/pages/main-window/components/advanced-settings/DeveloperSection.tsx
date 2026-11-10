@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
-import { TrashIcon } from '@phosphor-icons/react'
+import { Trash2Icon } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@components/ui/tabs'
 import type { MainWindowAPI } from '@types'
@@ -133,7 +133,7 @@ function TaskMaintenanceSection({ api }: { api: MainWindowAPI }): React.JSX.Elem
             onClick={() => setConfirming(true)}
             disabled={busy}
           >
-            <TrashIcon /> Wipe all tasks &amp; re-mine
+            <Trash2Icon /> Wipe all tasks &amp; re-mine
           </Button>
         )}
       </div>

@@ -1,11 +1,11 @@
 import * as React from 'react'
 import { Menu } from '@base-ui/react/menu'
 import {
-  CaretDownIcon,
+  ChevronDownIcon,
   PlayIcon as PlayGlyph,
   PauseIcon as PauseGlyph,
-  StopIcon as StopGlyph,
-} from '@phosphor-icons/react'
+  SquareIcon as StopGlyph,
+} from 'lucide-react'
 import { Button } from '@components/ui/button'
 import { CAPTURE_PAUSE_CONFIG, formatPauseDuration } from '@/shared/constants'
 
@@ -25,9 +25,9 @@ interface CaptureControlSectionProps {
 }
 
 // Thin wrappers fix the size/weight once so the call sites stay terse.
-const PlayIcon = (): React.JSX.Element => <PlayGlyph className="w-5 h-5" weight="fill" />
-const StopIcon = (): React.JSX.Element => <StopGlyph className="w-5 h-5" weight="fill" />
-const PauseIcon = (): React.JSX.Element => <PauseGlyph className="w-5 h-5" weight="fill" />
+const PlayIcon = (): React.JSX.Element => <PlayGlyph className="w-5 h-5" fill="currentColor" />
+const StopIcon = (): React.JSX.Element => <StopGlyph className="w-5 h-5" fill="currentColor" />
+const PauseIcon = (): React.JSX.Element => <PauseGlyph className="w-5 h-5" fill="currentColor" />
 
 const formatCountdown = (remainingMs: number): string => {
   const minutes = Math.max(0, Math.ceil(remainingMs / 60_000))
@@ -198,7 +198,7 @@ export function CaptureControlSection({
             />
           }
         >
-          <CaretDownIcon />
+          <ChevronDownIcon />
         </Menu.Trigger>
         <Menu.Portal>
           <Menu.Positioner side="bottom" align="end" sideOffset={6} className="z-50">

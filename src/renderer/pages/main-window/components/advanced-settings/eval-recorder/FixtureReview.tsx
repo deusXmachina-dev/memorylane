@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
-  ArrowClockwiseIcon,
+  RotateCwIcon,
   ArrowLeftIcon,
-  CaretRightIcon,
-  CheckCircleIcon,
-  ExportIcon,
-  FloppyDiskIcon,
-  TrashIcon,
-  WarningCircleIcon,
-  XCircleIcon,
+  ChevronRightIcon,
+  CircleCheckIcon,
+  ShareIcon,
+  SaveIcon,
+  Trash2Icon,
+  CircleAlertIcon,
+  CircleXIcon,
   XIcon,
-} from '@phosphor-icons/react'
+} from 'lucide-react'
 import { Button } from '@components/ui/button'
 import { Card, CardContent } from '@components/ui/card'
 import { Input } from '@components/ui/input'
@@ -120,11 +120,11 @@ export function FixtureReview({
           <span className="flex items-center gap-1 text-sm font-medium">
             {check.followed ? (
               <>
-                <CheckCircleIcon className="size-4 text-primary" /> All steps matched
+                <CircleCheckIcon className="size-4 text-primary" /> All steps matched
               </>
             ) : (
               <>
-                <WarningCircleIcon className="size-4 text-destructive" />
+                <CircleAlertIcon className="size-4 text-destructive" />
                 {check.steps
                   ? `${check.steps.filter((s) => s.ok).length} of ${check.steps.length} steps matched`
                   : "Didn't match the script"}
@@ -196,11 +196,11 @@ export function FixtureReview({
           </>
         ) : (
           <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(true)}>
-            <TrashIcon /> Delete
+            <Trash2Icon /> Delete
           </Button>
         )}
         <Button variant="ghost" size="sm" onClick={() => onExport(fixture.name)}>
-          <ExportIcon /> Export
+          <ShareIcon /> Export
         </Button>
         {showEditor && (
           <Button
@@ -215,7 +215,7 @@ export function FixtureReview({
         <div className="flex-1" />
         {showEditor && (
           <Button variant="outline" onClick={() => void save()} disabled={!dirty}>
-            <FloppyDiskIcon /> Save
+            <SaveIcon /> Save
           </Button>
         )}
         {showEditor && script && hasNext && (
@@ -226,7 +226,7 @@ export function FixtureReview({
               })
             }
           >
-            Save and record next <CaretRightIcon />
+            Save and record next <ChevronRightIcon />
           </Button>
         )}
       </div>
@@ -266,9 +266,9 @@ function CheckCard({
             {check.steps.map((step, i) => (
               <li key={i} className="flex gap-3 py-2 text-sm">
                 {step.ok ? (
-                  <CheckCircleIcon className="mt-0.5 size-4 shrink-0 text-primary" />
+                  <CircleCheckIcon className="mt-0.5 size-4 shrink-0 text-primary" />
                 ) : (
-                  <XCircleIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
+                  <CircleXIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
                 )}
                 <div>
                   <div className="font-medium">
@@ -296,7 +296,7 @@ function CheckCard({
             </Button>
           )}
           <Button onClick={onRerecord}>
-            <ArrowClockwiseIcon /> Record again
+            <RotateCwIcon /> Record again
           </Button>
         </div>
       </CardContent>

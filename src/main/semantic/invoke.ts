@@ -150,7 +150,7 @@ export async function invokeRawVideoCompletion(
     parsed = rawText.length > 0 ? (JSON.parse(rawText) as RawChatCompletionResponse) : null
   } catch (error) {
     if (response.ok) {
-      throw new Error(`Failed to parse response body: ${describe(error)}`)
+      throw new Error(`Failed to parse response body: ${describe(error)}`, { cause: error })
     }
   }
 

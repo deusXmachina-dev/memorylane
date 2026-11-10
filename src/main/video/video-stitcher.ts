@@ -103,13 +103,13 @@ function resolveExecutablePath(filepath: string, source: string): string {
 }
 
 function resolveFfmpegStaticPath(): string {
-  let resolvedPath: string | null = null
+  let resolvedPath: string | null
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     resolvedPath = require('ffmpeg-static') as string | null
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
-    throw new Error(`Failed to resolve ffmpeg-static module: ${detail}`)
+    throw new Error(`Failed to resolve ffmpeg-static module: ${detail}`, { cause: error })
   }
 
   if (!resolvedPath) {

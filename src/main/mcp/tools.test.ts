@@ -1,7 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import * as os from 'os'
 import * as path from 'path'
-// eslint-disable-next-line import/no-unresolved
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { registerTools, type EditionContext, type MCPServices } from './tools'
 import { StorageService, type Cluster, type Sighting } from '../storage'

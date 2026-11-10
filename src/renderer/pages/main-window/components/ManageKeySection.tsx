@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useCallback, useState } from 'react'
 import { toast } from 'sonner'
-import { Eye, EyeSlash } from '@phosphor-icons/react'
+import { EyeIcon, EyeOffIcon } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Badge } from '@components/ui/badge'
@@ -191,7 +191,7 @@ export function ManageKeySection({
               onClick={() => setPasswordVisible((v) => !v)}
               className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
-              {passwordVisible ? <EyeSlash /> : <Eye />}
+              {passwordVisible ? <EyeOffIcon /> : <EyeIcon />}
             </Button>
           </div>
 

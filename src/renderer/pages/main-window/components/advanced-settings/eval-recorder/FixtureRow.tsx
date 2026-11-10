@@ -1,4 +1,4 @@
-import { CheckCircleIcon, ExportIcon, TrashIcon, WarningCircleIcon } from '@phosphor-icons/react'
+import { CircleCheckIcon, ShareIcon, Trash2Icon, CircleAlertIcon } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import type { EvalFixtureSummary } from '@/shared/eval-review'
 
@@ -17,9 +17,9 @@ export function FixtureRow({
     <div className="flex items-center gap-2 py-2">
       <button type="button" onClick={() => onOpen(fixture.name)} className="flex-1 text-left">
         <div className="flex items-center gap-1.5 text-sm font-medium">
-          {fixture.scriptFollowed === true && <CheckCircleIcon className="size-4 text-primary" />}
+          {fixture.scriptFollowed === true && <CircleCheckIcon className="size-4 text-primary" />}
           {fixture.scriptFollowed === false && (
-            <WarningCircleIcon className="size-4 text-destructive" />
+            <CircleAlertIcon className="size-4 text-destructive" />
           )}
           {new Date(fixture.capturedAt).toLocaleString()}
         </div>
@@ -29,10 +29,10 @@ export function FixtureRow({
         </div>
       </button>
       <Button variant="ghost" size="sm" onClick={() => onExport(fixture.name)}>
-        <ExportIcon /> Export
+        <ShareIcon /> Export
       </Button>
       <Button variant="ghost" size="sm" onClick={() => onDelete(fixture.name)}>
-        <TrashIcon /> Delete
+        <Trash2Icon /> Delete
       </Button>
     </div>
   )

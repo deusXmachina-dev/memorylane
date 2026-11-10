@@ -218,7 +218,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
           error: message,
         }),
       )
-      throw new Error(message)
+      throw new Error(message, { cause: error })
     }
 
     this.applyTransition(
@@ -240,7 +240,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
           error: message,
         }),
       )
-      throw new Error(message)
+      throw new Error(message, { cause: error })
     }
     if (!descriptorResponse.ok) {
       const errorMessage = await this.readErrorMessage(
@@ -268,7 +268,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
           error: errorMessage,
         }),
       )
-      throw new Error(errorMessage)
+      throw new Error(errorMessage, { cause: error })
     }
 
     if (descriptor.kind === 'already_approved') {
@@ -292,7 +292,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
           error: message,
         }),
       )
-      throw new Error(message)
+      throw new Error(message, { cause: error })
     }
 
     this.pendingConsent = {
@@ -396,7 +396,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       this.applyTransition(
         transitionEnterpriseAccess(this.accessState, { type: 'activation_failed', error: message }),
       )
-      throw new Error(message)
+      throw new Error(message, { cause: error })
     }
     let result: ActivateResult
     try {
@@ -410,7 +410,7 @@ export class EnterpriseAccessProvider extends BaseAccessProvider {
       this.applyTransition(
         transitionEnterpriseAccess(this.accessState, { type: 'activation_failed', error: message }),
       )
-      throw new Error(message)
+      throw new Error(message, { cause: error })
     }
 
     if (result.status === 'error') {

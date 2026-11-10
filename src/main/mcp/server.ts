@@ -5,9 +5,9 @@
  * Supports stdio transport for use with Claude Desktop and other MCP clients.
  */
 
-// eslint-disable-next-line import/no-unresolved
+// eslint-disable-next-line import-x/no-unresolved
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-// eslint-disable-next-line import/no-unresolved
+// eslint-disable-next-line import-x/no-unresolved
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { Writable } from 'node:stream'
 import * as fs from 'fs'
