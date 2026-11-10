@@ -14,21 +14,20 @@
     "prepublishOnly": "npm run build"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.8.1",
-    "@modelcontextprotocol/sdk": "^1.12.1",
-    "better-sqlite3": "^12.6.2",
-    "onnxruntime-node": "^1.22.0",
-    "sqlite-vec": "^0.1.7-alpha.2",
-    "zod": "^3.24.4"
+    "@huggingface/transformers": "^4.3.2",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "better-sqlite3": "^13.0.3",
+    "sqlite-vec": "^0.1.9",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^25.2.1",
+    "@types/node": "^25.9.9",
     "tsup": "^8.4.0",
-    "typescript": "~5.7.0",
+    "typescript": "~6.0.3",
     "vitest": "^4.0.18"
   },
   "repository": {

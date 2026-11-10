@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import {
-  ArrowLeftIcon,
-  ArrowClockwiseIcon,
-  ExportIcon,
-  FloppyDiskIcon,
-  TrashIcon,
-} from '@phosphor-icons/react'
+import { ArrowLeftIcon, RotateCwIcon, ShareIcon, SaveIcon, Trash2Icon } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import { Input } from '@components/ui/input'
 import { Textarea } from '@components/ui/textarea'
@@ -143,10 +137,10 @@ export function TaskGoldenSection({ api }: { api: MainWindowAPI }): React.JSX.El
                   </div>
                 </button>
                 <Button variant="ghost" size="sm" onClick={() => void exportFixture(f.name)}>
-                  <ExportIcon /> Export
+                  <ShareIcon /> Export
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => void deleteFixture(f.name)}>
-                  <TrashIcon /> Delete
+                  <Trash2Icon /> Delete
                 </Button>
               </div>
             ))}
@@ -294,10 +288,10 @@ function SightingPromote({
               disabled={!dirty}
               title="Rebuild the draft from the current window (discards edits)"
             >
-              <ArrowClockwiseIcon /> Regenerate
+              <RotateCwIcon /> Regenerate
             </Button>
             <Button size="sm" onClick={() => void promote()} disabled={busy}>
-              <FloppyDiskIcon /> Promote to golden
+              <SaveIcon /> Promote to golden
             </Button>
           </div>
         </div>
@@ -360,10 +354,10 @@ function TaskFixtureReview({
         </Button>
         <div className="flex-1 text-sm font-medium">{loaded?.label || name}</div>
         <Button variant="ghost" size="sm" onClick={onExport}>
-          <ExportIcon /> Export
+          <ShareIcon /> Export
         </Button>
         <Button variant="ghost" size="sm" onClick={onDelete}>
-          <TrashIcon /> Delete
+          <Trash2Icon /> Delete
         </Button>
       </div>
 
@@ -373,7 +367,7 @@ function TaskFixtureReview({
             golden.md
           </span>
           <Button size="sm" onClick={() => void save()} disabled={!dirty}>
-            <FloppyDiskIcon /> Save golden
+            <SaveIcon /> Save golden
           </Button>
         </div>
         <Textarea

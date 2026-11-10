@@ -255,7 +255,7 @@ export class TaskMiner {
     const host = remoteHost(provider.getRouteSnapshot()?.baseURL)
     if (host) {
       this.running = true
-      let resolves = false
+      let resolves: boolean
       try {
         resolves = await this.env.resolvesWithinTimeout(host)
       } finally {

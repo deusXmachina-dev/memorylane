@@ -4,6 +4,7 @@
     "outDir": "dist",
     "rootDir": "../..",
     "declaration": false,
+    "types": ["node"],
     "paths": {
       "@main/*": ["../../src/main/*"],
       "@/*": ["../../src/*"],

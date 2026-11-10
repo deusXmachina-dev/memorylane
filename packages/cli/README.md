@@ -4,7 +4,7 @@ CLI for querying the [MemoryLane](https://github.com/deusXmachina-dev/memorylane
 
 ## Requirements
 
-Node.js **20, 22, or 24 (LTS)**. Other versions may work but are unsupported — `better-sqlite3`, the SQLite driver this CLI depends on, [only ships prebuilt binaries for LTS releases](https://github.com/WiseLibs/better-sqlite3#installation).
+Node.js **22 or later**, on macOS, Linux, or Windows (x64 or arm64). The SQLite driver, `better-sqlite3`, bundles its prebuilt binaries for these platforms.
 
 ## Install
 
@@ -49,7 +49,7 @@ memorylane get-db                         # Show resolved DB path
 
 ## Semantic search
 
-Vector search uses `@huggingface/transformers` (installed automatically as an optional dependency). If it failed to install on your platform, you can install it manually:
+Vector search uses `@huggingface/transformers` (installed with the CLI). If it is missing, install it manually:
 
 ```bash
 npm install -g @huggingface/transformers
@@ -57,24 +57,11 @@ npm install -g @huggingface/transformers
 
 ## Troubleshooting
 
-### `Could not locate the bindings file` / `MemoryLane CLI cannot load its SQLite native module`
+### `MemoryLane CLI cannot load its SQLite native module`
 
-The `better-sqlite3` native binary wasn't placed on disk during install. Usually one of:
-
-- **npm install scripts are disabled.** Check with `npm config get ignore-scripts` — must print `false`. Reinstall with `npm install -g @deusxmachina-dev/memorylane-cli --foreground-scripts` to surface what the install script is doing.
-- **`prebuild-install` couldn't reach GitHub releases.** This can happen on locked-down corporate networks that mirror the npm registry but not `github.com`. Verify:
-  ```bash
-  curl -I https://github.com/WiseLibs/better-sqlite3/releases/download/v12.6.2/better-sqlite3-v12.6.2-node-v137-darwin-arm64.tar.gz
-  ```
-  (Adjust `node-v137` to your Node ABI: 20→`v115`, 22→`v127`, 24→`v137`.) Anything other than `200` or a `302` to a working CDN is the problem.
-- **You're on a non-LTS Node version** — see [Requirements](#requirements).
-
-If the install completed but the binary is missing, you can rebuild in place:
-
-```bash
-cd "$(npm root -g)/@deusxmachina-dev/memorylane-cli"
-npm rebuild better-sqlite3 --foreground-scripts
-```
+- **Check your Node version** with `node -v`. It must be 22 or later.
+- **Check your platform.** Prebuilt binaries cover macOS, Linux (glibc and musl), and Windows on x64 and arm64. Other platforms are not supported.
+- **Reinstall** to restore missing files: `npm install -g @deusxmachina-dev/memorylane-cli`.
 
 ## License
 

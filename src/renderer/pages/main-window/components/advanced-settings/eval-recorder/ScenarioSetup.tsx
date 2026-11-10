@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, ArrowSquareOutIcon, RecordIcon } from '@phosphor-icons/react'
+import { ArrowLeftIcon, ExternalLinkIcon, CircleIcon } from 'lucide-react'
 import { Button } from '@components/ui/button'
 import { Card, CardContent } from '@components/ui/card'
 import { isHandsOffStep } from '@/shared/eval-review'
@@ -55,7 +55,7 @@ export function ScenarioSetup({
                   <span className="flex-1">{text}</span>
                   {url && (
                     <Button variant="outline" size="sm" onClick={() => onOpenUrl(url)}>
-                      <ArrowSquareOutIcon /> Open
+                      <ExternalLinkIcon /> Open
                     </Button>
                   )}
                 </li>
@@ -90,7 +90,7 @@ export function ScenarioSetup({
 
       <div className="flex justify-end">
         <Button size="lg" onClick={onStart} disabled={recording}>
-          <RecordIcon weight="fill" /> Start recording
+          <CircleIcon fill="currentColor" /> Start recording
         </Button>
       </div>
 

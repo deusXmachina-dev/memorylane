@@ -384,6 +384,19 @@ export interface WipeAndRemineResult {
   }
 }
 
+export type HostPlatform =
+  | 'aix'
+  | 'android'
+  | 'cygwin'
+  | 'darwin'
+  | 'freebsd'
+  | 'haiku'
+  | 'linux'
+  | 'netbsd'
+  | 'openbsd'
+  | 'sunos'
+  | 'win32'
+
 export interface MainWindowAPI {
   getEditionConfig: () => Promise<AppEditionConfig>
   refreshAccessState: () => Promise<AccessState>
@@ -513,5 +526,5 @@ export interface MainWindowAPI {
     name: string,
   ) => Promise<{ success: boolean; path?: string; error?: string }>
   // Host platform (set at preload time; never changes mid-session)
-  platform: NodeJS.Platform
+  platform: HostPlatform
 }

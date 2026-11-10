@@ -5,7 +5,7 @@
 // optional back-navigation override, and gate the forward arrow.
 
 import type { OnboardingStepId, OnboardingStepInfo } from './components/onboarding/OnboardingLayout'
-import type { PermissionStatus } from '@types'
+import type { HostPlatform, PermissionStatus } from '@types'
 
 export type DisplayStep = OnboardingStepId | 'dashboard'
 
@@ -39,7 +39,7 @@ export interface OnboardingInputs {
   hasAnyProgress: boolean
   anyMcpConnected: boolean
   viewStepOverride: OnboardingStepId | null
-  platform: NodeJS.Platform
+  platform: HostPlatform
   hasExistingActivities: boolean
 }
 
@@ -62,7 +62,7 @@ export interface OnboardingResolution {
  * it as auto-complete in the resolution logic. Canonical step indices are kept
  * stable; only the displayed list is filtered.
  */
-function isPermissionsStepRelevant(platform: NodeJS.Platform): boolean {
+function isPermissionsStepRelevant(platform: HostPlatform): boolean {
   return platform === 'darwin'
 }
 

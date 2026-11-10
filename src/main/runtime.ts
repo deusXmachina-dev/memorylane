@@ -218,7 +218,7 @@ export async function createMainRuntime(params: {
     } catch (error) {
       log.error('[Runtime] Failed to quiesce capture; aborting purge:', error)
       resume()
-      throw new Error('Failed to stop capture before purge')
+      throw new Error('Failed to stop capture before purge', { cause: error })
     }
 
     storage.purge()

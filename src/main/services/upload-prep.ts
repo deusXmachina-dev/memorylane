@@ -14,8 +14,8 @@ function workerScriptPath(): string {
 // so a stuck child can't leave the upload `inFlight` promise unresolved.
 const WORKER_TIMEOUT_MS = 2 * 60 * 1000
 
-export function prepareUploadInWorker(req: DeltaRequest): Promise<Buffer> {
-  return new Promise<Buffer>((resolve, reject) => {
+export function prepareUploadInWorker(req: DeltaRequest): Promise<Buffer<ArrayBuffer>> {
+  return new Promise<Buffer<ArrayBuffer>>((resolve, reject) => {
     const child = utilityProcess.fork(workerScriptPath(), [], { serviceName: 'upload-prep' })
     let settled = false
 

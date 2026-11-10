@@ -1,13 +1,12 @@
 import { useState } from 'react'
 import {
-  CaretRightIcon,
-  CheckCircleIcon,
+  ChevronRightIcon,
+  CircleCheckIcon,
   CircleIcon,
-  DownloadSimpleIcon,
-  RecordIcon,
-  UploadSimpleIcon,
-  WarningCircleIcon,
-} from '@phosphor-icons/react'
+  DownloadIcon,
+  UploadIcon,
+  CircleAlertIcon,
+} from 'lucide-react'
 import { Button } from '@components/ui/button'
 import type { EvalFixtureSummary } from '@/shared/eval-review'
 import { SettingsSection } from '../SettingsSection'
@@ -59,11 +58,11 @@ export function ScenarioLibrary({
               </span>
             )}
             <Button variant="outline" size="sm" onClick={onImportScenarios}>
-              <UploadSimpleIcon /> Import scenarios
+              <UploadIcon /> Import scenarios
             </Button>
             {onExportAll && (
               <Button variant="outline" size="sm" onClick={onExportAll}>
-                <DownloadSimpleIcon /> Export all
+                <DownloadIcon /> Export all
               </Button>
             )}
           </div>
@@ -87,7 +86,7 @@ export function ScenarioLibrary({
 
       {next && (
         <div className="flex items-center gap-4 rounded-xl p-4 ring-1 ring-primary">
-          <RecordIcon weight="fill" className="size-6 shrink-0 text-primary" />
+          <CircleIcon fill="currentColor" className="size-6 shrink-0 text-primary" />
           <div className="min-w-0 flex-1">
             <div className="text-xs text-muted-foreground">Up next</div>
             <div className="font-medium">{next.script.title}</div>
@@ -132,7 +131,7 @@ export function ScenarioLibrary({
                     </div>
                   </div>
                   <StatusLabel scenario={scenario} />
-                  <CaretRightIcon className="size-4 text-muted-foreground" />
+                  <ChevronRightIcon className="size-4 text-muted-foreground" />
                 </button>
               ))
             )}
@@ -152,7 +151,7 @@ export function ScenarioLibrary({
         ))}
         <div className="py-3">
           <Button variant="outline" size="sm" onClick={onFreeRecording}>
-            <RecordIcon weight="fill" /> Record without a script
+            <CircleIcon fill="currentColor" /> Record without a script
           </Button>
         </div>
       </SettingsSection>
@@ -164,7 +163,7 @@ export function StatusLabel({ scenario }: { scenario: Scenario }): React.JSX.Ele
   if (scenario.status === 'done') {
     return (
       <span className="flex shrink-0 items-center gap-1 text-xs">
-        <CheckCircleIcon className="size-4 text-primary" />
+        <CircleCheckIcon className="size-4 text-primary" />
         Recorded{scenario.recorded > 1 && ` ×${scenario.recorded}`}
       </span>
     )
@@ -172,7 +171,7 @@ export function StatusLabel({ scenario }: { scenario: Scenario }): React.JSX.Ele
   if (scenario.status === 'redo') {
     return (
       <span className="flex shrink-0 items-center gap-1 text-xs font-medium">
-        <WarningCircleIcon className="size-4 text-destructive" />
+        <CircleAlertIcon className="size-4 text-destructive" />
         Redo
       </span>
     )
