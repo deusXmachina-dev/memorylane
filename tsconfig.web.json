@@ -4,6 +4,7 @@
     "composite": true,
     "outDir": "dist/web",
     "jsx": "react-jsx",
+    "types": ["node"],
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "paths": {
       "@/*": ["./src/*"],

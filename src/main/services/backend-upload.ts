@@ -18,7 +18,7 @@ function removeQuietly(filePath: string): void {
 
 export function fileForm(bytes: Buffer, filename: string): FormData {
   const form = new FormData()
-  form.append('file', new Blob([bytes]), filename)
+  form.append('file', new Blob([new Uint8Array(bytes)]), filename)
   return form
 }
 
