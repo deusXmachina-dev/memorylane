@@ -4,7 +4,7 @@ import * as path from 'path'
 export default defineConfig({
   entry: ['src/index.ts', 'src/mcp.ts'],
   format: ['cjs'],
-  target: 'node18',
+  target: 'node22',
   platform: 'node',
   outDir: 'dist',
   clean: true,
@@ -16,7 +16,7 @@ export default defineConfig({
       '@types': path.resolve(__dirname, '../../src/shared/types'),
     }
   },
-  external: ['better-sqlite3', 'sqlite-vec', '@huggingface/transformers', 'onnxruntime-node'],
+  external: ['better-sqlite3', 'sqlite-vec', '@huggingface/transformers'],
   banner: {
     js: '#!/usr/bin/env node\nprocess.env.NODE_ENV = "production";',
   },

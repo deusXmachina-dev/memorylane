@@ -39,7 +39,7 @@ export interface OnboardingInputs {
   hasAnyProgress: boolean
   anyMcpConnected: boolean
   viewStepOverride: OnboardingStepId | null
-  platform: NodeJS.Platform
+  platform: string
   hasExistingActivities: boolean
 }
 
@@ -62,7 +62,7 @@ export interface OnboardingResolution {
  * it as auto-complete in the resolution logic. Canonical step indices are kept
  * stable; only the displayed list is filtered.
  */
-function isPermissionsStepRelevant(platform: NodeJS.Platform): boolean {
+function isPermissionsStepRelevant(platform: string): boolean {
   return platform === 'darwin'
 }
 

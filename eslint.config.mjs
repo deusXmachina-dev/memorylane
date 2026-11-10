@@ -3,7 +3,6 @@ import prettier from 'eslint-config-prettier/flat'
 import { defineConfig } from 'eslint/config'
 import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescript'
 import { importX } from 'eslint-plugin-import-x'
-import globals from 'globals'
 import tseslint from 'typescript-eslint'
 
 export default defineConfig(
@@ -27,7 +26,6 @@ export default defineConfig(
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
-      globals: { ...globals.browser, ...globals.node, ...globals.es2015 },
     },
     settings: {
       'import-x/resolver-next': [

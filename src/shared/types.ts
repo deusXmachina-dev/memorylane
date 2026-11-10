@@ -513,5 +513,5 @@ export interface MainWindowAPI {
     name: string,
   ) => Promise<{ success: boolean; path?: string; error?: string }>
   // Host platform (set at preload time; never changes mid-session)
-  platform: NodeJS.Platform
+  platform: string
 }

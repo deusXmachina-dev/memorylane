@@ -6,7 +6,7 @@ import { fileForm, type UploadJob } from './backend-upload'
 
 export const DELTA_OVERLAP_MS = 60 * 60 * 1000
 
-export type PrepareUpload = (req: DeltaRequest) => Promise<Buffer>
+export type PrepareUpload = (req: DeltaRequest) => Promise<Buffer<ArrayBuffer>>
 
 const defaultPrepareUpload: PrepareUpload = async (req) => {
   const { prepareUploadInWorker } = await import('./upload-prep')
