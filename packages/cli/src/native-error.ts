@@ -23,7 +23,7 @@ export function formatNativeBindingHint(err: unknown): string {
     'To fix, upgrade Node.js if needed, then reinstall:',
     '  npm install -g @deusxmachina-dev/memorylane-cli',
     '',
-    `Details: ${message.split('\n')[0]}`,
+    `Details: ${message.trim()}`,
     '',
   ].join('\n')
 }

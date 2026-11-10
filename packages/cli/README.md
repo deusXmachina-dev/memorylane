@@ -49,7 +49,7 @@ memorylane get-db                         # Show resolved DB path
 
 ## Semantic search
 
-Vector search uses `@huggingface/transformers` (installed automatically as an optional dependency). If it failed to install on your platform, you can install it manually:
+Vector search uses `@huggingface/transformers` (installed with the CLI). If it is missing, install it manually:
 
 ```bash
 npm install -g @huggingface/transformers
@@ -60,7 +60,7 @@ npm install -g @huggingface/transformers
 ### `MemoryLane CLI cannot load its SQLite native module`
 
 - **Check your Node version** with `node -v`. It must be 22 or later.
-- **Check your platform.** Prebuilt binaries cover macOS, Linux (glibc and musl), and Windows on x64 and arm64. Anything else needs a local build toolchain.
+- **Check your platform.** Prebuilt binaries cover macOS, Linux (glibc and musl), and Windows on x64 and arm64. Other platforms are not supported.
 - **Reinstall** to restore missing files: `npm install -g @deusxmachina-dev/memorylane-cli`.
 
 ## License

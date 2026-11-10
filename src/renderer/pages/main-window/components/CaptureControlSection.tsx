@@ -24,10 +24,9 @@ interface CaptureControlSectionProps {
   onResume?: () => void
 }
 
-// Thin wrappers fix the size/weight once so the call sites stay terse.
-const PlayIcon = (): React.JSX.Element => <PlayGlyph className="w-5 h-5" fill="currentColor" />
-const StopIcon = (): React.JSX.Element => <StopGlyph className="w-5 h-5" fill="currentColor" />
-const PauseIcon = (): React.JSX.Element => <PauseGlyph className="w-5 h-5" fill="currentColor" />
+const PlayIcon = (): React.JSX.Element => <PlayGlyph className="size-5" fill="currentColor" />
+const StopIcon = (): React.JSX.Element => <StopGlyph className="size-5" fill="currentColor" />
+const PauseIcon = (): React.JSX.Element => <PauseGlyph className="size-5" fill="currentColor" />
 
 const formatCountdown = (remainingMs: number): string => {
   const minutes = Math.max(0, Math.ceil(remainingMs / 60_000))
