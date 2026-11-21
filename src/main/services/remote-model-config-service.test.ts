@@ -12,7 +12,7 @@ import { jsonResponse } from '@main/utils/test-utils'
 
 const CONFIG_V1: RemoteModelConfig = {
   version: 1,
-  models: { taskMining: ['minimax/minimax-m3'] },
+  models: { taskMining: ['z-ai/glm-5.3-flash'] },
 }
 
 describe('RemoteModelConfigService', () => {
