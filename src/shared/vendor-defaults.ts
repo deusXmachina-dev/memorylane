@@ -13,7 +13,7 @@ export interface ModelPreset {
  * are authoritative — an upgrade replaces stale/retired ids rather than
  * stranding a seat on them.
  */
-export const MODEL_DEFAULTS_VERSION = 5
+export const MODEL_DEFAULTS_VERSION = 6
 
 export interface VendorPresets {
   /** Presets for each model slot. The first entry is the vendor's default. */
@@ -55,7 +55,6 @@ export const VENDOR_PRESETS: Record<Vendor, VendorPresets> = {
     patternDetection: [
       { id: 'z-ai/glm-5.3-flash', label: 'GLM 5.3 Flash' },
       { id: 'xiaomi/mimo-v2.6-flash', label: 'MiMo V2.6 Flash' },
-      { id: 'minimax/minimax-m3', label: 'MiniMax M3' },
     ],
   },
   google: {

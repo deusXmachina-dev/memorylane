@@ -22,14 +22,14 @@ describe('coerceRemoteModelConfig', () => {
         version: 3,
         models: {
           semanticVideo: ['google/gemini-3.1-flash-lite', 'google/gemini-2.5-flash'],
-          taskMining: ['minimax/minimax-m3'],
+          taskMining: ['z-ai/glm-5.3-flash'],
         },
       }),
     ).toEqual({
       version: 3,
       models: {
         semanticVideo: ['google/gemini-3.1-flash-lite', 'google/gemini-2.5-flash'],
-        taskMining: ['minimax/minimax-m3'],
+        taskMining: ['z-ai/glm-5.3-flash'],
       },
     })
   })
@@ -75,10 +75,10 @@ describe('coerceRemoteModelConfig', () => {
       models: {
         semanticVideo: [],
         embeddings: ['some/model'],
-        userContext: ['minimax/minimax-m3'],
+        userContext: ['z-ai/glm-5.3-flash'],
       },
     })
-    expect(config).toEqual({ version: 2, models: { userContext: ['minimax/minimax-m3'] } })
+    expect(config).toEqual({ version: 2, models: { userContext: ['z-ai/glm-5.3-flash'] } })
   })
 })
 
@@ -92,7 +92,7 @@ describe('remote-model-config-store', () => {
   })
 
   it('round-trips a config through write then read', () => {
-    const config = { version: 4, models: { taskMining: ['minimax/minimax-m3'] } }
+    const config = { version: 4, models: { taskMining: ['z-ai/glm-5.3-flash'] } }
     writeRemoteModelConfig(config, TMP_FILE)
     expect(readRemoteModelConfig(TMP_FILE)).toEqual(config)
   })
